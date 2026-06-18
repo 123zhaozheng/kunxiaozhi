@@ -401,6 +401,7 @@ def create_wecom_message_handler(
                 write_user_message_immediately=True,
                 enabled_skills=enabled_skills,
                 persona_system_prompt=persona_system_prompt,
+                persona_preset_id=preset_id,
             )
 
             logger.info("[WeCom] Task submitted: session=%s, run_id=%s, user=%s", session_id, run_id, session_owner_id)
@@ -545,6 +546,13 @@ _INACCURATE_REASON_MAP: dict[int, str] = {
     4: "数据分析错误",
 }
 
+_WECOM_REASON_TO_ENUM: dict[int, str] = {
+    1: "irrelevant",
+    2: "incomplete",
+    3: "incorrect",
+    4: "data_error",
+}
+
 
 async def _handle_wecom_feedback(
     feedback_id: str,
@@ -628,6 +636,11 @@ async def _handle_wecom_feedback(
     # type=1 → "up", type=2 → "down"
     rating = "up" if feedback_type == 1 else "down"
 
+    # 点踩原因（仅 down 有意义）：取首个原因码映射到枚举
+    reason: str | None = None
+    if feedback_type == 2 and inaccurate_reasons:
+        reason = _WECOM_REASON_TO_ENUM.get(inaccurate_reasons[0])
+
     # Build comment for type=2 (dislike)
     comment: str | None = None
     if feedback_type == 2:
@@ -673,6 +686,7 @@ async def _handle_wecom_feedback(
             run_id=run_id,
             rating=rating,
             comment=comment,
+            reason=reason,
         )
         await feedback_manager.submit_feedback(user_id, username, data)
         logger.info(

@@ -48,10 +48,56 @@
     "selectModeDesc": "切换助手模式"
   },
   "analytics": {
+    "drilldown": {
+      "agent": "Agent",
+      "back": "返回",
+      "comment": "评论",
+      "createdAt": "创建时间",
+      "empty": "暂无数据",
+      "eventCount": "事件数",
+      "feedbackTitle": "反馈明细",
+      "preset": "角色",
+      "rating": "评分",
+      "reason": "原因",
+      "runId": "运行",
+      "runsTitle": "运行明细",
+      "sessionName": "会话",
+      "sessionsTitle": "会话明细",
+      "startedAt": "开始时间",
+      "status": "状态",
+      "tokens": "Token",
+      "user": "用户"
+    },
+    "feedback": {
+      "byPreset": "按角色分反馈",
+      "byPresetHint": "按角色智能体统计好评/差评",
+      "down": "差评",
+      "downCount": "差评数",
+      "noReasons": "暂无点踩原因数据",
+      "reasonDistribution": "点踩原因分布",
+      "reasonDistributionHint": "差评的 reason 分布",
+      "title": "反馈",
+      "total": "反馈总数",
+      "up": "好评",
+      "upCount": "好评数",
+      "upRate": "好评率"
+    },
     "overview": {
       "activeUsers": "活跃用户",
       "totalSessions": "总会话数",
       "totalTokens": "总 token",
+      "upVoteRate": "点赞率"
+    },
+    "preset": {
+      "activeUsers": "活跃用户数",
+      "analyze": "分析",
+      "downReasons": "点踩原因分布",
+      "noDownReasons": "暂无点踩原因数据",
+      "subtitle": "单角色智能体指标",
+      "title": "角色分析",
+      "totalMessages": "总消息数",
+      "totalSessions": "总会话数",
+      "totalTokens": "token 消耗总计",
       "upVoteRate": "点赞率"
     },
     "sessions": {
@@ -909,6 +955,13 @@
     "positive": "好评",
     "positiveRate": "好评率",
     "pressEnter": "⌘+Enter 发送",
+    "reason": {
+      "data_error": "数据分析错误",
+      "incomplete": "内容不完整",
+      "incorrect": "内容错误",
+      "irrelevant": "与问题无关",
+      "title": "请选择原因（可选）"
+    },
     "skipAndSubmit": "跳过并提交",
     "submit": "提交",
     "submitFailed": "反馈提交失败",

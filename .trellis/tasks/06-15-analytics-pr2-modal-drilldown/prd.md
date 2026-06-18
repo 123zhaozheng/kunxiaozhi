@@ -57,3 +57,37 @@
 - 实时推送
 - 用户消息内容查看
 - 通知/告警阈值
+
+## 数据链路扩展（PR2 必需的前置改动）
+
+PR1 调研（`.trellis/tasks/06-15-analytics-pr1-backend-and-dashboard/research/preset-agent-linkage.md`）已查明：`traces` 只存 Agent factory ID（"search"/"fast"/"team"），不存 `persona_preset_id`；`feedback` 只有 `rating`+`comment`，无点踩原因。PR2 的"按角色 token"和"点踩原因分布"必须先扩展数据链路。
+
+### E1. trace 写入链路落 persona_preset_id
+- `chat.py` 的 `task_manager.submit(...)` 调用加 `persona_preset_id=request.persona_preset_id`
+- `task_manager.submit` 签名加 `persona_preset_id: Optional[str] = None`，透传给 executor
+- `executor.py` `PresenterConfig(...)` 构造加 `persona_preset_id=persona_preset_id`
+- `PresenterConfig` dataclass 加 `persona_preset_id` 字段
+- `presenter_storage._build_trace_metadata` 写入 `metadata["persona_preset_id"]`（非空时）
+- WeCom 入口（`wecom/handler.py`）若走同一 submit 链路，同步传 `persona_preset_id`
+- 兼容性：历史 trace 无该字段，按角色统计时 `$match metadata.persona_preset_id` 自然过滤掉旧数据，无需迁移
+
+### E2. feedback 加 reason 字段（点踩原因）
+- `FeedbackBase` 加 `reason: Optional[Literal[...]]`，枚举 4 值：`irrelevant`(与问题无关) / `incomplete`(内容不完整) / `incorrect`(内容错误) / `data_error`(数据分析错误)；仅 down 时有意义，up 时为 None
+- `FeedbackCreate` 继承该字段；feedback 路由提交端点接收 reason
+- 前端点踩时弹原因选择 UI（可选 comment）
+- 历史数据无 reason，统计时按 None 处理（不计入分布）
+
+## Decisions (ADR-lite)
+
+### D1: trace 落 persona_preset_id 而非用 session 中转
+- **Context**: token 统计要按角色分，traces 无 preset_id，但 sessions.metadata 有
+- **Decision**: 在 trace 写入时直接落 persona_preset_id 到 metadata，不走 sessions $lookup 中转
+- **Consequences**: 改动触及 chat→task→executor→presenter 链路（4 处），但查询直接、性能好；历史 trace 不计入按角色统计（可接受，新数据生效）
+
+### D2: feedback.reason 为可选枚举，仅 down 时收集
+- **Context**: 点踩原因分布需要原因码
+- **Decision**: 加 Optional 枚举字段，前端点踩时弹选择，up 时为 None
+- **Consequences**: 历史数据无 reason；统计时 None 不计入分布
+
+### D3: 钻取明细复用 settings:manage
+- 继承父任务 D8

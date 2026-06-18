@@ -13,12 +13,18 @@ from pydantic import BaseModel, ConfigDict, Field
 # 评分值类型：up（好评）或 down（差评）
 RatingValue = Literal["up", "down"]
 
+# 点踩原因枚举（仅 down 时有意义，up 时为 None）
+FeedbackReason = Literal["irrelevant", "incomplete", "incorrect", "data_error"]
+
 
 class FeedbackBase(BaseModel):
     """反馈基础模型"""
 
     rating: RatingValue = Field(..., description="评分：up（好评）或 down（差评）")
     comment: Optional[str] = Field(None, max_length=1000, description="可选评论")
+    reason: Optional[FeedbackReason] = Field(
+        None, description="点踩原因（仅 down 时有意义）"
+    )
 
 
 class FeedbackCreate(FeedbackBase):

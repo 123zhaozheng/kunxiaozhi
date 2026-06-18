@@ -13,8 +13,14 @@ from src.infra.analytics.storage import AnalyticsStorage
 from src.infra.logging import get_logger
 from src.kernel.schemas.analytics import (
     ByLabelItem,
+    ByPresetFeedbackResponse,
+    FeedbackListResponse,
+    FeedbackSummaryResponse,
     HeatmapCell,
     OverviewResponse,
+    PresetAnalyticsResponse,
+    RunListResponse,
+    SessionListResponse,
     SessionsTrendResponse,
     TrendDataPoint,
 )
@@ -62,3 +68,49 @@ class AnalyticsManager:
         self, start: datetime, end: datetime
     ) -> list[TrendDataPoint]:
         return await self.storage.get_tokens_trend(start, end)
+
+    async def get_preset_metrics(
+        self, preset_id: str, start: datetime, end: datetime
+    ) -> PresetAnalyticsResponse:
+        return await self.storage.get_preset_metrics(preset_id, start, end)
+
+    async def get_feedback_summary(
+        self, start: datetime, end: datetime
+    ) -> FeedbackSummaryResponse:
+        return await self.storage.get_feedback_summary(start, end)
+
+    async def get_feedback_by_preset(
+        self, start: datetime, end: datetime
+    ) -> ByPresetFeedbackResponse:
+        return await self.storage.get_feedback_by_preset(start, end)
+
+    async def list_sessions(
+        self,
+        start: datetime,
+        end: datetime,
+        preset_id: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> SessionListResponse:
+        return await self.storage.list_sessions(start, end, preset_id, skip, limit)
+
+    async def list_feedback(
+        self,
+        start: datetime,
+        end: datetime,
+        preset_id: Optional[str] = None,
+        rating: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> FeedbackListResponse:
+        return await self.storage.list_feedback(start, end, preset_id, rating, skip, limit)
+
+    async def list_runs(
+        self,
+        start: datetime,
+        end: datetime,
+        preset_id: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> RunListResponse:
+        return await self.storage.list_runs(start, end, preset_id, skip, limit)

@@ -78,6 +78,7 @@ class TaskExecutor:
         display_message: Optional[str] = None,
         team_id: Optional[str] = None,
         active_goal: Optional[Dict[str, Any]] = None,
+        persona_preset_id: Optional[str] = None,
     ) -> None:
         """执行任务"""
         from src.infra.writer.present import Presenter, PresenterConfig
@@ -101,6 +102,7 @@ class TaskExecutor:
                     run_id=run_id,  # 传递 run_id
                     trace_id=existing_trace_id,  # reuse trace from queued path
                     enable_storage=True,
+                    persona_preset_id=persona_preset_id,
                 )
             )
 

@@ -66,3 +66,4 @@ class PresenterConfig:
     chunk_delay: float = 0.0  # 流式输出延迟 (秒)
     max_result_length: int = 2000  # 结果最大长度
     enable_storage: bool = True  # 是否启用事件存储
+    persona_preset_id: Optional[str] = None  # 角色智能体 ID（用于按角色统计）

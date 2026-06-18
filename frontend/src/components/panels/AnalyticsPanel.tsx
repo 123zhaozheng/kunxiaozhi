@@ -15,11 +15,14 @@ import {
   Cpu,
   Hash,
   MessageSquare,
+  ThumbsDown,
   ThumbsUp,
   User as UserIcon,
   Users,
 } from "lucide-react";
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   Cell,
   Legend,
@@ -38,11 +41,14 @@ import { analyticsApi } from "../../services/api/analytics";
 import type {
   AnalyticsRangePreset,
   ByLabelItem,
+  ByPresetFeedbackItem,
+  FeedbackSummaryResponse,
   HeatmapCell,
   OverviewResponse,
   SessionsTrendResponse,
   TrendDataPoint,
 } from "../../types/analytics";
+import { AnalyticsDrilldownList, type DrilldownKind } from "./AnalyticsDrilldownList";
 
 const PIE_COLORS = [
   "#6366f1",
@@ -340,9 +346,10 @@ interface PieBlockProps {
   title: string;
   data: ByLabelItem[];
   unitFormatter?: (value: number) => string;
+  onSliceClick?: (entry: ByLabelItem) => void;
 }
 
-function PieBlock({ title, data, unitFormatter }: PieBlockProps) {
+function PieBlock({ title, data, unitFormatter, onSliceClick }: PieBlockProps) {
   const renderLabel = useCallback(
     (entry: ByLabelItem) => {
       const label = entry?.label ?? "—";
@@ -377,11 +384,13 @@ function PieBlock({ title, data, unitFormatter }: PieBlockProps) {
                 outerRadius={70}
                 innerRadius={30}
                 paddingAngle={1}
+                onClick={onSliceClick ? (entry) => onSliceClick(entry as ByLabelItem) : undefined}
               >
                 {data.map((entry, index) => (
                   <Cell
                     key={entry.label}
                     fill={PIE_COLORS[index % PIE_COLORS.length]}
+                    cursor={onSliceClick ? "pointer" : undefined}
                   />
                 ))}
               </Pie>
@@ -403,6 +412,124 @@ function PieBlock({ title, data, unitFormatter }: PieBlockProps) {
           </ResponsiveContainer>
         </div>
       )}
+    </div>
+  );
+}
+
+interface FeedbackByPresetBarProps {
+  data: ByPresetFeedbackItem[];
+  onSliceClick?: (entry: ByPresetFeedbackItem) => void;
+}
+
+function FeedbackByPresetBar({ data, onSliceClick }: FeedbackByPresetBarProps) {
+  const { t } = useTranslation();
+  if ((data?.length ?? 0) === 0) {
+    return (
+      <div className="flex h-32 items-center justify-center text-sm text-stone-500 dark:text-stone-400">
+        —
+      </div>
+    );
+  }
+  const rows = data.map((d) => ({
+    name: d.preset_name || d.preset_id,
+    up: d.up_count,
+    down: d.down_count,
+    raw: d,
+  }));
+  return (
+    <div className="h-56">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart
+          data={rows}
+          layout="vertical"
+          margin={{ top: 4, right: 16, bottom: 4, left: 8 }}
+        >
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="rgba(120,113,108,0.2)"
+            horizontal={false}
+          />
+          <XAxis type="number" tick={{ fontSize: 11, fill: "currentColor" }} allowDecimals={false} />
+          <YAxis
+            type="category"
+            dataKey="name"
+            tick={{ fontSize: 11, fill: "currentColor" }}
+            width={100}
+          />
+          <Tooltip
+            formatter={(value: number, name: string) => [formatNumber(Number(value)), name]}
+          />
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+          <Bar
+            dataKey="up"
+            name={t("analytics.feedback.up", "好评")}
+            stackId="a"
+            fill="#10b981"
+            cursor={onSliceClick ? "pointer" : undefined}
+            onClick={onSliceClick ? (entry) => onSliceClick((entry as { raw: ByPresetFeedbackItem }).raw) : undefined}
+          />
+          <Bar
+            dataKey="down"
+            name={t("analytics.feedback.down", "差评")}
+            stackId="a"
+            fill="#ef4444"
+            cursor={onSliceClick ? "pointer" : undefined}
+            onClick={onSliceClick ? (entry) => onSliceClick((entry as { raw: ByPresetFeedbackItem }).raw) : undefined}
+          />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+interface ReasonBarProps {
+  data: ByLabelItem[];
+  onSliceClick?: (entry: ByLabelItem) => void;
+}
+
+function ReasonBar({ data, onSliceClick }: ReasonBarProps) {
+  const { t } = useTranslation();
+  if ((data?.length ?? 0) === 0) {
+    return (
+      <div className="flex h-32 items-center justify-center text-sm text-stone-500 dark:text-stone-400">
+        {t("analytics.feedback.noReasons", "暂无点踩原因数据")}
+      </div>
+    );
+  }
+  return (
+    <div className="h-56">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart
+          data={data}
+          layout="vertical"
+          margin={{ top: 4, right: 16, bottom: 4, left: 8 }}
+        >
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="rgba(120,113,108,0.2)"
+            horizontal={false}
+          />
+          <XAxis type="number" tick={{ fontSize: 11, fill: "currentColor" }} allowDecimals={false} />
+          <YAxis
+            type="category"
+            dataKey="label"
+            tick={{ fontSize: 11, fill: "currentColor" }}
+            width={120}
+            tickFormatter={(value: string) => t(`feedback.reason.${value}`, value)}
+          />
+          <Tooltip
+            formatter={(value: number) => [formatNumber(Number(value)), ""]}
+            labelFormatter={(label: string) => t(`feedback.reason.${label}`, label)}
+          />
+          <Bar
+            dataKey="value"
+            radius={[0, 4, 4, 0]}
+            fill="#ef4444"
+            cursor={onSliceClick ? "pointer" : undefined}
+            onClick={onSliceClick ? (entry) => onSliceClick(entry as ByLabelItem) : undefined}
+          />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -528,6 +655,17 @@ export function AnalyticsPanel() {
   const [tokensByModel, setTokensByModel] = useState<ByLabelItem[]>([]);
   const [tokensByPreset, setTokensByPreset] = useState<ByLabelItem[]>([]);
   const [tokensTrend, setTokensTrend] = useState<TrendDataPoint[]>([]);
+  const [feedbackSummary, setFeedbackSummary] =
+    useState<FeedbackSummaryResponse | null>(null);
+  const [feedbackByPreset, setFeedbackByPreset] = useState<ByPresetFeedbackItem[]>(
+    [],
+  );
+
+  const [drilldown, setDrilldown] = useState<{
+    kind: DrilldownKind;
+    presetId?: string;
+    rating?: "up" | "down";
+  } | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -562,6 +700,8 @@ export function AnalyticsPanel() {
         byModelData,
         byPresetData,
         tokensTrendData,
+        feedbackSummaryData,
+        feedbackByPresetData,
       ] = await Promise.all([
         analyticsApi.getOverview(start, end),
         analyticsApi.getActiveUserTrend(start, end),
@@ -570,6 +710,8 @@ export function AnalyticsPanel() {
         analyticsApi.getTokensByModel(start, end),
         analyticsApi.getTokensByPreset(start, end, 10),
         analyticsApi.getTokensTrend(start, end),
+        analyticsApi.getFeedbackSummary(start, end),
+        analyticsApi.getFeedbackByPreset(start, end),
       ]);
       setOverview(overviewData ?? null);
       setActiveTrend(Array.isArray(activeData?.items) ? activeData.items : []);
@@ -581,6 +723,12 @@ export function AnalyticsPanel() {
       );
       setTokensTrend(
         Array.isArray(tokensTrendData?.items) ? tokensTrendData.items : [],
+      );
+      setFeedbackSummary(feedbackSummaryData ?? null);
+      setFeedbackByPreset(
+        Array.isArray(feedbackByPresetData?.items)
+          ? feedbackByPresetData.items
+          : [],
       );
     } catch (err) {
       const message =
@@ -849,7 +997,11 @@ export function AnalyticsPanel() {
               isLoading={isLoading}
               isEmpty={!isLoading && (tokensByModel?.length ?? 0) === 0}
             >
-              <PieBlock title="" data={tokensByModel} />
+              <PieBlock
+                title=""
+                data={tokensByModel}
+                onSliceClick={() => setDrilldown({ kind: "runs" })}
+              />
             </ChartCard>
             <ChartCard
               title={t("analytics.tokens.byPreset", "Tokens by agent type (Top 10)")}
@@ -861,7 +1013,11 @@ export function AnalyticsPanel() {
               isLoading={isLoading}
               isEmpty={!isLoading && (tokensByPreset?.length ?? 0) === 0}
             >
-              <PieBlock title="" data={tokensByPreset} />
+              <PieBlock
+                title=""
+                data={tokensByPreset}
+                onSliceClick={() => setDrilldown({ kind: "runs" })}
+              />
             </ChartCard>
           </div>
           <div className="mt-3">
@@ -891,7 +1047,92 @@ export function AnalyticsPanel() {
             </ChartCard>
           </div>
         </section>
+
+        {/* Feedback section */}
+        <section className="mt-4">
+          <h2 className="mb-2 text-sm font-semibold tracking-wide text-stone-600 uppercase dark:text-stone-400">
+            {t("analytics.feedback.title", "反馈")}
+          </h2>
+          <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatsCard
+              icon={ThumbsUp}
+              label={t("analytics.feedback.total", "反馈总数")}
+              value={feedbackSummary ? formatNumber(feedbackSummary.total) : "—"}
+            />
+            <StatsCard
+              icon={ThumbsUp}
+              label={t("analytics.feedback.upCount", "好评数")}
+              value={feedbackSummary ? formatNumber(feedbackSummary.up_count) : "—"}
+            />
+            <StatsCard
+              icon={ThumbsDown}
+              label={t("analytics.feedback.downCount", "差评数")}
+              value={feedbackSummary ? formatNumber(feedbackSummary.down_count) : "—"}
+            />
+            <StatsCard
+              icon={ThumbsUp}
+              label={t("analytics.feedback.upRate", "好评率")}
+              value={
+                feedbackSummary
+                  ? `${feedbackSummary.up_percentage.toFixed(1)}%`
+                  : "—"
+              }
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <ChartCard
+              title={t("analytics.feedback.byPreset", "按角色分反馈")}
+              subtitle={t(
+                "analytics.feedback.byPresetHint",
+                "按角色智能体统计好评/差评",
+              )}
+              icon={<UserIcon size={16} aria-hidden />}
+              isLoading={isLoading}
+              isEmpty={!isLoading && (feedbackByPreset?.length ?? 0) === 0}
+            >
+              <FeedbackByPresetBar
+                data={feedbackByPreset}
+                onSliceClick={(entry) =>
+                  setDrilldown({ kind: "feedback", presetId: entry.preset_id })
+                }
+              />
+            </ChartCard>
+            <ChartCard
+              title={t("analytics.feedback.reasonDistribution", "点踩原因分布")}
+              subtitle={t(
+                "analytics.feedback.reasonDistributionHint",
+                "差评的 reason 分布",
+              )}
+              icon={<ThumbsDown size={16} aria-hidden />}
+              isLoading={isLoading}
+              isEmpty={
+                !isLoading &&
+                (feedbackSummary?.reason_distribution.length ?? 0) === 0
+              }
+            >
+              <ReasonBar
+                data={feedbackSummary?.reason_distribution ?? []}
+                onSliceClick={() =>
+                  setDrilldown({ kind: "feedback", rating: "down" })
+                }
+              />
+            </ChartCard>
+          </div>
+        </section>
       </div>
+
+      {drilldown ? (
+        <div className="px-4 pb-6 sm:px-6">
+          <AnalyticsDrilldownList
+            kind={drilldown.kind}
+            start={toIso(effectiveRange.start)}
+            end={toIso(effectiveRange.end)}
+            presetId={drilldown.presetId}
+            rating={drilldown.rating}
+            onBack={() => setDrilldown(null)}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

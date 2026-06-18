@@ -48,11 +48,57 @@
     "selectModeDesc": "에이전트 모드 전환"
   },
   "analytics": {
+    "drilldown": {
+      "agent": "Agent",
+      "back": "뒤로",
+      "comment": "댓글",
+      "createdAt": "생성 시각",
+      "empty": "데이터 없음",
+      "eventCount": "이벤트 수",
+      "feedbackTitle": "피드백 상세",
+      "preset": "에이전트",
+      "rating": "평가",
+      "reason": "사유",
+      "runId": "실행",
+      "runsTitle": "실행 상세",
+      "sessionName": "세션",
+      "sessionsTitle": "세션 상세",
+      "startedAt": "시작 시각",
+      "status": "상태",
+      "tokens": "토큰",
+      "user": "사용자"
+    },
+    "feedback": {
+      "byPreset": "에이전트별 피드백",
+      "byPresetHint": "에이전트별 긍정/부정 평가",
+      "down": "부정",
+      "downCount": "부정 평가 수",
+      "noReasons": "부정 평가 사유 데이터 없음",
+      "reasonDistribution": "부정 평가 사유 분포",
+      "reasonDistributionHint": "부정 평가의 사유 분포",
+      "title": "피드백",
+      "total": "피드백 총수",
+      "up": "긍정",
+      "upCount": "긍정 평가 수",
+      "upRate": "긍정률"
+    },
     "overview": {
       "activeUsers": "활성 사용자",
       "totalSessions": "총 세션 수",
       "totalTokens": "총 토큰 수",
       "upVoteRate": "긍정 비율"
+    },
+    "preset": {
+      "activeUsers": "활성 사용자 수",
+      "analyze": "분석",
+      "downReasons": "부정 평가 사유 분포",
+      "noDownReasons": "부정 평가 사유 데이터 없음",
+      "subtitle": "에이전트별 지표",
+      "title": "에이전트 분석",
+      "totalMessages": "총 메시지 수",
+      "totalSessions": "총 세션 수",
+      "totalTokens": "총 토큰 수",
+      "upVoteRate": "긍정률"
     },
     "sessions": {
       "messages": "메시지 수",
@@ -909,6 +955,13 @@
     "positive": "긍정",
     "positiveRate": "긍정율",
     "pressEnter": "⌘+Enter로 보내기",
+    "reason": {
+      "data_error": "데이터 분석 오류",
+      "incomplete": "내용이 불완전",
+      "incorrect": "내용이 부정확",
+      "irrelevant": "질문과 무관",
+      "title": "사유 선택 (선택)"
+    },
     "skipAndSubmit": "건너뛰고 제출",
     "submit": "제출",
     "submitFailed": "피드백 제출에 실패했습니다",

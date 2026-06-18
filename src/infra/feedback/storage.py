@@ -93,6 +93,7 @@ class FeedbackStorage:
             "run_id": feedback_data.run_id,
             "rating": feedback_data.rating,
             "comment": feedback_data.comment,
+            "reason": feedback_data.reason,
             "created_at": now,
         }
         result = await self.collection.insert_one(feedback_dict)

@@ -48,11 +48,57 @@
     "selectModeDesc": "Переключить режим агента"
   },
   "analytics": {
+    "drilldown": {
+      "agent": "Агент",
+      "back": "Назад",
+      "comment": "Комментарий",
+      "createdAt": "Создано",
+      "empty": "Нет данных",
+      "eventCount": "События",
+      "feedbackTitle": "Детали отзывов",
+      "preset": "Агент",
+      "rating": "Оценка",
+      "reason": "Причина",
+      "runId": "Запуск",
+      "runsTitle": "Детали запусков",
+      "sessionName": "Сессия",
+      "sessionsTitle": "Детали сессий",
+      "startedAt": "Начало",
+      "status": "Статус",
+      "tokens": "Токены",
+      "user": "Пользователь"
+    },
+    "feedback": {
+      "byPreset": "Отзывы по агентам",
+      "byPresetHint": "Положительные/отрицательные оценки по агентам",
+      "down": "Отриц.",
+      "downCount": "Отрицательных",
+      "noReasons": "Нет данных о причинах",
+      "reasonDistribution": "Причины отрицательных оценок",
+      "reasonDistributionHint": "Распределение причин отрицательных оценок",
+      "title": "Отзывы",
+      "total": "Всего отзывов",
+      "up": "Полож.",
+      "upCount": "Положительных",
+      "upRate": "Доля положительных"
+    },
     "overview": {
       "activeUsers": "Активные пользователи",
       "totalSessions": "Всего сессий",
       "totalTokens": "Всего токенов",
       "upVoteRate": "Положительных"
+    },
+    "preset": {
+      "activeUsers": "Активные пользователи",
+      "analyze": "Анализ",
+      "downReasons": "Причины отрицательных оценок",
+      "noDownReasons": "Нет данных о причинах",
+      "subtitle": "Метрики по агенту",
+      "title": "Аналитика агента",
+      "totalMessages": "Всего сообщений",
+      "totalSessions": "Всего сессий",
+      "totalTokens": "Всего токенов",
+      "upVoteRate": "Доля положительных"
     },
     "sessions": {
       "messages": "Сообщения",
@@ -911,6 +957,13 @@
     "positive": "Положительный",
     "positiveRate": "Доля положительных",
     "pressEnter": "Нажмите Enter для отправки",
+    "reason": {
+      "data_error": "Ошибка анализа данных",
+      "incomplete": "Неполное содержание",
+      "incorrect": "Неверное содержание",
+      "irrelevant": "Не по теме",
+      "title": "Выберите причину (необязательно)"
+    },
     "skipAndSubmit": "Пропустить и отправить",
     "submit": "Отправить",
     "submitFailed": "Не удалось отправить отзыв",

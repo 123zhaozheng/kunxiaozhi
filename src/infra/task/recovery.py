@@ -199,6 +199,7 @@ class TaskRecoveryService:
             ),
             "disabled_mcp_tools": session_metadata.get("disabled_mcp_tools") or None,
             "team_id": session_metadata.get("team_id"),
+            "persona_preset_id": session_metadata.get("persona_preset_id"),
         }
 
         concurrency_result = await limiter.claim_recovery_slot(
@@ -243,6 +244,7 @@ class TaskRecoveryService:
                     disabled_mcp_tools=session_metadata.get("disabled_mcp_tools") or None,
                     session_name=getattr(session, "name", None),
                     team_id=session_metadata.get("team_id"),
+                    persona_preset_id=session_metadata.get("persona_preset_id"),
                 )
             except Exception:
                 await limiter.release(session.user_id, new_run_id, dequeue=False)
@@ -270,6 +272,7 @@ class TaskRecoveryService:
                     run_id=new_run_id,
                     trace_id=recovery_trace_id,
                     enable_storage=True,
+                    persona_preset_id=session_metadata.get("persona_preset_id"),
                 )
             )
             await trace_presenter._ensure_trace()

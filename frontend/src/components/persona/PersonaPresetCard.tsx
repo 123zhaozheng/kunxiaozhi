@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Sparkles, Check, Copy, Pencil, Trash2, Pin, Star } from "lucide-react";
+import { Sparkles, Check, Copy, Pencil, Trash2, Pin, Star, BarChart3 } from "lucide-react";
 import type { PersonaPreset } from "../../types";
 import { PersonaAvatarIcon, PersonaAvatarImage } from "./PersonaAvatarIcon";
 import {
@@ -16,6 +16,7 @@ interface PersonaPresetCardProps {
   activeTag: string | null;
   canWrite: boolean;
   canAdmin: boolean;
+  canAnalyze?: boolean;
   onUse: (preset: PersonaPreset) => void;
   onClear: () => void;
   onCopy: (preset: PersonaPreset) => void;
@@ -26,6 +27,7 @@ interface PersonaPresetCardProps {
   onEdit: (preset: PersonaPreset) => void;
   onDelete: (preset: PersonaPreset) => void;
   onToggleTag: (tag: string) => void;
+  onAnalyze?: (preset: PersonaPreset) => void;
 }
 
 export function PersonaPresetCard({
@@ -34,6 +36,7 @@ export function PersonaPresetCard({
   activeTag,
   canWrite,
   canAdmin,
+  canAnalyze,
   onUse,
   onClear,
   onCopy,
@@ -41,6 +44,7 @@ export function PersonaPresetCard({
   onEdit,
   onDelete,
   onToggleTag,
+  onAnalyze,
 }: PersonaPresetCardProps) {
   const { t } = useTranslation();
   const gradient = nameToGradient(preset.name);
@@ -219,6 +223,15 @@ export function PersonaPresetCard({
             )}
           </div>
           <div className="flex items-center gap-1.5">
+            {preset.scope === "global" && canAnalyze && onAnalyze && (
+              <button
+                onClick={() => onAnalyze(preset)}
+                className="scb__action-btn scb__action-btn--ghost"
+                title={t("analytics.preset.analyze", "分析")}
+              >
+                <BarChart3 size={16} />
+              </button>
+            )}
             {selected ? (
               <button
                 onClick={onClear}

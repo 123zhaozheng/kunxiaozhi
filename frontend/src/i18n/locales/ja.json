@@ -48,8 +48,54 @@
     "selectModeDesc": "エージェントモードを切り替え"
   },
   "analytics": {
+    "drilldown": {
+      "agent": "Agent",
+      "back": "戻る",
+      "comment": "コメント",
+      "createdAt": "作成日時",
+      "empty": "データなし",
+      "eventCount": "イベント数",
+      "feedbackTitle": "フィードバック詳細",
+      "preset": "エージェント",
+      "rating": "評価",
+      "reason": "理由",
+      "runId": "実行",
+      "runsTitle": "実行詳細",
+      "sessionName": "セッション",
+      "sessionsTitle": "セッション詳細",
+      "startedAt": "開始日時",
+      "status": "ステータス",
+      "tokens": "トークン",
+      "user": "ユーザー"
+    },
+    "feedback": {
+      "byPreset": "エージェント別フィードバック",
+      "byPresetHint": "エージェントごとの高評価/低評価",
+      "down": "低評価",
+      "downCount": "低評価数",
+      "noReasons": "低評価理由のデータなし",
+      "reasonDistribution": "低評価理由の分布",
+      "reasonDistributionHint": "低評価の理由分布",
+      "title": "フィードバック",
+      "total": "フィードバック総数",
+      "up": "高評価",
+      "upCount": "高評価数",
+      "upRate": "高評価率"
+    },
     "overview": {
       "activeUsers": "アクティブユーザー",
+      "totalSessions": "総セッション数",
+      "totalTokens": "総トークン数",
+      "upVoteRate": "高評価率"
+    },
+    "preset": {
+      "activeUsers": "アクティブユーザー数",
+      "analyze": "分析",
+      "downReasons": "低評価理由の分布",
+      "noDownReasons": "低評価理由のデータなし",
+      "subtitle": "エージェント別指標",
+      "title": "エージェント分析",
+      "totalMessages": "総メッセージ数",
       "totalSessions": "総セッション数",
       "totalTokens": "総トークン数",
       "upVoteRate": "高評価率"
@@ -909,6 +955,13 @@
     "positive": "ポジティブ",
     "positiveRate": "ポジティブ率",
     "pressEnter": "⌘+Enterで送信",
+    "reason": {
+      "data_error": "データ分析エラー",
+      "incomplete": "内容が不完全",
+      "incorrect": "内容が不正確",
+      "irrelevant": "質問と無関係",
+      "title": "理由を選択（任意）"
+    },
     "skipAndSubmit": "スキップして送信",
     "submit": "送信",
     "submitFailed": "フィードバックの送信に失敗しました",

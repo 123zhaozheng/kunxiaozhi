@@ -88,6 +88,7 @@ export function usePersonaPlaza() {
   const canRead = hasPermission(Permission.PERSONA_PRESET_READ);
   const canWrite = hasPermission(Permission.PERSONA_PRESET_WRITE);
   const canAdmin = hasPermission(Permission.PERSONA_PRESET_ADMIN);
+  const canAnalyze = hasPermission(Permission.CHANNEL_MANAGE);
 
   const [query, setQuery] = useState("");
   const [activeTag, setActiveTag] = useState<string | null>(null);
@@ -133,6 +134,9 @@ export function usePersonaPlaza() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isScopeOpen, setIsScopeOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [analyzeTarget, setAnalyzeTarget] = useState<PersonaPreset | null>(
+    null,
+  );
 
   const scopeBtnRef = useRef<HTMLButtonElement>(null);
   const tagBtnRef = useRef<HTMLButtonElement>(null);
@@ -254,6 +258,14 @@ export function usePersonaPlaza() {
     setShowModal(false);
     setEditingPreset(null);
     setEditorScope("user");
+  }, []);
+
+  const handleAnalyze = useCallback((preset: PersonaPreset) => {
+    setAnalyzeTarget(preset);
+  }, []);
+
+  const closeAnalyze = useCallback(() => {
+    setAnalyzeTarget(null);
   }, []);
 
   const handleDelete = useCallback(async () => {
@@ -439,6 +451,7 @@ export function usePersonaPlaza() {
     canRead,
     canWrite,
     canAdmin,
+    canAnalyze,
     query,
     setQuery,
     activeTag,
@@ -482,5 +495,8 @@ export function usePersonaPlaza() {
     handleImportFile,
     importInputRef,
     isImporting,
+    analyzeTarget,
+    handleAnalyze,
+    closeAnalyze,
   };
 }

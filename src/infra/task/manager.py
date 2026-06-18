@@ -250,6 +250,7 @@ class BackgroundTaskManager:
         active_goal: Optional[Dict[str, Any]] = None,
         user_message_written: bool = False,
         write_user_message_immediately: bool = False,
+        persona_preset_id: Optional[str] = None,
     ) -> Tuple[str, str]:
         """
         提交后台任务
@@ -332,6 +333,7 @@ class BackgroundTaskManager:
                     existing_trace_id=trace_id or None,
                     active_goal=active_goal,
                     user_message_written=user_message_written,
+                    persona_preset_id=persona_preset_id,
                 )
             )
             self._tasks[run_id] = task
@@ -367,6 +369,7 @@ class BackgroundTaskManager:
         team_id: Optional[str] = None,
         active_goal: Optional[Dict[str, Any]] = None,
         write_user_message_immediately: bool = False,
+        persona_preset_id: Optional[str] = None,
     ) -> Tuple[str, str]:
         """Submit a task to arq after persisting serializable task context."""
         task_executor = self._ensure_executor()
@@ -421,6 +424,7 @@ class BackgroundTaskManager:
                     "user_message_written": user_message_written,
                     "team_id": team_id,
                     "active_goal": active_goal,
+                    "persona_preset_id": persona_preset_id,
                 },
             )
 

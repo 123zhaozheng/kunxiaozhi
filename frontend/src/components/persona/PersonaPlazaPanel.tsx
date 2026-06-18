@@ -16,6 +16,7 @@ import { PanelHeader } from "../common/PanelHeader";
 import { PanelLoadingState } from "../common/PanelLoadingState";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { Pagination } from "../common/Pagination";
+import { PresetAnalyticsModal } from "../panels/PresetAnalyticsModal";
 import { usePersonaPlaza, type PersonaRouteState } from "./usePersonaPlaza";
 import { PersonaPresetCard } from "./PersonaPresetCard";
 import { PersonaEditorModal } from "./PersonaEditorModal";
@@ -41,6 +42,7 @@ export function PersonaPlazaPanel() {
     isMutating,
     canWrite,
     canAdmin,
+    canAnalyze,
     query,
     setQuery,
     activeTag,
@@ -84,6 +86,9 @@ export function PersonaPlazaPanel() {
     handleImportFile,
     importInputRef,
     isImporting,
+    analyzeTarget,
+    handleAnalyze,
+    closeAnalyze,
   } = usePersonaPlaza();
 
   const isInitialLoading =
@@ -262,6 +267,7 @@ export function PersonaPlazaPanel() {
                   activeTag={activeTag}
                   canWrite={canWrite}
                   canAdmin={canAdmin}
+                  canAnalyze={canAnalyze}
                   onUse={handleUse}
                   onClear={handleClear}
                   onCopy={handleCopy}
@@ -269,6 +275,7 @@ export function PersonaPlazaPanel() {
                   onEdit={(p) => openModal(p)}
                   onDelete={(p) => setDeleteTarget(p)}
                   onToggleTag={toggleTag}
+                  onAnalyze={handleAnalyze}
                 />
               </div>
             ))}
@@ -296,6 +303,12 @@ export function PersonaPlazaPanel() {
         createPreset={createPreset}
         updatePreset={updatePreset}
         onClose={closeModal}
+      />
+
+      <PresetAnalyticsModal
+        open={!!analyzeTarget}
+        preset={analyzeTarget}
+        onClose={closeAnalyze}
       />
 
       <ConfirmDialog

@@ -79,6 +79,67 @@ async def test_ensure_trace_keeps_user_id_when_username_lookup_misses(
     assert "username" not in writer.calls[0]["metadata"]
 
 
+@pytest.mark.asyncio
+async def test_ensure_trace_writes_persona_preset_id_when_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """E1: persona_preset_id 应写入 trace metadata。"""
+    presenter = Presenter(
+        PresenterConfig(
+            session_id="session-1",
+            agent_id="search",
+            agent_name="Search Agent",
+            user_id="user-1",
+            persona_preset_id="preset-abc",
+        )
+    )
+    writer = _FakeDualWriter()
+
+    async def fake_get_dual_writer():
+        return writer
+
+    monkeypatch.setattr(presenter, "_get_dual_writer", fake_get_dual_writer)
+    monkeypatch.setattr(
+        "src.infra.user.storage.UserStorage",
+        lambda: _FakeUserStorage(SimpleNamespace(username="alice")),
+    )
+
+    await presenter._ensure_trace()
+
+    assert len(writer.calls) == 1
+    assert writer.calls[0]["metadata"]["persona_preset_id"] == "preset-abc"
+
+
+@pytest.mark.asyncio
+async def test_ensure_trace_omits_persona_preset_id_when_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """E1: persona_preset_id 为空时不写 key（兼容历史 trace）。"""
+    presenter = Presenter(
+        PresenterConfig(
+            session_id="session-1",
+            agent_id="search",
+            agent_name="Search Agent",
+            user_id="user-1",
+        )
+    )
+    writer = _FakeDualWriter()
+
+    async def fake_get_dual_writer():
+        return writer
+
+    monkeypatch.setattr(presenter, "_get_dual_writer", fake_get_dual_writer)
+    monkeypatch.setattr(
+        "src.infra.user.storage.UserStorage",
+        lambda: _FakeUserStorage(None),
+    )
+
+    await presenter._ensure_trace()
+
+    assert len(writer.calls) == 1
+    assert "persona_preset_id" not in writer.calls[0]["metadata"]
+
+
 def test_present_tool_start_compacts_large_input_and_tool_call_state() -> None:
     large_input = "x" * 20_000
     presenter = Presenter()

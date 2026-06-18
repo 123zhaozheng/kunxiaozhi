@@ -48,8 +48,54 @@
     "selectModeDesc": "Switch agent mode"
   },
   "analytics": {
+    "drilldown": {
+      "agent": "Agent",
+      "back": "Back",
+      "comment": "Comment",
+      "createdAt": "Created",
+      "empty": "No data",
+      "eventCount": "Events",
+      "feedbackTitle": "Feedback details",
+      "preset": "Agent",
+      "rating": "Rating",
+      "reason": "Reason",
+      "runId": "Run",
+      "runsTitle": "Run details",
+      "sessionName": "Session",
+      "sessionsTitle": "Session details",
+      "startedAt": "Started",
+      "status": "Status",
+      "tokens": "Tokens",
+      "user": "User"
+    },
+    "feedback": {
+      "byPreset": "Feedback by agent",
+      "byPresetHint": "Up/down votes per agent",
+      "down": "Down",
+      "downCount": "Down votes",
+      "noReasons": "No down-vote reason data",
+      "reasonDistribution": "Down-vote reasons",
+      "reasonDistributionHint": "Reason distribution of down votes",
+      "title": "Feedback",
+      "total": "Total feedback",
+      "up": "Up",
+      "upCount": "Up votes",
+      "upRate": "Positive rate"
+    },
     "overview": {
       "activeUsers": "Active users",
+      "totalSessions": "Total sessions",
+      "totalTokens": "Total tokens",
+      "upVoteRate": "Positive rate"
+    },
+    "preset": {
+      "activeUsers": "Active users",
+      "analyze": "Analyze",
+      "downReasons": "Down-vote reasons",
+      "noDownReasons": "No down-vote reason data",
+      "subtitle": "Per-agent metrics",
+      "title": "Agent analytics",
+      "totalMessages": "Total messages",
       "totalSessions": "Total sessions",
       "totalTokens": "Total tokens",
       "upVoteRate": "Positive rate"
@@ -909,6 +955,13 @@
     "positive": "Positive",
     "positiveRate": "Positive Rate",
     "pressEnter": "Press Enter to submit",
+    "reason": {
+      "data_error": "Data analysis error",
+      "incomplete": "Incomplete",
+      "incorrect": "Incorrect",
+      "irrelevant": "Irrelevant",
+      "title": "Select a reason (optional)"
+    },
     "skipAndSubmit": "Skip & Submit",
     "submit": "Submit",
     "submitFailed": "Failed to submit feedback",

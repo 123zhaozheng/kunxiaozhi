@@ -3,7 +3,7 @@ import { ThumbsUp, ThumbsDown } from "lucide-react";
 import { clsx } from "clsx";
 import toast from "react-hot-toast";
 import { feedbackApi } from "../../../services/api/feedback";
-import type { RatingValue } from "../../../types/feedback";
+import type { RatingValue, FeedbackReason } from "../../../types/feedback";
 import { useTranslation } from "react-i18next";
 import { FeedbackDialog } from "./FeedbackDialog";
 
@@ -31,6 +31,7 @@ export function FeedbackButtons({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
   const [comment, setComment] = useState("");
+  const [reason, setReason] = useState<FeedbackReason | null>(null);
   const [submittedFeedback, setSubmittedFeedback] =
     useState<RatingValue | null>(externalFeedback || null);
 
@@ -44,6 +45,7 @@ export function FeedbackButtons({
     if (isSubmitting || submittedFeedback) return;
     setSelectedRating(rating);
     setComment("");
+    setReason(null);
     setShowDialog(true);
   }
 
@@ -55,6 +57,7 @@ export function FeedbackButtons({
       await feedbackApi.submit({
         rating: selectedRating,
         comment: comment.trim() || undefined,
+        reason: selectedRating === "down" ? (reason ?? undefined) : undefined,
         session_id: sessionId,
         run_id: runId || "",
       });
@@ -76,6 +79,7 @@ export function FeedbackButtons({
     setShowDialog(false);
     setSelectedRating(null);
     setComment("");
+    setReason(null);
   }
 
   function handleSkip() {
@@ -157,6 +161,8 @@ export function FeedbackButtons({
           rating={selectedRating}
           comment={comment}
           onCommentChange={setComment}
+          reason={reason}
+          onReasonChange={setReason}
           onSubmit={handleSubmitFeedback}
           onSkip={handleSkip}
           isSubmitting={isSubmitting}

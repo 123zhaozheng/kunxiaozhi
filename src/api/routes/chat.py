@@ -448,6 +448,7 @@ async def chat_stream(
         "disabled_mcp_tools": request.disabled_mcp_tools,
         "team_id": request.team_id,
         "active_goal": active_goal_data,
+        "persona_preset_id": request.persona_preset_id,
     }
 
     # 检查并发限制
@@ -556,6 +557,7 @@ async def chat_stream(
             team_id=request.team_id,
             active_goal=active_goal_data,
             write_user_message_immediately=True,
+            persona_preset_id=request.persona_preset_id,
         )
     else:
         # STARTED — 正常提交后台任务
@@ -579,6 +581,7 @@ async def chat_stream(
             trace_id=trace_id,
             active_goal=active_goal_data,
             write_user_message_immediately=True,
+            persona_preset_id=request.persona_preset_id,
         )
 
     # 更新 session metadata，存储完整的对话配置

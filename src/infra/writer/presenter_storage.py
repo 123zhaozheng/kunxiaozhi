@@ -81,6 +81,8 @@ class StoragePresenterMixin:
             "agent_name": self.config.agent_name,
         }
         metadata.update(await self._build_identity_metadata())
+        if self.config.persona_preset_id:
+            metadata["persona_preset_id"] = self.config.persona_preset_id
         return metadata
 
     async def build_langsmith_metadata(self) -> Dict[str, Any]:

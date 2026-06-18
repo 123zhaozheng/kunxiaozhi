@@ -4,7 +4,7 @@ import { ThumbsUp, ThumbsDown, X, Send } from "lucide-react";
 import { clsx } from "clsx";
 import { useTranslation } from "react-i18next";
 import { useSwipeToClose } from "../../../hooks/useSwipeToClose";
-import type { RatingValue } from "../../../types/feedback";
+import type { RatingValue, FeedbackReason } from "../../../types/feedback";
 
 interface FeedbackDialogProps {
   isOpen: boolean;
@@ -12,6 +12,8 @@ interface FeedbackDialogProps {
   rating: RatingValue;
   comment: string;
   onCommentChange: (value: string) => void;
+  reason: FeedbackReason | null;
+  onReasonChange: (value: FeedbackReason | null) => void;
   onSubmit: () => void;
   onSkip: () => void;
   isSubmitting: boolean;
@@ -23,6 +25,8 @@ export function FeedbackDialog({
   rating,
   comment,
   onCommentChange,
+  reason,
+  onReasonChange,
   onSubmit,
   onSkip,
   isSubmitting,
@@ -107,6 +111,37 @@ export function FeedbackDialog({
 
           {/* Content */}
           <div className="p-5">
+            {rating === "down" && (
+              <div className="mb-3">
+                <div className="mb-2 text-xs text-stone-500 dark:text-stone-400">
+                  {t("feedback.reason.title", "请选择原因（可选）")}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {(
+                    [
+                      "irrelevant",
+                      "incomplete",
+                      "incorrect",
+                      "data_error",
+                    ] as FeedbackReason[]
+                  ).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => onReasonChange(reason === r ? null : r)}
+                      className={clsx(
+                        "rounded-lg border px-3 py-2 text-xs transition-colors",
+                        reason === r
+                          ? "border-stone-400 bg-stone-100 dark:border-stone-500 dark:bg-stone-700"
+                          : "border-stone-200 bg-white dark:border-stone-600 dark:bg-stone-800",
+                      )}
+                    >
+                      {t(`feedback.reason.${r}`)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <textarea
               ref={textareaRef}
               value={comment}
