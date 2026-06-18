@@ -135,14 +135,20 @@ export function SessionListContent({
     <>
       {/* Header */}
       <div className="flex items-center justify-between px-3 pt-3 pb-1 sm:px-4">
-        <div className="flex h-7 items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => navigate("/chat")}
+          className="flex h-7 items-center gap-1.5 rounded-lg transition-colors hover:bg-stone-100 dark:hover:bg-stone-800/60"
+          title={APP_NAME}
+          aria-label={APP_NAME}
+        >
           <img
             src="/images/lamb.webp"
             alt={APP_NAME}
             className="h-7 object-contain"
           />
           <BrandWordmark decorative className="h-7 w-auto" />
-        </div>
+        </button>
         <button
           onClick={onCollapse}
           className="flex h-8 w-8 items-center justify-center rounded-lg text-stone-600 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800/60 transition-colors cursor-w-resize rtl:cursor-e-resize"
