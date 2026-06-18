@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/06-15-analytics-pr1-backend-and-dashboard/prd.md", "reason": "PR1 acceptance criteria"}
+{"file": ".trellis/tasks/06-11-analytics-dashboard/prd.md", "reason": "Parent PRD decisions"}
+{"file": ".trellis/tasks/06-11-analytics-dashboard/research/data-sources-inventory.md", "reason": "Verify queries hit the right collections"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Backend quality verification"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Error handling verification"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Frontend quality verification"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Cross-layer consistency"}

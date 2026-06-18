@@ -1,0 +1,11 @@
+{"file": ".trellis/tasks/06-15-analytics-pr1-backend-and-dashboard/prd.md", "reason": "PR1 scope requirements"}
+{"file": ".trellis/tasks/06-11-analytics-dashboard/prd.md", "reason": "Parent PRD with full design decisions"}
+{"file": ".trellis/tasks/06-11-analytics-dashboard/research/data-sources-inventory.md", "reason": "Inventory of MongoDB collections for analytics queries"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend conventions"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "MongoDB patterns and index creation"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Error handling for analytics routes"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Logging for analytics queries"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend conventions"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Component structure for AnalyticsPanel"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "State patterns for time filters and async data loading"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "TypeScript types for analytics API responses"}
