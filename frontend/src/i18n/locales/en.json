@@ -47,6 +47,52 @@
     "selectMode": "Select Mode",
     "selectModeDesc": "Switch agent mode"
   },
+  "analytics": {
+    "overview": {
+      "activeUsers": "Active users",
+      "totalSessions": "Total sessions",
+      "totalTokens": "Total tokens",
+      "upVoteRate": "Positive rate"
+    },
+    "sessions": {
+      "messages": "Messages",
+      "sessions": "Sessions",
+      "title": "Sessions",
+      "trend": "Sessions & messages",
+      "trendHint": "Counts per day across the time range"
+    },
+    "subtitle": "System usage and token metrics",
+    "timeRange": {
+      "1d": "1 day",
+      "30d": "30 days",
+      "7d": "7 days",
+      "apply": "Apply",
+      "custom": "Custom range",
+      "end": "End date",
+      "label": "Time range",
+      "start": "Start date"
+    },
+    "title": "Analytics",
+    "tokens": {
+      "byModel": "Tokens by model",
+      "byModelHint": "Total tokens per model",
+      "byPreset": "Tokens by agent type (Top 10)",
+      "byPresetHint": "Total tokens per agent type",
+      "title": "Tokens",
+      "total": "Total tokens",
+      "trend": "Token usage over time",
+      "trendHint": "Total tokens per day",
+      "unit": "tokens"
+    },
+    "users": {
+      "active": "Active",
+      "activeTrend": "Active users",
+      "activeTrendHint": "Distinct users active per day",
+      "heatmap": "Activity heatmap",
+      "heatmapHint": "Weekday × hour (sessions)",
+      "title": "Users"
+    }
+  },
   "agentConfig": {
     "addFirstModel": "Add your first model",
     "addModel": "Add Model",
@@ -1308,6 +1354,7 @@
   "nav": {
     "adminMarketplace": "Admin Marketplace",
     "agents": "Configuration",
+    "analytics": "Analytics",
     "chat": "Chat",
     "feedback": "Feedback",
     "files": "Files",
@@ -1676,6 +1723,10 @@
     "agents": {
       "description": "Configure and manage AI agents. Set up system prompts, select models, define tools, and orchestrate multi-agent workflows for complex tasks.",
       "title": "AI Agents"
+    },
+    "analytics": {
+      "description": "Track global usage, token consumption, active users, sessions and per-persona metrics across your LambChat deployment.",
+      "title": "Analytics Dashboard"
     },
     "chat": {
       "description": "Have intelligent conversations with AI agents. Multi-model switching, real-time streaming responses, session management, file uploads, and multi-agent collaboration.",

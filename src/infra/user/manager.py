@@ -90,6 +90,9 @@ class UserManager:
 
             raise AccountNotActiveError("账户未激活，请验证邮箱后登录", user.email)
 
+        # 登录成功，刷新 updated_at 供活跃用户统计
+        await self.storage.touch_updated_at(user.id)
+
         # 获取用户的角色和权限
         roles = []
         permissions = set()

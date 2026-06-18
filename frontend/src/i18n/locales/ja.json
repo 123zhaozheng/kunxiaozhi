@@ -47,6 +47,52 @@
     "selectMode": "モード選択",
     "selectModeDesc": "エージェントモードを切り替え"
   },
+  "analytics": {
+    "overview": {
+      "activeUsers": "アクティブユーザー",
+      "totalSessions": "総セッション数",
+      "totalTokens": "総トークン数",
+      "upVoteRate": "高評価率"
+    },
+    "sessions": {
+      "messages": "メッセージ数",
+      "sessions": "セッション数",
+      "title": "セッション",
+      "trend": "セッションとメッセージの推移",
+      "trendHint": "期間内の1日あたりの集計"
+    },
+    "subtitle": "システム利用状況とトークン指標",
+    "timeRange": {
+      "1d": "1日",
+      "30d": "30日",
+      "7d": "7日",
+      "apply": "適用",
+      "custom": "カスタム範囲",
+      "end": "終了日",
+      "label": "期間",
+      "start": "開始日"
+    },
+    "title": "統計ダッシュボード",
+    "tokens": {
+      "byModel": "モデル別トークン",
+      "byModelHint": "モデルごとの総トークン数",
+      "byPreset": "Agent タイプ別トークン (Top 10)",
+      "byPresetHint": "各 Agent タイプの総トークン数",
+      "title": "トークン",
+      "total": "総トークン",
+      "trend": "トークン消費の推移",
+      "trendHint": "1日あたりの総トークン数",
+      "unit": "tokens"
+    },
+    "users": {
+      "active": "アクティブ",
+      "activeTrend": "アクティブユーザー",
+      "activeTrendHint": "1日あたりのユニークユーザー数",
+      "heatmap": "アクティビティヒートマップ",
+      "heatmapHint": "曜日 × 時間（セッション）",
+      "title": "ユーザー"
+    }
+  },
   "agentConfig": {
     "addFirstModel": "最初のモデルを追加",
     "addModel": "モデルを追加",
@@ -1308,6 +1354,7 @@
   "nav": {
     "adminMarketplace": "管理マーケット",
     "agents": "設定",
+    "analytics": "統計",
     "chat": "チャット",
     "feedback": "フィードバック",
     "files": "ファイル",
@@ -1658,6 +1705,10 @@
     "agents": {
       "description": "AIエージェントの設定と管理。システムプロンプト、モデル選択、ツール定義、マルチエージェントワークフローのオーケストレーション。",
       "title": "AIエージェント"
+    },
+    "analytics": {
+      "description": "LambChatにおけるシステム全体の利用状況、トークン消費、アクティブユーザー、セッション数、および各ペルソナごとの指標を確認できます。",
+      "title": "統計ダッシュボード"
     },
     "chat": {
       "description": "AIエージェントとインテリジェントな対話。マルチモデル切り替え、リアルタイムストリーミング応答、セッション管理、ファイルアップロード、マルチエージェント連携に対応。",

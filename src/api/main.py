@@ -21,6 +21,7 @@ from src.api.middleware.tracing import TracingMiddleware
 from src.api.middleware.user_context import UserContextMiddleware
 from src.api.routes import (
     agent,
+    analytics,
     auth,
     chat,
     envvar,
@@ -327,6 +328,12 @@ def _startup_index_initializers():
         await NotificationStorage().create_indexes()
         logger.info("NotificationStorage indexes initialized")
 
+    async def _init_analytics_storage() -> None:
+        from src.infra.analytics.storage import AnalyticsStorage
+
+        await AnalyticsStorage().ensure_indexes()
+        logger.info("AnalyticsStorage indexes initialized")
+
     return [
         ("agent_config_storage", _init_agent_config_storage),
         ("model_storage", _init_model_storage),
@@ -335,6 +342,7 @@ def _startup_index_initializers():
         ("session_storage", _init_session_storage),
         ("revealed_file_storage", _init_revealed_file_storage),
         ("notification_storage", _init_notification_storage),
+        ("analytics_storage", _init_analytics_storage),
     ]
 
 
@@ -654,6 +662,9 @@ def create_app() -> FastAPI:
     app.include_router(revealed_file.router, prefix="/api/files", tags=["Files"])
     app.include_router(human.router, prefix="/human", tags=["Human"])
     app.include_router(feedback.router, prefix="/api/feedback", tags=["Feedback"])
+    app.include_router(
+        analytics.router, prefix="/api/analytics", tags=["Analytics"]
+    )
     app.include_router(notification.router, prefix="/api/notifications", tags=["Notifications"])
     # WebSocket 路由: /ws 用于实时通知
     app.include_router(websocket.router, tags=["WebSocket"])

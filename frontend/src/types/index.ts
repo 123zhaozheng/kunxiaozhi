@@ -238,6 +238,21 @@ export type {
 } from "./team";
 
 // ============================================
+// Analytics Types
+// ============================================
+export type {
+  OverviewResponse,
+  TrendDataPoint,
+  TrendResponse,
+  HeatmapCell,
+  HeatmapResponse,
+  ByLabelItem,
+  ByLabelResponse,
+  SessionsTrendResponse,
+  AnalyticsRangePreset,
+} from "./analytics";
+
+// ============================================
 // Project Types
 // ============================================
 

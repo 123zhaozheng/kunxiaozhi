@@ -277,6 +277,15 @@ function MemoryPage() {
   return <AppContent key="memory" activeTab="memory" />;
 }
 
+function AnalyticsPage() {
+  useSEO({
+    title: "seo.analytics.title",
+    description: "seo.analytics.description",
+    path: "/analytics",
+  });
+  return <AppContent key="analytics" activeTab="analytics" />;
+}
+
 // Auth page wrapper - redirects to /chat after successful login/register
 function AuthPageWrapper({
   initialMode,
@@ -541,6 +550,19 @@ function App() {
               element={
                 <ProtectedRoute>
                   <MemoryPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/analytics"
+              element={
+                <ProtectedRoute
+                  permissions={[Permission.SETTINGS_MANAGE]}
+                  redirectTo="/chat"
+                  showToast
+                  toastMessage={t("errors.noPermission")}
+                >
+                  <AnalyticsPage />
                 </ProtectedRoute>
               }
             />

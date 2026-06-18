@@ -55,6 +55,11 @@ const TeamBuilderPanel = lazy(() =>
     default: m.TeamBuilderWrapper,
   })),
 );
+const AnalyticsPanel = lazy(() =>
+  import("../../panels/AnalyticsPanel").then((m) => ({
+    default: m.AnalyticsPanel,
+  })),
+);
 
 const panelMap: Record<
   string,
@@ -73,6 +78,7 @@ const panelMap: Record<
   team: TeamBuilderPanel,
   notifications: NotificationPanel,
   memory: MemoryPanel,
+  analytics: AnalyticsPanel,
 };
 
 function PanelLoader() {

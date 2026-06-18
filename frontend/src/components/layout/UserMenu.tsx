@@ -11,6 +11,7 @@ import {
   Star,
   Bell,
   Settings,
+  BarChart3,
 } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 import { Permission } from "../../types";
@@ -160,6 +161,12 @@ export function UserMenu({ onShowProfile }: UserMenuProps) {
       label: t("nav.notifications"),
       icon: Bell,
       show: canManageNotifications,
+    },
+    {
+      path: "/analytics",
+      label: t("nav.analytics"),
+      icon: BarChart3,
+      show: canManageSettings,
     },
     {
       path: "/settings",

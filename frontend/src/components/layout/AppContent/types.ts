@@ -12,4 +12,5 @@ export type TabType =
   | "files"
   | "notifications"
   | "memory"
-  | "team";
+  | "team"
+  | "analytics";

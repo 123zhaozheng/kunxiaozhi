@@ -47,6 +47,52 @@
     "selectMode": "모드 선택",
     "selectModeDesc": "에이전트 모드 전환"
   },
+  "analytics": {
+    "overview": {
+      "activeUsers": "활성 사용자",
+      "totalSessions": "총 세션 수",
+      "totalTokens": "총 토큰 수",
+      "upVoteRate": "긍정 비율"
+    },
+    "sessions": {
+      "messages": "메시지 수",
+      "sessions": "세션 수",
+      "title": "세션",
+      "trend": "세션 및 메시지 추이",
+      "trendHint": "선택한 기간의 일별 집계"
+    },
+    "subtitle": "시스템 사용량과 토큰 지표",
+    "timeRange": {
+      "1d": "1일",
+      "30d": "30일",
+      "7d": "7일",
+      "apply": "적용",
+      "custom": "사용자 지정 기간",
+      "end": "종료일",
+      "label": "기간",
+      "start": "시작일"
+    },
+    "title": "통계 대시보드",
+    "tokens": {
+      "byModel": "모델별 토큰",
+      "byModelHint": "모델별 총 토큰 수",
+      "byPreset": "Agent 타입별 토큰 (Top 10)",
+      "byPresetHint": "각 Agent 타입의 총 토큰 수",
+      "title": "토큰",
+      "total": "총 토큰",
+      "trend": "토큰 사용 추이",
+      "trendHint": "일별 총 토큰 수",
+      "unit": "tokens"
+    },
+    "users": {
+      "active": "활성",
+      "activeTrend": "활성 사용자",
+      "activeTrendHint": "일별 고유 활성 사용자 수",
+      "heatmap": "활동 히트맵",
+      "heatmapHint": "요일 × 시간 (세션)",
+      "title": "사용자"
+    }
+  },
   "agentConfig": {
     "addFirstModel": "첫 번째 모델 추가",
     "addModel": "모델 추가",
@@ -1308,6 +1354,7 @@
   "nav": {
     "adminMarketplace": "관리자 마켓플레이스",
     "agents": "설정",
+    "analytics": "통계",
     "chat": "채팅",
     "feedback": "피드백",
     "files": "파일",
@@ -1658,6 +1705,10 @@
     "agents": {
       "description": "AI 에이전트를 구성하고 관리하세요. 시스템 프롬프트 설정, 모델 선택, 도구 정의 및 복잡한 작업을 위한 멀티 에이전트 워크플로우 오케스트레이션.",
       "title": "AI 에이전트"
+    },
+    "analytics": {
+      "description": "LambChat의 시스템 전반의 사용량, 토큰 소비, 활성 사용자, 세션 수 및 페르소나별 지표를 확인하세요.",
+      "title": "통계 대시보드"
     },
     "chat": {
       "description": "AI 에이전트와 지능적인 대화를 나누세요. 다중 모델 전환, 실시간 스트리밍 응답, 세션 관리, 파일 업로드 및 멀티 에이전트 협업을 지원합니다.",

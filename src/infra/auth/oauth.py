@@ -260,6 +260,9 @@ class OAuthService:
                 logger.error("Failed to find or create user")
                 return None
 
+            # 登录成功，刷新 updated_at 供活跃用户统计
+            await self.storage.touch_updated_at(user.id)
+
             # 生成 JWT token
             from src.infra.auth.jwt import create_access_token, create_refresh_token
 

@@ -12,6 +12,16 @@ from src.kernel.schemas.agent import (
     StreamEvent,
     ToolsListResponse,
 )
+from src.kernel.schemas.analytics import (
+    ByLabelItem,
+    ByLabelResponse,
+    HeatmapCell,
+    HeatmapResponse,
+    OverviewResponse,
+    SessionsTrendResponse,
+    TrendDataPoint,
+    TrendResponse,
+)
 from src.kernel.schemas.mcp import (
     MCPExportResponse,
     MCPImportRequest,
@@ -129,4 +139,13 @@ __all__ = [
     "StreamEvent",
     "HealthResponse",
     "ToolsListResponse",
+    # Analytics
+    "OverviewResponse",
+    "TrendDataPoint",
+    "TrendResponse",
+    "HeatmapCell",
+    "HeatmapResponse",
+    "ByLabelItem",
+    "ByLabelResponse",
+    "SessionsTrendResponse",
 ]

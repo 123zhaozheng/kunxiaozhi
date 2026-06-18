@@ -558,6 +558,27 @@ class UserStorage:
                 pass
         return result.modified_count > 0
 
+    async def touch_updated_at(self, user_id: str) -> bool:
+        """
+        只刷新 updated_at 时间戳，用于登录等"活跃"事件，供活跃用户统计。
+
+        与 set_email_verified 等方法不同，此方法不清除 auth cache：
+        登录刷新时间戳不应让缓存失效，否则每次登录都清缓存反而降低性能。
+
+        Args:
+            user_id: 用户 ID
+
+        Returns:
+            是否更新成功
+        """
+        from bson import ObjectId
+
+        result = await self.collection.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {"updated_at": utc_now()}},
+        )
+        return result.modified_count > 0
+
     async def set_reset_token(self, user_id: str, token: str, expires: datetime) -> bool:
         """
         设置用户密码重置令牌

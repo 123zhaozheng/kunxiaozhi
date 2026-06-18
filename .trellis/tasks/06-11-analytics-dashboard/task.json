@@ -1,0 +1,29 @@
+{
+  "id": "analytics-dashboard",
+  "name": "analytics-dashboard",
+  "title": "feat: LambChat 全局统计与角色指标系统",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "zhaozheng",
+  "assignee": "zhaozheng",
+  "createdAt": "2026-06-11",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "06-15-analytics-pr1-backend-and-dashboard",
+    "06-15-analytics-pr2-modal-drilldown"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
