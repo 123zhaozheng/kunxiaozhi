@@ -1,4 +1,0 @@
-{"file": ".trellis/tasks/06-11-wecom-feedback-integration/research/wecom-feedback-event.md", "reason": "WeCom SDK feedback event 数据结构、映射关系、约束条件"}
-{"file": ".trellis/tasks/06-11-wecom-feedback-integration/research/lambchat-feedback-system.md", "reason": "LambChat 反馈系统 API、存储、Manager 入口，用于打通时直接调用"}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "Backend error handling guidelines for feedback handler exceptions"}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Logging guidelines for feedback event processing logs"}

@@ -1,4 +1,0 @@
-{"file": ".trellis/tasks/06-11-wecom-feedback-integration/research/wecom-feedback-event.md", "reason": "WeCom SDK feedback event 数据结构，验证实现是否正确映射"}
-{"file": ".trellis/tasks/06-11-wecom-feedback-integration/research/lambchat-feedback-system.md", "reason": "LambChat 反馈系统约束（唯一性、类型），验证反馈写入逻辑"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality guidelines for verifying code changes"}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "Error handling verification for feedback processing"}
