@@ -9,7 +9,7 @@ def apply_deepagents_patches() -> None:
     import deepagents.middleware.summarization as _summarization
 
     current = _summarization.compute_summarization_defaults
-    if getattr(current, "_lambchat_patched", False):
+    if getattr(current, "_kunxiaozhi_patched", False):
         return
 
     original = current
@@ -41,5 +41,5 @@ def apply_deepagents_patches() -> None:
             },
         }
 
-    _patched_compute_summarization_defaults._lambchat_patched = True  # type: ignore[attr-defined]
+    _patched_compute_summarization_defaults._kunxiaozhi_patched = True  # type: ignore[attr-defined]
     _summarization.compute_summarization_defaults = _patched_compute_summarization_defaults

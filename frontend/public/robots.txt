@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://lambchat.com/sitemap.xml
+Sitemap: https://kunxiaozhi.com/sitemap.xml

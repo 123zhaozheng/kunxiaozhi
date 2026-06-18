@@ -9,7 +9,7 @@
     "currentVersion": "現在のバージョン",
     "gitTag": "Git タグ",
     "latestVersion": "最新バージョン",
-    "title": "LambChat について",
+    "title": "昆小智 について",
     "upToDate": "最新バージョンをお使いです！",
     "updateAvailable": "新しいバージョンが利用可能です！",
     "viewOnGitHub": "GitHub で見る",
@@ -313,7 +313,7 @@
       "name": "Team Agent"
     }
   },
-  "appName": "LambChat",
+  "appName": "昆小智",
   "approvals": {
     "approve": "承認",
     "cancel": "キャンセル",
@@ -1693,10 +1693,10 @@
   "pwaStatus": {
     "backOnline": "オンラインに戻りました",
     "dismiss": "閉じる",
-    "newUpdate": "LambChatの新しいアップデートがあります。",
+    "newUpdate": "昆小智の新しいアップデートがあります。",
     "offlineBody": "接続が戻ると、チャット、ファイル、同期が再開されます。",
     "offlineTitle": "オフラインです",
-    "updateReadyBody": "新しい LambChat バージョンを適用できます。",
+    "updateReadyBody": "新しい 昆小智 バージョンを適用できます。",
     "updateReadyTitle": "更新の準備ができました"
   },
   "roles": {
@@ -1760,7 +1760,7 @@
       "title": "AIエージェント"
     },
     "analytics": {
-      "description": "LambChatにおけるシステム全体の利用状況、トークン消費、アクティブユーザー、セッション数、および各ペルソナごとの指標を確認できます。",
+      "description": "昆小智におけるシステム全体の利用状況、トークン消費、アクティブユーザー、セッション数、および各ペルソナごとの指標を確認できます。",
       "title": "統計ダッシュボード"
     },
     "chat": {
@@ -1777,8 +1777,8 @@
       "title": "ファイルライブラリ"
     },
     "landing": {
-      "description": "LambChatはSkills + MCPデュアルエンジン駆動のプラガブルなマルチテナントAI対話プラットフォーム。Claude、GPT、Geminiなど複数モデルに対応し、リアルタイムSSEストリーミング、マルチエージェントオーケストレーション、モジュラースキルシステムを提供。",
-      "title": "LambChat - AIエージェントプラットフォーム"
+      "description": "昆小智はSkills + MCPデュアルエンジン駆動のプラガブルなマルチテナントAI対話プラットフォーム。Claude、GPT、Geminiなど複数モデルに対応し、リアルタイムSSEストリーミング、マルチエージェントオーケストレーション、モジュラースキルシステムを提供。",
+      "title": "昆小智 - AIエージェントプラットフォーム"
     },
     "marketplace": {
       "description": "コミュニティ構築のAIスキルを発見・インストール。評価・デプロイでAIエージェントの機能を拡張。",
@@ -1829,10 +1829,10 @@
     "ACCESS_TOKEN_EXPIRE_HOURS": "アクセストークン有効期限（時間）",
     "ADMIN_CONTACT_EMAIL": "Aboutダイアログに表示される管理者の連絡先メール",
     "ADMIN_CONTACT_URL": "管理者の連絡先/サポートURL（ヘルプデスク、フィードバックフォーム等）、Aboutダイアログに表示",
-    "APP_BASE_URL": "ファイルダウンロード/アップロードの公開ベースURL（例：https://lambchat.com）。リバースプロキシ環境でrequest.base_urlが不正確な場合に必要。",
+    "APP_BASE_URL": "ファイルダウンロード/アップロードの公開ベースURL（例：https://kunxiaozhi.com）。リバースプロキシ環境でrequest.base_urlが不正確な場合に必要。",
     "ARQ_EMBEDDED_WORKER": "TASK_BACKEND が arq の場合、各 FastAPI プロセス内で内蔵 arq worker を起動します。",
     "ARQ_JOB_TIMEOUT_SECONDS": "1つの arq job の最大実行時間（秒）。",
-    "ARQ_QUEUE_NAME": "LambChat タスク job に arq が使用する Redis キュー名。",
+    "ARQ_QUEUE_NAME": "昆小智 タスク job に arq が使用する Redis キュー名。",
     "ARQ_WORKER_MAX_JOBS": "FastAPI プロセスごとの arq job 最大同時実行数。",
     "AUDIO_TRANSCRIPTION_API_KEY": "音声文字起こしプロバイダーの API キー。OpenAI や SiliconFlow などの OpenAI 互換エンドポイントに対応します。",
     "AUDIO_TRANSCRIPTION_BASE_URL": "音声文字起こしプロバイダーの Base URL（例: https://api.openai.com/v1 または https://api.siliconflow.cn/v1）。空欄の場合は既定の OpenAI エンドポイントを使います。",

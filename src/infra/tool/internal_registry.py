@@ -1,4 +1,4 @@
-"""Registry for LambChat internal tools exposed through the MCP UI."""
+"""Registry for 昆小智 internal tools exposed through the MCP UI."""
 
 from __future__ import annotations
 
@@ -22,11 +22,11 @@ from src.kernel.schemas.mcp import (
     MCPTransport,
 )
 
-INTERNAL_MCP_SERVER_NAME = "lambchat_internal"
+INTERNAL_MCP_SERVER_NAME = "kunxiaozhi_internal"
 
 
 def build_internal_tools() -> list[BaseTool]:
-    """Build the internal tool set that LambChat exposes to agents."""
+    """Build the internal tool set that 昆小智 exposes to agents."""
     tools: list[BaseTool] = []
 
     if settings.ENABLE_IMAGE_GENERATION:

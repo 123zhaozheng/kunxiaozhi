@@ -441,7 +441,7 @@ class WeComResponseCollector:
 
                 safe_suffix = os.path.basename(file_name) or "file"
                 with NamedTemporaryFile(
-                    prefix="lambchat-wecom-", suffix=f"-{safe_suffix}"
+                    prefix="kunxiaozhi-wecom-", suffix=f"-{safe_suffix}"
                 ) as tmp:
                     size = await _download_storage_object_to_file(
                         backend,

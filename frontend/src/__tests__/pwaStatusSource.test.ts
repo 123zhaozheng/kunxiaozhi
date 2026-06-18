@@ -21,7 +21,7 @@ test("App mounts the PWA status toast bridge near the global toaster", () => {
 
 test("PWA status toast bridge handles update, offline, and restored-online events", () => {
   assert.match(componentSource, /PWA_UPDATE_AVAILABLE_EVENT/);
-  assert.match(componentSource, /activateWaitingLambChatPwaUpdate/);
+  assert.match(componentSource, /activateWaitingKunXiaoZhiPwaUpdate/);
   assert.match(componentSource, /addEventListener\("offline"/);
   assert.match(componentSource, /addEventListener\("online"/);
   assert.match(componentSource, /toast\.custom/);
@@ -38,7 +38,7 @@ test("PWA status toast bridge uses i18n for user-facing text", () => {
   assert.doesNotMatch(componentSource, /You are offline/);
   assert.doesNotMatch(componentSource, /Chat, files, and sync will resume/);
   assert.doesNotMatch(componentSource, /Update ready/);
-  assert.doesNotMatch(componentSource, /A fresh LambChat version is ready/);
+  assert.doesNotMatch(componentSource, /A fresh 昆小智 version is ready/);
   assert.doesNotMatch(componentSource, /Back online/);
   assert.doesNotMatch(componentSource, /aria-label="Dismiss"/);
 });

@@ -35,7 +35,7 @@ def _has_tool_continuation(message) -> bool:
 def apply_reasoning_patches() -> None:
     import langchain_openai.chat_models.base as _base
 
-    if getattr(_base, "_lambchat_reasoning_patch_applied", False):
+    if getattr(_base, "_kunxiaozhi_reasoning_patch_applied", False):
         return
 
     _orig_convert_delta = _base._convert_delta_to_message_chunk
@@ -60,4 +60,4 @@ def apply_reasoning_patches() -> None:
 
     _base._convert_delta_to_message_chunk = _patched_convert_delta
     _base._convert_message_to_dict = _patched_convert_msg
-    setattr(_base, "_lambchat_reasoning_patch_applied", True)  # type: ignore[attr-defined]
+    setattr(_base, "_kunxiaozhi_reasoning_patch_applied", True)  # type: ignore[attr-defined]

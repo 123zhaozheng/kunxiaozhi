@@ -363,7 +363,7 @@ export const WelcomePage = memo(function WelcomePage({
         {/* App icon (mobile only) */}
         <div className="sm:hidden relative mb-2">
           <WelcomeIcon
-            label="LambChat"
+            label="昆小智"
             className="welcome-icon relative size-12 object-contain"
           />
         </div>

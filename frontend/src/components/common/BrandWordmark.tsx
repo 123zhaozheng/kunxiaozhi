@@ -10,7 +10,7 @@ export interface BrandWordmarkProps {
 export function BrandWordmark({
   className,
   decorative = false,
-  title = "LambChat",
+  title = "昆小智",
   width,
 }: BrandWordmarkProps) {
   const titleId = useId();
@@ -40,7 +40,7 @@ export function BrandWordmark({
         dominantBaseline="central"
         fill="currentColor"
       >
-        LambChat
+        昆小智
       </text>
     </svg>
   );

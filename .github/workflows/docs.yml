@@ -32,7 +32,7 @@ jobs:
 
       - run: pnpm docs:build
         env:
-          VITEPRESS_BASE: /LambChat/
+          VITEPRESS_BASE: /KunXiaoZhi/
 
       - uses: actions/upload-pages-artifact@v3
         with:

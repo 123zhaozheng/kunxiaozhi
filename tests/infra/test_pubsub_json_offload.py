@@ -155,7 +155,7 @@ async def test_settings_service_publish_change_offloads_json_serialization(
         lambda: _FakeSettingsPubSub(),
     )
 
-    await SettingsService._publish_change("APP_NAME", "LambChat")
+    await SettingsService._publish_change("APP_NAME", "昆小智")
 
     assert calls == [json.dumps]
     assert fake_redis.published[0][0] == SETTINGS_CHANNEL

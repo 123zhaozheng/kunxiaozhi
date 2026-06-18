@@ -48,7 +48,7 @@ async def test_start_embedded_arq_worker_runs_with_signals_disabled(
         ARQ_EMBEDDED_WORKER=True,
         ARQ_WORKER_MAX_JOBS=64,
         ARQ_JOB_TIMEOUT_SECONDS=30,
-        ARQ_QUEUE_NAME="lambchat:arq",
+        ARQ_QUEUE_NAME="kunxiaozhi:arq",
         REDIS_URL="redis://localhost:6379/0",
         REDIS_PASSWORD=None,
     )
@@ -63,7 +63,7 @@ async def test_start_embedded_arq_worker_runs_with_signals_disabled(
     assert worker.kwargs["handle_signals"] is False
     assert worker.kwargs["max_jobs"] == 64
     assert worker.kwargs["job_timeout"] == 30
-    assert worker.kwargs["queue_name"] == "lambchat:arq"
+    assert worker.kwargs["queue_name"] == "kunxiaozhi:arq"
 
     await runtime.stop()
     assert runtime.is_running is False

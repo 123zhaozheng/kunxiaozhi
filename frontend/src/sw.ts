@@ -17,10 +17,10 @@ declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<unknown>;
 };
 
-const APP_SHELL_CACHE = "lambchat-app-shell-v2";
-const STATIC_CACHE = "lambchat-static-v2";
-const FONT_STYLES_CACHE = "lambchat-font-styles-v2";
-const FONT_FILES_CACHE = "lambchat-font-files-v2";
+const APP_SHELL_CACHE = "kunxiaozhi-app-shell-v2";
+const STATIC_CACHE = "kunxiaozhi-static-v2";
+const FONT_STYLES_CACHE = "kunxiaozhi-font-styles-v2";
+const FONT_FILES_CACHE = "kunxiaozhi-font-files-v2";
 const OFFLINE_URL = "/offline.html";
 
 cleanupOutdatedCaches();
@@ -49,7 +49,7 @@ async function getOfflineFallback(): Promise<Response> {
 
   return (
     cachedFallback ||
-    new Response("LambChat is offline.", {
+    new Response("昆小智 is offline.", {
       status: 503,
       statusText: "Service Unavailable",
       headers: { "Content-Type": "text/plain; charset=utf-8" },
@@ -148,9 +148,9 @@ self.addEventListener("push", (event) => {
     payload = { body: event.data?.text() };
   }
 
-  const title = payload.title || "LambChat";
+  const title = payload.title || "昆小智";
   const options: NotificationOptions = {
-    body: payload.body || payload.message || "You have a new LambChat update.",
+    body: payload.body || payload.message || "You have a new 昆小智 update.",
     icon: payload.icon || "/icons/icon-192.png",
     badge: payload.badge || "/icons/icon-192.png",
     data: {

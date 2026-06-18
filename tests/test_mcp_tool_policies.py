@@ -44,14 +44,14 @@ async def test_mcp_storage_round_trips_tool_policy(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(storage, "_invalidate_user_cache", lambda user_id: None)
 
     await storage.set_tool_policy(
-        server_name="lambchat_internal",
+        server_name="kunxiaozhi_internal",
         tool_name="image_generate",
         allowed_roles=["admin"],
         role_quotas={"admin": MCPRoleQuota(daily_limit=2)},
         updated_by="admin-1",
     )
 
-    policy = await storage.get_tool_policy("lambchat_internal", "image_generate")
+    policy = await storage.get_tool_policy("kunxiaozhi_internal", "image_generate")
 
     assert policy is not None
     assert policy.allowed_roles == ["admin"]
@@ -79,10 +79,10 @@ async def test_internal_tool_policies_filter_blocked_tools(
 
     class _FakeStorage:
         async def list_tool_policies(self, server_name: str):
-            assert server_name == "lambchat_internal"
+            assert server_name == "kunxiaozhi_internal"
             return {
                 "image_generate": MCPToolPolicy(
-                    server_name="lambchat_internal",
+                    server_name="kunxiaozhi_internal",
                     tool_name="image_generate",
                     allowed_roles=["admin"],
                 )

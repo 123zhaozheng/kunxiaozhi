@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    lambchat_lib::run()
+    kunxiaozhi_lib::run()
 }

@@ -93,7 +93,7 @@ async def test_admin_mcp_list_includes_internal_server() -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert any(server["name"] == "lambchat_internal" for server in payload["servers"])
+    assert any(server["name"] == "kunxiaozhi_internal" for server in payload["servers"])
 
 
 @pytest.mark.asyncio
@@ -122,11 +122,11 @@ async def test_admin_internal_tool_discovery_uses_internal_registry(
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.get("/api/admin/mcp/lambchat_internal/tools")
+        response = await client.get("/api/admin/mcp/kunxiaozhi_internal/tools")
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["server_name"] == "lambchat_internal"
+    assert payload["server_name"] == "kunxiaozhi_internal"
     assert payload["count"] == 1
     assert payload["tools"][0]["name"] == "image_generate"
 

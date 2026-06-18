@@ -442,7 +442,7 @@ async def export_memories(
     return StreamingResponse(
         stream_export(),
         media_type="application/json",
-        headers={"Content-Disposition": 'attachment; filename="lambchat-memory-export.json"'},
+        headers={"Content-Disposition": 'attachment; filename="kunxiaozhi-memory-export.json"'},
     )
 
 

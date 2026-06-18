@@ -146,13 +146,7 @@ export function ProfileModal({
         className ?? ""
       }`}
     >
-      <a
-        href="https://github.com/clivia/LambChat"
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(e) => e.stopPropagation()}
-        className="text-[11px] text-stone-400 dark:text-stone-500 tabular-nums hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
-      >
+      <span className="text-[11px] text-stone-400 dark:text-stone-500 tabular-nums">
         <BrandWordmark
           decorative
           className="inline-block h-4 w-auto align-[-0.2em] text-stone-500 dark:text-stone-400"
@@ -160,16 +154,10 @@ export function ProfileModal({
         {versionInfo?.app_version && (
           <span className="ml-1 opacity-70">v{versionInfo.app_version}</span>
         )}
-      </a>
-      <a
-        href="https://github.com/clivia/LambChat"
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(e) => e.stopPropagation()}
-        className="px-1.5 sm:px-2 text-[11px] font-medium text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300 transition-colors py-1 rounded-md hover:bg-stone-100 dark:hover:bg-stone-700/60 shrink-0 font-serif"
-      >
+      </span>
+      <span className="px-1.5 sm:px-2 text-[11px] font-medium text-stone-400 dark:text-stone-500 py-1 rounded-md shrink-0 font-serif">
         {t("common.poweredBy")}
-      </a>
+      </span>
     </div>
   );
 

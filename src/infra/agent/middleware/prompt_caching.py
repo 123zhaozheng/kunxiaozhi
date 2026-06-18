@@ -19,7 +19,7 @@ from src.infra.agent.middleware._helpers import _system_message_to_blocks
 from src.kernel.config import settings
 
 _MAX_ANTHROPIC_CACHE_BREAKPOINTS = 4
-_PROMPT_CACHE_VOLATILE_TOOL_EXTRA = "_lambchat_prompt_cache_volatile"
+_PROMPT_CACHE_VOLATILE_TOOL_EXTRA = "_kunxiaozhi_prompt_cache_volatile"
 
 
 class PromptCachingMiddleware(AgentMiddleware):

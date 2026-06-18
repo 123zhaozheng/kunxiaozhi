@@ -38,14 +38,13 @@ class Settings(BaseSettings):
     """
 
     # Application (not in SETTING_DEFINITIONS - internal use only)
-    APP_NAME: str = "LambChat"
+    APP_NAME: str = "昆小智"
     APP_VERSION: str = Field(default_factory=get_app_version)
 
     # Version Info (populated at startup)
     GIT_TAG: Optional[str] = None
     COMMIT_HASH: Optional[str] = None
     BUILD_TIME: Optional[str] = None
-    GITHUB_URL: str = "https://github.com/Yanyutin753/LambChat"
 
     # Debug (not in SETTING_DEFINITIONS - developer toggle)
     DEBUG_STREAM_EVENTS: bool = False
@@ -72,7 +71,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
-    APP_BASE_URL: str = ""  # e.g. https://lambchat.example.com — 用于生成文件 URL 的固定前缀
+    APP_BASE_URL: str = ""  # e.g. https://kunxiaozhi.example.com — 用于生成文件 URL 的固定前缀
     LOG_LEVEL: str = "INFO"
 
     # LLM Settings
@@ -122,7 +121,7 @@ class Settings(BaseSettings):
     # Task execution settings
     TASK_BACKEND: str = "arq"  # local | arq
     ARQ_EMBEDDED_WORKER: bool = True
-    ARQ_QUEUE_NAME: str = "lambchat:arq"
+    ARQ_QUEUE_NAME: str = "kunxiaozhi:arq"
     ARQ_WORKER_MAX_JOBS: int = 64
     ARQ_JOB_TIMEOUT_SECONDS: int = 86400
     TASK_STARTUP_CLEANUP_CONCURRENCY: int = 16

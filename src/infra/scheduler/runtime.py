@@ -35,7 +35,7 @@ class ScheduledJob:
 
 
 class RuntimeScheduler:
-    """Small APScheduler facade for LambChat runtime services."""
+    """Small APScheduler facade for 昆小智 runtime services."""
 
     def __init__(self) -> None:
         self._scheduler: AsyncIOScheduler | None = None

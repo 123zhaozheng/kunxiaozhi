@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">LambChat</string>
-    <string name="title_activity_main">LambChat</string>
-    <string name="package_name">com.lambchat.app</string>
-    <string name="custom_url_scheme">com.lambchat.app</string>
+    <string name="app_name">昆小智</string>
+    <string name="title_activity_main">昆小智</string>
+    <string name="package_name">com.kunxiaozhi.app</string>
+    <string name="custom_url_scheme">com.kunxiaozhi.app</string>
 </resources>

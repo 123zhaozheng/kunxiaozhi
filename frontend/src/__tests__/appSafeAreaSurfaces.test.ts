@@ -39,21 +39,6 @@ test("the authenticated app shell reserves both status bar and home indicator ar
   );
 });
 
-test("public landing page header, mobile menu, and footer use safe-area spacing", () => {
-  const navbar = readSource("../components/landing/components/Navbar.tsx");
-  const mobileMenu = readSource(
-    "../components/landing/components/MobileMenu.tsx",
-  );
-  const footer = readSource("../components/landing/components/Footer.tsx");
-
-  assert.match(navbar, /className=\{`[^`]*\bsafe-area-top\b/);
-  assert.match(
-    mobileMenu,
-    /\btop-\[calc\(3\.5rem\+var\(--app-safe-area-top,0px\)\)\]/,
-  );
-  assert.match(footer, /className="[^"]*\bsafe-area-bottom\b/);
-});
-
 test("auth and shared public pages protect their fixed headers and bottom bars", () => {
   const auth = readSource("../components/auth/AuthPage.tsx");
   const shared = readSource("../components/share/SharedPage.tsx");

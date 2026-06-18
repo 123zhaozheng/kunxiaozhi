@@ -38,7 +38,7 @@ from src.kernel.config import settings
 
 logger = logging.getLogger(__name__)
 
-_PROMPT_CACHE_VOLATILE_TOOL_EXTRA = "_lambchat_prompt_cache_volatile"
+_PROMPT_CACHE_VOLATILE_TOOL_EXTRA = "_kunxiaozhi_prompt_cache_volatile"
 _BINARY_UPLOAD_SPOOL_MEMORY_LIMIT = 2 * 1024 * 1024
 _BINARY_BLOCK_UPLOAD_MAX_BYTES = 50 * 1024 * 1024
 _BINARY_BLOCK_UPLOAD_TOTAL_MAX_BYTES = 50 * 1024 * 1024

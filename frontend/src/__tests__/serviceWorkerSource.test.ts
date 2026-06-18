@@ -10,7 +10,7 @@ test("service worker uses Workbox precaching with an injected Vite manifest", ()
   assert.match(source, /cleanupOutdatedCaches\(\)/);
 });
 
-test("service worker keeps dynamic LambChat backends out of runtime caches", () => {
+test("service worker keeps dynamic 昆小智 backends out of runtime caches", () => {
   assert.match(source, /getPwaRequestKind/);
   assert.doesNotMatch(source, /registerRoute\([^]*\/api/);
   assert.doesNotMatch(source, /registerRoute\([^]*text\/event-stream/);

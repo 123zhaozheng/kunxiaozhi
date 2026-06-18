@@ -18,7 +18,7 @@ import type { SessionConfig } from "./useAgent/types";
 import type { PersonaPresetSnapshot } from "../types";
 import { normalizeAgentOptionValues } from "../components/layout/AppContent/useAgentOptions";
 
-const STORAGE_KEY = "lambchat_session_config";
+const STORAGE_KEY = "kunxiaozhi_session_config";
 
 export interface SessionConfigState {
   // 当前对话禁用的 skills（名称列表）

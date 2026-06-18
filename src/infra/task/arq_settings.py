@@ -7,7 +7,7 @@ from arq.connections import RedisSettings
 
 
 def build_arq_redis_settings(settings: Any) -> RedisSettings:
-    """Build arq Redis settings from LambChat's Redis configuration."""
+    """Build arq Redis settings from 昆小智's Redis configuration."""
     parsed = urlparse(settings.REDIS_URL)
     database = 0
     if parsed.path and parsed.path != "/":

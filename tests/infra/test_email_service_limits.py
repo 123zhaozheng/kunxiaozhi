@@ -12,7 +12,7 @@ def test_parse_accounts_clamps_configured_accounts(monkeypatch) -> None:
         {
             "api_key": f"re_key_{index}",
             "email_from": f"noreply-{index}@example.com",
-            "email_from_name": "LambChat",
+            "email_from_name": "昆小智",
         }
         for index in range(email_service_module.RESEND_ACCOUNTS_MAX + 5)
     ]
@@ -59,6 +59,6 @@ async def test_get_accounts_offloads_account_json_parsing(monkeypatch) -> None:
         {
             "api_key": "re_key_1",
             "email_from": "noreply@example.com",
-            "email_from_name": "LambChat",
+            "email_from_name": "昆小智",
         }
     ]

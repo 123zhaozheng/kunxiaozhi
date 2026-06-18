@@ -9,7 +9,7 @@ def test_openai_models_include_prompt_cache_routing_hints() -> None:
         api_key="sk-test",
     )
 
-    assert model.model_kwargs["prompt_cache_key"] == "lambchat:openai:gpt-4.1"
+    assert model.model_kwargs["prompt_cache_key"] == "kunxiaozhi:openai:gpt-4.1"
     assert model.model_kwargs["prompt_cache_retention"] == "24h"
 
 

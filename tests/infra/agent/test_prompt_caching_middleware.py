@@ -154,7 +154,7 @@ def test_retag_tools_skips_explicitly_volatile_tools() -> None:
         _FakeTool(
             name="github:create_issue",
             description="dynamic deferred tool",
-            extras={"_lambchat_prompt_cache_volatile": True},
+            extras={"_kunxiaozhi_prompt_cache_volatile": True},
         ),
     ]
 
@@ -164,7 +164,7 @@ def test_retag_tools_skips_explicitly_volatile_tools() -> None:
 
     assert retagged is not None
     assert retagged[0].extras == {"cache_control": {"type": "ephemeral"}}
-    assert retagged[1].extras == {"_lambchat_prompt_cache_volatile": True}
+    assert retagged[1].extras == {"_kunxiaozhi_prompt_cache_volatile": True}
 
 
 def test_cacheable_tool_count_ignores_volatile_deferred_tools() -> None:
@@ -173,7 +173,7 @@ def test_cacheable_tool_count_ignores_volatile_deferred_tools() -> None:
         _FakeTool(
             name="github:create_issue",
             description="dynamic deferred tool",
-            extras={"_lambchat_prompt_cache_volatile": True},
+            extras={"_kunxiaozhi_prompt_cache_volatile": True},
         ),
     ]
 
@@ -498,7 +498,7 @@ async def test_tool_search_middleware_injects_discovered_tools_as_cacheable() ->
     result = await middleware.awrap_model_call(_Request(), _handler)
     discovered_tool = next(tool for tool in result.tools if tool.name == "alpha:create")
 
-    assert "_lambchat_prompt_cache_volatile" not in (discovered_tool.extras or {})
+    assert "_kunxiaozhi_prompt_cache_volatile" not in (discovered_tool.extras or {})
 
 
 async def test_tool_search_middleware_skips_duplicate_search_guide_when_already_present() -> None:

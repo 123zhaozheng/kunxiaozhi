@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { CircleHelp, ExternalLink, Keyboard } from "lucide-react";
+import { CircleHelp, Keyboard } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ShortcutDialog } from "./ChatInputShortcuts";
 
@@ -44,27 +44,6 @@ function SecondaryIcon({ children }: { children: ReactNode }) {
     <span className="shrink-0" style={{ color: theme.textSecondary }}>
       {children}
     </span>
-  );
-}
-
-function MenuLink({
-  href,
-  children,
-  ...props
-}: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      role="menuitem"
-      className={`${menuItemClass} no-underline`}
-      style={{ color: theme.text }}
-      {...hover}
-      {...props}
-    >
-      {children}
-    </a>
   );
 }
 
@@ -129,19 +108,6 @@ export function ChatInputHelpMenu({ className }: { className?: string }) {
           className="absolute bottom-full right-0 mb-1.5 sm:mb-2 w-[170px] sm:w-[200px] rounded-xl p-1 shadow-lg"
           style={panelStyle}
         >
-          <MenuLink
-            href="https://yanyutin753.github.io/LambChat/"
-            onClick={close}
-          >
-            <SecondaryIcon>
-              <CircleHelp size={14} className="sm:w-4 sm:h-4" />
-            </SecondaryIcon>
-            <span className="flex-1">{t("chat.helpDocs", "帮助文档")}</span>
-            <SecondaryIcon>
-              <ExternalLink size={12} style={{ opacity: 0.5 }} />
-            </SecondaryIcon>
-          </MenuLink>
-
           <MenuButtonItem
             onClick={() => {
               close();

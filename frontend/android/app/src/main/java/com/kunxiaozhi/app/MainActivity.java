@@ -1,4 +1,4 @@
-package com.lambchat.app;
+package com.kunxiaozhi.app;
 
 import com.getcapacitor.BridgeActivity;
 

@@ -10,7 +10,7 @@ DEFAULT_SHARE_ROBOTS = "noindex, follow, max-image-preview:large"
 INDEX_ROBOTS = "index, follow, max-image-preview:large"
 NOINDEX_ROBOTS = "noindex, follow, max-image-preview:large"
 DEFAULT_SHARE_PREVIEW_LABEL = "Shared session preview"
-DEFAULT_SHARE_DESCRIPTION = "View this shared session on LambChat."
+DEFAULT_SHARE_DESCRIPTION = "View this shared session on 昆小智."
 PUBLIC_HOME_PATH = "/"
 CRAWLER_ROBOTS_META_NAMES = (
     "googlebot",
@@ -111,7 +111,7 @@ def build_shared_page_seo(
     session: Mapping[str, Any],
     owner: Mapping[str, Any] | None,
     events: Sequence[Mapping[str, Any]],
-    app_name: str = "LambChat",
+    app_name: str = "昆小智",
     indexable: bool = False,
 ) -> SharedPageSeo:
     first_user, first_assistant = _extract_preview_lines(events)
@@ -156,7 +156,7 @@ def build_shared_page_error_seo(
     *,
     base_url: str,
     share_id: str,
-    app_name: str = "LambChat",
+    app_name: str = "昆小智",
     reason: str,
 ) -> SharedPageSeo:
     messages = {
@@ -208,8 +208,8 @@ def _build_home_preview_html() -> str:
     feature_items = "\n".join(f"      <li>{html.escape(feature)}</li>" for feature in features)
     return f"""<main data-public-preview="server" style="max-width: 920px; margin: 0 auto; padding: 48px 24px; font-family: 'Source Sans 3', Arial, sans-serif; color: #1c1917; background: #faf9f7;">
     <p style="margin: 0 0 12px; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #78716c;">AI agent workspace</p>
-    <h1>LambChat AI Agent Platform</h1>
-    <p style="font-size: 18px; line-height: 1.7; color: #44403c;">LambChat is a pluggable, multi-tenant AI conversation platform for teams building agent workflows with Skills, MCP tools, and streaming model responses.</p>
+    <h1>昆小智 AI Agent Platform</h1>
+    <p style="font-size: 18px; line-height: 1.7; color: #44403c;">昆小智 is a pluggable, multi-tenant AI conversation platform for teams building agent workflows with Skills, MCP tools, and streaming model responses.</p>
     <ul style="font-size: 16px; line-height: 1.8; color: #44403c;">
 {feature_items}
     </ul>
@@ -220,12 +220,12 @@ def build_public_route_seo(*, base_url: str, path: str) -> PublicRouteSeo:
     normalized_path = path if path.startswith("/") else f"/{path}"
     is_home = _is_public_indexable_path(normalized_path)
     title = (
-        "LambChat - AI Agent Platform | Multi-Model Chat & Skill Engine" if is_home else "LambChat"
+        "昆小智 - AI Agent Platform | Multi-Model Chat & Skill Engine" if is_home else "昆小智"
     )
     description = (
-        "LambChat is a pluggable, multi-tenant AI conversation platform for teams building multi-model agents with Skills, MCP tools, streaming chat, document processing, and role-based access."
+        "昆小智 is a pluggable, multi-tenant AI conversation platform for teams building multi-model agents with Skills, MCP tools, streaming chat, document processing, and role-based access."
         if is_home
-        else "LambChat application route."
+        else "昆小智 application route."
     )
 
     return PublicRouteSeo(

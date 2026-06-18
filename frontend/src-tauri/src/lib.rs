@@ -3,5 +3,5 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .run(tauri::generate_context!())
-        .expect("error while running LambChat desktop app");
+        .expect("error while running 昆小智 desktop app");
 }

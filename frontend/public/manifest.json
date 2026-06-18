@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "LambChat - AI Agent Platform",
-  "short_name": "LambChat",
+  "name": "昆小智 - AI 智能体平台",
+  "short_name": "昆小智",
   "description": "A pluggable, multi-tenant AI conversation system. Skills + MCP dual-engine driven, modular by design. SSE streaming, multi-modal document processing, JWT/RBAC auth, and GitHub-synced Skills.",
   "start_url": "/",
   "scope": "/",
@@ -62,14 +62,14 @@
     {
       "name": "Skills",
       "short_name": "Skills",
-      "description": "Open the LambChat skills workspace",
+      "description": "Open the 昆小智 skills workspace",
       "url": "/skills",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Marketplace",
       "short_name": "Market",
-      "description": "Browse LambChat marketplace skills",
+      "description": "Browse 昆小智 marketplace skills",
       "url": "/marketplace",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }
@@ -80,14 +80,14 @@
       "sizes": "1280x640",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "LambChat AI agent workspace"
+      "label": "昆小智 AI agent workspace"
     },
     {
       "src": "/images/best-practice/mobile-view.webp",
       "sizes": "750x1624",
       "type": "image/webp",
       "form_factor": "narrow",
-      "label": "LambChat mobile chat workspace"
+      "label": "昆小智 mobile chat workspace"
     }
   ],
   "launch_handler": {

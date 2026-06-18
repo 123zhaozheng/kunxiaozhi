@@ -8,7 +8,7 @@ test("extracts generated image uploads from Image Generate tool results", () => 
     success: true,
     images: [
       {
-        url: "https://lambchat.com/api/upload/file/generated-images/6999be7275bdd6b1d868075b/20260527_164547_8ee7dae2_generated-20260527_164547-1.png",
+        url: "https://kunxiaozhi.com/api/upload/file/generated-images/6999be7275bdd6b1d868075b/20260527_164547_8ee7dae2_generated-20260527_164547-1.png",
         key: "generated-images/6999be7275bdd6b1d868075b/20260527_164547_8ee7dae2_generated-20260527_164547-1.png",
         content_type: "image/png",
       },
@@ -17,7 +17,7 @@ test("extracts generated image uploads from Image Generate tool results", () => 
 
   assert.deepEqual(extractGeneratedImageResults(result), [
     {
-      url: "https://lambchat.com/api/upload/file/generated-images/6999be7275bdd6b1d868075b/20260527_164547_8ee7dae2_generated-20260527_164547-1.png",
+      url: "https://kunxiaozhi.com/api/upload/file/generated-images/6999be7275bdd6b1d868075b/20260527_164547_8ee7dae2_generated-20260527_164547-1.png",
       name: "20260527_164547_8ee7dae2_generated-20260527_164547-1.png",
       contentType: "image/png",
     },
@@ -53,7 +53,7 @@ test("ignores non-image upload entries", () => {
       success: true,
       images: [
         {
-          url: "https://lambchat.com/api/upload/file/report.pdf",
+          url: "https://kunxiaozhi.com/api/upload/file/report.pdf",
           content_type: "application/pdf",
         },
       ],

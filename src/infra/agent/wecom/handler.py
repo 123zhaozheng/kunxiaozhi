@@ -212,10 +212,10 @@ def create_wecom_message_handler(
                 )
                 return
 
-            # ── WeCom userid → LambChat user_id mapping ───────────────
+            # ── WeCom userid → 昆小智 user_id mapping ───────────────
             # WeCom userid (e.g. employee ID "10325") is used as the
-            # LambChat username during registration. Look up the real
-            # LambChat user_id (MongoDB ObjectId) via username.
+            # 昆小智 username during registration. Look up the real
+            # 昆小智 user_id (MongoDB ObjectId) via username.
             session_owner_id = sender_id  # fallback
             try:
                 from src.infra.user.storage import UserStorage
@@ -229,7 +229,7 @@ def create_wecom_message_handler(
                     )
                 else:
                     logger.warning(
-                        "[WeCom] No LambChat user found for username=%s, "
+                        "[WeCom] No 昆小智 user found for username=%s, "
                         "using sender_id as fallback",
                         sender_id,
                     )
@@ -564,10 +564,10 @@ async def _handle_wecom_feedback(
     chat_type: str,
     aibotid: str,
 ) -> None:
-    """Process WeCom feedback event and sync to LambChat feedback system.
+    """Process WeCom feedback event and sync to 昆小智 feedback system.
 
     WeCom feedback_type: 1=like, 2=dislike, 3=cancel.
-    LambChat rating: "up" or "down".
+    昆小智 rating: "up" or "down".
     """
     from src.infra.feedback.manager import FeedbackManager
     from src.infra.feedback.storage import FeedbackStorage
@@ -599,7 +599,7 @@ async def _handle_wecom_feedback(
             )
         else:
             logger.warning(
-                "[WeCom Feedback] No LambChat user for username=%s, using sender_id as fallback",
+                "[WeCom Feedback] No 昆小智 user for username=%s, using sender_id as fallback",
                 sender_id,
             )
     except Exception as e:

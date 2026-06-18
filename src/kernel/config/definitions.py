@@ -135,7 +135,7 @@ SETTING_DEFINITIONS: dict[str, dict] = {
                     name="email_from_name",
                     type="text",
                     label="settingDesc.RESEND_ACCOUNT_EMAIL_FROM_NAME",
-                    placeholder="LambChat",
+                    placeholder="昆小智",
                 ),
             ],
         ),
@@ -842,7 +842,7 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "category": SettingCategory.REDIS,
         "subcategory": "task",
         "description": "settingDesc.ARQ_QUEUE_NAME",
-        "default": "lambchat:arq",
+        "default": "kunxiaozhi:arq",
         "depends_on": {"key": "TASK_BACKEND", "value": "arq"},
     },
     "ARQ_WORKER_MAX_JOBS": {

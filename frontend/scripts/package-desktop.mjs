@@ -10,11 +10,11 @@ function hasCommand(command) {
   );
 }
 
-const appUrl = process.env.LAMBCHAT_APP_URL || "";
+const appUrl = process.env.KUNXIAOZHI_APP_URL || "";
 
 if (!appUrl) {
   console.error(
-    "Missing LAMBCHAT_APP_URL. Example: LAMBCHAT_APP_URL=https://chat.example.com pnpm package:desktop",
+    "Missing KUNXIAOZHI_APP_URL. Example: KUNXIAOZHI_APP_URL=https://chat.example.com pnpm package:desktop",
   );
   process.exit(1);
 }
@@ -63,7 +63,7 @@ const result = spawnSync(pnpmCommand, args, {
   shell: process.platform === "win32",
   env: {
     ...process.env,
-    LAMBCHAT_APP_URL: normalizedAppUrl,
+    KUNXIAOZHI_APP_URL: normalizedAppUrl,
     VITE_API_BASE: normalizedAppUrl,
   },
 });

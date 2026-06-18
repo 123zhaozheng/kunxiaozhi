@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { getPwaRequestKind, isBackendPath } from "../pwaRouting.ts";
 
-const ORIGIN = "https://lambchat.com";
+const ORIGIN = "https://kunxiaozhi.com";
 
 test("bypasses backend, streaming, non-GET, and cross-origin requests", () => {
   assert.equal(isBackendPath("/api/chat"), true);

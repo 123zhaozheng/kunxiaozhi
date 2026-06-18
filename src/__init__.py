@@ -1,1 +1,1 @@
-# LambChat source package
+# KunXiaoZhi source package

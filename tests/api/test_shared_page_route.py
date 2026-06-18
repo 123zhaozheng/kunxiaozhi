@@ -27,14 +27,14 @@ async def test_shared_page_route_injects_share_specific_seo(
 <!doctype html>
 <html lang="en">
   <head>
-    <link rel="canonical" href="https://lambchat.com/" />
-    <title>LambChat - AI Agent Platform</title>
+    <link rel="canonical" href="https://kunxiaozhi.com/" />
+    <title>昆小智 - AI Agent Platform</title>
     <meta name="description" content="Default description" />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Default og title" />
     <meta property="og:description" content="Default og description" />
-    <meta property="og:url" content="https://lambchat.com/" />
+    <meta property="og:url" content="https://kunxiaozhi.com/" />
     <meta name="twitter:title" content="Default twitter title" />
     <meta name="twitter:description" content="Default twitter description" />
   </head>
@@ -74,17 +74,17 @@ async def test_shared_page_route_injects_share_specific_seo(
         lambda _project_root, _frontend_dev_url: ("static", static_dir),
     )
     monkeypatch.setattr(api_main.share, "get_shared_content", _fake_get_shared_content)
-    monkeypatch.setattr(api_main.settings, "APP_BASE_URL", "https://lambchat.com")
+    monkeypatch.setattr(api_main.settings, "APP_BASE_URL", "https://kunxiaozhi.com")
 
     app = api_main.create_app()
     transport = ASGITransport(app=app)
 
-    async with AsyncClient(transport=transport, base_url="https://lambchat.com") as client:
+    async with AsyncClient(transport=transport, base_url="https://kunxiaozhi.com") as client:
         response = await client.get("/shared/ssehSOzUgKnX")
 
     assert response.status_code == 200
-    assert "<title>🤖 创意Agent专利 - LambChat Shared Session</title>" in response.text
-    assert 'rel="canonical" href="https://lambchat.com/shared/ssehSOzUgKnX"' in response.text
+    assert "<title>🤖 创意Agent专利 - 昆小智 Shared Session</title>" in response.text
+    assert 'rel="canonical" href="https://kunxiaozhi.com/shared/ssehSOzUgKnX"' in response.text
     assert 'content="noindex, follow, max-image-preview:large"' in response.text
     assert "Shared session preview" in response.text
 
@@ -101,14 +101,14 @@ async def test_public_home_route_injects_crawlable_seo(
 <!doctype html>
 <html lang="en">
   <head>
-    <link rel="canonical" href="https://lambchat.com/" />
-    <title>LambChat - AI Agent Platform</title>
+    <link rel="canonical" href="https://kunxiaozhi.com/" />
+    <title>昆小智 - AI Agent Platform</title>
     <meta name="description" content="Default description" />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Default og title" />
     <meta property="og:description" content="Default og description" />
-    <meta property="og:url" content="https://lambchat.com/" />
+    <meta property="og:url" content="https://kunxiaozhi.com/" />
     <meta name="twitter:title" content="Default twitter title" />
     <meta name="twitter:description" content="Default twitter description" />
   </head>
@@ -125,18 +125,18 @@ async def test_public_home_route_injects_crawlable_seo(
         "resolve_frontend_target",
         lambda _project_root, _frontend_dev_url: ("static", static_dir),
     )
-    monkeypatch.setattr(api_main.settings, "APP_BASE_URL", "https://lambchat.com")
+    monkeypatch.setattr(api_main.settings, "APP_BASE_URL", "https://kunxiaozhi.com")
 
     app = api_main.create_app()
     transport = ASGITransport(app=app)
 
-    async with AsyncClient(transport=transport, base_url="https://lambchat.com") as client:
+    async with AsyncClient(transport=transport, base_url="https://kunxiaozhi.com") as client:
         response = await client.get("/")
 
     assert response.status_code == 200
-    assert "<h1>LambChat AI Agent Platform</h1>" in response.text
+    assert "<h1>昆小智 AI Agent Platform</h1>" in response.text
     assert 'content="index, follow, max-image-preview:large"' in response.text
-    assert 'rel="canonical" href="https://lambchat.com/"' in response.text
+    assert 'rel="canonical" href="https://kunxiaozhi.com/"' in response.text
 
 
 @pytest.mark.asyncio
@@ -164,12 +164,12 @@ async def test_public_home_route_reuses_cached_index_html(
         "resolve_frontend_target",
         lambda _project_root, _frontend_dev_url: ("static", static_dir),
     )
-    monkeypatch.setattr(api_main.settings, "APP_BASE_URL", "https://lambchat.com")
+    monkeypatch.setattr(api_main.settings, "APP_BASE_URL", "https://kunxiaozhi.com")
 
     app = api_main.create_app()
     transport = ASGITransport(app=app)
 
-    async with AsyncClient(transport=transport, base_url="https://lambchat.com") as client:
+    async with AsyncClient(transport=transport, base_url="https://kunxiaozhi.com") as client:
         first = await client.get("/")
         second = await client.get("/")
 
@@ -231,14 +231,14 @@ async def test_auth_spa_routes_are_noindexed_in_initial_html(
 <!doctype html>
 <html lang="en">
   <head>
-    <link rel="canonical" href="https://lambchat.com/" />
-    <title>LambChat - AI Agent Platform</title>
+    <link rel="canonical" href="https://kunxiaozhi.com/" />
+    <title>昆小智 - AI Agent Platform</title>
     <meta name="description" content="Default description" />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Default og title" />
     <meta property="og:description" content="Default og description" />
-    <meta property="og:url" content="https://lambchat.com/" />
+    <meta property="og:url" content="https://kunxiaozhi.com/" />
     <meta name="twitter:title" content="Default twitter title" />
     <meta name="twitter:description" content="Default twitter description" />
   </head>
@@ -255,17 +255,17 @@ async def test_auth_spa_routes_are_noindexed_in_initial_html(
         "resolve_frontend_target",
         lambda _project_root, _frontend_dev_url: ("static", static_dir),
     )
-    monkeypatch.setattr(api_main.settings, "APP_BASE_URL", "https://lambchat.com")
+    monkeypatch.setattr(api_main.settings, "APP_BASE_URL", "https://kunxiaozhi.com")
 
     app = api_main.create_app()
     transport = ASGITransport(app=app)
 
-    async with AsyncClient(transport=transport, base_url="https://lambchat.com") as client:
+    async with AsyncClient(transport=transport, base_url="https://kunxiaozhi.com") as client:
         response = await client.get("/auth/login")
 
     assert response.status_code == 200
     assert 'content="noindex, follow, max-image-preview:large"' in response.text
-    assert 'rel="canonical" href="https://lambchat.com/auth/login"' in response.text
+    assert 'rel="canonical" href="https://kunxiaozhi.com/auth/login"' in response.text
 
 
 @pytest.mark.asyncio
@@ -288,7 +288,7 @@ async def test_image_static_files_include_cache_control(
     app = api_main.create_app()
     transport = ASGITransport(app=app)
 
-    async with AsyncClient(transport=transport, base_url="https://lambchat.com") as client:
+    async with AsyncClient(transport=transport, base_url="https://kunxiaozhi.com") as client:
         response = await client.get("/images/lamb.webp")
 
     assert response.status_code == 200
@@ -305,7 +305,7 @@ async def test_service_worker_is_served_without_auth(
     static_dir = tmp_path / "dist"
     static_dir.mkdir()
     (static_dir / "index.html").write_text("<!doctype html><div id='root'></div>", encoding="utf-8")
-    (static_dir / "sw.js").write_text("self.__lambchat = true;\n", encoding="utf-8")
+    (static_dir / "sw.js").write_text("self.__kunxiaozhi = true;\n", encoding="utf-8")
 
     monkeypatch.setattr(
         api_main,
@@ -316,13 +316,13 @@ async def test_service_worker_is_served_without_auth(
     app = api_main.create_app()
     transport = ASGITransport(app=app)
 
-    async with AsyncClient(transport=transport, base_url="https://lambchat.com") as client:
+    async with AsyncClient(transport=transport, base_url="https://kunxiaozhi.com") as client:
         response = await client.get("/sw.js")
 
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-cache"
     assert response.headers["content-type"].startswith("text/javascript")
-    assert response.text == "self.__lambchat = true;\n"
+    assert response.text == "self.__kunxiaozhi = true;\n"
 
 
 @pytest.mark.asyncio
@@ -333,7 +333,7 @@ async def test_spa_static_file_metadata_check_runs_in_blocking_executor(
     static_dir = tmp_path / "dist"
     static_dir.mkdir()
     (static_dir / "index.html").write_text("<!doctype html><div id='root'></div>", encoding="utf-8")
-    (static_dir / "sw.js").write_text("self.__lambchat = true;\n", encoding="utf-8")
+    (static_dir / "sw.js").write_text("self.__kunxiaozhi = true;\n", encoding="utf-8")
     blocking_calls: list[str] = []
 
     async def _fake_run_blocking_io(func, *args, **kwargs):
@@ -350,7 +350,7 @@ async def test_spa_static_file_metadata_check_runs_in_blocking_executor(
     app = api_main.create_app()
     transport = ASGITransport(app=app)
 
-    async with AsyncClient(transport=transport, base_url="https://lambchat.com") as client:
+    async with AsyncClient(transport=transport, base_url="https://kunxiaozhi.com") as client:
         response = await client.get("/sw.js")
 
     assert response.status_code == 200
@@ -379,7 +379,7 @@ async def test_offline_page_is_served_without_auth(
     app = api_main.create_app()
     transport = ASGITransport(app=app)
 
-    async with AsyncClient(transport=transport, base_url="https://lambchat.com") as client:
+    async with AsyncClient(transport=transport, base_url="https://kunxiaozhi.com") as client:
         response = await client.get("/offline.html")
 
     assert response.status_code == 200

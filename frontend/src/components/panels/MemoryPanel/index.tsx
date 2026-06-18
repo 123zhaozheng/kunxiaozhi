@@ -142,7 +142,7 @@ export function MemoryPanel() {
       const link = document.createElement("a");
       const date = new Date().toISOString().slice(0, 10);
       link.href = url;
-      link.download = `lambchat-memory-${date}.json`;
+      link.download = `kunxiaozhi-memory-${date}.json`;
       document.body.appendChild(link);
       link.click();
       link.remove();

@@ -15,7 +15,7 @@ import type {
   PersonaPresetSnapshot,
 } from "../../types";
 
-const SESSION_CONFIG_KEY = "lambchat_session_config";
+const SESSION_CONFIG_KEY = "kunxiaozhi_session_config";
 
 export type ScopeFilter = "all" | "pinned" | "favorite" | "global" | "user";
 
@@ -366,7 +366,7 @@ export function usePersonaPlaza() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `lambchat-personas-${new Date()
+    a.download = `kunxiaozhi-personas-${new Date()
       .toISOString()
       .slice(0, 10)}.json`;
     a.click();

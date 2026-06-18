@@ -85,7 +85,7 @@ async def _download_storage_object_to_file(
 
 
 def _storage_key_from_upload_url(url: str) -> str | None:
-    """Extract the LambChat storage key from a proxied upload URL."""
+    """Extract the 昆小智 storage key from a proxied upload URL."""
     if not url:
         return None
     try:

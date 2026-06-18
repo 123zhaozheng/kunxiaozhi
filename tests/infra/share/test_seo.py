@@ -9,7 +9,7 @@ from src.infra.share.seo import (
 
 def test_build_shared_page_seo_uses_share_specific_metadata() -> None:
     seo = build_shared_page_seo(
-        base_url="https://lambchat.com",
+        base_url="https://kunxiaozhi.com",
         share_id="ssehSOzUgKnX",
         session={
             "name": "🤖 创意Agent专利",
@@ -39,8 +39,8 @@ def test_build_shared_page_seo_uses_share_specific_metadata() -> None:
         ],
     )
 
-    assert seo.title == "🤖 创意Agent专利 - LambChat Shared Session"
-    assert seo.canonical_url == "https://lambchat.com/shared/ssehSOzUgKnX"
+    assert seo.title == "🤖 创意Agent专利 - 昆小智 Shared Session"
+    assert seo.canonical_url == "https://kunxiaozhi.com/shared/ssehSOzUgKnX"
     assert seo.robots == "noindex, follow, max-image-preview:large"
     assert "帮我写一个创意agent的训练方法的专利" in seo.description
     assert "技术交底书已完整生成" in seo.description
@@ -50,13 +50,13 @@ def test_build_shared_page_seo_uses_share_specific_metadata() -> None:
 
 def test_build_shared_page_error_seo_returns_noindex_metadata() -> None:
     seo = build_shared_page_error_seo(
-        base_url="https://lambchat.com",
+        base_url="https://kunxiaozhi.com",
         share_id="missing-share",
         reason="not_found",
     )
 
-    assert seo.title == "Shared session not found - LambChat"
-    assert seo.canonical_url == "https://lambchat.com/shared/missing-share"
+    assert seo.title == "Shared session not found - 昆小智"
+    assert seo.canonical_url == "https://kunxiaozhi.com/shared/missing-share"
     assert seo.robots == "noindex, follow, max-image-preview:large"
 
 
@@ -65,14 +65,14 @@ def test_inject_share_seo_into_html_replaces_default_meta_and_adds_preview() -> 
 <!doctype html>
 <html lang="en">
   <head>
-    <link rel="canonical" href="https://lambchat.com/" />
-    <title>LambChat - AI Agent Platform</title>
+    <link rel="canonical" href="https://kunxiaozhi.com/" />
+    <title>昆小智 - AI Agent Platform</title>
     <meta name="description" content="Default description" />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Default og title" />
     <meta property="og:description" content="Default og description" />
-    <meta property="og:url" content="https://lambchat.com/" />
+    <meta property="og:url" content="https://kunxiaozhi.com/" />
     <meta name="twitter:title" content="Default twitter title" />
     <meta name="twitter:description" content="Default twitter description" />
   </head>
@@ -83,7 +83,7 @@ def test_inject_share_seo_into_html_replaces_default_meta_and_adds_preview() -> 
 """.strip()
 
     seo = build_shared_page_seo(
-        base_url="https://lambchat.com",
+        base_url="https://kunxiaozhi.com",
         share_id="ssehSOzUgKnX",
         session={
             "name": "🤖 创意Agent专利",
@@ -105,11 +105,11 @@ def test_inject_share_seo_into_html_replaces_default_meta_and_adds_preview() -> 
 
     rendered = inject_share_seo_into_html(html, seo)
 
-    assert "<title>🤖 创意Agent专利 - LambChat Shared Session</title>" in rendered
-    assert 'rel="canonical" href="https://lambchat.com/shared/ssehSOzUgKnX"' in rendered
+    assert "<title>🤖 创意Agent专利 - 昆小智 Shared Session</title>" in rendered
+    assert 'rel="canonical" href="https://kunxiaozhi.com/shared/ssehSOzUgKnX"' in rendered
     assert 'meta name="robots" content="noindex, follow, max-image-preview:large"' in rendered
     assert 'property="og:type" content="article"' in rendered
-    assert 'property="og:url" content="https://lambchat.com/shared/ssehSOzUgKnX"' in rendered
+    assert 'property="og:url" content="https://kunxiaozhi.com/shared/ssehSOzUgKnX"' in rendered
     assert "Shared session preview" in rendered
     assert "clivia.yang" in rendered
     assert "技术交底书已完整生成" in rendered
@@ -120,14 +120,14 @@ def test_inject_public_home_seo_adds_crawlable_landing_content() -> None:
 <!doctype html>
 <html lang="en">
   <head>
-    <link rel="canonical" href="https://lambchat.com/" />
-    <title>LambChat - AI Agent Platform</title>
+    <link rel="canonical" href="https://kunxiaozhi.com/" />
+    <title>昆小智 - AI Agent Platform</title>
     <meta name="description" content="Default description" />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Default og title" />
     <meta property="og:description" content="Default og description" />
-    <meta property="og:url" content="https://lambchat.com/" />
+    <meta property="og:url" content="https://kunxiaozhi.com/" />
     <meta name="twitter:title" content="Default twitter title" />
     <meta name="twitter:description" content="Default twitter description" />
   </head>
@@ -137,12 +137,12 @@ def test_inject_public_home_seo_adds_crawlable_landing_content() -> None:
 </html>
 """.strip()
 
-    seo = build_public_route_seo(base_url="https://lambchat.com", path="/")
+    seo = build_public_route_seo(base_url="https://kunxiaozhi.com", path="/")
     rendered = inject_public_route_seo_into_html(html, seo)
 
-    assert '<link rel="canonical" href="https://lambchat.com/"' in rendered
+    assert '<link rel="canonical" href="https://kunxiaozhi.com/"' in rendered
     assert 'meta name="robots" content="index, follow, max-image-preview:large"' in rendered
-    assert "<h1>LambChat AI Agent Platform</h1>" in rendered
+    assert "<h1>昆小智 AI Agent Platform</h1>" in rendered
     assert "Multi-model AI chat" in rendered
     assert "Model Context Protocol" in rendered
 
@@ -152,7 +152,7 @@ def test_inject_public_home_seo_adds_domestic_and_bing_crawler_meta() -> None:
 <!doctype html>
 <html lang="en">
   <head>
-    <title>LambChat - AI Agent Platform</title>
+    <title>昆小智 - AI Agent Platform</title>
     <meta name="robots" content="index, follow, max-image-preview:large" />
   </head>
   <body>
@@ -161,7 +161,7 @@ def test_inject_public_home_seo_adds_domestic_and_bing_crawler_meta() -> None:
 </html>
 """.strip()
 
-    seo = build_public_route_seo(base_url="https://lambchat.com", path="/")
+    seo = build_public_route_seo(base_url="https://kunxiaozhi.com", path="/")
     rendered = inject_public_route_seo_into_html(html, seo)
 
     for crawler in [
@@ -176,9 +176,9 @@ def test_inject_public_home_seo_adds_domestic_and_bing_crawler_meta() -> None:
 
 
 def test_build_public_route_seo_marks_app_routes_noindex() -> None:
-    seo = build_public_route_seo(base_url="https://lambchat.com", path="/chat")
+    seo = build_public_route_seo(base_url="https://kunxiaozhi.com", path="/chat")
 
-    assert seo.canonical_url == "https://lambchat.com/chat"
+    assert seo.canonical_url == "https://kunxiaozhi.com/chat"
     assert seo.robots == "noindex, follow, max-image-preview:large"
 
 
@@ -187,7 +187,7 @@ def test_inject_public_app_route_seo_noindexes_domestic_and_bing_crawlers() -> N
 <!doctype html>
 <html lang="en">
   <head>
-    <title>LambChat - AI Agent Platform</title>
+    <title>昆小智 - AI Agent Platform</title>
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta name="bingbot" content="index, follow, max-image-preview:large" />
     <meta name="Baiduspider" content="index, follow, max-image-preview:large" />
@@ -198,7 +198,7 @@ def test_inject_public_app_route_seo_noindexes_domestic_and_bing_crawlers() -> N
 </html>
 """.strip()
 
-    seo = build_public_route_seo(base_url="https://lambchat.com", path="/chat")
+    seo = build_public_route_seo(base_url="https://kunxiaozhi.com", path="/chat")
     rendered = inject_public_route_seo_into_html(html, seo)
 
     assert 'meta name="bingbot" content="noindex, follow, max-image-preview:large"' in rendered

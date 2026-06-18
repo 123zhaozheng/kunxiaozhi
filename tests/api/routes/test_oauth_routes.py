@@ -15,7 +15,7 @@ class _FakeOAuthService:
     async def handle_callback(self, provider, code: str, state: str, redirect_uri: str):
         assert code == "apple-code"
         assert state == "state-123"
-        assert redirect_uri == "https://lambchat.com/api/auth/oauth/apple/callback"
+        assert redirect_uri == "https://kunxiaozhi.com/api/auth/oauth/apple/callback"
         return Token(access_token="access.jwt", refresh_token="refresh.jwt", expires_in=3600)
 
 
@@ -26,7 +26,7 @@ async def test_apple_form_post_callback_redirects_to_frontend_fragment(
     app = FastAPI()
     app.include_router(oauth_routes.router, prefix="/api/auth")
 
-    monkeypatch.setattr(oauth_routes, "_get_frontend_url", lambda request: "https://lambchat.com")
+    monkeypatch.setattr(oauth_routes, "_get_frontend_url", lambda request: "https://kunxiaozhi.com")
     monkeypatch.setattr(oauth_routes, "_get_client_ip", lambda request: "203.0.113.10")
     monkeypatch.setattr(oauth_routes, "_verify_oauth_state", lambda provider, state, ip: True)
 
@@ -36,7 +36,7 @@ async def test_apple_form_post_callback_redirects_to_frontend_fragment(
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
-        base_url="https://lambchat.com",
+        base_url="https://kunxiaozhi.com",
         follow_redirects=False,
     ) as client:
         response = await client.post(
@@ -48,7 +48,7 @@ async def test_apple_form_post_callback_redirects_to_frontend_fragment(
     location = response.headers["location"]
     parsed = urlparse(location)
     assert parsed.scheme == "https"
-    assert parsed.netloc == "lambchat.com"
+    assert parsed.netloc == "kunxiaozhi.com"
     assert parsed.path == "/auth/callback"
     assert "access_token=access.jwt" in parsed.fragment
     assert "refresh_token=refresh.jwt" in parsed.fragment
@@ -56,7 +56,7 @@ async def test_apple_form_post_callback_redirects_to_frontend_fragment(
 
 
 def test_frontend_url_prefers_configured_app_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(auth_utils.settings, "APP_BASE_URL", "https://lambchat.com/")
+    monkeypatch.setattr(auth_utils.settings, "APP_BASE_URL", "https://kunxiaozhi.com/")
 
     request = type(
         "Request",
@@ -70,7 +70,7 @@ def test_frontend_url_prefers_configured_app_base_url(monkeypatch: pytest.Monkey
         },
     )()
 
-    assert auth_utils._get_frontend_url(request) == "https://lambchat.com"
+    assert auth_utils._get_frontend_url(request) == "https://kunxiaozhi.com"
 
 
 class _FakeRedis:

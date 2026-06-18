@@ -15,7 +15,7 @@ test("release workflow publishes branded desktop and mobile artifacts", () => {
   );
 
   const workflow = readRepoFile(workflowPath);
-  assert.match(workflow, /LambChat-/);
+  assert.match(workflow, /KunXiaoZhi-/);
   assert.match(workflow, /package:desktop/);
   assert.match(workflow, /assembleRelease/);
   assert.match(workflow, /softprops\/action-gh-release/);
@@ -38,12 +38,12 @@ test("release workflow publishes branded desktop and mobile artifacts", () => {
 test("release workflow publishes a debug Android APK when signing secrets are missing", () => {
   const workflow = readRepoFile(".github/workflows/app-release.yml");
 
-  assert.doesNotMatch(workflow, /LambChat-android-[^\n]*release-unsigned\.apk/);
+  assert.doesNotMatch(workflow, /KunXiaoZhi-android-[^\n]*release-unsigned\.apk/);
   assert.doesNotMatch(workflow, /unsigned-xcarchive/);
   assert.match(workflow, /assembleDebug/);
   assert.match(workflow, /app-debug\.apk/);
-  assert.match(workflow, /LambChat-android-\$\{RELEASE_TAG\}-debug\.apk/);
-  assert.match(workflow, /LambChat-android-\$\{RELEASE_TAG\}-signed\.apk/);
+  assert.match(workflow, /KunXiaoZhi-android-\$\{RELEASE_TAG\}-debug\.apk/);
+  assert.match(workflow, /KunXiaoZhi-android-\$\{RELEASE_TAG\}-signed\.apk/);
 });
 
 test("mobile package scripts generate and validate branded native images", () => {
@@ -67,8 +67,8 @@ test("mobile package scripts generate and validate branded native images", () =>
   assert.match(packageJson.scripts["brand:assets"], /generate-branded-assets/);
   assert.match(packageJson.scripts["brand:assets:check"], /--check/);
   assert.match(packagedBuildScript, /VITE_API_BASE:\s*normalizedAppUrl/);
-  assert.match(packagedBuildScript, /LAMBCHAT_APP_URL:\s*normalizedAppUrl/);
-  assert.match(assetScript, /LambChat/);
+  assert.match(packagedBuildScript, /KUNXIAOZHI_APP_URL:\s*normalizedAppUrl/);
+  assert.match(assetScript, /昆小智/);
   assert.match(assetScript, /public\/icons\/icon-512\.png/);
   assert.match(assetScript, /scalePngNearest/);
   assert.match(assetScript, /1024/);
@@ -78,7 +78,7 @@ test("desktop package script bundles the frontend before Tauri packaging", () =>
   const script = readRepoFile("frontend/scripts/package-desktop.mjs");
 
   assert.match(script, /VITE_API_BASE:\s*normalizedAppUrl/);
-  assert.match(script, /LAMBCHAT_APP_URL:\s*normalizedAppUrl/);
+  assert.match(script, /KUNXIAOZHI_APP_URL:\s*normalizedAppUrl/);
   assert.doesNotMatch(script, /spawnSync\(pnpmCommand, \["build"\]/);
   assert.doesNotMatch(script, /spawnSync\(pnpmCommand, \["packaged:build"\]/);
   assert.match(script, /tauriCliPackage = "@tauri-apps\/cli@2\.11\.2"/);
@@ -92,7 +92,7 @@ test("desktop package uses committed Tauri project and branded icons", () => {
   const config = readRepoFile("frontend/src-tauri/tauri.conf.json");
   const cargo = readRepoFile("frontend/src-tauri/Cargo.toml");
 
-  assert.match(config, /"productName": "LambChat"/);
+  assert.match(config, /"productName": "昆小智"/);
   assert.match(config, /"frontendDist": "\.\.\/dist"/);
   assert.match(config, /"beforeBuildCommand": "pnpm packaged:build"/);
   assert.match(config, /"icons\/icon\.ico"/);

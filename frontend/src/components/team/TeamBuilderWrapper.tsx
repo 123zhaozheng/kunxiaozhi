@@ -400,7 +400,7 @@ export function TeamBuilderWrapper() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `lambchat-teams-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `kunxiaozhi-teams-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success(

@@ -1,5 +1,5 @@
 {
-  "description": "All LangChain astream_events(version='v2') event types consumed by LambChat's AgentEventProcessor.",
+  "description": "All LangChain astream_events(version='v2') event types consumed by 昆小智's AgentEventProcessor.",
   "recorded_at": "2026-05-30",
   "version": "v2",
   "note": "These are raw LangChain graph stream events, NOT the SSE events sent to the frontend. Each LangChain event is processed by AgentEventProcessor.process_event() and may emit zero or more SSE events via Presenter.",

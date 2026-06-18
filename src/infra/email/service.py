@@ -89,7 +89,7 @@ class EmailService:
                             {
                                 "api_key": str(acc.get("api_key", "")),
                                 "email_from": str(acc.get("email_from", "noreply@example.com")),
-                                "email_from_name": str(acc.get("email_from_name", "LambChat")),
+                                "email_from_name": str(acc.get("email_from_name", "昆小智")),
                             }
                         )
         except (json.JSONDecodeError, TypeError) as e:
@@ -312,7 +312,7 @@ class EmailService:
             return False
 
         reset_url = base_url.rstrip("/") + "/auth/reset-password?token=" + reset_token
-        from_name = account.get("email_from_name", "LambChat")
+        from_name = account.get("email_from_name", "昆小智")
         expire_hours = str(self._reset_expire_hours)
         icon_url = base_url.rstrip("/") + "/icons/icon.svg"
         safe_username = EmailTemplate._escape_html(username)
@@ -381,7 +381,7 @@ class EmailService:
         verify_url = (
             base_url.rstrip("/") + "/auth/verify-email?token=" + verify_token + "&email=" + to_email
         )
-        from_name = account.get("email_from_name", "LambChat")
+        from_name = account.get("email_from_name", "昆小智")
         icon_url = base_url.rstrip("/") + "/icons/icon.svg"
         safe_username = EmailTemplate._escape_html(username)
 
@@ -442,7 +442,7 @@ class EmailService:
             return False
 
         login_url = base_url.rstrip("/") + "/auth/login"
-        from_name = account.get("email_from_name", "LambChat")
+        from_name = account.get("email_from_name", "昆小智")
         icon_url = base_url.rstrip("/") + "/icons/icon.svg"
         safe_username = EmailTemplate._escape_html(username)
 

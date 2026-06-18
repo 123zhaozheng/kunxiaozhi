@@ -1,4 +1,4 @@
-"""OpenAI-compatible image generation tool for LambChat agents."""
+"""OpenAI-compatible image generation tool for 昆小智 agents."""
 
 from __future__ import annotations
 

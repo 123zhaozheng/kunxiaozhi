@@ -11,7 +11,7 @@ on:
         required: true
         type: string
       app_url:
-        description: 'Public LambChat URL. Falls back to repo variable/secret LAMBCHAT_APP_URL.'
+        description: 'Public KunXiaoZhi URL. Falls back to repo variable/secret KUNXIAOZHI_APP_URL.'
         required: false
         type: string
 
@@ -22,7 +22,7 @@ env:
   NODE_VERSION: '20'
   PNPM_VERSION: '10.32.1'
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
-  LAMBCHAT_APP_URL: ${{ inputs.app_url || vars.LAMBCHAT_APP_URL || secrets.LAMBCHAT_APP_URL }}
+  KUNXIAOZHI_APP_URL: ${{ inputs.app_url || vars.KUNXIAOZHI_APP_URL || secrets.KUNXIAOZHI_APP_URL }}
 
 jobs:
   desktop:
@@ -53,10 +53,10 @@ jobs:
       - name: Validate app URL
         shell: bash
         run: |
-          test -n "$LAMBCHAT_APP_URL"
-          case "$LAMBCHAT_APP_URL" in
+          test -n "$KUNXIAOZHI_APP_URL"
+          case "$KUNXIAOZHI_APP_URL" in
             https://*) ;;
-            *) echo "LAMBCHAT_APP_URL must be an https:// URL"; exit 1 ;;
+            *) echo "KUNXIAOZHI_APP_URL must be an https:// URL"; exit 1 ;;
           esac
 
       - name: Install Linux desktop dependencies
@@ -89,7 +89,7 @@ jobs:
         run: pnpm install --frozen-lockfile
         working-directory: frontend
 
-      - name: Verify LambChat native brand assets
+      - name: Verify KunXiaoZhi native brand assets
         run: pnpm brand:assets:check
         working-directory: frontend
 
@@ -123,14 +123,14 @@ jobs:
           fi
           while IFS= read -r file; do
             base="$(basename "$file")"
-            cp "$file" "release-assets/LambChat-${{ matrix.artifact_slug }}-${RELEASE_TAG}-${base}"
+            cp "$file" "release-assets/KunXiaoZhi-${{ matrix.artifact_slug }}-${RELEASE_TAG}-${base}"
           done < release-assets/files.txt
           rm release-assets/files.txt
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: LambChat-${{ matrix.artifact_slug }}-${{ env.RELEASE_TAG }}
+          name: KunXiaoZhi-${{ matrix.artifact_slug }}-${{ env.RELEASE_TAG }}
           path: release-assets/*
           if-no-files-found: error
 
@@ -146,10 +146,10 @@ jobs:
 
       - name: Validate app URL
         run: |
-          test -n "$LAMBCHAT_APP_URL"
-          case "$LAMBCHAT_APP_URL" in
+          test -n "$KUNXIAOZHI_APP_URL"
+          case "$KUNXIAOZHI_APP_URL" in
             https://*) ;;
-            *) echo "LAMBCHAT_APP_URL must be an https:// URL"; exit 1 ;;
+            *) echo "KUNXIAOZHI_APP_URL must be an https:// URL"; exit 1 ;;
           esac
 
       - name: Setup pnpm
@@ -181,7 +181,7 @@ jobs:
         run: pnpm mobile:sync
         working-directory: frontend
 
-      - name: Verify LambChat native brand assets
+      - name: Verify KunXiaoZhi native brand assets
         run: pnpm brand:assets:check
         working-directory: frontend
 
@@ -209,12 +209,12 @@ jobs:
               --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" \
               --ks-key-alias "$ANDROID_KEY_ALIAS" \
               --key-pass "pass:$ANDROID_KEY_PASSWORD" \
-              --out "release-assets/LambChat-android-${RELEASE_TAG}-signed.apk" \
+              --out "release-assets/KunXiaoZhi-android-${RELEASE_TAG}-signed.apk" \
               "$unsigned_apk"
             echo "has_artifact=true" >> "$GITHUB_OUTPUT"
           else
             debug_apk="frontend/android/app/build/outputs/apk/debug/app-debug.apk"
-            cp "$debug_apk" "release-assets/LambChat-android-${RELEASE_TAG}-debug.apk"
+            cp "$debug_apk" "release-assets/KunXiaoZhi-android-${RELEASE_TAG}-debug.apk"
             echo "Android signing secrets are not configured; uploading debug APK instead of signed release APK."
             echo "has_artifact=true" >> "$GITHUB_OUTPUT"
           fi
@@ -223,7 +223,7 @@ jobs:
         if: steps.android-artifact.outputs.has_artifact == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: LambChat-android-${{ env.RELEASE_TAG }}
+          name: KunXiaoZhi-android-${{ env.RELEASE_TAG }}
           path: release-assets/*
           if-no-files-found: error
 
@@ -238,10 +238,10 @@ jobs:
       - name: Validate app URL
         shell: bash
         run: |
-          test -n "$LAMBCHAT_APP_URL"
-          case "$LAMBCHAT_APP_URL" in
+          test -n "$KUNXIAOZHI_APP_URL"
+          case "$KUNXIAOZHI_APP_URL" in
             https://*) ;;
-            *) echo "LAMBCHAT_APP_URL must be an https:// URL"; exit 1 ;;
+            *) echo "KUNXIAOZHI_APP_URL must be an https:// URL"; exit 1 ;;
           esac
 
       - name: Setup pnpm
@@ -264,7 +264,7 @@ jobs:
         run: pnpm mobile:sync
         working-directory: frontend
 
-      - name: Verify LambChat native brand assets
+      - name: Verify KunXiaoZhi native brand assets
         run: pnpm brand:assets:check
         working-directory: frontend
 
@@ -274,7 +274,7 @@ jobs:
             -workspace App.xcworkspace \
             -scheme App \
             -configuration Release \
-            -derivedDataPath "$RUNNER_TEMP/LambChatDerivedData" \
+            -derivedDataPath "$RUNNER_TEMP/KunXiaoZhiDerivedData" \
             build \
             CODE_SIGNING_ALLOWED=NO
         working-directory: frontend/ios/App
@@ -309,7 +309,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          name: LambChat ${{ env.RELEASE_TAG }}
+          name: KunXiaoZhi ${{ env.RELEASE_TAG }}
           files: release-assets/*
           fail_on_unmatched_files: true
           generate_release_notes: true

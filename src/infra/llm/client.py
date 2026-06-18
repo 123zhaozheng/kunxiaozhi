@@ -124,7 +124,7 @@ def _make_cache_key(
 def _prompt_cache_key(provider: str, model_name: str) -> str:
     """Stable routing key for provider-side prompt cache locality."""
     safe_model = model_name.replace("/", ":")
-    return f"lambchat:{provider}:{safe_model}"
+    return f"kunxiaozhi:{provider}:{safe_model}"
 
 
 def _langchain_profile(profile: Optional[dict]) -> Optional[dict]:

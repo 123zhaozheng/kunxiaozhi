@@ -10,6 +10,7 @@ import { Toaster, ToastBar, toast } from "react-hot-toast";
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
+import { useAuth } from "./hooks/useAuth";
 import { ChatPageSkeleton, FilesPageSkeleton } from "./components/skeletons";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
@@ -53,11 +54,6 @@ const VerifyEmail = lazy(() =>
 const RegistrationPending = lazy(() =>
   import("./components/auth/RegistrationPending").then((m) => ({
     default: m.RegistrationPending,
-  })),
-);
-const LandingPage = lazy(() =>
-  import("./components/landing/LandingPage").then((m) => ({
-    default: m.LandingPage,
   })),
 );
 const AuthPage = lazy(() =>
@@ -308,6 +304,13 @@ function AuthPageWrapper({
   );
 }
 
+// Root redirect — intro page removed; route by auth state.
+function RootRedirect() {
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) return <ChatPageSkeleton />;
+  return <Navigate to={isAuthenticated ? "/chat" : "/auth/login"} replace />;
+}
+
 // Main App Component
 function App() {
   const { t } = useTranslation();
@@ -387,7 +390,7 @@ function App() {
         <SelectionActionPopover />
         <Suspense fallback={<ChatPageSkeleton />}>
           <Routes>
-            <Route path="/" element={<LandingPage />} />
+            <Route path="/" element={<RootRedirect />} />
             {/* Auth routes */}
             <Route path="/auth/login" element={<AuthPageWrapper />} />
             <Route

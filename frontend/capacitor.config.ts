@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: "com.lambchat.app",
-  appName: "LambChat",
+  appId: "com.kunxiaozhi.app",
+  appName: "昆小智",
   webDir: "dist",
   bundledWebRuntime: false,
   android: {

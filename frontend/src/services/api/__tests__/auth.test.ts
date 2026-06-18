@@ -5,8 +5,8 @@ import { buildOAuthLoginUrl } from "../auth.ts";
 
 test("buildOAuthLoginUrl uses API base for split frontend/backend deployments", () => {
   assert.equal(
-    buildOAuthLoginUrl("github", "https://api.lambchat.com"),
-    "https://api.lambchat.com/api/auth/oauth/github",
+    buildOAuthLoginUrl("github", "https://api.kunxiaozhi.com"),
+    "https://api.kunxiaozhi.com/api/auth/oauth/github",
   );
 });
 

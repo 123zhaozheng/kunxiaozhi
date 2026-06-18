@@ -61,7 +61,7 @@ async def _release_concurrency_slot(user_id: str | None, run_id: str, *, dequeue
 
 
 async def run_agent_task(ctx: dict[str, Any], run_id: str) -> None:
-    """Run a previously persisted LambChat task from an arq worker."""
+    """Run a previously persisted 昆小智 task from an arq worker."""
     payload_store: TaskArqPayloadStore = ctx.get("payload_store") or TaskArqPayloadStore()
     payload = await payload_store.load(run_id)
     if payload is None:

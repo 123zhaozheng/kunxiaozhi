@@ -311,7 +311,7 @@ def file_upload_response(
     path: str,
     error: ExtendedFileError | None = None,
 ) -> FileUploadResponse:
-    """Create an upload response with LambChat's extended sandbox error codes."""
+    """Create an upload response with 昆小智's extended sandbox error codes."""
     return FileUploadResponse(path=path, error=cast(Any, error))
 
 
@@ -321,7 +321,7 @@ def file_download_response(
     content: bytes | None = None,
     error: ExtendedFileError | None = None,
 ) -> FileDownloadResponse:
-    """Create a download response with LambChat's extended sandbox error codes."""
+    """Create a download response with 昆小智's extended sandbox error codes."""
     return FileDownloadResponse(path=path, content=content, error=cast(Any, error))
 
 

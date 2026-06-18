@@ -3,8 +3,8 @@ import { RefreshCw, WifiOff, X } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import {
-  type LambChatPwaUpdateEventDetail,
-  activateWaitingLambChatPwaUpdate,
+  type KunXiaoZhiPwaUpdateEventDetail,
+  activateWaitingKunXiaoZhiPwaUpdate,
 } from "../../pwa";
 import { PWA_UPDATE_AVAILABLE_EVENT } from "../../pwaGuards";
 import {
@@ -94,7 +94,7 @@ export function PwaStatusToasts() {
 
   useEffect(() => {
     const handleUpdateAvailable = (event: Event) => {
-      const registration = (event as CustomEvent<LambChatPwaUpdateEventDetail>)
+      const registration = (event as CustomEvent<KunXiaoZhiPwaUpdateEventDetail>)
         .detail?.registration;
 
       if (!registration) return;
@@ -106,7 +106,7 @@ export function PwaStatusToasts() {
           tone="update"
           actionLabelKey="common.refresh"
           onAction={() => {
-            if (activateWaitingLambChatPwaUpdate(registration)) {
+            if (activateWaitingKunXiaoZhiPwaUpdate(registration)) {
               toast.dismiss(PWA_UPDATE_TOAST_ID);
             }
           }}

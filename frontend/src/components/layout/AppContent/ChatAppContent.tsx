@@ -307,7 +307,7 @@ export function ChatAppContent({
       return;
     }
     try {
-      const raw = localStorage.getItem("lambchat_session_config");
+      const raw = localStorage.getItem("kunxiaozhi_session_config");
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (parsed.personaPresetId === personaId && parsed.personaSnapshot) {

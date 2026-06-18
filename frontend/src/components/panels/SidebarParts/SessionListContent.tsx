@@ -25,7 +25,7 @@ import {
 import { groupSessionsByTime } from "../sessionHelpers";
 import { ProjectItem } from "../../sidebar/ProjectItem";
 import { SessionItem } from "../../sidebar/SessionItem";
-import { APP_NAME, GITHUB_URL } from "../../../constants";
+import { APP_NAME } from "../../../constants";
 import { isSessionFavorite } from "../../sidebar/sessionFavorites";
 import type { Project } from "../../../types";
 import { isSidebarProject } from "./projectFilters";
@@ -141,14 +141,7 @@ export function SessionListContent({
             alt={APP_NAME}
             className="h-7 object-contain"
           />
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-stone-800 dark:text-stone-100 hover:text-stone-900 dark:hover:text-stone-50 transition-colors"
-          >
-            <BrandWordmark decorative className="h-7 w-auto" />
-          </a>
+          <BrandWordmark decorative className="h-7 w-auto" />
         </div>
         <button
           onClick={onCollapse}

@@ -90,7 +90,7 @@ for (const [target, content] of generatedTargets) {
 
 if (invalidCount > 0) {
   console.error(
-    `Found ${invalidCount} native image asset(s) that do not use the LambChat brand icon.`,
+    `Found ${invalidCount} native image asset(s) that do not use the 昆小智 brand icon.`,
   );
   process.exit(1);
 }
@@ -99,7 +99,7 @@ if (!checkOnly) {
   console.log(
     `Generated ${
       targets.length + generatedTargets.size
-    } LambChat branded native assets.`,
+    } 昆小智 branded native assets.`,
   );
 }
 

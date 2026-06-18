@@ -1,7 +1,7 @@
 services:
   redis:
     image: redis:alpine
-    container_name: lambchat-redis
+    container_name: kunxiaozhi-redis
     restart: always
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     ports:
@@ -11,7 +11,7 @@ services:
 
   mongodb:
     image: mongo:8.2.5
-    container_name: lambchat-mongodb
+    container_name: kunxiaozhi-mongodb
     restart: always
     command: mongod --wiredTigerCacheSizeGB 0.5
     ports:
@@ -19,9 +19,9 @@ services:
     volumes:
       - mongodb-data:/data/db
 
-  lambchat:
-    container_name: lambchat
-    image: ghcr.io/yanyutin753/lambchat:latest
+  kunxiaozhi:
+    container_name: kunxiaozhi
+    image: ghcr.io/123zhaozheng/kunxiaozhi:latest
     restart: always
     deploy:
       resources:
