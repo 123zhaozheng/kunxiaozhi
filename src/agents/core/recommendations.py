@@ -43,6 +43,19 @@ _token_encoding: Any | None = None
 _token_encoding_loaded = False
 _recommend_background_tasks: set[asyncio.Task[None]] = set()
 
+# Strips the `[User message sent at: <timestamp> <offset> <tz>] ` metadata prefix
+# that `format_user_message_with_timestamp` adds to user messages for the main
+# chat model. Recommendation prompts must not see this prefix, otherwise the
+# model parrots it into the generated follow-up questions. Anchored at the start
+# and requires the literal marker plus `] ` so normal user messages that happen
+# to start with `[` are not affected.
+_TIMESTAMP_PREFIX_RE = re.compile(r"^\[User message sent at: [^\]]+\] ")
+
+
+def _strip_timestamp_prefix(content: str) -> str:
+    """Remove the leading user-message timestamp metadata prefix, once."""
+    return _TIMESTAMP_PREFIX_RE.sub("", content, count=1)
+
 
 async def _noop_recommend_task() -> None:
     return None
@@ -198,8 +211,10 @@ def _clip_prompt_to_token_budget(prompt: str, max_tokens: int) -> str:
 def _event_content(event: dict[str, Any]) -> str:
     data = event.get("data")
     if isinstance(data, dict):
-        return _normalize_text(data.get("content") or data.get("message") or "")
-    return _normalize_text(data)
+        return _strip_timestamp_prefix(
+            _normalize_text(data.get("content") or data.get("message") or "")
+        )
+    return _strip_timestamp_prefix(_normalize_text(data))
 
 
 def _message_role(message: Any) -> str:
@@ -232,8 +247,8 @@ def _message_content(message: Any) -> str:
                     parts.append(str(text))
             elif item:
                 parts.append(str(item))
-        return _normalize_text(" ".join(parts))
-    return _normalize_text(content)
+        return _strip_timestamp_prefix(_normalize_text(" ".join(parts)))
+    return _strip_timestamp_prefix(_normalize_text(content))
 
 
 def format_history_from_messages(

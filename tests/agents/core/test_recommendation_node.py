@@ -495,6 +495,64 @@ async def test_drain_recommend_background_tasks_cancels_pending_tasks(monkeypatc
     assert cleanup_finished is True
 
 
+def test_format_history_context_strips_timestamp_prefix_from_user_messages() -> None:
+    context = format_history_context(
+        [
+            {
+                "run_id": "run-1",
+                "event_type": "user:message",
+                "data": {
+                    "content": "[User message sent at: 2026-06-24 15:30:00 +08:00 Asia/Shanghai] 还有哪些关键步骤？"
+                },
+            },
+            {
+                "run_id": "run-1",
+                "event_type": "message:chunk",
+                "data": {"content": "先建立基础跑量。"},
+            },
+        ],
+        max_chars=200,
+    )
+
+    assert "[User message sent at:" not in context
+    assert "还有哪些关键步骤？" in context
+    assert "先建立基础跑量。" in context
+
+
+def test_format_history_from_messages_strips_timestamp_prefix_from_user_messages() -> None:
+    class _HumanMessage:
+        type = "human"
+        content = "[User message sent at: 2026-06-24 15:30:00 +08:00 Asia/Shanghai] 有哪些常见误区？"
+
+    class _AIMessage:
+        type = "ai"
+        content = "逐步增加跑量并注意恢复。"
+
+    context = format_history_from_messages(
+        [_HumanMessage(), _AIMessage()],
+        current_user_input="当前问题",
+        current_output="当前结果",
+    )
+
+    assert "[User message sent at:" not in context
+    assert "有哪些常见误区？" in context
+    assert "逐步增加跑量并注意恢复。" in context
+
+
+def test_format_history_from_messages_does_not_strip_normal_bracket_prefix() -> None:
+    class _HumanMessage:
+        type = "human"
+        content = "[代码] 这段逻辑有什么问题？"
+
+    context = format_history_from_messages(
+        [_HumanMessage()],
+        current_user_input="当前问题",
+        current_output="当前结果",
+    )
+
+    assert "[代码] 这段逻辑有什么问题？" in context
+
+
 def test_langgraph_agents_do_not_block_on_recommendation_node() -> None:
     for agent_cls in (SearchAgent, FastAgent, TeamAgent):
         builder = _RecordingBuilder()
