@@ -95,7 +95,7 @@ class NativeMemoryBackend(MemoryBackend):
         """Ensure indexes exist; set up optional embedding function."""
         await run_blocking_io(self._ensure_collection)
         await self._create_indexes()
-        self._setup_embedding_fn()
+        await self._setup_embedding_fn()
         await self._prune_legacy_session_summaries()
 
     async def close(self) -> None:
@@ -133,19 +133,15 @@ class NativeMemoryBackend(MemoryBackend):
     async def _get_memory_model():
         """Get LLM model for memory operations.
 
-        Uses dedicated NATIVE_MEMORY_MODEL/API config if set,
-        otherwise falls back to the main LLM_MODEL.
+        Uses the dedicated NATIVE_MEMORY_MODEL_ID card when set, otherwise
+        falls back to the default model (via model_id=None).
         """
-        model = getattr(settings, "NATIVE_MEMORY_MODEL", None)
-        api_base = getattr(settings, "NATIVE_MEMORY_API_BASE", None) or None
-        api_key = getattr(settings, "NATIVE_MEMORY_API_KEY", None) or None
         max_tokens = int(getattr(settings, "NATIVE_MEMORY_MAX_TOKENS", 2000))
         from src.infra.llm.client import LLMClient
 
+        model_id = getattr(settings, "NATIVE_MEMORY_MODEL_ID", "") or None
         return await LLMClient.get_model(
-            model=model,
-            api_base=api_base,
-            api_key=api_key,
+            model_id=model_id,
             temperature=0.1,
             max_tokens=max_tokens,
         )
@@ -524,15 +520,24 @@ class NativeMemoryBackend(MemoryBackend):
         except Exception as e:
             logger.warning(f"[NativeMemory] Session context index creation skipped: {e}")
 
-    def _setup_embedding_fn(self) -> None:
-        """Set up optional embedding function from config."""
-        api_base = getattr(settings, "NATIVE_MEMORY_EMBEDDING_API_BASE", "")
-        api_key = getattr(settings, "NATIVE_MEMORY_EMBEDDING_API_KEY", "")
-        model = getattr(settings, "NATIVE_MEMORY_EMBEDDING_MODEL", "text-embedding-3-small")
+    async def _setup_embedding_fn(self) -> None:
+        """Set up optional embedding function from a kind=embedding model card.
 
-        if not api_base or not api_key:
-            logger.debug("[NativeMemory] No embedding API configured, text-only mode")
+        When NATIVE_MEMORY_EMBEDDING_MODEL_ID references a configured embedding
+        card, build an httpx client against the card's api_base/api_key/model.
+        Otherwise the backend runs in text-only mode.
+        """
+        from src.infra.llm.client import LLMClient
+
+        model_id = getattr(settings, "NATIVE_MEMORY_EMBEDDING_MODEL_ID", "") or None
+        card = await LLMClient.get_card_config(model_id, kind="embedding")
+        if not card or not card.get("api_base") or not card.get("api_key"):
+            logger.debug("[NativeMemory] No embedding card configured, text-only mode")
             return
+
+        api_base = card["api_base"]
+        api_key = card["api_key"]
+        model = card["model"] or "text-embedding-3-small"
 
         try:
             import httpx
@@ -556,7 +561,7 @@ class NativeMemoryBackend(MemoryBackend):
 
             self._embedding_fn = embed_fn
             self._httpx_client = client
-            logger.info(f"[NativeMemory] Embedding enabled: {api_base} ({model})")
+            logger.info(f"[NativeMemory] Embedding enabled via card: {api_base} ({model})")
         except ImportError:
             logger.warning("[NativeMemory] httpx not available, embedding disabled")
 

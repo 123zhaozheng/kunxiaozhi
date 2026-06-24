@@ -1,9 +1,16 @@
 """Model-related schemas."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+
+# Valid model-card capability kinds. Kept in sync with the frontend
+# MODEL_KIND_OPTIONS (ModelFormModal.tsx) and MODEL_CARD_KIND_FILTER
+# (SettingsPanel.constants.ts). Legacy cards without an explicit kind default
+# to "chat" everywhere it is read.
+ModelKind = Literal["chat", "embedding", "rerank", "transcribe"]
+DEFAULT_MODEL_KIND: ModelKind = "chat"
 
 
 class ModelProfile(BaseModel):
@@ -28,6 +35,11 @@ class ModelConfig(BaseModel):
     provider: Optional[str] = Field(
         None,
         description="Explicit LLM provider (e.g. openai/anthropic/google/deepseek). Auto-detected from value if not set.",
+    )
+    kind: Optional[ModelKind] = Field(
+        "chat",
+        description="Model capability kind: chat / embedding / rerank / transcribe. "
+        "Defaults to chat for backward compatibility with legacy cards.",
     )
     icon: Optional[str] = Field(
         None,
@@ -57,6 +69,10 @@ class ModelConfigCreate(BaseModel):
         None,
         description="Explicit LLM provider (e.g. openai/anthropic/google/deepseek). Auto-detected from value if not set.",
     )
+    kind: Optional[ModelKind] = Field(
+        "chat",
+        description="Model capability kind: chat / embedding / rerank / transcribe.",
+    )
     icon: Optional[str] = Field(
         None,
         description="Explicit display icon slug. Falls back to provider/model inference when not set.",
@@ -79,6 +95,9 @@ class ModelConfigUpdate(BaseModel):
     """Update an existing model configuration."""
 
     provider: Optional[str] = Field(None, description="Explicit LLM provider override")
+    kind: Optional[ModelKind] = Field(
+        None, description="Model capability kind override: chat / embedding / rerank / transcribe."
+    )
     icon: Optional[str] = Field(None, description="Explicit display icon slug override")
     label: Optional[str] = Field(None, description="Display name for the model")
     description: Optional[str] = Field(None, description="Model description")
@@ -110,6 +129,7 @@ class AvailableModel(BaseModel):
     id: Optional[str] = Field(None, description="Model ID")
     value: str = Field(..., description="Model identifier")
     provider: Optional[str] = Field(None, description="LLM provider")
+    kind: Optional[str] = Field("chat", description="Model capability kind")
     icon: Optional[str] = Field(None, description="Explicit display icon slug")
     label: str = Field(..., description="Display name for the model")
     description: Optional[str] = Field(None, description="Model description")
@@ -136,6 +156,7 @@ def to_available_model(model: ModelConfig) -> AvailableModel:
         id=model.id,
         value=model.value,
         provider=model.provider,
+        kind=model.kind,
         icon=model.icon,
         label=model.label,
         description=model.description,

@@ -487,9 +487,7 @@ async def generate_recommend_questions(
 
     try:
         model = await LLMClient.get_model(
-            model=settings.SESSION_TITLE_MODEL,
-            api_base=settings.SESSION_TITLE_API_BASE or None,
-            api_key=settings.SESSION_TITLE_API_KEY or None,
+            model_id=settings.SESSION_TITLE_MODEL_ID or None,
             max_tokens=300,
             max_retries=settings.LLM_MAX_RETRIES,
         )

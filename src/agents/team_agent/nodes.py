@@ -156,9 +156,9 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
     logger.debug(f"[TeamAgent] LLM init: {llm_init_time * 1000:.3f}ms")
 
     # 查询 fallback_model 配置
-    fallback_model_value = agent_options.get("_resolved_fallback_model")
+    fallback_model_id = agent_options.get("_resolved_fallback_model")
     if "_resolved_fallback_model" not in agent_options:
-        fallback_model_value = await resolve_fallback_model(
+        fallback_model_id = await resolve_fallback_model(
             model_id, selected_model, log_prefix="[TeamAgent]"
         )
     supports_vision = agent_options.get("_resolved_supports_vision")
@@ -351,7 +351,7 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
     ) -> list:
         """Build the middleware stack for a single subagent."""
         mw = [
-            *create_retry_middleware(fallback_model=fallback_model_value, thinking=thinking_config),
+            *create_retry_middleware(fallback_model=fallback_model_id, thinking=thinking_config),
             ToolResultBinaryMiddleware(base_url=subagent_base_url),
             SubagentActivityMiddleware(backend=backend),
         ]
@@ -467,7 +467,7 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
 
     # ── 主代理中间件栈 ──
     user_middleware = create_retry_middleware(
-        fallback_model=fallback_model_value, thinking=thinking_config
+        fallback_model=fallback_model_id, thinking=thinking_config
     )
     user_middleware.append(ToolResultBinaryMiddleware(base_url=subagent_base_url))
     _prompt_sections = [

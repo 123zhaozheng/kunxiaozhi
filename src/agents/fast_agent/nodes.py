@@ -97,9 +97,9 @@ async def fast_agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict
     logger.debug(f"[FastAgent] LLM init: {llm_init_time * 1000:.3f}ms")
 
     # 查询 fallback_model 配置
-    fallback_model_value = agent_options.get("_resolved_fallback_model")
+    fallback_model_id = agent_options.get("_resolved_fallback_model")
     if "_resolved_fallback_model" not in agent_options:
-        fallback_model_value = await resolve_fallback_model(
+        fallback_model_id = await resolve_fallback_model(
             model_id, selected_model, log_prefix="[FastAgent]"
         )
     supports_vision = agent_options.get("_resolved_supports_vision")
@@ -172,7 +172,7 @@ async def fast_agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict
     subagent_base_url = configurable.get("base_url", "")
     subagent_prompt_sections = [s for s in (*persona_sections, skills_prompt, memory_guide) if s]
     subagent_middleware = [
-        *create_retry_middleware(fallback_model=fallback_model_value, thinking=thinking_config),
+        *create_retry_middleware(fallback_model=fallback_model_id, thinking=thinking_config),
         ToolResultBinaryMiddleware(base_url=subagent_base_url),
         SubagentActivityMiddleware(backend=backend),
     ]
@@ -204,7 +204,7 @@ async def fast_agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict
     # 构建中间件栈：retry → binary upload → skills+memory → memory_index → tool search → cache tag
     # Order: stable → semi-stable → dynamic → cache breakpoint
     user_middleware = create_retry_middleware(
-        fallback_model=fallback_model_value, thinking=thinking_config
+        fallback_model=fallback_model_id, thinking=thinking_config
     )
     user_middleware.append(ToolResultBinaryMiddleware(base_url=subagent_base_url))
     # Skills + memory guide: session-static (one SectionPromptMiddleware, multiple blocks)

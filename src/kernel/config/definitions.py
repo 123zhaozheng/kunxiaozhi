@@ -278,27 +278,13 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "description": "settingDesc.SESSION_SEARCH_BACKFILL_STARTUP_DELAY_SECONDS",
         "default": 30.0,
     },
-    "SESSION_TITLE_MODEL": {
+    "SESSION_TITLE_MODEL_ID": {
         "type": SettingType.STRING,
         "category": SettingCategory.SESSION,
         "subcategory": "title",
-        "description": "settingDesc.SESSION_TITLE_MODEL",
-        "default": "claude-3-5-haiku-20241022",
-    },
-    "SESSION_TITLE_API_BASE": {
-        "type": SettingType.STRING,
-        "category": SettingCategory.SESSION,
-        "subcategory": "title",
-        "description": "settingDesc.SESSION_TITLE_API_BASE",
+        "description": "settingDesc.SESSION_TITLE_MODEL_ID",
         "default": "",
-    },
-    "SESSION_TITLE_API_KEY": {
-        "type": SettingType.STRING,
-        "category": SettingCategory.SESSION,
-        "subcategory": "title",
-        "description": "settingDesc.SESSION_TITLE_API_KEY",
-        "default": "",
-        "is_sensitive": True,
+        "frontend_visible": True,
     },
     "SESSION_TITLE_PROMPT": {
         "type": SettingType.TEXT,
@@ -681,27 +667,13 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "description": "settingDesc.ENABLE_AUDIO_TRANSCRIPTION",
         "default": False,
     },
-    "AUDIO_TRANSCRIPTION_API_KEY": {
+    "AUDIO_TRANSCRIPTION_MODEL_ID": {
         "type": SettingType.STRING,
         "category": SettingCategory.AUDIO_TRANSCRIPTION,
-        "description": "settingDesc.AUDIO_TRANSCRIPTION_API_KEY",
-        "default": "",
-        "is_sensitive": True,
-        "depends_on": "ENABLE_AUDIO_TRANSCRIPTION",
-    },
-    "AUDIO_TRANSCRIPTION_BASE_URL": {
-        "type": SettingType.STRING,
-        "category": SettingCategory.AUDIO_TRANSCRIPTION,
-        "description": "settingDesc.AUDIO_TRANSCRIPTION_BASE_URL",
+        "description": "settingDesc.AUDIO_TRANSCRIPTION_MODEL_ID",
         "default": "",
         "depends_on": "ENABLE_AUDIO_TRANSCRIPTION",
-    },
-    "AUDIO_TRANSCRIPTION_MODEL": {
-        "type": SettingType.STRING,
-        "category": SettingCategory.AUDIO_TRANSCRIPTION,
-        "description": "settingDesc.AUDIO_TRANSCRIPTION_MODEL",
-        "default": "gpt-4o-mini-transcribe",
-        "depends_on": "ENABLE_AUDIO_TRANSCRIPTION",
+        "frontend_visible": True,
     },
     "AUDIO_TRANSCRIPTION_MAX_DOWNLOAD_BYTES": {
         "type": SettingType.NUMBER,

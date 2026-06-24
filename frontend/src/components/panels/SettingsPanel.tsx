@@ -36,6 +36,7 @@ import type {
 import {
   CATEGORY_ORDER,
   MODEL_CONFIG_SETTING_KEYS,
+  MODEL_CARD_KIND_FILTER,
   TYPE_COLORS,
 } from "./SettingsPanel.constants";
 
@@ -145,6 +146,7 @@ export function SettingsPanel() {
                 id: model.id || "",
                 value: model.value,
                 provider: model.provider,
+                kind: model.kind,
                 icon: model.icon,
                 label: model.label,
                 description: model.description,
@@ -781,7 +783,65 @@ export function SettingsPanel() {
                                                 }),
                                               ),
                                             ]
-                                          : setting.type === "boolean"
+                                          : setting.key ===
+                                              "SESSION_TITLE_MODEL_ID"
+                                            ? [
+                                                {
+                                                  value: "",
+                                                  label: t(
+                                                    "settings.sameAsDefaultModel",
+                                                    "Same as default model",
+                                                  ),
+                                                },
+                                                ...availableModels.map(
+                                                  (model) => ({
+                                                    value: model.id,
+                                                    label: `${model.label} (${model.value})`,
+                                                  }),
+                                                ),
+                                              ]
+                                            : setting.key in
+                                              MODEL_CARD_KIND_FILTER
+                                            ? (() => {
+                                                const kind =
+                                                  MODEL_CARD_KIND_FILTER[
+                                                    setting.key
+                                                  ];
+                                                const emptyLabel =
+                                                  kind === "transcribe"
+                                                    ? t(
+                                                        "settings.transcriptionDisabled",
+                                                        "Disabled (tool unavailable)",
+                                                      )
+                                                    : kind === "embedding"
+                                                      ? t(
+                                                          "settings.textOnlyMode",
+                                                          "Text-only mode",
+                                                        )
+                                                      : kind === "rerank"
+                                                        ? t(
+                                                            "settings.localRerank",
+                                                            "Local rerank",
+                                                          )
+                                                        : t(
+                                                            "settings.defaultModel",
+                                                            "Default model",
+                                                          );
+                                                return [
+                                                  { value: "", label: emptyLabel },
+                                                  ...availableModels
+                                                    .filter(
+                                                      (model) =>
+                                                        (model.kind || "chat") ===
+                                                        kind,
+                                                    )
+                                                    .map((model) => ({
+                                                      value: model.id,
+                                                      label: `${model.label} (${model.value})`,
+                                                    })),
+                                                ];
+                                              })()
+                                            : setting.type === "boolean"
                                             ? [
                                                 {
                                                   value: "true",

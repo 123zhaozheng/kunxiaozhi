@@ -28,15 +28,21 @@ async def resolve_fallback_model(
     *,
     log_prefix: str = "",
 ) -> str | None:
-    """从 DB 解析 fallback_model ID 到实际的 model value。
+    """Resolve the fallback model configured on the current model into a model card ID.
+
+    The caller passes this ID to the retry middleware, which resolves it to a
+    chat model via ``LLMClient.get_model(model_id=...)``. Returning the card ID
+    (instead of the model value string) keeps the fallback on the same
+    provider/protocol/auth path as the primary model and avoids the legacy
+    bare-value resolution detour.
 
     Args:
-        model_id: 当前模型的 DB ID（优先）
-        selected_model: 当前模型的 value 字符串（备选）
-        log_prefix: 日志前缀，如 "[FastAgent]" 或 "[Agent]"
+        model_id: DB ID of the current model (preferred)
+        selected_model: value string of the current model (fallback lookup)
+        log_prefix: log prefix, e.g. "[FastAgent]" or "[Agent]"
 
     Returns:
-        fallback model 的 value 字符串，或 None（无 fallback / 查询失败）
+        Fallback model card ID, or None (no fallback / lookup failure)
     """
     from src.infra.agent.model_storage import get_model_storage
 
@@ -61,14 +67,14 @@ async def resolve_fallback_model(
         logger.warning("%s Failed to lookup fallback model: %s", log_prefix, e)
         return None
 
-    if fallback_db:
+    if fallback_db and fallback_db.enabled:
         logger.info(
             "%s Fallback model: %s (%s)",
             log_prefix,
             fallback_db.label,
-            fallback_db.value,
+            fallback_db.id,
         )
-        return fallback_db.value
+        return fallback_db.id
 
     return None
 

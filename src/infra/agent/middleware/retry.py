@@ -171,6 +171,11 @@ class ModelFallbackMiddleware(AgentMiddleware):
     (ModelRetryMiddleware gives up via ``on_failure="continue"``) and the inner
     handler raises a retryable error, this middleware creates a fallback LLM and
     replays the request once.
+
+    The fallback is identified by a model card ID (``fallback_model``), resolved
+    to a chat model via ``LLMClient.get_model(model_id=...)``. When no fallback
+    card is configured (``fallback_model`` is falsy) the middleware is not added
+    to the stack.
     """
 
     def __init__(self, *, fallback_model: str, thinking: dict | None = None) -> None:
@@ -185,7 +190,7 @@ class ModelFallbackMiddleware(AgentMiddleware):
             from src.infra.llm.client import LLMClient
 
             self._fallback_llm = await LLMClient.get_model(
-                model=self._fallback_model,
+                model_id=self._fallback_model or None,
                 thinking=self._thinking,
             )
             logger.info("[ModelFallback] Created fallback LLM: %s", self._fallback_model)

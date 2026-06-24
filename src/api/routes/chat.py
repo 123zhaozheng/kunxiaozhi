@@ -119,17 +119,17 @@ async def _attach_resolved_model_options(agent_options: dict, model: ModelConfig
 
         set_cached_api_key(model.value, model.api_key)
 
-    fallback_value = None
+    fallback_id = None
     if model.fallback_model:
         from src.infra.agent.model_storage import get_model_storage
 
         try:
             fallback = await get_model_storage().get(model.fallback_model)
             if fallback and fallback.enabled:
-                fallback_value = fallback.value
+                fallback_id = fallback.id
         except Exception as e:
             logger.warning("Failed to resolve fallback model %s: %s", model.fallback_model, e)
-    agent_options["_resolved_fallback_model"] = fallback_value
+    agent_options["_resolved_fallback_model"] = fallback_id
     agent_options["_resolved_model_profile"] = _model_profile_dict(model)
 
 

@@ -107,9 +107,7 @@ class Settings(BaseSettings):
     ENABLE_MESSAGE_HISTORY: bool = True
     SSE_CACHE_TTL: int = 86400
     SESSION_SEARCH_BACKFILL_STARTUP_DELAY_SECONDS: float = 30.0
-    SESSION_TITLE_MODEL: str = "claude-3-5-haiku-20241022"
-    SESSION_TITLE_API_BASE: str = ""
-    SESSION_TITLE_API_KEY: str = ""
+    SESSION_TITLE_MODEL_ID: str = ""
     SESSION_TITLE_PROMPT: str = "请您用简短的3-5个字的标题加上一个表情符号作为用户对话的提示标题。请您选取适合用于总结的表情符号来增强理解，但请避免使用符号或特殊格式。请您根据提示回复一个提示标题文本。\n\n回复示例：\n\n📉 股市趋势\n\n🍪 完美巧克力曲奇食谱\n\n🎮 视频游戏开发洞察\n\n# 重要\n\n1. 请务必用{lang}回复我\n2. 回复字数控制在3-5个字\n\nPrompt: {message}"
     ENABLE_RECOMMEND_QUESTIONS: bool = True
     RECOMMEND_QUESTIONS_MAX_BACKGROUND_TASKS: int = 8
@@ -287,20 +285,14 @@ class Settings(BaseSettings):
     ENABLE_MEMORY: bool = False
 
     # Native Memory Settings (MongoDB-backed, zero external deps)
-    NATIVE_MEMORY_EMBEDDING_API_BASE: str = ""
-    NATIVE_MEMORY_EMBEDDING_API_KEY: str = ""
-    NATIVE_MEMORY_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    NATIVE_MEMORY_EMBEDDING_MODEL_ID: str = ""
     NATIVE_MEMORY_STALENESS_DAYS: int = 30
     NATIVE_MEMORY_PRUNE_THRESHOLD: int = 90
     NATIVE_MEMORY_INDEX_ENABLED: bool = True
     NATIVE_MEMORY_INDEX_CACHE_TTL: int = 300
-    NATIVE_MEMORY_MODEL: str = ""
+    NATIVE_MEMORY_MODEL_ID: str = ""
     NATIVE_MEMORY_COMPACTION_MODEL_ID: str = ""
-    NATIVE_MEMORY_API_BASE: str = ""
-    NATIVE_MEMORY_API_KEY: str = ""
-    NATIVE_MEMORY_RERANK_MODEL: str = ""
-    NATIVE_MEMORY_RERANK_API_BASE: str = ""
-    NATIVE_MEMORY_RERANK_API_KEY: str = ""
+    NATIVE_MEMORY_RERANK_MODEL_ID: str = ""
     NATIVE_MEMORY_MAX_TOKENS: int = 2000
     NATIVE_MEMORY_INLINE_CONTENT_MAX_CHARS: int = 1200
     NATIVE_MEMORY_IMPORT_TOTAL_CONTENT_MAX_CHARS: int = 2_000_000
@@ -321,9 +313,7 @@ class Settings(BaseSettings):
 
     # Audio transcription tool settings
     ENABLE_AUDIO_TRANSCRIPTION: bool = False
-    AUDIO_TRANSCRIPTION_API_KEY: str = ""
-    AUDIO_TRANSCRIPTION_BASE_URL: str = ""
-    AUDIO_TRANSCRIPTION_MODEL: str = "gpt-4o-mini-transcribe"
+    AUDIO_TRANSCRIPTION_MODEL_ID: str = ""
     AUDIO_TRANSCRIPTION_MAX_DOWNLOAD_BYTES: int = 50 * 1024 * 1024
 
     # Image generation tool settings

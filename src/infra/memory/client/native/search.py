@@ -359,12 +359,19 @@ def local_rerank(query: str, candidates: list[dict], max_results: int) -> list[d
 
 
 async def rerank_candidates(query: str, candidates: list[dict], max_results: int) -> list[dict]:
-    rerank_model = getattr(settings, "NATIVE_MEMORY_RERANK_MODEL", "") or ""
-    api_base = getattr(settings, "NATIVE_MEMORY_RERANK_API_BASE", "") or ""
-    api_key = getattr(settings, "NATIVE_MEMORY_RERANK_API_KEY", "") or ""
+    from src.infra.llm.client import LLMClient
 
-    if not rerank_model or not api_base or not api_key or len(candidates) <= 1:
+    if len(candidates) <= 1:
         return local_rerank(query, candidates, max_results)
+
+    model_id = getattr(settings, "NATIVE_MEMORY_RERANK_MODEL_ID", "") or None
+    card = await LLMClient.get_card_config(model_id, kind="rerank")
+    if not card or not card.get("model") or not card.get("api_base") or not card.get("api_key"):
+        return local_rerank(query, candidates, max_results)
+
+    rerank_model = card["model"]
+    api_base = card["api_base"]
+    api_key = card["api_key"]
 
     documents = [
         "\n".join(

@@ -174,6 +174,7 @@ async def test_list_available_models_returns_public_fields_only(
             "id": "allowed-model",
             "value": "openai/gpt-allowed",
             "provider": "openai",
+            "kind": "chat",
             "icon": "qwen",
             "label": "Allowed",
             "description": "Visible",

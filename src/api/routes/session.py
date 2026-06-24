@@ -719,17 +719,13 @@ async def generate_session_title(
     if not message or not message.strip():
         return {"title": "新对话", "session_id": session_id}
 
-    title_model = settings.SESSION_TITLE_MODEL
-    title_api_base = settings.SESSION_TITLE_API_BASE or None
-    title_api_key = settings.SESSION_TITLE_API_KEY or None
+    title_model_id = settings.SESSION_TITLE_MODEL_ID or None
     prompt_template = settings.SESSION_TITLE_PROMPT
 
     # 使用 LLM 生成标题
     try:
         model = await LLMClient.get_model(
-            model=title_model,
-            api_base=title_api_base,
-            api_key=title_api_key,
+            model_id=title_model_id,
             max_tokens=100,
             max_retries=settings.LLM_MAX_RETRIES,
         )

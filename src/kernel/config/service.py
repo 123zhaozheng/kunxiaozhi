@@ -22,6 +22,11 @@ _settings_cache: dict[str, Any] = {}
 _ALLOW_EMPTY_STRING_SETTINGS = {
     "DEFAULT_MODEL_ID",
     "NATIVE_MEMORY_COMPACTION_MODEL_ID",
+    "SESSION_TITLE_MODEL_ID",
+    "NATIVE_MEMORY_MODEL_ID",
+    "AUDIO_TRANSCRIPTION_MODEL_ID",
+    "NATIVE_MEMORY_EMBEDDING_MODEL_ID",
+    "NATIVE_MEMORY_RERANK_MODEL_ID",
 }
 
 _CHECKPOINT_AFFECTED_SETTINGS = {
@@ -48,6 +53,159 @@ async def _reset_checkpoint_runtime_state(reason: str) -> None:
             reason,
             exc,
         )
+
+
+async def _migrate_session_title_model_to_id() -> None:
+    """One-time migration: backfill SESSION_TITLE_MODEL_ID from the legacy
+    SESSION_TITLE_MODEL triplet.
+
+    If the legacy `SESSION_TITLE_MODEL` was explicitly set in the database
+    (non-default value) and `SESSION_TITLE_MODEL_ID` is empty, look up a model
+    card by value (trying both the raw value and a provider-prefixed form) and
+    backfill the new ID. Idempotent and best-effort: never raises.
+    """
+    await _migrate_legacy_model_triplet_to_id(
+        legacy_key="SESSION_TITLE_MODEL",
+        new_id_key="SESSION_TITLE_MODEL_ID",
+        expected_kind="chat",
+        provider_prefixes=("anthropic", "openai"),
+    )
+
+
+async def _migrate_native_memory_model_to_id() -> None:
+    """One-time migration: backfill NATIVE_MEMORY_MODEL_ID from the legacy
+    NATIVE_MEMORY_MODEL triplet."""
+    await _migrate_legacy_model_triplet_to_id(
+        legacy_key="NATIVE_MEMORY_MODEL",
+        new_id_key="NATIVE_MEMORY_MODEL_ID",
+        expected_kind="chat",
+        provider_prefixes=("anthropic", "openai"),
+    )
+
+
+async def _migrate_audio_transcription_model_to_id() -> None:
+    """One-time migration: backfill AUDIO_TRANSCRIPTION_MODEL_ID from the
+    legacy AUDIO_TRANSCRIPTION_MODEL bare string."""
+    await _migrate_legacy_model_triplet_to_id(
+        legacy_key="AUDIO_TRANSCRIPTION_MODEL",
+        new_id_key="AUDIO_TRANSCRIPTION_MODEL_ID",
+        expected_kind="transcribe",
+        provider_prefixes=("openai",),
+    )
+
+
+async def _migrate_native_memory_embedding_model_to_id() -> None:
+    """One-time migration: backfill NATIVE_MEMORY_EMBEDDING_MODEL_ID from the
+    legacy NATIVE_MEMORY_EMBEDDING_MODEL bare string."""
+    await _migrate_legacy_model_triplet_to_id(
+        legacy_key="NATIVE_MEMORY_EMBEDDING_MODEL",
+        new_id_key="NATIVE_MEMORY_EMBEDDING_MODEL_ID",
+        expected_kind="embedding",
+        provider_prefixes=("openai",),
+    )
+
+
+async def _migrate_native_memory_rerank_model_to_id() -> None:
+    """One-time migration: backfill NATIVE_MEMORY_RERANK_MODEL_ID from the
+    legacy NATIVE_MEMORY_RERANK_MODEL bare string."""
+    await _migrate_legacy_model_triplet_to_id(
+        legacy_key="NATIVE_MEMORY_RERANK_MODEL",
+        new_id_key="NATIVE_MEMORY_RERANK_MODEL_ID",
+        expected_kind="rerank",
+        provider_prefixes=("openai",),
+    )
+
+
+async def _migrate_legacy_model_triplet_to_id(
+    *,
+    legacy_key: str,
+    new_id_key: str,
+    expected_kind: str,
+    provider_prefixes: tuple[str, ...],
+) -> None:
+    """One-time migration helper: backfill a `<NEW>_MODEL_ID` setting from a
+    legacy bare-string model setting.
+
+    If the legacy setting was explicitly written to the DB (non-default) and
+    the new `_MODEL_ID` is empty, look up a model card by value (trying both
+    the raw value and provider-prefixed forms). Cards are filtered to the
+    expected `kind` when the stored card carries one (legacy cards without a
+    `kind` are treated as chat and still match for chat migrations). Idempotent
+    and best-effort: never raises.
+    """
+    if _settings_service is None:
+        return
+
+    try:
+        legacy = await _settings_service._storage.get_raw(legacy_key)
+    except Exception as exc:
+        logger.debug("[Settings] %s migration: failed to read legacy value: %s", legacy_key, exc)
+        return
+
+    # Only migrate when the legacy setting was explicitly written to the DB.
+    if legacy is None or legacy.updated_at is None:
+        return
+
+    legacy_value = legacy.value
+    if not isinstance(legacy_value, str) or not legacy_value.strip():
+        return
+
+    # Skip if the new ID is already configured (explicitly set in DB).
+    new_setting = await _settings_service._storage.get_raw(new_id_key)
+    if new_setting is not None and new_setting.updated_at is not None:
+        return
+    if getattr(settings, new_id_key, ""):
+        return
+
+    try:
+        from src.infra.agent.model_storage import get_model_storage
+
+        storage = get_model_storage()
+        candidates: list[str] = [legacy_value]
+        # Model cards may store the value with a provider prefix (e.g.
+        # "anthropic/claude-...") while the legacy setting was the bare model
+        # name. Try both forms to maximize the chance of a match.
+        if "/" not in legacy_value:
+            for prefix in provider_prefixes:
+                candidates.append(f"{prefix}/{legacy_value}")
+
+        matched_id: Optional[str] = None
+        for candidate in candidates:
+            stored = await storage.get_by_value(candidate)
+            if not stored or not stored.id:
+                continue
+            # Filter by kind when the card carries an explicit kind. Legacy
+            # cards without `kind` default to "chat" and only match chat
+            # migrations; non-chat migrations require an explicit kind match.
+            stored_kind = getattr(stored, "kind", None) or "chat"
+            if stored_kind != expected_kind:
+                continue
+            matched_id = stored.id
+            break
+
+        if matched_id:
+            await _settings_service._storage.set(new_id_key, matched_id, "system:migration")
+            setattr(settings, new_id_key, matched_id)
+            _settings_cache[new_id_key] = matched_id
+            logger.info(
+                "[Settings] Migrated %s='%s' -> %s='%s'",
+                legacy_key,
+                legacy_value,
+                new_id_key,
+                matched_id,
+            )
+        else:
+            logger.warning(
+                "[Settings] Could not auto-migrate %s='%s': no matching model "
+                "card found by value (kind=%s). Please create a model card of "
+                "this kind and select it for %s.",
+                legacy_key,
+                legacy_value,
+                expected_kind,
+                new_id_key,
+            )
+    except Exception as exc:
+        logger.warning("[Settings] %s migration failed: %s", legacy_key, exc)
 
 
 async def initialize_settings() -> None:
@@ -89,6 +247,13 @@ async def initialize_settings() -> None:
     logger.info(f"[Settings] Loaded {loaded_count} settings into cache")
     logger.info(f"[Settings] REDIS_URL = {settings.REDIS_URL}")
 
+    # One-time migration of legacy bare-string triplets -> *_MODEL_ID card refs
+    await _migrate_session_title_model_to_id()
+    await _migrate_native_memory_model_to_id()
+    await _migrate_audio_transcription_model_to_id()
+    await _migrate_native_memory_embedding_model_to_id()
+    await _migrate_native_memory_rerank_model_to_id()
+
 
 async def refresh_settings(key: Optional[str] = None) -> None:
     """Refresh settings from database.
@@ -106,17 +271,15 @@ async def refresh_settings(key: Optional[str] = None) -> None:
     # Settings that affect LLM model cache (used for title generation etc.)
     llm_affected_settings = {
         "DEFAULT_MODEL_ID",
-        "SESSION_TITLE_MODEL",
-        "SESSION_TITLE_API_BASE",
-        "SESSION_TITLE_API_KEY",
+        "SESSION_TITLE_MODEL_ID",
+        "NATIVE_MEMORY_MODEL_ID",
         "LLM_MAX_RETRIES",
     }
 
     # Settings that require memory backend reinitialization
     memory_affected_settings = {
         "ENABLE_MEMORY",
-        "NATIVE_MEMORY_EMBEDDING_API_BASE",
-        "NATIVE_MEMORY_EMBEDDING_API_KEY",
+        "NATIVE_MEMORY_EMBEDDING_MODEL_ID",
     }
 
     if key:

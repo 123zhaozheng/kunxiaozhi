@@ -28,6 +28,21 @@ class _ModelStorage:
                 label="Fallback",
                 enabled=True,
             )
+        if model_id == "fallback-disabled":
+            return ModelConfig(
+                id=model_id,
+                value="openai/gpt-fallback-disabled",
+                label="Fallback Disabled",
+                enabled=False,
+            )
+        if model_id == "allowed-with-disabled-fallback":
+            return ModelConfig(
+                id=model_id,
+                value="openai/gpt-allowed-disabled-fb",
+                label="Allowed Disabled Fallback",
+                fallback_model="fallback-disabled",
+                enabled=True,
+            )
         if model_id == "blocked-enabled":
             return ModelConfig(
                 id=model_id,
@@ -59,6 +74,8 @@ class _AgentConfigStorage:
     async def get_role_models(self, role_id: str) -> list[str] | None:
         if role_id == "role-user":
             return ["allowed-enabled"]
+        if role_id == "role-disabled-fallback":
+            return ["allowed-with-disabled-fallback"]
         if role_id == "role-empty":
             return []
         if role_id == "role-large":
@@ -70,6 +87,10 @@ class _Role:
     id = "role-user"
 
 
+class _DisabledFallbackRole:
+    id = "role-disabled-fallback"
+
+
 class _EmptyRole:
     id = "role-empty"
 
@@ -78,6 +99,8 @@ class _RoleManager:
     async def get_role_by_name(self, role_name: str) -> _Role | None:
         if role_name == "user":
             return _Role()
+        if role_name == "disabled-fallback":
+            return _DisabledFallbackRole()
         if role_name == "empty":
             return _EmptyRole()
         if role_name == "large":
@@ -135,7 +158,7 @@ async def test_validate_agent_model_access_allows_role_model_id(
     assert agent_options["model"] == "openai/gpt-allowed"
     assert agent_options["_resolved_model_config"]["id"] == "allowed-enabled"
     assert agent_options["_resolved_model_config"]["api_key"] is None
-    assert agent_options["_resolved_fallback_model"] == "openai/gpt-fallback"
+    assert agent_options["_resolved_fallback_model"] == "fallback-enabled"
     assert agent_options["_resolved_supports_vision"] is True
 
 
@@ -162,6 +185,31 @@ async def test_validate_agent_model_access_selects_role_default_when_missing(
 
     assert agent_options["model_id"] == "allowed-enabled"
     assert agent_options["model"] == "openai/gpt-allowed"
+
+
+@pytest.mark.asyncio
+async def test_validate_agent_model_access_falls_back_to_none_when_fallback_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Disabled fallback cards must resolve to None so the middleware is skipped."""
+    monkeypatch.setattr(
+        "src.infra.agent.model_storage.get_model_storage",
+        lambda: _ModelStorage(),
+    )
+    monkeypatch.setattr(
+        "src.infra.agent.config_storage.get_agent_config_storage",
+        lambda: _AgentConfigStorage(),
+    )
+    monkeypatch.setattr(
+        "src.infra.role.manager.get_role_manager",
+        lambda: _RoleManager(),
+    )
+    user = TokenPayload(sub="user-1", username="tester", roles=["disabled-fallback"])
+    agent_options = {"model_id": "allowed-with-disabled-fallback"}
+
+    await validate_agent_model_access(agent_options, user)
+
+    assert agent_options["_resolved_fallback_model"] is None
 
 
 @pytest.mark.asyncio

@@ -95,6 +95,40 @@ def _parse_provider(model: str) -> tuple[str, str]:
     return "openai", model
 
 
+def _assert_protocol_api_base_consistent(protocol: str, api_base: Optional[str]) -> None:
+    """Raise ValueError when the selected protocol and api_base carry
+    contradictory strong signals.
+
+    Conservative heuristic (Q2 decision): only fires on unambiguous path
+    markers — OpenAI-compatible strong signals (``/v1/chat/completions`` /
+    ``/openai``) vs. Anthropic strong signal (``/v1/messages``). Bare hostnames
+    without path markers are left alone so dual-route proxies are not flagged.
+    """
+    if not api_base:
+        return
+
+    base_lower = api_base.lower()
+    # Strip a trailing slash so "/v1/messages/" still matches.
+    base_path = base_lower.rstrip("/")
+
+    openai_strong = base_path.endswith("/v1/chat/completions") or "/openai" in base_path
+    anthropic_strong = base_path.endswith("/v1/messages")
+
+    if protocol == "anthropic" and openai_strong and not anthropic_strong:
+        raise ValueError(
+            f"Protocol/api_base mismatch: provider resolves to the Anthropic "
+            f"protocol but api_base='{api_base}' carries OpenAI-compatible "
+            f"signals. Update the model card's provider or api_base to avoid "
+            f"failed requests to /v1/messages."
+        )
+    if protocol == "openai" and anthropic_strong and not openai_strong:
+        raise ValueError(
+            f"Protocol/api_base mismatch: provider resolves to the OpenAI "
+            f"protocol but api_base='{api_base}' carries Anthropic signals "
+            f"(/v1/messages). Update the model card's provider or api_base."
+        )
+
+
 def _make_cache_key(
     provider: str,
     model_name: str,
@@ -232,6 +266,11 @@ class LLMClient:
         profile = _langchain_profile(profile)
 
         protocol = _resolve_protocol(provider)
+
+        # Conservative protocol/api_base mismatch fast-fail (Q2 decision).
+        # Only raise on strong, unambiguous path signals to avoid false
+        # positives on dual-route proxies whose api_base is just a bare host.
+        _assert_protocol_api_base_consistent(protocol, api_base)
 
         if protocol == "anthropic":
             # 将 thinking config 转换为 Anthropic API 格式
@@ -547,12 +586,49 @@ class LLMClient:
         return instance
 
     @staticmethod
-    async def get_langgraph_model(
-        model: Optional[str] = None,
-        **kwargs: Any,
-    ) -> BaseChatModel:
-        """获取 LangGraph 配置的模型。"""
-        return await LLMClient.get_model(model=model, **kwargs)
+    async def get_card_config(
+        model_id: Optional[str],
+        *,
+        kind: str,
+    ) -> Optional[dict[str, Any]]:
+        """Resolve a non-chat model card (embedding/rerank/transcribe) by ID.
+
+        Returns a dict with ``api_base``, ``api_key`` and ``model`` (the card's
+        ``value``) ready to feed the service-specific client constructor
+        (AsyncOpenAI / httpx), or ``None`` when no card is referenced/found.
+
+        Unlike :meth:`get_model`, this does NOT construct a chat model —
+        transcription/embedding/rerank use distinct APIs and must not go
+        through the chat model factory. The returned ``kind`` is verified when
+        the stored card carries one (legacy cards default to "chat" and only
+        match a ``kind="chat"`` request).
+        """
+        if not model_id:
+            return None
+        try:
+            from src.infra.agent.model_storage import get_model_storage
+
+            stored = await get_model_storage().get(model_id)
+        except Exception as exc:
+            logger.warning("[LLMClient] Failed to resolve card config for %s: %s", model_id, exc)
+            return None
+        if not stored:
+            logger.warning("[LLMClient] Card %s not found for kind=%s", model_id, kind)
+            return None
+        stored_kind = getattr(stored, "kind", None) or "chat"
+        if stored_kind != kind:
+            logger.warning(
+                "[LLMClient] Card %s kind mismatch: expected %s, got %s",
+                model_id,
+                kind,
+                stored_kind,
+            )
+            return None
+        return {
+            "api_base": stored.api_base,
+            "api_key": stored.api_key,
+            "model": stored.value,
+        }
 
     @staticmethod
     def clear_cache_by_model(model_pattern: Optional[str] = None) -> int:

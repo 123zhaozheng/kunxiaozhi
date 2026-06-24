@@ -41,4 +41,18 @@ export const TYPE_COLORS: Record<SettingType, string> = {
 export const MODEL_CONFIG_SETTING_KEYS = new Set([
   "DEFAULT_MODEL_ID",
   "NATIVE_MEMORY_COMPACTION_MODEL_ID",
+  "SESSION_TITLE_MODEL_ID",
+  "NATIVE_MEMORY_MODEL_ID",
+  "AUDIO_TRANSCRIPTION_MODEL_ID",
+  "NATIVE_MEMORY_EMBEDDING_MODEL_ID",
+  "NATIVE_MEMORY_RERANK_MODEL_ID",
 ]);
+
+// Map of model-card ID setting keys to the card `kind` they reference.
+// Settings not in this map reference chat-kind cards (default behaviour).
+export const MODEL_CARD_KIND_FILTER: Record<string, string> = {
+  NATIVE_MEMORY_MODEL_ID: "chat",
+  AUDIO_TRANSCRIPTION_MODEL_ID: "transcribe",
+  NATIVE_MEMORY_EMBEDDING_MODEL_ID: "embedding",
+  NATIVE_MEMORY_RERANK_MODEL_ID: "rerank",
+};

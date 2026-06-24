@@ -108,9 +108,9 @@ async def agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict[str,
     logger.debug(f"[Agent] LLM init: {llm_init_time * 1000:.3f}ms")
 
     # 查询 fallback_model 配置
-    fallback_model_value = agent_options.get("_resolved_fallback_model")
+    fallback_model_id = agent_options.get("_resolved_fallback_model")
     if "_resolved_fallback_model" not in agent_options:
-        fallback_model_value = await resolve_fallback_model(
+        fallback_model_id = await resolve_fallback_model(
             model_id, selected_model, log_prefix="[Agent]"
         )
     supports_vision = agent_options.get("_resolved_supports_vision")
@@ -189,7 +189,7 @@ async def agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict[str,
     if sandbox_backend and sandbox_work_dir:
         subagent_prompt_sections.append(SANDBOX_RUNTIME_SECTION.format(work_dir=sandbox_work_dir))
     subagent_middleware = [
-        *create_retry_middleware(fallback_model=fallback_model_value, thinking=thinking_config),
+        *create_retry_middleware(fallback_model=fallback_model_id, thinking=thinking_config),
         MCPQuotaMiddleware(user_id=context.user_id),
         ToolResultBinaryMiddleware(base_url=search_base_url),
         SubagentActivityMiddleware(backend=backend),
@@ -224,7 +224,7 @@ async def agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict[str,
     # 构建中间件栈：retry → binary → skills+memory → sandbox runtime/tools → memory_index → tool search → cache tag
     # Order: stable → semi-stable → dynamic → cache breakpoint
     user_middleware = create_retry_middleware(
-        fallback_model=fallback_model_value, thinking=thinking_config
+        fallback_model=fallback_model_id, thinking=thinking_config
     )
     user_middleware.append(MCPQuotaMiddleware(user_id=context.user_id))
     user_middleware.append(ToolResultBinaryMiddleware(base_url=search_base_url))

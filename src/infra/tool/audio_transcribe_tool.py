@@ -82,16 +82,26 @@ def _known_download_size(headers: Any) -> int | None:
     return size if size >= 0 else None
 
 
-def _build_client() -> AsyncOpenAI | None:
-    api_key = getattr(settings, "AUDIO_TRANSCRIPTION_API_KEY", "") or ""
-    if not api_key:
-        return None
+async def _build_client() -> tuple[AsyncOpenAI | None, str]:
+    """Resolve the kind=transcribe model card and build the AsyncOpenAI client.
 
-    base_url = getattr(settings, "AUDIO_TRANSCRIPTION_BASE_URL", "") or None
+    Returns ``(client, model_value)``. When no card is configured (or it is
+    missing/invalid), returns ``(None, "")`` so the caller surfaces a clear
+    "not configured" error.
+    """
+    from src.infra.llm.client import LLMClient
+
+    model_id = getattr(settings, "AUDIO_TRANSCRIPTION_MODEL_ID", "") or None
+    card = await LLMClient.get_card_config(model_id, kind="transcribe")
+    if not card or not card.get("api_key"):
+        return None, ""
+
+    api_key = card["api_key"]
+    base_url = card.get("api_base") or None
     client_kwargs: dict[str, Any] = {"api_key": api_key}
     if base_url:
         client_kwargs["base_url"] = base_url
-    return AsyncOpenAI(**client_kwargs)
+    return AsyncOpenAI(**client_kwargs), card.get("model") or ""
 
 
 async def _close_client(client: Any) -> None:
@@ -121,13 +131,13 @@ async def audio_transcribe(
 
     resolved_url = _resolve_url(url, runtime)
 
-    client = _build_client()
+    client, card_model = await _build_client()
     if client is None:
-        return await _json_dumps_result({"error": "AUDIO_TRANSCRIPTION_API_KEY is not configured"})
+        return await _json_dumps_result(
+            {"error": "AUDIO_TRANSCRIPTION_MODEL_ID is not configured"}
+        )
 
-    resolved_model = (
-        model or getattr(settings, "AUDIO_TRANSCRIPTION_MODEL", "") or "gpt-4o-mini-transcribe"
-    )
+    resolved_model = model or card_model or "gpt-4o-mini-transcribe"
 
     try:
         try:

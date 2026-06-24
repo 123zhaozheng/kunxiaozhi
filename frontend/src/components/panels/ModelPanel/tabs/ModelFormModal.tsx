@@ -16,6 +16,17 @@ import type {
 } from "../../../../services/api/model";
 import { ModelIconSelect } from "./ModelIconSelect";
 
+// Valid model-card capability kinds. Must stay in sync with the backend
+// `kind` field (src/kernel/schemas/model.py) and MODEL_CARD_KIND_FILTER in
+// SettingsPanel.constants.ts. Legacy cards without an explicit kind are
+// treated as "chat" by the backend, so "chat" is the safe default.
+const MODEL_KIND_OPTIONS = [
+  { value: "chat", labelKey: "agentConfig.modelKindChat" },
+  { value: "embedding", labelKey: "agentConfig.modelKindEmbedding" },
+  { value: "rerank", labelKey: "agentConfig.modelKindRerank" },
+  { value: "transcribe", labelKey: "agentConfig.modelKindTranscribe" },
+] as const;
+
 interface ModelFormModalProps {
   model: ModelConfig | null; // null = creating, non-null = editing
   models: ModelConfig[];
@@ -52,6 +63,7 @@ export const ModelFormModal = ({
     Boolean(model?.profile?.supports_vision),
   );
   const [formProvider, setFormProvider] = useState(model?.provider || "");
+  const [formKind, setFormKind] = useState(model?.kind || "chat");
   const [formIcon, setFormIcon] = useState(model?.icon || "");
   const [formFallbackModel, setFormFallbackModel] = useState(
     model?.fallback_model || "",
@@ -100,6 +112,7 @@ export const ModelFormModal = ({
       if (isEditing && model?.id) {
         const update: ModelConfigUpdate = {
           provider: (formProvider || undefined) as ProviderType | undefined,
+          kind: formKind,
           icon: formIcon || undefined,
           label: formLabel.trim(),
           description: formDescription.trim() || undefined,
@@ -118,6 +131,7 @@ export const ModelFormModal = ({
         const data: ModelConfigCreate = {
           value: formValue.trim(),
           provider: (formProvider || undefined) as ProviderType | undefined,
+          kind: formKind,
           icon: formIcon || undefined,
           label: formLabel.trim(),
           description: formDescription.trim() || undefined,
@@ -149,6 +163,7 @@ export const ModelFormModal = ({
     formMaxInputTokens,
     formSupportsVision,
     formProvider,
+    formKind,
     formIcon,
     formFallbackModel,
     isEditing,
@@ -253,6 +268,25 @@ export const ModelFormModal = ({
                 placeholder={t("agentConfig.providerAuto")}
               />
               <p className="es-hint">{t("agentConfig.providerHint")}</p>
+            </div>
+            <div className="es-field">
+              <label className="es-label">
+                {t("agentConfig.modelKind", "Capability kind")}
+              </label>
+              <GlassSelect
+                value={formKind}
+                onChange={setFormKind}
+                options={MODEL_KIND_OPTIONS.map((opt) => ({
+                  value: opt.value,
+                  label: t(opt.labelKey),
+                }))}
+              />
+              <p className="es-hint">
+                {t(
+                  "agentConfig.modelKindHint",
+                  "Determines which settings can reference this card (chat / embedding / rerank / transcribe). Defaults to chat.",
+                )}
+              </p>
             </div>
             <div className="es-field">
               <label className="es-label">{t("agentConfig.modelIcon")}</label>

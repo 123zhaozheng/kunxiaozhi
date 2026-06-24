@@ -538,30 +538,14 @@ EXTRA_SETTING_DEFINITIONS: dict[str, dict] = {
     # ============================================
     # Memory Embedding Settings
     # ============================================
-    "NATIVE_MEMORY_EMBEDDING_API_BASE": {
+    "NATIVE_MEMORY_EMBEDDING_MODEL_ID": {
         "type": SettingType.STRING,
         "category": SettingCategory.MEMORY_EMBEDDING,
         "subcategory": "api",
-        "description": "settingDesc.NATIVE_MEMORY_EMBEDDING_API_BASE",
+        "description": "settingDesc.NATIVE_MEMORY_EMBEDDING_MODEL_ID",
         "default": "",
         "depends_on": "ENABLE_MEMORY",
-    },
-    "NATIVE_MEMORY_EMBEDDING_API_KEY": {
-        "type": SettingType.STRING,
-        "category": SettingCategory.MEMORY_EMBEDDING,
-        "subcategory": "api",
-        "description": "settingDesc.NATIVE_MEMORY_EMBEDDING_API_KEY",
-        "default": "",
-        "is_sensitive": True,
-        "depends_on": "ENABLE_MEMORY",
-    },
-    "NATIVE_MEMORY_EMBEDDING_MODEL": {
-        "type": SettingType.STRING,
-        "category": SettingCategory.MEMORY_EMBEDDING,
-        "subcategory": "api",
-        "description": "settingDesc.NATIVE_MEMORY_EMBEDDING_MODEL",
-        "default": "text-embedding-3-small",
-        "depends_on": "ENABLE_MEMORY",
+        "frontend_visible": True,
     },
     # ============================================
     # Memory Search & Index Settings
@@ -583,30 +567,14 @@ EXTRA_SETTING_DEFINITIONS: dict[str, dict] = {
         "default": 300,
         "depends_on": "ENABLE_MEMORY",
     },
-    "NATIVE_MEMORY_RERANK_MODEL": {
+    "NATIVE_MEMORY_RERANK_MODEL_ID": {
         "type": SettingType.STRING,
         "category": SettingCategory.MEMORY_SEARCH,
         "subcategory": "rerank",
-        "description": "settingDesc.NATIVE_MEMORY_RERANK_MODEL",
+        "description": "settingDesc.NATIVE_MEMORY_RERANK_MODEL_ID",
         "default": "",
         "depends_on": "ENABLE_MEMORY",
-    },
-    "NATIVE_MEMORY_RERANK_API_BASE": {
-        "type": SettingType.STRING,
-        "category": SettingCategory.MEMORY_SEARCH,
-        "subcategory": "rerank",
-        "description": "settingDesc.NATIVE_MEMORY_RERANK_API_BASE",
-        "default": "",
-        "depends_on": "ENABLE_MEMORY",
-    },
-    "NATIVE_MEMORY_RERANK_API_KEY": {
-        "type": SettingType.STRING,
-        "category": SettingCategory.MEMORY_SEARCH,
-        "subcategory": "rerank",
-        "description": "settingDesc.NATIVE_MEMORY_RERANK_API_KEY",
-        "default": "",
-        "is_sensitive": True,
-        "depends_on": "ENABLE_MEMORY",
+        "frontend_visible": True,
     },
     "NATIVE_MEMORY_APPEND_MAX_DETAILS": {
         "type": SettingType.NUMBER,
@@ -661,13 +629,14 @@ EXTRA_SETTING_DEFINITIONS: dict[str, dict] = {
     # ============================================
     # Memory Storage & Policy Settings
     # ============================================
-    "NATIVE_MEMORY_MODEL": {
+    "NATIVE_MEMORY_MODEL_ID": {
         "type": SettingType.STRING,
         "category": SettingCategory.MEMORY_STORAGE,
         "subcategory": "llm",
-        "description": "settingDesc.NATIVE_MEMORY_MODEL",
+        "description": "settingDesc.NATIVE_MEMORY_MODEL_ID",
         "default": "",
         "depends_on": "ENABLE_MEMORY",
+        "frontend_visible": True,
     },
     "NATIVE_MEMORY_COMPACTION_MODEL_ID": {
         "type": SettingType.STRING,
@@ -675,23 +644,6 @@ EXTRA_SETTING_DEFINITIONS: dict[str, dict] = {
         "subcategory": "llm",
         "description": "settingDesc.NATIVE_MEMORY_COMPACTION_MODEL_ID",
         "default": "",
-        "depends_on": "ENABLE_MEMORY",
-    },
-    "NATIVE_MEMORY_API_BASE": {
-        "type": SettingType.STRING,
-        "category": SettingCategory.MEMORY_STORAGE,
-        "subcategory": "llm",
-        "description": "settingDesc.NATIVE_MEMORY_API_BASE",
-        "default": "",
-        "depends_on": "ENABLE_MEMORY",
-    },
-    "NATIVE_MEMORY_API_KEY": {
-        "type": SettingType.STRING,
-        "category": SettingCategory.MEMORY_STORAGE,
-        "subcategory": "llm",
-        "description": "settingDesc.NATIVE_MEMORY_API_KEY",
-        "default": "",
-        "is_sensitive": True,
         "depends_on": "ENABLE_MEMORY",
     },
     "NATIVE_MEMORY_STORE_NAMESPACE": {

@@ -93,6 +93,7 @@ def test_get_audio_transcribe_tool_returns_expected_tool() -> None:
 async def test_audio_transcribe_offloads_config_error_result_json(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from src.infra.llm.client import LLMClient
     from src.infra.tool import audio_transcribe_tool
 
     calls: list[object] = []
@@ -101,8 +102,13 @@ async def test_audio_transcribe_offloads_config_error_result_json(
         calls.append(func)
         return func(*args, **kwargs)
 
+    async def fake_get_card_config(model_id, *, kind):
+        assert kind == "transcribe"
+        return None
+
     monkeypatch.setattr(audio_transcribe_tool, "run_blocking_io", fake_run_blocking_io)
-    monkeypatch.setattr(audio_transcribe_tool.settings, "AUDIO_TRANSCRIPTION_API_KEY", "")
+    monkeypatch.setattr(LLMClient, "get_card_config", fake_get_card_config)
+    monkeypatch.setattr(audio_transcribe_tool.settings, "AUDIO_TRANSCRIPTION_MODEL_ID", "")
 
     result = json.loads(
         await audio_transcribe_tool.audio_transcribe.coroutine(
@@ -111,16 +117,25 @@ async def test_audio_transcribe_offloads_config_error_result_json(
         )
     )
 
-    assert result == {"error": "AUDIO_TRANSCRIPTION_API_KEY is not configured"}
+    assert result == {"error": "AUDIO_TRANSCRIPTION_MODEL_ID is not configured"}
     assert json.dumps in calls
 
 
 @pytest.mark.asyncio
 async def test_audio_transcribe_transcribes_audio_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.infra.llm.client import LLMClient
     from src.infra.tool import audio_transcribe_tool
 
     captured: dict[str, object] = {}
     close_calls = 0
+
+    async def fake_get_card_config(model_id, *, kind):
+        assert kind == "transcribe"
+        return {
+            "api_base": "https://api.example.com/v1",
+            "api_key": "sk-test",
+            "model": "gpt-4o-mini-transcribe",
+        }
 
     class _FakeTranscriptions:
         async def create(self, **kwargs):
@@ -166,20 +181,13 @@ async def test_audio_transcribe_transcribes_audio_url(monkeypatch: pytest.Monkey
             captured["download_url"] = request_url
             return _FakeResponse()
 
+    monkeypatch.setattr(LLMClient, "get_card_config", fake_get_card_config)
     monkeypatch.setattr(audio_transcribe_tool, "AsyncOpenAI", _FakeAsyncOpenAI)
     monkeypatch.setattr(
         audio_transcribe_tool.httpx, "AsyncClient", lambda **kwargs: _FakeHttpClient()
     )
-    monkeypatch.setattr(audio_transcribe_tool.settings, "AUDIO_TRANSCRIPTION_API_KEY", "sk-test")
     monkeypatch.setattr(
-        audio_transcribe_tool.settings,
-        "AUDIO_TRANSCRIPTION_BASE_URL",
-        "https://api.example.com/v1",
-    )
-    monkeypatch.setattr(
-        audio_transcribe_tool.settings,
-        "AUDIO_TRANSCRIPTION_MODEL",
-        "gpt-4o-mini-transcribe",
+        audio_transcribe_tool.settings, "AUDIO_TRANSCRIPTION_MODEL_ID", "card-transcribe-1"
     )
 
     result = json.loads(
@@ -212,6 +220,7 @@ async def test_audio_transcribe_transcribes_audio_url(monkeypatch: pytest.Monkey
 async def test_audio_transcribe_returns_error_when_download_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from src.infra.llm.client import LLMClient
     from src.infra.tool import audio_transcribe_tool
 
     class _FakeHttpClient:
@@ -224,10 +233,14 @@ async def test_audio_transcribe_returns_error_when_download_fails(
         async def get(self, request_url: str):
             raise RuntimeError(f"failed to fetch {request_url}")
 
+    async def fake_get_card_config(_model_id, *, kind):
+        return {"api_base": "https://api.example.com/v1", "api_key": "sk-test", "model": "m"}
+
+    monkeypatch.setattr(LLMClient, "get_card_config", fake_get_card_config)
     monkeypatch.setattr(
         audio_transcribe_tool.httpx, "AsyncClient", lambda **kwargs: _FakeHttpClient()
     )
-    monkeypatch.setattr(audio_transcribe_tool.settings, "AUDIO_TRANSCRIPTION_API_KEY", "sk-test")
+    monkeypatch.setattr(audio_transcribe_tool.settings, "AUDIO_TRANSCRIPTION_MODEL_ID", "card-1")
 
     result = json.loads(
         await audio_transcribe_tool.audio_transcribe.coroutine(
@@ -243,6 +256,7 @@ async def test_audio_transcribe_returns_error_when_download_fails(
 async def test_audio_transcribe_rejects_audio_downloads_over_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from src.infra.llm.client import LLMClient
     from src.infra.tool import audio_transcribe_tool
 
     transcribe_called = False
@@ -281,11 +295,15 @@ async def test_audio_transcribe_rejects_audio_downloads_over_limit(
         def stream(self, method: str, request_url: str):
             return _FakeResponse()
 
+    async def fake_get_card_config(_model_id, *, kind):
+        return {"api_base": "https://api.example.com/v1", "api_key": "sk-test", "model": "m"}
+
+    monkeypatch.setattr(LLMClient, "get_card_config", fake_get_card_config)
     monkeypatch.setattr(audio_transcribe_tool, "AsyncOpenAI", _FakeAsyncOpenAI)
     monkeypatch.setattr(
         audio_transcribe_tool.httpx, "AsyncClient", lambda **kwargs: _FakeHttpClient()
     )
-    monkeypatch.setattr(audio_transcribe_tool.settings, "AUDIO_TRANSCRIPTION_API_KEY", "sk-test")
+    monkeypatch.setattr(audio_transcribe_tool.settings, "AUDIO_TRANSCRIPTION_MODEL_ID", "card-1")
     monkeypatch.setattr(
         audio_transcribe_tool.settings, "AUDIO_TRANSCRIPTION_MAX_DOWNLOAD_BYTES", 10
     )
@@ -305,6 +323,7 @@ async def test_audio_transcribe_rejects_audio_downloads_over_limit(
 async def test_audio_transcribe_rejects_known_oversize_download_before_streaming(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from src.infra.llm.client import LLMClient
     from src.infra.tool import audio_transcribe_tool
 
     transcribe_called = False
@@ -344,11 +363,15 @@ async def test_audio_transcribe_rejects_known_oversize_download_before_streaming
         def stream(self, method: str, request_url: str):
             return _FakeResponse()
 
+    async def fake_get_card_config(_model_id, *, kind):
+        return {"api_base": "https://api.example.com/v1", "api_key": "sk-test", "model": "m"}
+
+    monkeypatch.setattr(LLMClient, "get_card_config", fake_get_card_config)
     monkeypatch.setattr(audio_transcribe_tool, "AsyncOpenAI", _FakeAsyncOpenAI)
     monkeypatch.setattr(
         audio_transcribe_tool.httpx, "AsyncClient", lambda **kwargs: _FakeHttpClient()
     )
-    monkeypatch.setattr(audio_transcribe_tool.settings, "AUDIO_TRANSCRIPTION_API_KEY", "sk-test")
+    monkeypatch.setattr(audio_transcribe_tool.settings, "AUDIO_TRANSCRIPTION_MODEL_ID", "card-1")
     monkeypatch.setattr(
         audio_transcribe_tool.settings, "AUDIO_TRANSCRIPTION_MAX_DOWNLOAD_BYTES", 10
     )
@@ -368,6 +391,7 @@ async def test_audio_transcribe_rejects_known_oversize_download_before_streaming
 async def test_audio_transcribe_offloads_spooled_file_io(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from src.infra.llm.client import LLMClient
     from src.infra.tool import audio_transcribe_tool
 
     calls: list[str] = []
@@ -421,6 +445,10 @@ async def test_audio_transcribe_offloads_spooled_file_io(
                 raising=False,
             )
 
+    async def fake_get_card_config(_model_id, *, kind):
+        return {"api_base": "https://api.example.com/v1", "api_key": "sk-test", "model": "m"}
+
+    monkeypatch.setattr(LLMClient, "get_card_config", fake_get_card_config)
     monkeypatch.setattr(audio_transcribe_tool, "AsyncOpenAI", _FakeAsyncOpenAI)
     monkeypatch.setattr(
         audio_transcribe_tool.httpx,
@@ -432,7 +460,7 @@ async def test_audio_transcribe_offloads_spooled_file_io(
         audio_transcribe_tool, "run_blocking_io", fake_run_blocking_io, raising=False
     )
     monkeypatch.setattr(audio_transcribe_tool, "_inside_fake_blocking_io", False, raising=False)
-    monkeypatch.setattr(audio_transcribe_tool.settings, "AUDIO_TRANSCRIPTION_API_KEY", "sk-test")
+    monkeypatch.setattr(audio_transcribe_tool.settings, "AUDIO_TRANSCRIPTION_MODEL_ID", "card-1")
 
     result = json.loads(
         await audio_transcribe_tool.audio_transcribe.coroutine(

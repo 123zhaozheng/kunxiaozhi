@@ -118,25 +118,15 @@ async def test_generate_recommend_questions_uses_session_title_model(monkeypatch
 
     monkeypatch.setattr("src.infra.llm.client.LLMClient.get_model", fake_get_model)
     monkeypatch.setattr(
-        "src.agents.core.recommendations.settings.SESSION_TITLE_MODEL",
-        "title-model",
-    )
-    monkeypatch.setattr(
-        "src.agents.core.recommendations.settings.SESSION_TITLE_API_BASE",
-        "https://title.example/v1",
-    )
-    monkeypatch.setattr(
-        "src.agents.core.recommendations.settings.SESSION_TITLE_API_KEY",
-        "title-key",
+        "src.agents.core.recommendations.settings.SESSION_TITLE_MODEL_ID",
+        "title-model-card-id",
     )
 
     questions = await generate_recommend_questions("如何准备半程马拉松？", "先建立基础跑量。")
 
     assert calls == [
         {
-            "model": "title-model",
-            "api_base": "https://title.example/v1",
-            "api_key": "title-key",
+            "model_id": "title-model-card-id",
             "max_tokens": 300,
             "max_retries": 3,
         }
@@ -144,6 +134,32 @@ async def test_generate_recommend_questions_uses_session_title_model(monkeypatch
     assert "如何准备半程马拉松？" in _request_text(model.prompts[0])
     assert "先建立基础跑量。" in _request_text(model.prompts[0])
     assert questions == ["问题一？", "问题二？", "问题三？"]
+
+
+async def test_generate_recommend_questions_uses_default_when_title_id_empty(monkeypatch) -> None:
+    calls = []
+    model = _FakeModel()
+
+    async def fake_get_model(**kwargs):
+        calls.append(kwargs)
+        return model
+
+    monkeypatch.setattr("src.infra.llm.client.LLMClient.get_model", fake_get_model)
+    monkeypatch.setattr(
+        "src.agents.core.recommendations.settings.SESSION_TITLE_MODEL_ID",
+        "",
+        raising=False,
+    )
+
+    await generate_recommend_questions("如何准备半程马拉松？")
+
+    assert calls == [
+        {
+            "model_id": None,
+            "max_tokens": 300,
+            "max_retries": 3,
+        }
+    ]
 
 
 async def test_generate_recommend_questions_sends_rules_as_system_message(monkeypatch) -> None:
@@ -376,12 +392,9 @@ async def test_generate_recommend_questions_falls_back_quietly_without_title_api
 
     monkeypatch.setattr("src.infra.llm.client.LLMClient.get_model", fake_get_model)
     monkeypatch.setattr(
-        "src.agents.core.recommendations.settings.SESSION_TITLE_API_BASE",
+        "src.agents.core.recommendations.settings.SESSION_TITLE_MODEL_ID",
         "",
-    )
-    monkeypatch.setattr(
-        "src.agents.core.recommendations.settings.SESSION_TITLE_API_KEY",
-        "",
+        raising=False,
     )
     monkeypatch.setattr(
         "src.agents.core.recommendations.logger.warning",
