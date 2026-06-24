@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "改动 useMessageScroll hook，需遵循 hook 编写约定"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "涉及 ref/状态（follow state、recoverUnexpectedTopJumpUntilRef）的清理"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量基线，确保删除孤儿代码不破坏现有约定"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "移除导出函数后需保持类型导出一致"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "清理跳顶恢复相关孤儿代码时判断可复用性"}
