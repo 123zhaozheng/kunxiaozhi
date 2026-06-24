@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/06-24-unify-llm-model-management-card-based-resolution-for-all-consumers/prd.md", "reason": "验收标准 + 三阶段范围 + Q1/Q2/Q3 决策（check 对照）"}
+{"file": ".trellis/tasks/06-24-unify-llm-model-management-card-based-resolution-for-all-consumers/research/protocol-retry-rootcause.md", "reason": "协议快速失败验收依据：断点 + 启发式正/负例"}
+{"file": ".trellis/tasks/06-24-unify-llm-model-management-card-based-resolution-for-all-consumers/research/model-consumers-survey.md", "reason": "确认旧三件套无残留引用 + 各消费方收编完整"}
+{"file": ".trellis/tasks/06-24-unify-llm-model-management-card-based-resolution-for-all-consumers/research/model-card-dropdown-feasibility.md", "reason": "前端下拉机制 + 改动点清单（check 前端联动）"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量检查清单"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量检查清单"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨前后端数据流一致性检查"}
