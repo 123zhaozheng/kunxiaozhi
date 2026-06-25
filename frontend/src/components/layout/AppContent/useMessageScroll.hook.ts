@@ -9,8 +9,6 @@ import {
   getScrollToBottomTimingOptions,
   didLatestStreamingAssistantFinish,
   shouldAutoScrollAfterViewportChange,
-  shouldIgnoreUnexpectedTopJumpDuringBottomLock,
-  getUnexpectedTopJumpRecoveryUntilAfterUserIntent,
   startVirtuosoScrollToBottom,
   type ScrollToBottomTimingMode,
 } from "./messageScrollUtils";
@@ -106,7 +104,6 @@ export function useMessageScroll(
   const userScrolledUpRef = useRef(false);
   const autoScrollActiveRef = useRef(false);
   const ignoreProgrammaticScrollUntilRef = useRef(0);
-  const recoverUnexpectedTopJumpUntilRef = useRef(0);
   const streamLockActiveRef = useRef(false);
   const manualDetachFromStreamRef = useRef(false);
   const streamingAssistantActiveRef = useRef(false);
@@ -159,7 +156,6 @@ export function useMessageScroll(
     pendingHistoryScrollRef.current = resetState.pendingHistoryScroll;
     historyScrollArmedRef.current = resetState.historyScrollArmed;
     ignoreProgrammaticScrollUntilRef.current = 0;
-    recoverUnexpectedTopJumpUntilRef.current = 0;
     isNearBottomRef.current = resetState.isNearBottom;
     previousMessagesRef.current = messages;
     historyLoadActiveRef.current = isLoadingHistory;
@@ -231,8 +227,6 @@ export function useMessageScroll(
         footer: messagesEndRef.current,
       });
       ignoreProgrammaticScrollUntilRef.current = Date.now() + 120;
-      recoverUnexpectedTopJumpUntilRef.current =
-        Date.now() + timing.observeAfterSettleMs;
       scrollCleanupRef.current?.();
       scrollCleanupRef.current = startVirtuosoScrollToBottom({
         virtuoso: virtuosoRef.current,
@@ -253,13 +247,9 @@ export function useMessageScroll(
         shouldAbort: () => userScrolledUpRef.current,
         onAutoScroll: () => {
           ignoreProgrammaticScrollUntilRef.current = Date.now() + 80;
-          recoverUnexpectedTopJumpUntilRef.current =
-            Date.now() + timing.observeAfterSettleMs;
         },
         onComplete: () => {
           autoScrollActiveRef.current = false;
-          recoverUnexpectedTopJumpUntilRef.current =
-            Date.now() + timing.observeAfterSettleMs;
         },
       });
     },
@@ -275,7 +265,6 @@ export function useMessageScroll(
     autoScrollActiveRef.current = false;
     streamLockActiveRef.current = false;
     pendingHistoryScrollRef.current = false;
-    recoverUnexpectedTopJumpUntilRef.current = 0;
     virtuosoRef.current?.scrollTo({
       top: 0,
       behavior: "auto",
@@ -326,12 +315,6 @@ export function useMessageScroll(
         streamingAssistantActive: streamingAssistantActiveRef.current,
       });
 
-      recoverUnexpectedTopJumpUntilRef.current =
-        getUnexpectedTopJumpRecoveryUntilAfterUserIntent({
-          recoverUntil: recoverUnexpectedTopJumpUntilRef.current,
-          now: Date.now(),
-        });
-
       if (nextFollowState === currentState) {
         return;
       }
@@ -353,29 +336,6 @@ export function useMessageScroll(
       const isAwayFromBottom =
         scrollTop + scroller.clientHeight <
         scroller.scrollHeight - awayFromBottomThresholdPx;
-
-      if (
-        shouldIgnoreUnexpectedTopJumpDuringBottomLock({
-          scrollTop,
-          clientHeight: scroller.clientHeight,
-          scrollHeight: scroller.scrollHeight,
-          autoScrollActive: autoScrollActiveRef.current,
-          recentlyBottomLocked: now <= recoverUnexpectedTopJumpUntilRef.current,
-          userScrolledUp: userScrolledUpRef.current,
-          manualDetachActive: manualDetachFromStreamRef.current,
-        })
-      ) {
-        forceVirtuosoToBottom({
-          virtuoso: virtuosoRef.current,
-          scroller,
-          footer: messagesEndRef.current,
-        });
-        ignoreProgrammaticScrollUntilRef.current = now + 120;
-        setIsNearTop(false);
-        lastScrollTop.value = scroller.scrollTop;
-        lastScrollTime.value = now;
-        return;
-      }
 
       const nextFollowState = getNextMessageScrollFollowStateForUserScroll({
         state: createMessageScrollFollowState({

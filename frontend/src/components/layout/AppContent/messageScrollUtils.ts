@@ -268,42 +268,6 @@ export function shouldStopAutoScrollOnUserScroll({
   return deltaScrollPx > 6;
 }
 
-export function shouldIgnoreUnexpectedTopJumpDuringBottomLock({
-  scrollTop,
-  clientHeight,
-  scrollHeight,
-  autoScrollActive,
-  recentlyBottomLocked = false,
-  userScrolledUp,
-  manualDetachActive,
-}: {
-  scrollTop: number;
-  clientHeight: number;
-  scrollHeight: number;
-  autoScrollActive: boolean;
-  recentlyBottomLocked?: boolean;
-  userScrolledUp: boolean;
-  manualDetachActive: boolean;
-}): boolean {
-  return (
-    (autoScrollActive || recentlyBottomLocked) &&
-    !userScrolledUp &&
-    !manualDetachActive &&
-    scrollTop <= 1 &&
-    scrollHeight > clientHeight + 1
-  );
-}
-
-export function getUnexpectedTopJumpRecoveryUntilAfterUserIntent({
-  recoverUntil,
-  now,
-}: {
-  recoverUntil: number;
-  now: number;
-}): number {
-  return now <= recoverUntil ? 0 : recoverUntil;
-}
-
 export function shouldAutoScrollAfterViewportChange({
   scroller,
   bottomBreathingRoomPx,
@@ -448,10 +412,6 @@ export function startVirtuosoScrollToBottom({
     maxDurationMs ?? Math.max(intervalMs * maxAttempts, stableHeightWindowMs);
   const isAtKnownBottom = () =>
     scroller.scrollTop + scroller.clientHeight >= lastKnownScrollHeight - 1;
-  const isUnexpectedTopJump = () =>
-    postSettleObserveUntil > 0 &&
-    scroller.scrollTop <= 1 &&
-    scroller.scrollHeight > scroller.clientHeight + 1;
   const resetSettleBudget = () => {
     attempts = 0;
     lastKnownScrollHeight = scroller.scrollHeight;
@@ -494,12 +454,6 @@ export function startVirtuosoScrollToBottom({
         }
 
         if (postSettleObserveUntil > 0 && !isAtKnownBottom()) {
-          if (isUnexpectedTopJump()) {
-            noteLayoutChange();
-            scroll();
-            return;
-          }
-
           finish("aborted");
           return;
         }
@@ -550,11 +504,6 @@ export function startVirtuosoScrollToBottom({
 
     if (postSettleObserveUntil > 0) {
       if (!isAtBottom) {
-        if (isUnexpectedTopJump()) {
-          scroll();
-          return;
-        }
-
         if (!heightChanged) {
           finish("aborted");
           return;

@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   forceScrollerToPhysicalBottom,
   forceVirtuosoToBottom,
-  getUnexpectedTopJumpRecoveryUntilAfterUserIntent,
   getAutoScrollResumeThresholdPx,
   getAtBottomThresholdPx,
   getAwayFromBottomThresholdPx,
@@ -12,7 +11,6 @@ import {
   getInitialBottomItemLocation,
   getMessageListSessionKey,
   hasNewOutgoingMessage,
-  shouldIgnoreUnexpectedTopJumpDuringBottomLock,
   shouldStopAutoScrollOnUserScroll,
   shouldAutoScrollForMessageUpdate,
   shouldAutoScrollAfterViewportChange,
@@ -193,54 +191,6 @@ test("keeps bottom-lock inside Virtuoso when a virtual list handle is available"
   assert.ok(scrollToIndexCalls > 0);
   assert.equal(footerCalls, 0);
   assert.equal(scroller.scrollTop, 0);
-});
-
-test("treats a top jump right after bottom-locking as recoverable", () => {
-  assert.equal(
-    shouldIgnoreUnexpectedTopJumpDuringBottomLock({
-      scrollTop: 0,
-      clientHeight: 600,
-      scrollHeight: 2400,
-      autoScrollActive: false,
-      recentlyBottomLocked: true,
-      userScrolledUp: false,
-      manualDetachActive: false,
-    }),
-    true,
-  );
-});
-
-test("does not recover a top jump after the user intentionally detached", () => {
-  assert.equal(
-    shouldIgnoreUnexpectedTopJumpDuringBottomLock({
-      scrollTop: 0,
-      clientHeight: 600,
-      scrollHeight: 2400,
-      autoScrollActive: false,
-      recentlyBottomLocked: true,
-      userScrolledUp: true,
-      manualDetachActive: false,
-    }),
-    false,
-  );
-});
-
-test("clears the unexpected top jump recovery window on user intent", () => {
-  assert.equal(
-    getUnexpectedTopJumpRecoveryUntilAfterUserIntent({
-      recoverUntil: 2000,
-      now: 1000,
-    }),
-    0,
-  );
-
-  assert.equal(
-    getUnexpectedTopJumpRecoveryUntilAfterUserIntent({
-      recoverUntil: 1000,
-      now: 2000,
-    }),
-    1000,
-  );
 });
 
 test("forces the list to the last item when Virtuoso supports scrollToIndex", () => {
@@ -1016,32 +966,6 @@ test("does not stop auto-scroll for programmatic or tiny upward adjustments", ()
       isAwayFromBottom: false,
       deltaScrollPx: 1,
       scrollTop: 260,
-    }),
-    false,
-  );
-});
-
-test("ignores an unexpected top jump while the bottom lock is still active", () => {
-  assert.equal(
-    shouldIgnoreUnexpectedTopJumpDuringBottomLock({
-      scrollTop: 0,
-      clientHeight: 100,
-      scrollHeight: 500,
-      autoScrollActive: true,
-      userScrolledUp: false,
-      manualDetachActive: false,
-    }),
-    true,
-  );
-
-  assert.equal(
-    shouldIgnoreUnexpectedTopJumpDuringBottomLock({
-      scrollTop: 0,
-      clientHeight: 100,
-      scrollHeight: 500,
-      autoScrollActive: true,
-      userScrolledUp: true,
-      manualDetachActive: false,
     }),
     false,
   );
