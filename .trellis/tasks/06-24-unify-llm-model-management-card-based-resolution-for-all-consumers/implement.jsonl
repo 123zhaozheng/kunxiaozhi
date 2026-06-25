@@ -1,8 +1,0 @@
-{"file": ".trellis/tasks/06-24-unify-llm-model-management-card-based-resolution-for-all-consumers/prd.md", "reason": "任务 PRD：目标、三阶段计划、Q1/Q2/Q3 决策、验收标准、改动点清单"}
-{"file": ".trellis/tasks/06-24-unify-llm-model-management-card-based-resolution-for-all-consumers/research/protocol-retry-rootcause.md", "reason": "协议判定与重试风暴根因 + 三个断点 + 修法建议"}
-{"file": ".trellis/tasks/06-24-unify-llm-model-management-card-based-resolution-for-all-consumers/research/model-card-dropdown-feasibility.md", "reason": "卡片管理现状 + 下拉框可行性 + 前端下拉触发机制 + 改动点清单"}
-{"file": ".trellis/tasks/06-24-unify-llm-model-management-card-based-resolution-for-all-consumers/research/model-consumers-survey.md", "reason": "全部消费方盘点表 + 卡片/裸串分类 + 关键文件索引"}
-{"file": ".trellis/tasks/06-24-unify-llm-model-management-card-based-resolution-for-all-consumers/research/langchain-langgraph-model-mgmt.md", "reason": "生态实践与借鉴边界（仅参考，不强制迁 init_chat_model）"}
-{"file": ".trellis/spec/backend/index.md", "reason": "后端编码规范入口 + Pre-Development Checklist"}
-{"file": ".trellis/spec/frontend/index.md", "reason": "前端编码规范入口"}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨前后端改动思维指南（本任务涉及 settings 前后端联动）"}
