@@ -94,3 +94,6 @@ k8s/lambchat.yaml
 
 # Superpowers (external project, not part of this repo)
 .superpowers/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
