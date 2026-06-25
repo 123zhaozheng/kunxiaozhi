@@ -103,6 +103,7 @@ class TraceStorage:
 
     def __init__(self):
         self._collection = None
+        self._counter_collection = None
         self._merger = None  # 事件合并器
 
     @property
@@ -114,6 +115,31 @@ class TraceStorage:
             self._collection = db[settings.MONGODB_TRACES_COLLECTION]
             # 索引创建在首次异步操作时触发，避免在 property getter 中调用 create_task
         return self._collection
+
+    @property
+    def counter_collection(self):
+        """session 级事件全局序号计数器集合（延迟加载）"""
+        if self._counter_collection is None:
+            client = get_mongo_client()
+            db = client[settings.MONGODB_DB]
+            self._counter_collection = db["session_events_counter"]
+        return self._counter_collection
+
+    async def next_event_seq(self, session_id: str) -> int:
+        """
+        原子递增并返回该 session 的下一个事件全局序号。
+
+        跨 trace 的所有事件共享同一个 session 级计数器，因此 seq 单调递增、
+        能稳定表达事件的因果先后——避免按 timestamp 排序时并发/同毫秒事件
+        顺序不稳定导致的消息错位与重复渲染。
+        """
+        doc = await self.counter_collection.find_one_and_update(
+            {"_id": session_id},
+            {"$inc": {"seq": 1}},
+            upsert=True,
+            return_document=True,
+        )
+        return int(doc.get("seq", 1))
 
     async def ensure_indexes_if_needed(self):
         """确保索引存在（由首次使用时调用）"""
@@ -250,6 +276,7 @@ class TraceStorage:
         trace_id: str,
         event_type: str,
         data: Dict[str, Any],
+        session_id: Optional[str] = None,
     ) -> bool:
         """
         追加事件到 trace
@@ -260,21 +287,24 @@ class TraceStorage:
             trace_id: Trace ID
             event_type: 事件类型
             data: 事件数据
+            session_id: 会话 ID（用于分配 session 级全局序号 seq）
 
         Returns:
             是否追加成功
         """
         try:
+            seq = await self.next_event_seq(session_id) if session_id else None
+            event_doc: Dict[str, Any] = {
+                "event_type": event_type,
+                "data": data,
+                "timestamp": utc_now(),
+            }
+            if seq is not None:
+                event_doc["seq"] = seq
             result = await self.collection.update_one(
                 {"trace_id": trace_id},
                 {
-                    "$push": {
-                        "events": {
-                            "event_type": event_type,
-                            "data": data,
-                            "timestamp": utc_now(),
-                        }
-                    },
+                    "$push": {"events": event_doc},
                     "$inc": {"event_count": 1},
                     "$set": {"updated_at": utc_now()},
                 },
@@ -738,12 +768,39 @@ class TraceStorage:
                         "events.event_type": 1,
                         "events.data": 1,
                         "events.timestamp": 1,
+                        "events.seq": 1,
                     }
                 },
                 {"$unwind": "$events"},
             ]
             if event_types:
                 pipeline.append({"$match": {"events.event_type": {"$in": event_types}}})
+            # Sort by the session-level global sequence number when present, so
+            # cross-trace event order is stable and matches causal write order.
+            # Legacy events written before seq was introduced have no seq; they
+            # are older than any seq-bearing event, so treat missing seq as 0
+            # (sorts before seq>=1) and break ties by timestamp. $limit is
+            # applied AFTER this sort so the returned window is the earliest
+            # max_events in stable order (not an arbitrary $limit over an
+            # unstable cross-trace order).
+            pipeline.append(
+                {
+                    "$set": {
+                        "events.seq_sort": {
+                            "$ifNull": ["$events.seq", 0]
+                        }
+                    }
+                }
+            )
+            pipeline.append(
+                {
+                    "$sort": {
+                        "events.seq_sort": 1,
+                        "started_at": 1,
+                        "events.timestamp": 1,
+                    }
+                }
+            )
             pipeline.extend(
                 [
                     {"$limit": max_events},
@@ -755,6 +812,7 @@ class TraceStorage:
                             "event_type": "$events.event_type",
                             "data": "$events.data",
                             "timestamp": "$events.timestamp",
+                            "seq": "$events.seq",
                         }
                     },
                 ]

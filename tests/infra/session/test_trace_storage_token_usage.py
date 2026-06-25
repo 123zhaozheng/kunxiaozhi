@@ -359,10 +359,19 @@ async def test_get_session_events_uses_server_side_limit_when_max_events_is_set(
                     "events.event_type": 1,
                     "events.data": 1,
                     "events.timestamp": 1,
+                    "events.seq": 1,
                 }
             },
             {"$unwind": "$events"},
             {"$match": {"events.event_type": {"$in": ["user:message", "done"]}}},
+            {"$set": {"events.seq_sort": {"$ifNull": ["$events.seq", 0]}}},
+            {
+                "$sort": {
+                    "events.seq_sort": 1,
+                    "started_at": 1,
+                    "events.timestamp": 1,
+                }
+            },
             {"$limit": 2},
             {
                 "$project": {
@@ -372,6 +381,7 @@ async def test_get_session_events_uses_server_side_limit_when_max_events_is_set(
                     "event_type": "$events.event_type",
                     "data": "$events.data",
                     "timestamp": "$events.timestamp",
+                    "seq": "$events.seq",
                 }
             },
         ]

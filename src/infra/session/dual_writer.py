@@ -90,18 +90,27 @@ def _build_mongo_bulk_operations(
     *,
     now: datetime,
     max_events: int,
+    seqs_by_session: Optional[Dict[str, List[int]]] = None,
 ) -> list[UpdateOne]:
     grouped: dict[str, list[dict]] = defaultdict(list)
     trace_context: dict[str, tuple[str, Optional[str]]] = {}
+    # Per-session cursor into the pre-allocated seq list, advanced in batch order
+    # so each event gets the next seq for its session.
+    seq_cursor: dict[str, int] = {}
 
     for trace_id, event_type, data, session_id, run_id, timestamp in batch:
-        grouped[trace_id].append(
-            {
-                "event_type": event_type,
-                "data": data,
-                "timestamp": timestamp,
-            }
-        )
+        event_doc: dict = {
+            "event_type": event_type,
+            "data": data,
+            "timestamp": timestamp,
+        }
+        if seqs_by_session and session_id and session_id in seqs_by_session:
+            seqs = seqs_by_session[session_id]
+            idx = seq_cursor.get(session_id, 0)
+            if idx < len(seqs):
+                event_doc["seq"] = seqs[idx]
+                seq_cursor[session_id] = idx + 1
+        grouped[trace_id].append(event_doc)
         if trace_id not in trace_context:
             trace_context[trace_id] = (session_id, run_id)
 
@@ -326,11 +335,42 @@ class DualEventWriter:
 
         now = utc_now()
         max_events = _get_max_events_per_trace()
+
+        # Pre-allocate a session-level global sequence number for every event in
+        # the batch, grouped by session (one atomic $inc per session). seq gives
+        # a stable, monotonic global order across all traces of a session so that
+        # reads can sort by seq instead of by (unreliable, same-millisecond)
+        # timestamp — fixing cross-run event reordering that caused duplicate
+        # message ids and wrong message order in the chat history.
+        seqs_by_session: Dict[str, List[int]] = {}
+        session_counts: Dict[str, int] = {}
+        for _trace_id, _event_type, _data, session_id, _run_id, _ts in batch:
+            if session_id:
+                session_counts[session_id] = session_counts.get(session_id, 0) + 1
+        for session_id, count in session_counts.items():
+            try:
+                doc = await self.trace.counter_collection.find_one_and_update(
+                    {"_id": session_id},
+                    {"$inc": {"seq": count}},
+                    upsert=True,
+                    return_document=True,
+                )
+                base = int(doc.get("seq", count))
+                seqs_by_session[session_id] = list(
+                    range(base - count + 1, base + 1)
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to allocate event seq for session {session_id}: {e}"
+                )
+                seqs_by_session[session_id] = []
+
         operations = await run_blocking_io(
             _build_mongo_bulk_operations,
             batch,
             now=now,
             max_events=max_events,
+            seqs_by_session=seqs_by_session,
         )
 
         # 批量执行
