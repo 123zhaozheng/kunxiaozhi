@@ -184,3 +184,43 @@ async def test_admin_toggle_tool_returns_bad_request_for_disabled_tool_overflow(
 
     assert response.status_code == 400
     assert "maximum 100" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_toggle_internal_server_returns_bad_request_for_admin() -> None:
+    """The internal virtual server is a read-only shell; toggling it as a whole
+    is rejected with a clear 400 (not a 404 from the storage path)."""
+    class _FakeStorage:
+        async def toggle_server(self, *_args, **_kwargs):
+            raise AssertionError("storage must not be called for internal server")
+
+    app = FastAPI()
+    app.include_router(mcp_route.router, prefix="/api/mcp")
+    app.dependency_overrides[api_deps.get_current_user_required] = _fake_admin
+    app.dependency_overrides[mcp_route.get_mcp_storage] = lambda: _FakeStorage()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.patch("/api/mcp/kunxiaozhi_internal/toggle")
+
+    assert response.status_code == 400
+    assert "Internal server cannot be toggled" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_toggle_internal_server_returns_not_found_for_non_admin() -> None:
+    """Non-admin users must not learn the internal server exists via toggle."""
+    class _FakeStorage:
+        async def toggle_server(self, *_args, **_kwargs):
+            raise AssertionError("storage must not be called for internal server")
+
+    app = FastAPI()
+    app.include_router(mcp_route.router, prefix="/api/mcp")
+    app.dependency_overrides[api_deps.get_current_user_required] = _fake_user
+    app.dependency_overrides[mcp_route.get_mcp_storage] = lambda: _FakeStorage()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.patch("/api/mcp/kunxiaozhi_internal/toggle")
+
+    assert response.status_code == 404

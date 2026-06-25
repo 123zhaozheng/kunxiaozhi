@@ -35,7 +35,13 @@ def build_internal_tools() -> list[BaseTool]:
     if settings.ENABLE_AUDIO_TRANSCRIPTION:
         tools.append(get_audio_transcribe_tool())
 
-    tools.extend(get_env_var_tools())
+    # env_var tools' only consumer is the sandbox (rebuild_sandbox_mcp /
+    # _sync_user_env_vars / EnvVarPromptMiddleware — all sandbox-gated).
+    # Load them only when a sandbox is configured so non-sandbox deployments
+    # don't expose dead-weight tools whose stored values have no consumer.
+    if settings.ENABLE_SANDBOX:
+        tools.extend(get_env_var_tools())
+
     tools.extend(get_persona_preset_tools())
     tools.extend(get_team_tools())
     return tools

@@ -341,6 +341,17 @@ async def toggle_server(
     storage: MCPStorage = Depends(get_mcp_storage),
 ):
     """Toggle a server's enabled status (user servers: direct toggle; system servers: toggle user preference)"""
+    # The internal virtual server is a read-only shell over built-in tools; it
+    # has no MongoDB record and cannot be toggled as a whole. Per-tool toggles
+    # remain available via toggle_tool (which handles _is_internal_server).
+    if _is_internal_server(name):
+        if not _is_admin(user):
+            raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
+        raise HTTPException(
+            status_code=400,
+            detail="Internal server cannot be toggled as a whole; toggle individual tools instead",
+        )
+
     server = await storage.toggle_server(
         name,
         user.sub,

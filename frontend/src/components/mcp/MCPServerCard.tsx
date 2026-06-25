@@ -151,27 +151,29 @@ export function MCPServerCard({
               </button>
             )}
           </div>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggle(server.name);
-            }}
-            className={`pps-card__action ${
-              server.enabled
-                ? "pps-card__action--active"
-                : "pps-card__action--primary"
-            }`}
-          >
-            {server.enabled ? (
-              <ToggleRight
-                size={13}
-                className="text-emerald-500 dark:text-emerald-400"
-              />
-            ) : (
-              <ToggleLeft size={13} />
-            )}
-            {server.enabled ? t("mcp.card.enable") : t("mcp.card.disable")}
-          </button>
+          {!server.is_internal && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggle(server.name);
+              }}
+              className={`pps-card__action ${
+                server.enabled
+                  ? "pps-card__action--active"
+                  : "pps-card__action--primary"
+              }`}
+            >
+              {server.enabled ? (
+                <ToggleRight
+                  size={13}
+                  className="text-emerald-500 dark:text-emerald-400"
+                />
+              ) : (
+                <ToggleLeft size={13} />
+              )}
+              {server.enabled ? t("mcp.card.enable") : t("mcp.card.disable")}
+            </button>
+          )}
         </div>
       </div>
     </div>

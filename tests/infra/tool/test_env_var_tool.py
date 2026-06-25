@@ -93,6 +93,45 @@ def _stub_context_tool_imports(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def _stub_internal_registry_env_var_tools(
+    monkeypatch: pytest.MonkeyPatch,
+    context_module,
+) -> None:
+    """Stub internal_registry so get_internal_tools_for_user returns the real
+    build_internal_tools() output (driven by the real ENABLE_SANDBOX flag), without
+    hitting MongoDB. build_internal_tools reads internal_registry.settings, so we
+    mirror the context module's ENABLE_SANDBOX onto it to exercise the gate.
+    """
+    import src.infra.tool.internal_registry as registry
+
+    monkeypatch.setattr(
+        registry.settings,
+        "ENABLE_SANDBOX",
+        bool(getattr(context_module.settings, "ENABLE_SANDBOX", False)),
+        raising=True,
+    )
+
+    async def fake_get_internal_tools_for_user(*, user_id, user_roles, is_admin):
+        return registry.build_internal_tools()
+
+    monkeypatch.setattr(
+        context_module,
+        "get_internal_tools_for_user",
+        fake_get_internal_tools_for_user,
+        raising=True,
+    )
+    # mcp.quota.resolve_user_mcp_access is called before get_internal_tools_for_user
+    # in setup(); stub it so no DB hit occurs.
+    import src.infra.mcp.quota as quota
+
+    async def fake_resolve_user_mcp_access(user_id):
+        return ([], False)
+
+    monkeypatch.setattr(
+        quota, "resolve_user_mcp_access", fake_resolve_user_mcp_access, raising=True
+    )
+
+
 def test_get_env_var_tools_returns_safe_crud_tools() -> None:
     from src.infra.tool.env_var_tool import get_env_var_tools
 
@@ -300,7 +339,9 @@ async def test_env_var_tool_requires_runtime_user(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.asyncio
-async def test_search_agent_context_includes_env_var_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_search_agent_context_includes_env_var_tools_when_sandbox_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _stub_context_tool_imports(monkeypatch)
     search_context = _load_module_from_path(
         "search_context_under_test",
@@ -308,8 +349,9 @@ async def test_search_agent_context_includes_env_var_tools(monkeypatch: pytest.M
     )
 
     monkeypatch.setattr(search_context.settings, "ENABLE_MEMORY", False)
-    monkeypatch.setattr(search_context.settings, "ENABLE_SANDBOX", False)
+    monkeypatch.setattr(search_context.settings, "ENABLE_SANDBOX", True)
     monkeypatch.setattr(search_context.settings, "ENABLE_SKILLS", False)
+    _stub_internal_registry_env_var_tools(monkeypatch, search_context)
 
     ctx = search_context.SearchAgentContext(user_id="user-1")
     await ctx.setup()
@@ -319,7 +361,53 @@ async def test_search_agent_context_includes_env_var_tools(monkeypatch: pytest.M
 
 
 @pytest.mark.asyncio
-async def test_fast_agent_context_includes_env_var_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_search_agent_context_excludes_env_var_tools_when_sandbox_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_context_tool_imports(monkeypatch)
+    search_context = _load_module_from_path(
+        "search_context_under_test",
+        "src/agents/search_agent/context.py",
+    )
+
+    monkeypatch.setattr(search_context.settings, "ENABLE_MEMORY", False)
+    monkeypatch.setattr(search_context.settings, "ENABLE_SANDBOX", False)
+    monkeypatch.setattr(search_context.settings, "ENABLE_SKILLS", False)
+    _stub_internal_registry_env_var_tools(monkeypatch, search_context)
+
+    ctx = search_context.SearchAgentContext(user_id="user-1")
+    await ctx.setup()
+
+    names = {tool.name for tool in ctx.tools}
+    assert not ({"env_var_list", "env_var_set", "env_var_delete", "env_var_delete_all"} & names)
+
+
+@pytest.mark.asyncio
+async def test_fast_agent_context_includes_env_var_tools_when_sandbox_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_context_tool_imports(monkeypatch)
+    fast_context = _load_module_from_path(
+        "fast_context_under_test",
+        "src/agents/fast_agent/context.py",
+    )
+
+    monkeypatch.setattr(fast_context.settings, "ENABLE_MEMORY", False)
+    monkeypatch.setattr(fast_context.settings, "ENABLE_SANDBOX", True)
+    monkeypatch.setattr(fast_context.settings, "ENABLE_SKILLS", False)
+    _stub_internal_registry_env_var_tools(monkeypatch, fast_context)
+
+    ctx = fast_context.FastAgentContext(user_id="user-1")
+    await ctx.setup()
+
+    names = {tool.name for tool in ctx.tools}
+    assert {"env_var_list", "env_var_set", "env_var_delete", "env_var_delete_all"} <= names
+
+
+@pytest.mark.asyncio
+async def test_fast_agent_context_excludes_env_var_tools_when_sandbox_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _stub_context_tool_imports(monkeypatch)
     fast_context = _load_module_from_path(
         "fast_context_under_test",
@@ -329,9 +417,54 @@ async def test_fast_agent_context_includes_env_var_tools(monkeypatch: pytest.Mon
     monkeypatch.setattr(fast_context.settings, "ENABLE_MEMORY", False)
     monkeypatch.setattr(fast_context.settings, "ENABLE_SANDBOX", False)
     monkeypatch.setattr(fast_context.settings, "ENABLE_SKILLS", False)
+    _stub_internal_registry_env_var_tools(monkeypatch, fast_context)
 
     ctx = fast_context.FastAgentContext(user_id="user-1")
     await ctx.setup()
 
     names = {tool.name for tool in ctx.tools}
-    assert {"env_var_list", "env_var_set", "env_var_delete", "env_var_delete_all"} <= names
+    assert not ({"env_var_list", "env_var_set", "env_var_delete", "env_var_delete_all"} & names)
+
+
+@pytest.mark.asyncio
+async def test_search_agent_context_respects_disabled_env_var_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: when the per-tool policy disables env_var tools, they must NOT
+    re-appear via a second load path. Before the fix, a direct get_env_var_tools()
+    call in setup() bypassed get_internal_tools_for_user's policy filter and
+    re-added the disabled tools via name-only dedup."""
+    _stub_context_tool_imports(monkeypatch)
+    search_context = _load_module_from_path(
+        "search_context_under_test_policy",
+        "src/agents/search_agent/context.py",
+    )
+
+    monkeypatch.setattr(search_context.settings, "ENABLE_MEMORY", False)
+    monkeypatch.setattr(search_context.settings, "ENABLE_SANDBOX", True)
+    monkeypatch.setattr(search_context.settings, "ENABLE_SKILLS", False)
+
+    # Simulate policy filtering out ALL internal tools (incl. env_var).
+    async def fake_get_internal_tools_for_user(*, user_id, user_roles, is_admin):
+        return []
+
+    monkeypatch.setattr(
+        search_context,
+        "get_internal_tools_for_user",
+        fake_get_internal_tools_for_user,
+        raising=True,
+    )
+    import src.infra.mcp.quota as quota
+
+    async def fake_resolve_user_mcp_access(user_id):
+        return ([], False)
+
+    monkeypatch.setattr(
+        quota, "resolve_user_mcp_access", fake_resolve_user_mcp_access, raising=True
+    )
+
+    ctx = search_context.SearchAgentContext(user_id="user-1")
+    await ctx.setup()
+
+    names = {tool.name for tool in ctx.tools}
+    assert not ({"env_var_list", "env_var_set", "env_var_delete", "env_var_delete_all"} & names)
