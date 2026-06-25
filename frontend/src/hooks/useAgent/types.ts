@@ -219,6 +219,8 @@ export interface HistoryEvent {
   data: HistoryEventData | unknown;
   timestamp?: string;
   run_id?: string;
+  /** Session-level global sequence number (monotonic across all traces). */
+  seq?: number;
 }
 
 // Return type for useAgent hook

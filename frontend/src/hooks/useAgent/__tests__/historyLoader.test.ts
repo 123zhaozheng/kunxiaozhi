@@ -391,3 +391,54 @@ test("reconstructMessagesFromEvents keeps late run events after cancel on the ca
     "thinking",
   ]);
 });
+
+test("reconstructMessagesFromEvents does not duplicate an assistant id when a run's events are interleaved by another run's user message", () => {
+  const runA = "run_20260618064521_a46159bd";
+  const runB = "run_20260618064600_bbbbbbbb";
+  const messages = reconstructMessagesFromEvents(
+    [
+      // run A: user message
+      {
+        id: "event-user-a",
+        event_type: "user:message",
+        run_id: runA,
+        timestamp: "2026-06-18T06:45:21.000Z",
+        data: { content: "question A", message_id: `${runA}:user`, attachments: [] },
+      },
+      // run A: first assistant chunk
+      {
+        id: "event-chunk-a1",
+        event_type: "message:chunk",
+        run_id: runA,
+        timestamp: "2026-06-18T06:45:22.000Z",
+        data: { content: "answer A part 1" },
+      },
+      // run B: user message — splits run A's events
+      {
+        id: "event-user-b",
+        event_type: "user:message",
+        run_id: runB,
+        timestamp: "2026-06-18T06:46:00.000Z",
+        data: { content: "question B", message_id: `${runB}:user`, attachments: [] },
+      },
+      // run A: second assistant chunk (arrives after run B's user message)
+      {
+        id: "event-chunk-a2",
+        event_type: "message:chunk",
+        run_id: runA,
+        timestamp: "2026-06-18T06:46:30.000Z",
+        data: { content: "answer A part 2" },
+      },
+    ] satisfies HistoryEvent[],
+    new Set<string>(),
+    { activeSubagentStack: [] },
+  );
+
+  const ids = messages.map((message) => message.id);
+  // run A must produce exactly one assistant bubble (id = runA), not two.
+  assert.equal(ids.filter((id) => id === runA).length, 1);
+  // run A's chunks must both be folded into that single bubble.
+  const assistantA = messages.find((message) => message.id === runA);
+  assert.equal(assistantA?.role, "assistant");
+  assert.equal(assistantA?.content, "answer A part 1answer A part 2");
+});

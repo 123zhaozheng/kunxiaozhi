@@ -231,8 +231,17 @@ export function reconstructMessagesFromEvents(
   processedEventIds: Set<string>,
   opts: ProcessHistoryOptions,
 ): Message[] {
-  // Sort events by timestamp
+  // Sort events into a stable global order. Prefer the backend's session-level
+  // `seq` (monotonic across all traces) — it expresses causal write order and
+  // is immune to same-millisecond timestamp ties that made the old
+  // timestamp-only sort reorder a run's events and spawn duplicate assistant
+  // ids. Fall back to timestamp for legacy events written before seq existed.
   const sortedEvents = [...events].sort((a, b) => {
+    const seqA = typeof a.seq === "number" ? a.seq : null;
+    const seqB = typeof b.seq === "number" ? b.seq : null;
+    if (seqA !== null && seqB !== null) {
+      return seqA - seqB;
+    }
     const timeA = parseEventTimestamp(a.timestamp, 0).getTime();
     const timeB = parseEventTimestamp(b.timestamp, 0).getTime();
     return timeA - timeB;
@@ -242,6 +251,51 @@ export function reconstructMessagesFromEvents(
   let currentAssistantMessage: Message | null = null;
   const seenUserMessageIds = new Set<string>();
   const seenUserMessageRunIds = new Set<string>();
+  // Map from run_id to the index (in reconstructedMessages) of the currently
+  // open assistant bubble for that run. Ensures a run's split events reattach
+  // to the same bubble instead of spawning a second message with the same id.
+  //
+  // Without this, a run's events can be split by an interleaving user:message
+  // from another run (or by timestamp reordering), producing a second assistant
+  // message with id = run_id. Virtuoso's computeItemKey uses message.id, so a
+  // duplicate id makes React reconciliation render the same bubble across the
+  // whole viewport on scroll (the "screen fills with one AI reply" bug).
+  const assistantMessageIndexByRunId = new Map<string, number>();
+  // How many assistant bubbles have been created for a given run_id. The first
+  // bubble keeps id = run_id (matching the live send path, where the optimistic
+  // assistant id is replaced with run_id). A later bubble — only ever created
+  // when a run's events are so reordered that the first bubble can't be
+  // reattached — gets a suffixed id (`${run_id}:2`, ...) so it never collides.
+  const assistantBubbleCountByRunId = new Map<string, number>();
+
+  const runIdOf = (event: HistoryEvent): string | null => {
+    const r = event.run_id;
+    return typeof r === "string" && r.trim() ? r : null;
+  };
+
+  // Build the id for a new assistant bubble of `runId`. The first bubble of a
+  // run uses the run_id verbatim (preserving the live-path id contract); a
+  // later bubble gets a `:N` suffix to stay unique.
+  const nextAssistantId = (runId: string | null): string => {
+    if (!runId) return uuid();
+    const count = (assistantBubbleCountByRunId.get(runId) ?? 0) + 1;
+    assistantBubbleCountByRunId.set(runId, count);
+    return count === 1 ? runId : `${runId}:${count}`;
+  };
+
+  // Push the in-progress assistant bubble into the array and record its run_id
+  // so later split events from the same run can reattach to it.
+  const parkCurrentAssistant = () => {
+    if (!currentAssistantMessage) return;
+    reconstructedMessages.push(currentAssistantMessage);
+    if (currentAssistantMessage.runId) {
+      assistantMessageIndexByRunId.set(
+        currentAssistantMessage.runId,
+        reconstructedMessages.length - 1,
+      );
+    }
+    currentAssistantMessage = null;
+  };
 
   for (const event of sortedEvents) {
     const eventType = event.event_type;
@@ -250,10 +304,7 @@ export function reconstructMessagesFromEvents(
     // Handle user message separately
     if (eventType === "user:message") {
       const userMessageId = resolveUserMessageId(event, eventData);
-      const userMessageRunId =
-        typeof event.run_id === "string" && event.run_id.trim()
-          ? event.run_id
-          : null;
+      const userMessageRunId = runIdOf(event);
       if (
         seenUserMessageIds.has(userMessageId) ||
         (userMessageRunId && seenUserMessageRunIds.has(userMessageRunId))
@@ -265,10 +316,7 @@ export function reconstructMessagesFromEvents(
         seenUserMessageRunIds.add(userMessageRunId);
       }
 
-      if (currentAssistantMessage) {
-        reconstructedMessages.push(currentAssistantMessage);
-        currentAssistantMessage = null;
-      }
+      parkCurrentAssistant();
       const userAttachments = convertAttachments(eventData.attachments);
       reconstructedMessages.push({
         id: userMessageId,
@@ -298,13 +346,13 @@ export function reconstructMessagesFromEvents(
           }
           return part;
         });
-        const updatedMessage = {
+        currentAssistantMessage = {
           ...currentAssistantMessage,
           isStreaming: false,
           cancelled: true,
           parts: [...updatedParts, { type: "cancelled" as const }],
         };
-        reconstructedMessages.push(updatedMessage);
+        parkCurrentAssistant();
       } else {
         reconstructedMessages.push({
           id: uuid(),
@@ -319,27 +367,78 @@ export function reconstructMessagesFromEvents(
       continue;
     }
 
-    if (
-      !currentAssistantMessage &&
-      canAttachEventTypeToPreviousAssistant(eventType)
-    ) {
-      const lastMessageIndex = reconstructedMessages.length - 1;
-      const lastMessage = reconstructedMessages[lastMessageIndex];
-      if (canAttachToPreviousAssistant(event, lastMessage)) {
-        const updatedMessage = processHistoryEvent(
-          event,
-          lastMessage,
-          processedEventIds,
-          opts,
-        );
-        if (updatedMessage) {
-          reconstructedMessages[lastMessageIndex] = updatedMessage;
+    if (!currentAssistantMessage) {
+      const runId = runIdOf(event);
+
+      // Reuse this run's existing assistant bubble if one was parked earlier
+      // because its events got split by an interleaving user message from
+      // another run (or by timestamp reordering). Late events arriving after a
+      // cancel also reattach here — they belong to the cancelled bubble (e.g.
+      // token usage, late thinking). This is the fix for duplicate assistant
+      // ids: instead of spawning a second message with id = run_id, we splice
+      // the parked bubble back out and continue accumulating into it.
+      if (runId && assistantMessageIndexByRunId.has(runId)) {
+        const parkedIndex = assistantMessageIndexByRunId.get(runId)!;
+        const parked = reconstructedMessages[parkedIndex];
+        if (parked && parked.role === "assistant") {
+          reconstructedMessages.splice(parkedIndex, 1);
+          currentAssistantMessage = parked;
+          assistantMessageIndexByRunId.delete(runId);
+          for (const [otherRunId, idx] of assistantMessageIndexByRunId) {
+            if (idx > parkedIndex) {
+              assistantMessageIndexByRunId.set(otherRunId, idx - 1);
+            }
+          }
+          currentAssistantMessage = processHistoryEvent(
+            event,
+            currentAssistantMessage,
+            processedEventIds,
+            opts,
+          );
+          continue;
         }
-        continue;
       }
+
+      // Fall back to attaching to the previous assistant message when it shares
+      // the same run_id (preserves original behavior for contiguous runs where
+      // the bubble is the last parked element).
+      if (canAttachEventTypeToPreviousAssistant(eventType)) {
+        const lastMessageIndex = reconstructedMessages.length - 1;
+        const lastMessage = reconstructedMessages[lastMessageIndex];
+        if (canAttachToPreviousAssistant(event, lastMessage)) {
+          reconstructedMessages.splice(lastMessageIndex, 1);
+          if (lastMessage.runId) {
+            assistantMessageIndexByRunId.delete(lastMessage.runId);
+          }
+          currentAssistantMessage = processHistoryEvent(
+            event,
+            lastMessage,
+            processedEventIds,
+            opts,
+          );
+          continue;
+        }
+      }
+
+      // Create a new assistant bubble for this run. The first bubble of a run
+      // uses id = run_id (matching the live send path); any later bubble gets a
+      // `:N` suffix so it can never collide with the first.
+      const newId = nextAssistantId(runId);
+      currentAssistantMessage = processHistoryEvent(
+        event,
+        null,
+        processedEventIds,
+        opts,
+      );
+      if (currentAssistantMessage) {
+        // processHistoryEvent sets id = event.run_id; override with our unique
+        // id so a run can never produce two messages with the same id.
+        currentAssistantMessage = { ...currentAssistantMessage, id: newId };
+      }
+      continue;
     }
 
-    // Process other events
+    // Accumulate into the in-progress assistant bubble.
     currentAssistantMessage = processHistoryEvent(
       event,
       currentAssistantMessage,
@@ -348,9 +447,7 @@ export function reconstructMessagesFromEvents(
     );
   }
 
-  if (currentAssistantMessage) {
-    reconstructedMessages.push(currentAssistantMessage);
-  }
+  parkCurrentAssistant();
 
   return reconstructedMessages;
 }
