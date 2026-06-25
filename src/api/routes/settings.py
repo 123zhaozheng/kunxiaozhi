@@ -2,10 +2,14 @@
 Settings API router
 """
 
+from typing import Any
+
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 
 from src.api.deps import get_current_user_required, require_permissions
 from src.infra.settings.service import SettingsService, get_settings_service
+from src.kernel.config import settings
 from src.kernel.schemas.setting import (
     SettingItem,
     SettingResetResponse,
@@ -111,3 +115,57 @@ async def reset_setting(
         message=f"Setting {key} reset to default",
         reset_count=count,
     )
+
+
+@router.get("/dify-kb/datasets")
+async def list_dify_knowledge_bases(
+    _: TokenPayload = Depends(require_permissions("settings:manage")),
+) -> dict[str, Any]:
+    """List Dify knowledge bases to populate the persona KB picker.
+
+    Proxies Dify's ``GET /datasets`` and returns only the fields the picker
+    needs. Only available when the Dify KB feature is enabled and the
+    connection settings are configured.
+    """
+    if not (settings.DIFY_KB_ENABLED and settings.DIFY_KB_BASE_URL and settings.DIFY_KB_API_KEY):
+        raise HTTPException(status_code=400, detail="Dify knowledge base is not enabled or configured")
+
+    base_url = str(settings.DIFY_KB_BASE_URL).rstrip("/")
+    headers = {"Authorization": f"Bearer {settings.DIFY_KB_API_KEY}"}
+
+    datasets: list[dict[str, Any]] = []
+    page = 1
+    limit = 20
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            while True:
+                response = await client.get(
+                    f"{base_url}/datasets",
+                    headers=headers,
+                    params={"page": page, "limit": limit},
+                )
+                response.raise_for_status()
+                payload = response.json()
+                data = payload.get("data") if isinstance(payload, dict) else None
+                if not isinstance(data, list):
+                    break
+                for item in data:
+                    if not isinstance(item, dict):
+                        continue
+                    datasets.append(
+                        {
+                            "id": item.get("id"),
+                            "name": item.get("name"),
+                            "description": item.get("description"),
+                            "document_count": item.get("document_count"),
+                        }
+                    )
+                if not payload.get("has_more"):
+                    break
+                page += 1
+                if page > 200:  # hard safety cap
+                    break
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to reach Dify: {exc}") from exc
+
+    return {"datasets": datasets}

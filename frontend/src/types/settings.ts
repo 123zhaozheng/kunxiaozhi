@@ -33,7 +33,8 @@ export type SettingCategory =
   | "memory_embedding"
   | "memory_search"
   | "memory_storage"
-  | "audio_transcription";
+  | "audio_transcription"
+  | "dify";
 
 // Setting dependency condition
 export interface SettingDependsOn {

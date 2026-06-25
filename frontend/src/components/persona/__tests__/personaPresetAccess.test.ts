@@ -13,6 +13,7 @@ function buildPreset(scope: "user" | "global"): PersonaPreset {
     tags: [],
     system_prompt: "prompt",
     skill_names: [],
+    dify_kb_dataset_ids: [],
     visibility: scope === "global" ? "public" : "private",
     status: scope === "global" ? "published" : "draft",
     version: 1,

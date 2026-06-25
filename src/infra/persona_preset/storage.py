@@ -81,6 +81,7 @@ class PersonaPresetStorage:
         "system_prompt": "You are a helpful assistant.",
         "starter_prompts": [],
         "skill_names": [],
+        "dify_kb_dataset_ids": [],
         "visibility": "private",
         "status": "draft",
     }

@@ -19,6 +19,7 @@ export interface PersonaPresetEditorDraft {
   starter_prompts: PersonaStarterPrompt[];
   tags: string[];
   skill_names: string[];
+  dify_kb_dataset_ids: string[];
 }
 
 export interface PersonaPresetEditorOptions {
@@ -101,6 +102,7 @@ export function buildPersonaPresetPayload(
     starter_prompts: draft.starter_prompts,
     tags: draft.tags,
     skill_names: draft.skill_names,
+    dify_kb_dataset_ids: draft.dify_kb_dataset_ids,
   };
 
   if (preset) {

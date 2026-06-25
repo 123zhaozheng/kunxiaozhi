@@ -403,6 +403,13 @@ async def chat_stream(
         if request.agent_options is None:
             request.agent_options = {}
         await validate_agent_model_access(request.agent_options, user)
+        # Thread the persona's bound Dify knowledge-base ids onto agent_options so
+        # the dify_kb_retrieve tool can read them from runtime.config
+        # ["configurable"]["agent_options"] without a new end-to-end param.
+        if request.persona_snapshot and request.persona_snapshot.dify_kb_dataset_ids:
+            request.agent_options["dify_kb_dataset_ids"] = list(
+                request.persona_snapshot.dify_kb_dataset_ids
+            )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="角色预设不存在")
     except AuthorizationError as e:

@@ -19,6 +19,7 @@ export interface PersonaPreset {
   system_prompt: string;
   starter_prompts?: PersonaStarterPrompt[];
   skill_names: string[];
+  dify_kb_dataset_ids: string[];
   visibility: PersonaPresetVisibility;
   status: PersonaPresetStatus;
   source_preset_id?: string | null;
@@ -42,6 +43,7 @@ export interface PersonaPresetCreate {
   system_prompt: string;
   starter_prompts?: PersonaStarterPrompt[];
   skill_names?: string[];
+  dify_kb_dataset_ids?: string[];
   scope?: PersonaPresetScope;
   visibility?: PersonaPresetVisibility;
   status?: PersonaPresetStatus;
@@ -55,6 +57,7 @@ export interface PersonaPresetUpdate {
   system_prompt?: string;
   starter_prompts?: PersonaStarterPrompt[];
   skill_names?: string[];
+  dify_kb_dataset_ids?: string[];
   scope?: PersonaPresetScope;
   visibility?: PersonaPresetVisibility;
   status?: PersonaPresetStatus;
@@ -71,6 +74,7 @@ export interface PersonaPresetSnapshot {
   system_prompt: string;
   starter_prompts?: PersonaStarterPrompt[];
   skill_names: string[];
+  dify_kb_dataset_ids: string[];
   missing_skill_names: string[];
   version: number;
   avatar?: string | null;

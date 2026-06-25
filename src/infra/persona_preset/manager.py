@@ -283,6 +283,7 @@ class PersonaPresetManager:
             system_prompt=preset.system_prompt,
             starter_prompts=preset.starter_prompts,
             skill_names=skill_names,
+            dify_kb_dataset_ids=list(preset.dify_kb_dataset_ids or []),
             missing_skill_names=missing,
             version=preset.version,
             avatar=preset.avatar,

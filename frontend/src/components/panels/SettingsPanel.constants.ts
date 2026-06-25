@@ -22,6 +22,7 @@ export const CATEGORY_ORDER: SettingCategory[] = [
   "skills",
   "tools",
   "audio_transcription",
+  "dify",
   "tracing",
   "user",
   "oauth",
@@ -46,6 +47,8 @@ export const MODEL_CONFIG_SETTING_KEYS = new Set([
   "AUDIO_TRANSCRIPTION_MODEL_ID",
   "NATIVE_MEMORY_EMBEDDING_MODEL_ID",
   "NATIVE_MEMORY_RERANK_MODEL_ID",
+  "DIFY_KB_LLM_MODEL_ID",
+  "DIFY_KB_RERANK_MODEL_ID",
 ]);
 
 // Map of model-card ID setting keys to the card `kind` they reference.
@@ -55,4 +58,6 @@ export const MODEL_CARD_KIND_FILTER: Record<string, string> = {
   AUDIO_TRANSCRIPTION_MODEL_ID: "transcribe",
   NATIVE_MEMORY_EMBEDDING_MODEL_ID: "embedding",
   NATIVE_MEMORY_RERANK_MODEL_ID: "rerank",
+  DIFY_KB_LLM_MODEL_ID: "chat",
+  DIFY_KB_RERANK_MODEL_ID: "rerank",
 };

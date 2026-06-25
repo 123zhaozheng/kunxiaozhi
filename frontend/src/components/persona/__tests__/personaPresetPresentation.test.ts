@@ -17,6 +17,7 @@ function createPreset(overrides: Partial<PersonaPreset> = {}): PersonaPreset {
     tags: ["planning", "writing", "analysis", "review", "extra"],
     system_prompt: "Plan before acting.",
     skill_names: ["planner", "writer"],
+    dify_kb_dataset_ids: [],
     visibility: "private",
     status: "draft",
     source_preset_id: null,

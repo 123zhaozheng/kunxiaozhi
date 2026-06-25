@@ -323,6 +323,18 @@ class Settings(BaseSettings):
     IMAGE_GENERATION_MODEL: str = "gpt-image-2"
     IMAGE_GENERATION_TIMEOUT: int = 120
 
+    # Dify knowledge base retrieval tool settings
+    DIFY_KB_ENABLED: bool = False
+    DIFY_KB_BASE_URL: str = ""
+    DIFY_KB_API_KEY: str = ""
+    DIFY_KB_LLM_MODEL_ID: str = ""
+    DIFY_KB_RERANK_MODEL_ID: str = ""
+    DIFY_KB_SEARCH_METHOD: str = "hybrid_search"
+    DIFY_KB_TOP_K: int = 10
+    DIFY_KB_RERANK_TOP_K: int = 5
+    DIFY_KB_SCORE_THRESHOLD: float = 0.4
+    DIFY_KB_SEMANTIC_WEIGHT: float = 0.7
+
     model_config = {
         "env_file": str(PROJECT_ROOT / ".env"),
         "env_file_encoding": "utf-8",

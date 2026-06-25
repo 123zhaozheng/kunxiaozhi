@@ -79,6 +79,7 @@ export function SettingsPanel() {
       file_upload: t("categories.file_upload"),
       tools: t("categories.tools"),
       audio_transcription: t("categories.audio_transcription"),
+      dify: t("categories.dify"),
       tracing: t("categories.tracing"),
       user: t("categories.user"),
       oauth: t("categories.oauth"),
@@ -197,6 +198,8 @@ export function SettingsPanel() {
       llm: t("subcategories.llm"),
       model: t("subcategories.model"),
       policy: t("subcategories.policy"),
+      models: t("subcategories.models"),
+      retrieval: t("subcategories.retrieval"),
     }),
     [t],
   );

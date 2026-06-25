@@ -9,6 +9,7 @@ from langchain_core.tools import BaseTool
 
 from src.infra.mcp.storage import MCPStorage
 from src.infra.tool.audio_transcribe_tool import get_audio_transcribe_tool
+from src.infra.tool.dify_kb_tool import get_dify_kb_retrieve_tool
 from src.infra.tool.env_var_tool import get_env_var_tools
 from src.infra.tool.image_generation_tool import get_image_generation_tool
 from src.infra.tool.mcp_client import MCPToolWithRetry
@@ -34,6 +35,18 @@ def build_internal_tools() -> list[BaseTool]:
 
     if settings.ENABLE_AUDIO_TRANSCRIPTION:
         tools.append(get_audio_transcribe_tool())
+
+    # Dify KB retrieval requires the feature flag plus connection (base URL +
+    # API key) and both model-card selections (LLM rewrite + rerank). Missing
+    # any of these means the tool cannot function, so it is not exposed.
+    if (
+        settings.DIFY_KB_ENABLED
+        and settings.DIFY_KB_BASE_URL
+        and settings.DIFY_KB_API_KEY
+        and settings.DIFY_KB_LLM_MODEL_ID
+        and settings.DIFY_KB_RERANK_MODEL_ID
+    ):
+        tools.append(get_dify_kb_retrieve_tool())
 
     # env_var tools' only consumer is the sandbox (rebuild_sandbox_mcp /
     # _sync_user_env_vars / EnvVarPromptMiddleware — all sandbox-gated).

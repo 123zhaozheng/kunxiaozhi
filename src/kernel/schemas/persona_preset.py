@@ -75,11 +75,12 @@ class PersonaPresetBase(BaseModel):
     system_prompt: str = Field(..., min_length=1)
     starter_prompts: list[PersonaStarterPrompt] = Field(default_factory=list)
     skill_names: list[str] = Field(default_factory=list)
+    dify_kb_dataset_ids: list[str] = Field(default_factory=list)
     scope: PersonaPresetScope = PersonaPresetScope.USER
     visibility: PersonaPresetVisibility = PersonaPresetVisibility.PRIVATE
     status: PersonaPresetStatus = PersonaPresetStatus.DRAFT
 
-    @field_validator("tags", "skill_names")
+    @field_validator("tags", "skill_names", "dify_kb_dataset_ids")
     @classmethod
     def _dedupe_strings(cls, values: list[str]) -> list[str]:
         seen: set[str] = set()
@@ -107,11 +108,12 @@ class PersonaPresetUpdate(BaseModel):
     system_prompt: Optional[str] = Field(None, min_length=1)
     starter_prompts: Optional[list[PersonaStarterPrompt]] = None
     skill_names: Optional[list[str]] = None
+    dify_kb_dataset_ids: Optional[list[str]] = None
     scope: Optional[PersonaPresetScope] = None
     visibility: Optional[PersonaPresetVisibility] = None
     status: Optional[PersonaPresetStatus] = None
 
-    @field_validator("tags", "skill_names")
+    @field_validator("tags", "skill_names", "dify_kb_dataset_ids")
     @classmethod
     def _dedupe_optional_strings(cls, values: list[str] | None) -> list[str] | None:
         if values is None:
@@ -141,6 +143,7 @@ class PersonaPreset(BaseModel):
     system_prompt: str
     starter_prompts: list[PersonaStarterPrompt] = Field(default_factory=list)
     skill_names: list[str] = Field(default_factory=list)
+    dify_kb_dataset_ids: list[str] = Field(default_factory=list)
     visibility: PersonaPresetVisibility
     status: PersonaPresetStatus
     source_preset_id: Optional[str] = None
@@ -164,6 +167,7 @@ class PersonaPresetSnapshot(BaseModel):
     system_prompt: str
     starter_prompts: list[PersonaStarterPrompt] = Field(default_factory=list)
     skill_names: list[str] = Field(default_factory=list)
+    dify_kb_dataset_ids: list[str] = Field(default_factory=list)
     missing_skill_names: list[str] = Field(default_factory=list)
     version: int = 1
     avatar: Optional[str] = None

@@ -58,4 +58,22 @@ export const settingsApi = {
       },
     );
   },
+
+  /**
+   * List Dify knowledge bases (for the persona KB picker).
+   * Only succeeds when the Dify KB feature is enabled and configured.
+   */
+  async listDifyKbDatasets(): Promise<DifyKbDataset[]> {
+    const res = await authFetch<{ datasets: DifyKbDataset[] }>(
+      `${API_BASE}/api/settings/dify-kb/datasets`,
+    );
+    return res.datasets ?? [];
+  },
 };
+
+export interface DifyKbDataset {
+  id: string;
+  name: string;
+  description?: string | null;
+  document_count?: number | null;
+}
