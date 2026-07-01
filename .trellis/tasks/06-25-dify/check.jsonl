@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查新增代码是否符合后端质量标准与禁用模式"}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "校验 persona dify_kb_dataset_ids 跨 5 层数据流贯通无断点"}
-{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "校验是否复用现有 get_card_config/工具模板/设置模板，而非重复造轮子"}
-{"file": ".trellis/tasks/06-25-dify/prd.md", "reason": "逐条核对 8 条 Acceptance Criteria 与 Out of Scope 是否满足"}

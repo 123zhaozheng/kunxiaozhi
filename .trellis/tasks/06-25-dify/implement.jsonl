@@ -1,6 +1,0 @@
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "新增内置工具 + 设置项 + persona 字段，需遵循后端代码标准与禁用模式"}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "工具内三步外部调用（LLM/Dify/rerank）均需降级而非抛异常，需对照错误处理约定"}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "工具运行时需记录检索/降级事件，遵循结构化日志约定"}
-{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "本任务核心是复刻 image_generation_tool / NATIVE_MEMORY_RERANK / TURNSTILE 等现有模式，改前必须先搜复用点"}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "改动跨设置/persona/工具/API/前端 5 层，persona 的 dify_kb_dataset_ids 需从 DB→snapshot→task_context→runtime→工具贯通"}
-{"file": ".trellis/tasks/06-25-dify/prd.md", "reason": "本任务需求与五层改动设计、ADR 决策、验收标准"}

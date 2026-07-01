@@ -1,4 +1,0 @@
-{"file": ".trellis/tasks/07-01-persona/prd.md", "reason": "Verify acceptance criteria: plaza only, permission split, polling, reason tooltips, reconnect."}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check has_wecom on list vs channel:manage status/reconnect permissions stay consistent."}
-{"file": ".trellis/spec/backend/persona-runtime-and-dify-kb.md", "reason": "Persona/wecom config boundaries not regressed."}
-{"file": ".trellis/research/wecom-websocket-integration.md", "reason": "Validate reason_code mapping against SDK/official disconnect behaviors."}
