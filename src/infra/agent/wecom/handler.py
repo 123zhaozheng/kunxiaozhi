@@ -97,6 +97,120 @@ async def _lookup_session_by_run_id(run_id: str) -> str | None:
     return str(value) if value is not None else None
 
 
+async def _reconcile_wecom_session_owner(
+    session_id: str,
+    wecom_userid: str,
+    mapped_user_id: str,
+) -> None:
+    """将历史 WeCom 会话 owner 从企微 userid 迁移为昆小智 user_id。
+
+    旧版本曾用 sender_id（工号）作为 session.user_id；映射上线后 submit 使用
+    mapped_user_id，ensure_session 会拒绝 owner 不一致。
+    """
+    if not session_id or wecom_userid == mapped_user_id:
+        return
+    try:
+        from src.infra.session.storage import SessionStorage
+
+        storage = SessionStorage()
+        existing = await storage.get_by_session_id(session_id)
+        if not existing or not existing.user_id:
+            return
+        if existing.user_id == mapped_user_id:
+            return
+        if existing.user_id != wecom_userid:
+            return
+        migrated = await storage.set_user_id_if_matches(
+            session_id, wecom_userid, mapped_user_id
+        )
+        if migrated:
+            logger.info(
+                "[WeCom] Migrated session %s owner %s → %s",
+                session_id,
+                wecom_userid,
+                mapped_user_id,
+            )
+    except Exception as e:
+        logger.warning(
+            "[WeCom] Failed to reconcile session owner for %s: %s",
+            session_id,
+            e,
+        )
+
+
+async def _reconcile_wecom_channel_project(
+    wecom_userid: str,
+    mapped_user_id: str,
+    preset_name: str,
+) -> str | None:
+    """确保 persona 同名 channel 项目挂在昆小智 user_id 下，返回 project_id。"""
+    if wecom_userid == mapped_user_id:
+        try:
+            from src.infra.folder.storage import get_project_storage
+
+            project = await get_project_storage().get_or_create_by_name(
+                mapped_user_id, preset_name, project_type="channel", icon="💬"
+            )
+            return project.id
+        except Exception as e:
+            logger.warning("[WeCom] Failed to resolve channel project: %s", e)
+            return None
+    try:
+        from src.infra.folder.storage import get_project_storage
+
+        storage = get_project_storage()
+        migrated = await storage.migrate_owner_by_name_and_type(
+            wecom_userid, mapped_user_id, preset_name, project_type="channel"
+        )
+        if migrated:
+            logger.info(
+                "[WeCom] Using channel project %s for preset %s (user %s)",
+                migrated.id,
+                preset_name,
+                mapped_user_id,
+            )
+            return migrated.id
+        project = await storage.get_or_create_by_name(
+            mapped_user_id, preset_name, project_type="channel", icon="💬"
+        )
+        return project.id
+    except Exception as e:
+        logger.warning("[WeCom] Failed to reconcile channel project: %s", e)
+        return None
+
+
+async def _bind_wecom_session_to_project(
+    session_id: str,
+    mapped_user_id: str,
+    project_id: str | None,
+) -> None:
+    """已存在的 WeCom 会话不会走 ensure_session 创建，需显式写入 project_id。"""
+    if not project_id:
+        return
+    try:
+        from src.infra.session.storage import SessionStorage
+
+        storage = SessionStorage()
+        existing = await storage.get_by_session_id(session_id)
+        if not existing or existing.user_id != mapped_user_id:
+            return
+        current_pid = (existing.metadata or {}).get("project_id")
+        if current_pid == project_id:
+            return
+        await storage.move_to_project(session_id, mapped_user_id, project_id)
+        logger.info(
+            "[WeCom] Bound session %s to project %s",
+            session_id,
+            project_id,
+        )
+    except Exception as e:
+        logger.warning(
+            "[WeCom] Failed to bind session %s to project: %s",
+            session_id,
+            e,
+        )
+
+
 # ── Agent 执行 ────────────────────────────────────────────────────────
 
 
@@ -280,11 +394,9 @@ def create_wecom_message_handler(
             segmented_reply = wecom_config.get("segmented_reply", True)
             session_ttl_hours = wecom_config.get("session_ttl_hours", 24)
 
-            # ── Project 自动创建 ───────────────────────────────────
-            # Use the preset name as the project name for organizing sessions
-            project_id: str | None = None
+            # ── Project 自动创建 / 迁移（Web 侧按 user_id + metadata.project_id 展示）──
+            preset_name = "WeCom"
             try:
-                from src.infra.folder.storage import get_project_storage
                 from src.infra.persona_preset.manager import PersonaPresetManager
 
                 preset_manager = PersonaPresetManager()
@@ -293,15 +405,14 @@ def create_wecom_message_handler(
                     user_id="",
                     is_admin=True,
                 )
-                preset_name = preset.name if preset else "WeCom"
-
-                proj_storage = get_project_storage()
-                project = await proj_storage.get_or_create_by_name(
-                    session_owner_id, preset_name, project_type="channel", icon="💬"
-                )
-                project_id = project.id
+                if preset:
+                    preset_name = preset.name
             except Exception as e:
-                logger.warning("[WeCom] Failed to auto-create project for preset %s: %s", preset_id, e)
+                logger.warning("[WeCom] Failed to load preset name for %s: %s", preset_id, e)
+
+            project_id = await _reconcile_wecom_channel_project(
+                sender_id, session_owner_id, preset_name
+            )
 
             # ── 处理 /new 命令 - 严格匹配 ─────────────────────────
             if content.strip() == "/new":
@@ -316,6 +427,12 @@ def create_wecom_message_handler(
 
             # 获取当前 session ID
             session_id = await _get_wecom_session_id(chat_id, ttl_hours=session_ttl_hours)
+            await _reconcile_wecom_session_owner(
+                session_id, sender_id, session_owner_id
+            )
+            await _bind_wecom_session_to_project(
+                session_id, session_owner_id, project_id
+            )
             task_manager = get_task_manager()
 
             # Cancel any previous running task for this session.

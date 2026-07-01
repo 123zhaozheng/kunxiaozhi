@@ -227,6 +227,19 @@ class SessionStorage:
         )
         return result.modified_count > 0
 
+    async def set_user_id_if_matches(
+        self, session_id: str, expected_current: str, new_user_id: str
+    ) -> bool:
+        """当 session 的 user_id 等于 expected_current 时，迁移为 new_user_id。"""
+        if expected_current == new_user_id:
+            return False
+        await self.ensure_indexes_if_needed()
+        result = await self.collection.update_one(
+            {"session_id": session_id, "user_id": expected_current},
+            {"$set": {"user_id": new_user_id, "updated_at": utc_now()}},
+        )
+        return result.modified_count > 0
+
     async def get_by_id(self, session_id: str) -> Optional[Session]:
         """通过 ID 获取会话"""
         await self.ensure_indexes_if_needed()

@@ -96,3 +96,35 @@ authFetch(`/persona-presets/wecom/status`, {
 })
 // Map response.statuses[] -> Record by preset_id
 ```
+
+---
+
+## Scenario: WeCom userid → LambChat user_id (session & Web parity)
+
+### Contracts
+
+- Inbound: WeCom `sender_id` / single-chat `chat_id` = enterprise **userid** (e.g. `10325`).
+- Runtime owner: `UserStorage.get_by_username(sender_id).id` → Mongo **user id** (e.g. `6a2a…`); used for `submit`, `cancel`, projects, `move_to_project`.
+- Redis `wecom:session:{chat_id}` → custom `session_id` (e.g. `wecom_10325`); unchanged by mapping.
+
+### On each normal message (before `submit`)
+
+1. `_reconcile_wecom_session_owner` — only if `session.user_id == wecom_userid`, migrate to `mapped_user_id` (`set_user_id_if_matches`).
+2. `_reconcile_wecom_channel_project` — migrate or create `type=channel` project under `mapped_user_id` (preset name).
+3. `_bind_wecom_session_to_project` — `move_to_project` when owner already `mapped_user_id`.
+
+### Wrong vs Correct
+
+#### Wrong
+
+Using `sender_id` as `user_id` in `submit` while Web lists sessions for `User.id`.
+
+#### Correct
+
+Map once per message; legacy sessions with `user_id=10325` are migrated on next WeCom message.
+
+### Edge cases (documented, not auto-fixed)
+
+- No `users.username == sender_id` → fallback `session_owner_id = sender_id` (Web mismatch until user registered).
+- `session.user_id` neither wecom userid nor mapped id → reconcile skips (manual DB fix).
+- Duplicate channel projects (old on `10325`, new on mapped user) → prefer mapped user's project; old project's sessions may need rebinding if `project_id` pointed at old id.

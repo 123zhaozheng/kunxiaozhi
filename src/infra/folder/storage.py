@@ -193,6 +193,36 @@ class ProjectStorage:
         project_dict["id"] = str(result.inserted_id)
         return Project(**project_dict)
 
+    async def migrate_owner_by_name_and_type(
+        self,
+        old_user_id: str,
+        new_user_id: str,
+        name: str,
+        project_type: str = "channel",
+    ) -> Optional[Project]:
+        """将 channel 等项目从企微工号 owner 迁到昆小智 user_id（同名同 type）。"""
+        if old_user_id == new_user_id:
+            return None
+
+        old_doc = await self.collection.find_one(
+            {"user_id": old_user_id, "name": name, "type": project_type}
+        )
+        if not old_doc:
+            return None
+        new_existing = await self.collection.find_one(
+            {"user_id": new_user_id, "name": name, "type": project_type}
+        )
+        if new_existing:
+            new_existing["id"] = str(new_existing.pop("_id"))
+            return Project(**new_existing)
+        await self.collection.update_one(
+            {"_id": old_doc["_id"]},
+            {"$set": {"user_id": new_user_id, "updated_at": utc_now()}},
+        )
+        old_doc["user_id"] = new_user_id
+        old_doc["id"] = str(old_doc.pop("_id"))
+        return Project(**old_doc)
+
 
 # Singleton instance
 _project_storage: Optional[ProjectStorage] = None
