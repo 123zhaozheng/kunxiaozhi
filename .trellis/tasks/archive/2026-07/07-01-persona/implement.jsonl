@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/07-01-persona/prd.md", "reason": "Authoritative MVP: plaza-only UI, has_wecom vs admin live status, 15s poll, reason_code, reconnect API."}
+{"file": ".trellis/research/wecom-websocket-integration.md", "reason": "WeCom AI Bot WS protocol, SDK events, heartbeat/reconnect/disconnected_event semantics."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Persona list field + Redis status + API + PersonaPlaza card crosses backend/frontend/RBAC."}
+{"file": ".trellis/spec/backend/persona-runtime-and-dify-kb.md", "reason": "Persona preset runtime and config patterns adjacent to persona_wecom_config."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Where wecom bot/manager and persona_preset routes live."}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for implement agent."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "PersonaPlaza, PersonaPresetCard, hooks placement."}
