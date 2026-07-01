@@ -1888,6 +1888,7 @@
     "DEFERRED_TOOL_THRESHOLD": "MCP 工具延迟加载的工具总数阈值（0 = 始终延迟）",
     "DIFY_KB_API_KEY": "Dify 知识库 API 密钥（Dataset API Key，以 Bearer 方式鉴权）",
     "DIFY_KB_BASE_URL": "Dify 知识库 API 基础地址（如 https://api.dify.ai/v1 或自部署地址）",
+    "DIFY_KB_DEFAULT_DATASET_IDS": "通用 agent（fast/search/team 等）在未绑定 persona 时的默认 Dify 知识库检索范围；persona 绑定的知识库优先于此默认值",
     "DIFY_KB_ENABLED": "启用 Dify 知识库检索内置工具，供 persona 挂载的知识库检索使用",
     "DIFY_KB_LLM_MODEL_ID": "Dify 知识库检索时用于查询改写的模型卡片 ID（kind=chat）",
     "DIFY_KB_RERANK_MODEL_ID": "Dify 知识库检索时用于跨知识库重排序的模型卡片 ID（kind=rerank）",

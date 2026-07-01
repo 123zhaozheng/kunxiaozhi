@@ -265,6 +265,7 @@ async def fast_agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict
             "disabled_skills": configurable.get("disabled_skills"),
             "enabled_skills": configurable.get("enabled_skills"),
             "base_url": configurable.get("base_url", ""),
+            "agent_options": configurable.get("agent_options"),  # 传递 agent_options 供 dify_kb 等工具读取
             "presenter": presenter,  # 传递 presenter 给工具调用
         },
         "recursion_limit": config.get("recursion_limit", settings.SESSION_MAX_RUNS_PER_SESSION),

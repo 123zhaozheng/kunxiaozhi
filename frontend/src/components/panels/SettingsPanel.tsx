@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { AboutDialog } from "../common/AboutDialog";
 import { ConfirmDialog } from "../common/ConfirmDialog";
+import { DifyKbMultiSelect } from "../common/DifyKbMultiSelect";
 import { GlassSelect } from "../common/GlassSelect";
 import { LoadingSpinner } from "../common/LoadingSpinner";
 import { PanelSearchInput } from "../common/PanelSearchInput";
@@ -684,7 +685,13 @@ export function SettingsPanel() {
                       const isSaving = savingKeys.has(setting.key);
                       const modified = isModified(setting);
                       const justSaved = savedKeys.has(setting.key);
-                      const isJson = setting.type === "json";
+                      // DIFY_KB_DEFAULT_DATASET_IDS is a JSON array of dataset ids
+                      // rendered with the Dify KB multi-select picker (mirrors the
+                      // persona editor), not the generic JSON textarea.
+                      const isDifyKbDefaultIds =
+                        setting.key === "DIFY_KB_DEFAULT_DATASET_IDS";
+                      const isJson =
+                        setting.type === "json" && !isDifyKbDefaultIds;
                       const isSelect =
                         setting.key === "DEFAULT_AGENT" ||
                         setting.key === "DEFAULT_USER_ROLE" ||
@@ -731,6 +738,23 @@ export function SettingsPanel() {
 
                           {/* Edit Input */}
                           <div className="mt-3">
+                            {isDifyKbDefaultIds && (
+                              <DifyKbMultiSelect
+                                value={
+                                  (editValues[setting.key] as string[]) ??
+                                  (Array.isArray(setting.value)
+                                    ? (setting.value as string[])
+                                    : [])
+                                }
+                                disabled={!canManage}
+                                onChange={(ids) =>
+                                  setEditValues((prev) => ({
+                                    ...prev,
+                                    [setting.key]: ids,
+                                  }))
+                                }
+                              />
+                            )}
                             {isSelect && (
                               <GlassSelect
                                 value={getDisplayValue(setting)}

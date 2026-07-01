@@ -334,6 +334,7 @@ class Settings(BaseSettings):
     DIFY_KB_RERANK_TOP_K: int = 5
     DIFY_KB_SCORE_THRESHOLD: float = 0.4
     DIFY_KB_SEMANTIC_WEIGHT: float = 0.7
+    DIFY_KB_DEFAULT_DATASET_IDS: list[str] = Field(default_factory=list)
 
     model_config = {
         "env_file": str(PROJECT_ROOT / ".env"),

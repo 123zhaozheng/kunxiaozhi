@@ -843,4 +843,13 @@ EXTRA_SETTING_DEFINITIONS: dict[str, dict] = {
         "depends_on": "DIFY_KB_ENABLED",
         "frontend_visible": True,
     },
+    "DIFY_KB_DEFAULT_DATASET_IDS": {
+        "type": SettingType.JSON,
+        "category": SettingCategory.DIFY,
+        "subcategory": "retrieval",
+        "description": "settingDesc.DIFY_KB_DEFAULT_DATASET_IDS",
+        "default": [],
+        "depends_on": "DIFY_KB_ENABLED",
+        "frontend_visible": True,
+    },
 }

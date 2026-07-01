@@ -125,11 +125,30 @@
 
 ### R3 persona 可选字段
 - `PersonaPreset` 加 `dify_kb_dataset_ids: list[str] = []`（可选，默认空）。
-- 跟随 `persona_snapshot` 透传进 `task_context`（`chat.py:510` 那条链路加一个
-  `dify_kb_dataset_ids=...`）。
+- **运行时检索范围**：`dify_kb_retrieve` 只读
+  `config["configurable"]["agent_options"]["dify_kb_dataset_ids"]`，不读
+  `persona_snapshot` 本身。Web 在 `chat.py`（`resolve_persona_request` 之后）
+  将 persona 上的 ids（或 `settings.DIFY_KB_DEFAULT_DATASET_IDS` 回退）写入
+  `request.agent_options`。
 - 前端 `PersonaEditorModal.tsx` 加一个可选区块"Dify 知识库"，**仅当
   `DIFY_KB_ENABLED=true` 时显示**（前端读 settings 判断）；区块内多选 picker
   调 R4 接口拉 KB 列表。
+
+### R6 企业微信通道与 Web 对齐（bugfix）
+- **背景**：企微是消息网关（`aibotid → preset_id` → `resolve_persona_request`），
+  persona 上已配置 `dify_kb_dataset_ids` 时 snapshot 里有数据，与 Web 一致。
+  但 `handler.py` 提交任务时 `agent_options=None`，未执行与 Web 相同的
+  `agent_options["dify_kb_dataset_ids"]` 注入，导致工具恒报「未配置检索范围」。
+- **要求**：
+  1. 抽取与 Web 一致的解析逻辑（persona snapshot ids 优先，否则
+     `DIFY_KB_DEFAULT_DATASET_IDS`；有 ids 才写入 `agent_options`）为可复用函数
+     （建议 `src/api/routes/chat.py` 或 `src/infra/persona_preset/` 小模块，避免
+     复制粘贴）。
+  2. 在 `src/infra/agent/wecom/handler.py` 于 `resolve_persona_request` 之后调用，
+     将结果传入 `task_manager.submit(..., agent_options=...)`（勿再传 `None`）。
+  3. 单测：WeCom 路径在 snapshot 含 ids 时 `agent_options` 带 `dify_kb_dataset_ids`；
+     空 persona ids 且无系统默认时不写入或为空列表行为与 Web 一致。
+- **非目标**：本期不改企微默认 `agent_id`（仍 `search`）、不加 per-persona 选 fast。
 
 ### R4 Dify KB 列表接口（给 persona picker 用）
 - 新增后端路由 `GET /api/dify-kb/datasets`（或挂 settings 路由下），内部调
@@ -160,11 +179,13 @@
 - [ ] persona 的 `dify_kb_dataset_ids` 为空对存量 persona 无破坏（加载/保存正常）。
 - [ ] `GET /api/dify-kb/datasets` 在 Dify 未启用时返回 400，启用时返回 KB 列表。
 - [ ] persona 编辑器在 Dify 关闭时不显示"Dify 知识库"区块，开启时显示并可多选。
+- [ ] 企业微信：aibot 绑定且 persona 已选 KB 时，`dify_kb_retrieve` 能按该列表检索
+  （与 Web 同 persona 行为一致）；未挂 KB 时仍返回 `{success:false, reason:...}`。
 
 ## Definition of Done
 
 - 后端单测覆盖：gating 条件组合、persona 无 KB 返回空、LLM/rerank 降级、单 KB
-  失败隔离、query >250 截断。
+  失败隔离、query >250 截断、**R6 企微 agent_options 注入**（或共享解析函数单测）。
 - lint / typecheck / 现有测试全绿（uv 环境）。
 - 设置项 i18n 文案补齐（`settingDesc.DIFY_KB_*`）。
 - prd/研究结论归档到任务目录。
@@ -180,6 +201,8 @@
    条件区块。
 4. **KB 列表接口**：新路由透传 `GET /datasets`。
 5. **gating 层**：`build_internal_tools` 加一行 if。
+6. **通道层（R6）**：共享 `dify_kb_dataset_ids` → `agent_options` 解析；企微 handler
+   submit 传入 `agent_options`。
 
 模型解析统一走 `LLMClient.get_card_config(model_id, kind=...)`（chat + rerank 同源）。
 

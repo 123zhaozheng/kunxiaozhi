@@ -77,6 +77,7 @@ Before implementation:
 - [ ] Identified all layer boundaries
 - [ ] Defined format at each boundary
 - [ ] Decided where validation happens
+- [ ] **Channel gateways** (WeCom, etc.): same runtime injection as Web API? See [Persona Runtime & Dify KB](../backend/persona-runtime-and-dify-kb.md) for `agent_options` vs snapshot fields.
 
 After implementation:
 - [ ] Tested with edge cases (null, empty, invalid)

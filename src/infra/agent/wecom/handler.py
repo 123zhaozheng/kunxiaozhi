@@ -257,6 +257,15 @@ def create_wecom_message_handler(
             )
             await resolve_persona_request(agent_request, wecom_user)
 
+            from src.infra.persona_preset.dify_kb_agent_options import (
+                apply_dify_kb_dataset_ids_to_agent_options,
+            )
+
+            wecom_agent_options = apply_dify_kb_dataset_ids_to_agent_options(
+                {},
+                persona_snapshot=agent_request.persona_snapshot,
+            )
+
             # The persona snapshot and system prompt are now filled
             persona_system_prompt = agent_request.persona_system_prompt
             enabled_skills = agent_request.enabled_skills
@@ -395,7 +404,7 @@ def create_wecom_message_handler(
                 user_id=session_owner_id,
                 executor=executor,
                 project_id=project_id,
-                agent_options=None,
+                agent_options=wecom_agent_options or None,
                 session_name=session_title,
                 display_message=content,
                 write_user_message_immediately=True,

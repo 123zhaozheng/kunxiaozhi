@@ -24,8 +24,7 @@ import toast from "react-hot-toast";
 import { useSkills } from "../../hooks/useSkills";
 import { useAuth } from "../../hooks/useAuth";
 import { useSettingsContext } from "../../contexts/SettingsContext";
-import { settingsApi } from "../../services/api";
-import type { DifyKbDataset } from "../../services/api/settings";
+import { DifyKbMultiSelect } from "../common/DifyKbMultiSelect";
 import {
   buildPersonaPresetPayload,
   draftRowsToStarterPrompts,
@@ -185,51 +184,6 @@ export function PersonaEditorModal({
     const item = all.find((s) => s.key === "DIFY_KB_ENABLED");
     return item?.value === true || item?.value === "true";
   }, [systemSettings]);
-  const [difyKbDatasets, setDifyKbDatasets] = useState<DifyKbDataset[]>([]);
-  const [difyKbLoading, setDifyKbLoading] = useState(false);
-  const [difyKbDropdownOpen, setDifyKbDropdownOpen] = useState(false);
-  const difyKbDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Load Dify KB datasets for the picker when the feature is enabled and modal is open
-  useEffect(() => {
-    if (!showModal || !difyKbEnabled) {
-      setDifyKbDatasets([]);
-      setDifyKbDropdownOpen(false);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      setDifyKbLoading(true);
-      try {
-        const datasets = await settingsApi.listDifyKbDatasets();
-        if (!cancelled) setDifyKbDatasets(datasets);
-      } catch {
-        // Feature not configured / network error — leave the picker empty
-        if (!cancelled) setDifyKbDatasets([]);
-      } finally {
-        if (!cancelled) setDifyKbLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [showModal, difyKbEnabled]);
-
-  // Close Dify KB dropdown on outside click
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (
-        difyKbDropdownOpen &&
-        difyKbDropdownRef.current &&
-        !difyKbDropdownRef.current.contains(target)
-      ) {
-        setDifyKbDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [difyKbDropdownOpen]);
 
   // Load WeCom config when editing an existing preset
   useEffect(() => {
@@ -1076,159 +1030,12 @@ export function PersonaEditorModal({
                 "选择该角色可检索的 Dify 知识库；留空则不启用知识库检索。",
               )}
             </p>
-            <div ref={difyKbDropdownRef} className="relative">
-              <button
-                type="button"
-                onClick={() => setDifyKbDropdownOpen((v) => !v)}
-                className={`ppe-skill-trigger ${
-                  difyKbDropdownOpen ? "ppe-skill-trigger--open" : ""
-                }`}
-              >
-                {draft.dify_kb_dataset_ids.length > 0 ? (
-                  <span className="ppe-skill-trigger__count">
-                    <BookOpen size={12} />
-                    {t("personaPresets.difyKbCount", "{{count}} 个知识库已选择", {
-                      count: draft.dify_kb_dataset_ids.length,
-                    })}
-                  </span>
-                ) : (
-                  <span className="ppe-skill-trigger__placeholder">
-                    {t("personaPresets.difyKbPlaceholder", "选择知识库...")}
-                  </span>
-                )}
-                <ChevronDown
-                  size={14}
-                  className={`ppe-skill-trigger__chevron ${
-                    difyKbDropdownOpen ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
-
-              {draft.dify_kb_dataset_ids.length > 0 && !difyKbDropdownOpen && (
-                <div className="ppe-skill-selected-area">
-                  {draft.dify_kb_dataset_ids.map((id) => {
-                    const ds = difyKbDatasets.find((d) => d.id === id);
-                    return (
-                      <span key={id} className="ppe-skill-chip">
-                        {ds?.name || id}
-                        <X
-                          size={11}
-                          className="ppe-skill-chip-remove"
-                          onClick={() =>
-                            setDraft((prev) => ({
-                              ...prev,
-                              dify_kb_dataset_ids: prev.dify_kb_dataset_ids.filter(
-                                (n) => n !== id,
-                              ),
-                            }))
-                          }
-                        />
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-
-              {difyKbDropdownOpen && (
-                <div className="ppe-skill-dropdown">
-                  {difyKbLoading ? (
-                    <div className="flex items-center justify-center py-4">
-                      <LoadingSpinner size="sm" />
-                    </div>
-                  ) : difyKbDatasets.length > 0 ? (
-                    <>
-                      {draft.dify_kb_dataset_ids.length > 0 && (
-                        <div className="ppe-skill-selected-bar">
-                          {draft.dify_kb_dataset_ids.map((id) => {
-                            const ds = difyKbDatasets.find((d) => d.id === id);
-                            return (
-                              <span key={id} className="ppe-skill-chip">
-                                {ds?.name || id}
-                                <X
-                                  size={11}
-                                  className="ppe-skill-chip-remove"
-                                  onClick={() =>
-                                    setDraft((prev) => ({
-                                      ...prev,
-                                      dify_kb_dataset_ids:
-                                        prev.dify_kb_dataset_ids.filter(
-                                          (n) => n !== id,
-                                        ),
-                                    }))
-                                  }
-                                />
-                              </span>
-                            );
-                          })}
-                        </div>
-                      )}
-                      <div className="ppe-skill-dropdown__list">
-                        {difyKbDatasets.map((ds) => {
-                          const isSelected =
-                            draft.dify_kb_dataset_ids.includes(ds.id);
-                          return (
-                            <button
-                              key={ds.id}
-                              type="button"
-                              onClick={() =>
-                                setDraft((prev) => ({
-                                  ...prev,
-                                  dify_kb_dataset_ids: isSelected
-                                    ? prev.dify_kb_dataset_ids.filter(
-                                        (n) => n !== ds.id,
-                                      )
-                                    : [...prev.dify_kb_dataset_ids, ds.id],
-                                }))
-                              }
-                              className={`ppe-skill-option ${
-                                isSelected ? "ppe-skill-option--selected" : ""
-                              }`}
-                            >
-                              <div className="ppe-skill-option__check-ring">
-                                {isSelected ? (
-                                  <Check
-                                    size={12}
-                                    className="ppe-skill-option__check-icon"
-                                  />
-                                ) : (
-                                  <Plus
-                                    size={12}
-                                    className="ppe-skill-option__plus-icon"
-                                  />
-                                )}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium truncate">
-                                  {ds.name}
-                                </div>
-                                {ds.description && (
-                                  <div className="text-[11px] text-[var(--theme-text-secondary)] truncate mt-0.5">
-                                    {ds.description}
-                                  </div>
-                                )}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="ppe-skill-dropdown__empty">
-                      <BookOpen
-                        size={20}
-                        className="ppe-skill-dropdown__empty-icon"
-                      />
-                      <span>
-                        {t(
-                          "personaPresets.difyKbEmpty",
-                          "未找到知识库，请在系统设置中配置 Dify 连接",
-                        )}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            <DifyKbMultiSelect
+              value={draft.dify_kb_dataset_ids}
+              onChange={(ids) =>
+                setDraft((prev) => ({ ...prev, dify_kb_dataset_ids: ids }))
+              }
+            />
           </div>
         )}
 

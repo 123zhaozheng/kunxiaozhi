@@ -1888,6 +1888,7 @@
     "DEFERRED_TOOL_THRESHOLD": "Total tool count threshold above which MCP tools are deferred (0 = always defer)",
     "DIFY_KB_API_KEY": "Dify Knowledge API key (Dataset API key, used as Bearer token)",
     "DIFY_KB_BASE_URL": "Dify Knowledge API base URL (e.g. https://api.dify.ai/v1 or a self-hosted endpoint)",
+    "DIFY_KB_DEFAULT_DATASET_IDS": "Default Dify knowledge base retrieval scope for generic agents (fast/search/team) without a persona; persona-bound KBs take priority over this default",
     "DIFY_KB_ENABLED": "Enable the Dify knowledge base retrieval built-in tool for persona-bound KB retrieval",
     "DIFY_KB_LLM_MODEL_ID": "Model card ID (kind=chat) used for query rewriting in Dify KB retrieval",
     "DIFY_KB_RERANK_MODEL_ID": "Model card ID (kind=rerank) used for cross-KB reranking in Dify KB retrieval",

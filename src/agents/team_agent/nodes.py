@@ -536,6 +536,7 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
             "disabled_skills": configurable.get("disabled_skills"),
             "enabled_skills": runtime_enabled_skills,
             "base_url": configurable.get("base_url", ""),
+            "agent_options": configurable.get("agent_options"),  # 传递 agent_options 供 dify_kb 等工具读取
             "presenter": presenter,
         },
         "recursion_limit": config.get("recursion_limit", settings.SESSION_MAX_RUNS_PER_SESSION),
