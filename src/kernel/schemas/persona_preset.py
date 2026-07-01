@@ -152,6 +152,7 @@ class PersonaPreset(BaseModel):
     usage_count: int = 0
     is_favorite: bool = False
     is_pinned: bool = False
+    has_wecom: bool = False
     last_used_at: Optional[datetime] = None
     created_by: Optional[str] = None
     updated_by: Optional[str] = None

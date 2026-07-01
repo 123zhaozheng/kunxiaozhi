@@ -14,6 +14,8 @@ from typing import Any, Callable, Optional
 from redis.asyncio import Redis
 
 from src.infra.agent.wecom.bot import WECOM_AVAILABLE, WeComBot
+from src.infra.agent.wecom.state import ConnectionState
+from src.infra.agent.wecom.status import WeComStatusReasonCode, write_wecom_status
 from src.infra.logging import get_logger
 from src.infra.storage.redis import create_redis_client
 from src.kernel.schemas.wecom import WeComGroupPolicy
@@ -226,6 +228,39 @@ class WeComBotManager:
         """Look up preset_id for a given aibotid."""
         return self._aibotid_to_preset.get(aibotid)
 
+    async def _publish_bot_status(
+        self,
+        aibotid: str,
+        *,
+        state: ConnectionState,
+        reason_code: WeComStatusReasonCode | str | None = None,
+        reason_detail: str | None = None,
+    ) -> None:
+        preset_id = self._aibotid_to_preset.get(aibotid)
+        if not preset_id:
+            return
+        await write_wecom_status(
+            preset_id,
+            state=state,
+            reason_code=reason_code,
+            reason_detail=reason_detail,
+            node_id=self._node_id,
+            aibotid=aibotid,
+        )
+
+    async def _write_lease_lost_status(self, aibotid: str) -> None:
+        preset_id = self._aibotid_to_preset.get(aibotid)
+        if not preset_id:
+            return
+        await write_wecom_status(
+            preset_id,
+            state=ConnectionState.DISCONNECTED,
+            reason_code=WeComStatusReasonCode.LEASE_LOST,
+            reason_detail="lease_refresh_lost",
+            node_id=self._node_id,
+            aibotid=aibotid,
+        )
+
     def get_config_for_aibotid(self, aibotid: str) -> dict[str, Any] | None:
         """Look up WeCom config for a given aibotid."""
         return self._aibotid_configs.get(aibotid)
@@ -354,6 +389,7 @@ class WeComBotManager:
                 group_policy=WeComGroupPolicy(config.get("group_policy", "mention")),
                 message_handler=self.message_handler,
                 feedback_handler=self.feedback_handler,
+                status_callback=self._publish_bot_status,
             )
             success = await bot.start()
 
@@ -453,6 +489,7 @@ class WeComBotManager:
                 aibotid,
                 e,
             )
+        await self._write_lease_lost_status(aibotid)
 
     async def _release_lease(self, aibotid: str) -> None:
         task = self._lease_tasks.pop(aibotid, None)

@@ -439,9 +439,25 @@ class AgentConfigStorage:
             })
         return results
 
-    # ============================================
-    # 用户默认 Agent
-    # ============================================
+    async def list_persona_ids_with_wecom(self) -> set[str]:
+        """Preset IDs that have a non-empty WeCom aibotid configured (no secrets)."""
+        cursor = self._get_collection(_COLL_PERSONA_WECOM_CONFIG).find(
+            {"aibotid": {"$ne": ""}},
+            {"preset_id": 1},
+        )
+        ids: set[str] = set()
+        async for doc in cursor:
+            pid = doc.get("preset_id")
+            if pid:
+                ids.add(str(pid))
+        return ids
+
+    async def preset_has_wecom(self, preset_id: str) -> bool:
+        doc = await self._get_collection(_COLL_PERSONA_WECOM_CONFIG).find_one(
+            {"preset_id": preset_id, "aibotid": {"$ne": ""}},
+            {"_id": 1},
+        )
+        return doc is not None
 
     async def get_user_preference(self, user_id: str) -> Optional[UserAgentPreference]:
         """获取用户的默认 Agent 设置"""

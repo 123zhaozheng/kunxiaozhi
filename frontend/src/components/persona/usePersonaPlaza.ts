@@ -88,7 +88,8 @@ export function usePersonaPlaza() {
   const canRead = hasPermission(Permission.PERSONA_PRESET_READ);
   const canWrite = hasPermission(Permission.PERSONA_PRESET_WRITE);
   const canAdmin = hasPermission(Permission.PERSONA_PRESET_ADMIN);
-  const canAnalyze = hasPermission(Permission.CHANNEL_MANAGE);
+  const canManageChannel = hasPermission(Permission.CHANNEL_MANAGE);
+  const canAnalyze = canManageChannel;
 
   const [query, setQuery] = useState("");
   const [activeTag, setActiveTag] = useState<string | null>(null);
@@ -451,6 +452,7 @@ export function usePersonaPlaza() {
     canRead,
     canWrite,
     canAdmin,
+    canManageChannel,
     canAnalyze,
     query,
     setQuery,

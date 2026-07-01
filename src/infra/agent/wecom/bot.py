@@ -9,9 +9,13 @@ import asyncio
 import importlib.util
 import time
 from collections import OrderedDict
-from typing import Any, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional
 
 from src.infra.agent.wecom.state import ConnectionState
+from src.infra.agent.wecom.status import (
+    WeComStatusReasonCode,
+    map_error_to_reason_code,
+)
 from src.infra.logging import get_logger
 from src.infra.storage.redis import get_redis_client
 from src.kernel.schemas.wecom import WeComGroupPolicy
@@ -60,6 +64,7 @@ class WeComBot:
         group_policy: WeComGroupPolicy = WeComGroupPolicy.MENTION,
         message_handler: Optional[Callable] = None,
         feedback_handler: Optional[Callable] = None,
+        status_callback: Optional[Callable[..., Awaitable[None]]] = None,
     ):
         self.aibotid = aibotid
         self.secret = secret
@@ -67,7 +72,9 @@ class WeComBot:
         self.group_policy = group_policy
         self.message_handler = message_handler
         self.feedback_handler = feedback_handler
+        self.status_callback = status_callback
         self._running = False
+        self._server_replaced = False
         self._ws_client: Any = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._processed_message_ids: OrderedDict[str, None] = OrderedDict()
@@ -116,10 +123,17 @@ class WeComBot:
 
     # -- Connection state management --
 
-    def _set_connection_state(self, new_state: ConnectionState) -> None:
+    def _set_connection_state(
+        self,
+        new_state: ConnectionState,
+        *,
+        reason_code: WeComStatusReasonCode | str | None = None,
+        reason_detail: str | None = None,
+    ) -> None:
         """Update connection state with logging."""
         old_state = self._connection_state
-        if old_state != new_state:
+        state_changed = old_state != new_state
+        if state_changed:
             self._connection_state = new_state
             logger.info(
                 "WeCom connection state changed for aibotid=%s: %s -> %s",
@@ -129,6 +143,33 @@ class WeComBot:
             )
             if new_state == ConnectionState.CONNECTED:
                 self._last_activity_time = time.time()
+        if state_changed or reason_code is not None or reason_detail is not None:
+            self._schedule_status_publish(
+                self._connection_state,
+                reason_code,
+                reason_detail,
+            )
+
+    def _schedule_status_publish(
+        self,
+        state: ConnectionState,
+        reason_code: WeComStatusReasonCode | str | None,
+        reason_detail: str | None,
+    ) -> None:
+        if not self.status_callback:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(
+                self.status_callback(
+                    self.aibotid,
+                    state=state,
+                    reason_code=reason_code,
+                    reason_detail=reason_detail,
+                )
+            )
+        except RuntimeError:
+            pass
 
     def _get_connection_state(self) -> ConnectionState:
         """Get current connection state."""
@@ -170,7 +211,9 @@ class WeComBot:
             # Register event handlers
             client.on("authenticated", self._on_authenticated)
             client.on("disconnected", self._on_disconnected)
+            client.on("reconnecting", self._on_reconnecting)
             client.on("error", self._on_error)
+            client.on("event.disconnected_event", self._on_disconnected_event)
             client.on("message.text", self._on_text_message)
             client.on("message.image", self._on_image_message)
             client.on("message.file", self._on_file_message)
@@ -192,7 +235,11 @@ class WeComBot:
 
         except Exception as e:
             logger.error("WeCom AI Bot failed to start for aibotid=%s: %s", self.aibotid, e)
-            self._set_connection_state(ConnectionState.FAILED)
+            self._set_connection_state(
+                ConnectionState.FAILED,
+                reason_code=map_error_to_reason_code(e),
+                reason_detail=str(e),
+            )
             self._running = False
             return False
 
@@ -207,7 +254,17 @@ class WeComBot:
             self._ws_client = None
 
         self._pending_frames.clear()
-        self._set_connection_state(ConnectionState.DISCONNECTED)
+        reason = (
+            WeComStatusReasonCode.REPLACED
+            if self._server_replaced
+            else WeComStatusReasonCode.DISCONNECTED
+        )
+        self._set_connection_state(
+            ConnectionState.DISCONNECTED,
+            reason_code=reason,
+            reason_detail="stopped" if not self._server_replaced else "server_replaced",
+        )
+        self._server_replaced = False
         logger.info("WeCom AI Bot stopped for aibotid=%s", self.aibotid)
 
     # -- SDK lifecycle event handlers --
@@ -221,12 +278,43 @@ class WeComBot:
     async def _on_disconnected(self, reason: str = "") -> None:
         """Handle disconnection event."""
         logger.warning("WeCom bot disconnected for aibotid=%s: %s", self.aibotid, reason)
-        self._set_connection_state(ConnectionState.RECONNECTING)
+        if self._server_replaced:
+            self._set_connection_state(
+                ConnectionState.DISCONNECTED,
+                reason_code=WeComStatusReasonCode.REPLACED,
+                reason_detail=reason or None,
+            )
+            return
+        self._set_connection_state(
+            ConnectionState.RECONNECTING,
+            reason_code=None,
+            reason_detail=reason or None,
+        )
+
+    async def _on_reconnecting(self, attempt: int = 0) -> None:
+        """Handle SDK reconnecting event."""
+        self._set_connection_state(
+            ConnectionState.RECONNECTING,
+            reason_detail=f"attempt={attempt}" if attempt else None,
+        )
+
+    async def _on_disconnected_event(self, frame: Any) -> None:
+        """Server notified that a new connection replaced this one."""
+        self._server_replaced = True
+        self._set_connection_state(
+            ConnectionState.DISCONNECTED,
+            reason_code=WeComStatusReasonCode.REPLACED,
+            reason_detail="disconnected_event",
+        )
 
     async def _on_error(self, error: Exception) -> None:
         """Handle error event from SDK."""
         logger.error("WeCom bot error for aibotid=%s: %s", self.aibotid, error)
-        self._set_connection_state(ConnectionState.FAILED)
+        self._set_connection_state(
+            ConnectionState.FAILED,
+            reason_code=map_error_to_reason_code(error),
+            reason_detail=str(error),
+        )
 
     # -- Common frame parsing helpers --
 

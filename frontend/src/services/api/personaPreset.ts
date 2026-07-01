@@ -11,6 +11,8 @@ import type {
   PersonaPresetUpdate,
   PersonaWeComConfig,
   PersonaWeComConfigCreate,
+  PersonaWeComStatus,
+  PersonaWeComStatusBatchResponse,
 } from "../../types/personaPreset";
 
 const PERSONA_PRESETS_API = `${API_BASE}/api/persona-presets`;
@@ -223,6 +225,41 @@ export const personaPresetApi = {
       {
         method: "DELETE",
       },
+    );
+  },
+
+  async getWeComStatus(presetId: string): Promise<PersonaWeComStatus> {
+    return authFetch<PersonaWeComStatus>(
+      `${PERSONA_PRESETS_API}/${encodeURIComponent(presetId)}/wecom/status`,
+    );
+  },
+
+  async batchWeComStatus(
+    presetIds: string[],
+  ): Promise<PersonaWeComStatusBatchResponse> {
+    if (presetIds.length === 0) {
+      return { statuses: {} };
+    }
+    const body = await authFetch<{ statuses: PersonaWeComStatus[] }>(
+      `${PERSONA_PRESETS_API}/wecom/status`,
+      {
+        method: "POST",
+        body: JSON.stringify({ preset_ids: presetIds }),
+      },
+    );
+    const map: Record<string, PersonaWeComStatus | null> = {};
+    for (const status of body.statuses ?? []) {
+      map[status.preset_id] = status;
+    }
+    return { statuses: map };
+  },
+
+  async reconnectWeCom(
+    presetId: string,
+  ): Promise<{ status?: string; message?: string }> {
+    return authFetch(
+      `${PERSONA_PRESETS_API}/${encodeURIComponent(presetId)}/wecom/reconnect`,
+      { method: "POST" },
     );
   },
 };

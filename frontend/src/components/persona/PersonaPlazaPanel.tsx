@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   UserRound,
@@ -22,6 +23,9 @@ import { PersonaPresetCard } from "./PersonaPresetCard";
 import { PersonaEditorModal } from "./PersonaEditorModal";
 import { PersonaScopeDropdown } from "./PersonaScopeDropdown";
 import { PersonaTagFilterDropdown } from "./PersonaTagFilterDropdown";
+import { useWeComStatusPoll } from "./useWeComStatusPoll";
+import toast from "react-hot-toast";
+import type { PersonaPreset } from "../../types";
 
 export type { PersonaRouteState };
 
@@ -42,6 +46,7 @@ export function PersonaPlazaPanel() {
     isMutating,
     canWrite,
     canAdmin,
+    canManageChannel,
     canAnalyze,
     query,
     setQuery,
@@ -90,6 +95,38 @@ export function PersonaPlazaPanel() {
     handleAnalyze,
     closeAnalyze,
   } = usePersonaPlaza();
+
+  const wecomPollPresetIds = useMemo(
+    () => paged.filter((p) => p.has_wecom).map((p) => p.id),
+    [paged],
+  );
+
+  const { statusByPresetId, reconnectingId, reconnect } = useWeComStatusPoll({
+    enabled: canManageChannel,
+    presetIds: wecomPollPresetIds,
+  });
+
+  const handleWeComReconnect = useCallback(
+    async (preset: PersonaPreset) => {
+      const ok = await reconnect(preset.id);
+      if (ok) {
+        toast.success(
+          t(
+            "personaPresets.wecom.connection.reconnectSuccess",
+            "已触发企微重连",
+          ),
+        );
+      } else {
+        toast.error(
+          t(
+            "personaPresets.wecom.connection.reconnectFailed",
+            "企微重连失败",
+          ),
+        );
+      }
+    },
+    [reconnect, t],
+  );
 
   const isInitialLoading =
     isLoading && presets.length === 0 && !hasActiveFilters;
@@ -268,6 +305,10 @@ export function PersonaPlazaPanel() {
                   canWrite={canWrite}
                   canAdmin={canAdmin}
                   canAnalyze={canAnalyze}
+                  canManageChannel={canManageChannel}
+                  wecomStatus={statusByPresetId[preset.id]}
+                  wecomReconnecting={reconnectingId === preset.id}
+                  onWeComReconnect={handleWeComReconnect}
                   onUse={handleUse}
                   onClear={handleClear}
                   onCopy={handleCopy}

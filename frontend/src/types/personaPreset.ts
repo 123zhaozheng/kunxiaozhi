@@ -33,6 +33,7 @@ export interface PersonaPreset {
   updated_by?: string | null;
   created_at: string;
   updated_at: string;
+  has_wecom?: boolean;
 }
 
 export interface PersonaPresetCreate {
@@ -103,6 +104,33 @@ export interface PersonaWeComConfigCreate {
   send_thinking_message?: boolean;
   segmented_reply?: boolean;
   session_ttl_hours?: number;
+}
+
+export type PersonaWeComConnectionState =
+  | "connected"
+  | "connecting"
+  | "reconnecting"
+  | "disconnected"
+  | "failed"
+  | "unknown";
+
+export type PersonaWeComReasonCode =
+  | "replaced"
+  | "reconnect_exhausted"
+  | "auth_failed"
+  | "lease_lost"
+  | "disconnected";
+
+export interface PersonaWeComStatus {
+  preset_id: string;
+  state: PersonaWeComConnectionState;
+  reason_code?: PersonaWeComReasonCode | null;
+  reason_detail?: string | null;
+  updated_at?: string | null;
+}
+
+export interface PersonaWeComStatusBatchResponse {
+  statuses: Record<string, PersonaWeComStatus | null>;
 }
 
 export interface PersonaPresetListResponse {

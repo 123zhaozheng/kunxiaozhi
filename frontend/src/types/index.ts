@@ -63,6 +63,10 @@ export type {
   LocalizedText,
   PersonaWeComConfig,
   PersonaWeComConfigCreate,
+  PersonaWeComConnectionState,
+  PersonaWeComReasonCode,
+  PersonaWeComStatus,
+  PersonaWeComStatusBatchResponse,
 } from "./personaPreset";
 
 // ============================================

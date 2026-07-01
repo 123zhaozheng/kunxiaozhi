@@ -1467,3 +1467,88 @@
   opacity: 0.72;
   cursor: wait;
 }
+
+/* ===== Persona Plaza — WeCom connection UI ===== */
+.pps-wecom-badge {
+  backdrop-filter: blur(6px);
+  letter-spacing: 0.02em;
+}
+
+.pps-wecom-live {
+  position: relative;
+  z-index: 1;
+  padding: 0.2rem 0.35rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+}
+
+.dark .pps-wecom-live {
+  background: rgba(0, 0, 0, 0.45);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+}
+
+.pps-wecom-live__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
+}
+
+.dark .pps-wecom-live__dot {
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+}
+
+.pps-wecom-live__dot--success {
+  background: #22c55e;
+}
+
+.pps-wecom-live__dot--warning {
+  background: #eab308;
+  animation: pps-wecom-pulse 1.4s ease-in-out infinite;
+}
+
+.pps-wecom-live__dot--danger {
+  background: #ef4444;
+}
+
+.pps-wecom-live__dot--muted {
+  background: #a8a29e;
+}
+
+@keyframes pps-wecom-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.pps-wecom-live__reconnect {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.pps-wecom-live__reconnect:hover:not(:disabled) {
+  background: var(--theme-primary-light);
+  color: var(--theme-primary);
+}
+
+.pps-wecom-live__reconnect:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}

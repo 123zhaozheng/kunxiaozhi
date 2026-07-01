@@ -1621,7 +1621,28 @@
       "saveSuccess": "WeCom configuration saved",
       "saveFailed": "Failed to save WeCom configuration",
       "deleteSuccess": "WeCom configuration deleted",
-      "deleteFailed": "Failed to delete WeCom configuration"
+      "deleteFailed": "Failed to delete WeCom configuration",
+      "connection": {
+        "badge": "WeCom linked",
+        "reconnect": "Reconnect WeCom",
+        "reconnectSuccess": "WeCom reconnect triggered",
+        "reconnectFailed": "WeCom reconnect failed",
+        "state": {
+          "connected": "Connected",
+          "connecting": "Connecting",
+          "reconnecting": "Reconnecting",
+          "disconnected": "Disconnected",
+          "failed": "Failed",
+          "unknown": "Unknown"
+        },
+        "reason": {
+          "replaced": "Replaced by another instance",
+          "reconnect_exhausted": "Automatic reconnect exhausted",
+          "auth_failed": "Authentication failed",
+          "lease_lost": "Node lease lost",
+          "disconnected": "Disconnected"
+        }
+      }
     }
   },
   "profile": {

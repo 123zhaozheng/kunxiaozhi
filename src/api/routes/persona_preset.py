@@ -20,6 +20,11 @@ from src.kernel.schemas.persona_preset import (
 )
 from src.kernel.schemas.user import TokenPayload
 from src.kernel.schemas.wecom import PersonaWeComConfig, PersonaWeComConfigCreate
+from src.kernel.schemas.wecom_status import (
+    WeComConnectionStatus,
+    WeComStatusBatchRequest,
+    WeComStatusBatchResponse,
+)
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -31,6 +36,29 @@ def _is_admin(user: TokenPayload) -> bool:
 
 def _manager() -> PersonaPresetManager:
     return PersonaPresetManager()
+
+
+async def _wecom_configured_preset_ids() -> set[str]:
+    storage = get_agent_config_storage()
+    return await storage.list_persona_ids_with_wecom()
+
+
+async def _attach_has_wecom(presets: list[PersonaPreset]) -> list[PersonaPreset]:
+    if not presets:
+        return presets
+    configured = await _wecom_configured_preset_ids()
+    return [
+        p.model_copy(update={"has_wecom": p.id in configured and p.scope == PersonaPresetScope.GLOBAL})
+        for p in presets
+    ]
+
+
+async def _attach_has_wecom_one(preset: PersonaPreset) -> PersonaPreset:
+    if preset.scope != PersonaPresetScope.GLOBAL:
+        return preset.model_copy(update={"has_wecom": False})
+    storage = get_agent_config_storage()
+    has = await storage.preset_has_wecom(preset.id)
+    return preset.model_copy(update={"has_wecom": has})
 
 
 @router.get("/", response_model=PersonaPresetListResponse)
@@ -71,7 +99,7 @@ async def list_persona_presets(
         limit=limit,
     )
     return PersonaPresetListResponse(
-        presets=presets,
+        presets=await _attach_has_wecom(presets),
         total=total,
         skip=skip,
         limit=limit,
@@ -107,6 +135,23 @@ async def batch_create_persona_presets(
     )
 
 
+@router.post("/wecom/status", response_model=WeComStatusBatchResponse)
+async def batch_wecom_connection_status(
+    body: WeComStatusBatchRequest,
+    _: TokenPayload = Depends(require_permissions("channel:manage")),
+):
+    """Batch read WeCom connection status for plaza polling."""
+    from src.infra.agent.wecom.status import resolve_wecom_status
+
+    storage = get_agent_config_storage()
+    statuses: list[WeComConnectionStatus] = []
+    for preset_id in body.preset_ids:
+        has_wecom = await storage.preset_has_wecom(preset_id)
+        raw = await resolve_wecom_status(preset_id, has_wecom=has_wecom)
+        statuses.append(WeComConnectionStatus(**raw))
+    return WeComStatusBatchResponse(statuses=statuses)
+
+
 @router.get("/{preset_id}", response_model=PersonaPreset)
 async def get_persona_preset(
     preset_id: str,
@@ -114,10 +159,12 @@ async def get_persona_preset(
 ):
     """Get a visible persona preset."""
     try:
-        return await _manager().get_preset(
-            preset_id,
-            user_id=user.sub,
-            is_admin=_is_admin(user),
+        return await _attach_has_wecom_one(
+            await _manager().get_preset(
+                preset_id,
+                user_id=user.sub,
+                is_admin=_is_admin(user),
+            )
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="persona_preset_not_found")
@@ -234,6 +281,42 @@ async def _validate_global_preset(preset_id: str) -> PersonaPreset:
             detail="wecom_config_requires_global_preset",
         )
     return preset
+
+
+@router.get("/{preset_id}/wecom/status", response_model=WeComConnectionStatus)
+async def get_persona_wecom_connection_status(
+    preset_id: str,
+    _: TokenPayload = Depends(require_permissions("channel:manage")),
+):
+    """Get live WeCom WebSocket connection status for a global persona preset."""
+    from src.infra.agent.wecom.status import resolve_wecom_status
+
+    await _validate_global_preset(preset_id)
+    storage = get_agent_config_storage()
+    has_wecom = await storage.preset_has_wecom(preset_id)
+    raw = await resolve_wecom_status(preset_id, has_wecom=has_wecom)
+    return WeComConnectionStatus(**raw)
+
+
+@router.post("/{preset_id}/wecom/reconnect", response_model=WeComConnectionStatus)
+async def reconnect_persona_wecom(
+    preset_id: str,
+    _: TokenPayload = Depends(require_permissions("channel:manage")),
+):
+    """Restart WeCom bot for this preset (reload_preset)."""
+    from src.infra.agent.wecom.manager import get_wecom_bot_manager
+    from src.infra.agent.wecom.status import resolve_wecom_status
+
+    await _validate_global_preset(preset_id)
+    storage = get_agent_config_storage()
+    if not await storage.preset_has_wecom(preset_id):
+        raise HTTPException(status_code=404, detail="wecom_config_not_found")
+
+    manager = get_wecom_bot_manager()
+    await manager.reload_preset(preset_id)
+
+    raw = await resolve_wecom_status(preset_id, has_wecom=True)
+    return WeComConnectionStatus(**raw)
 
 
 @router.get("/{preset_id}/wecom", response_model=PersonaWeComConfig)

@@ -20,6 +20,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | To fill |
 | [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | To fill |
 | [Persona Runtime & Dify KB](./persona-runtime-and-dify-kb.md) | Persona KB ids → `agent_options`, tool gating, channel parity | Filled |
+| [WeCom Persona Connection Status](./wecom-persona-connection-status.md) | Redis WS health, status/reconnect API, plaza `has_wecom` vs admin poll | Filled |
 
 ---
 

@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Sparkles, Check, Copy, Pencil, Trash2, Pin, Star, BarChart3 } from "lucide-react";
-import type { PersonaPreset } from "../../types";
+import type { PersonaPreset, PersonaWeComStatus } from "../../types";
 import { PersonaAvatarIcon, PersonaAvatarImage } from "./PersonaAvatarIcon";
 import {
   isPersonaImageAvatar,
@@ -9,6 +9,7 @@ import {
 } from "./personaAvatar";
 import { getPersonaPresetCapabilities } from "./personaPresetAccess";
 import { getCategoryIcon, nameToGradient } from "../common/cardUtils";
+import { WeComConnectionIndicator } from "./WeComConnectionIndicator";
 
 interface PersonaPresetCardProps {
   preset: PersonaPreset;
@@ -17,6 +18,10 @@ interface PersonaPresetCardProps {
   canWrite: boolean;
   canAdmin: boolean;
   canAnalyze?: boolean;
+  canManageChannel?: boolean;
+  wecomStatus?: PersonaWeComStatus;
+  wecomReconnecting?: boolean;
+  onWeComReconnect?: (preset: PersonaPreset) => void;
   onUse: (preset: PersonaPreset) => void;
   onClear: () => void;
   onCopy: (preset: PersonaPreset) => void;
@@ -37,6 +42,10 @@ export function PersonaPresetCard({
   canWrite,
   canAdmin,
   canAnalyze,
+  canManageChannel,
+  wecomStatus,
+  wecomReconnecting,
+  onWeComReconnect,
   onUse,
   onClear,
   onCopy,
@@ -54,6 +63,8 @@ export function PersonaPresetCard({
     canWrite,
     canAdmin,
   });
+  const showWeComBadge = Boolean(preset.has_wecom);
+  const showWeComLive = showWeComBadge && Boolean(canManageChannel);
 
   return (
     <div className="scb group flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-card)] shadow-sm dark:shadow-none">
@@ -64,7 +75,23 @@ export function PersonaPresetCard({
           background: `linear-gradient(45deg, ${gradient[0]}, ${gradient[1]}, ${gradient[2]})`,
         }}
       >
-        <div className="absolute top-2 right-2 flex gap-1.5">
+        <div className="absolute top-2 right-2 flex flex-wrap items-center justify-end gap-1.5">
+          {showWeComBadge && (
+            <span className="scb__status-pill scb__status-pill--inactive pps-wecom-badge">
+              {t("personaPresets.wecom.connection.badge", "已接企微")}
+            </span>
+          )}
+          {showWeComLive && (
+            <WeComConnectionIndicator
+              status={wecomStatus}
+              reconnecting={wecomReconnecting}
+              onReconnect={
+                onWeComReconnect
+                  ? () => onWeComReconnect(preset)
+                  : undefined
+              }
+            />
+          )}
           {selected && (
             <span className="scb__status-pill scb__status-pill--installed">
               {t("personaPresets.using", "使用中")}
