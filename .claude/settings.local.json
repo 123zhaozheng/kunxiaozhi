@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__jcodemunch__jcodemunch_guide",
+      "mcp__jcodemunch__list_repos",
+      "mcp__codebase-memory-mcp__index_repository",
+      "mcp__codebase-memory-mcp__index_status",
+      "mcp__codebase-memory-mcp__get_architecture",
+      "mcp__codebase-memory-mcp__search_graph",
+      "mcp__codebase-memory-mcp__search_code",
+      "mcp__codebase-memory-mcp__trace_path",
+      "mcp__codebase-memory-mcp__get_code_snippet",
+      "PowerShell(cd D:\\\\code\\\\python\\\\LambChat\\\\frontend; npx tsc --noEmit 2>&1; echo \"EXITCODE: $LASTEXITCODE\")",
+      "mcp__exa__web_search_exa",
+      "PowerShell(cd D:\\\\code\\\\python\\\\LambChat\\\\frontend; npx ts-check-style 2>&1; echo \"EXITCODE: $LASTEXITCODE\")",
+      "PowerShell(cd D:\\\\code\\\\python\\\\LambChat\\\\frontend; npx tsc --noEmit; echo \"EXITCODE: $LASTEXITCODE\")"
+    ]
+  }
+}

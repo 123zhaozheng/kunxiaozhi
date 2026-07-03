@@ -73,7 +73,6 @@ docs/deepagents
 .docs/
 docs/plans/
 node_modules/
-.claude/
 docs/superpowers/
 docs/plans/
 !docs/images/
@@ -100,3 +99,15 @@ k8s/lambchat.yaml
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# Track AI tool configurations (Claude Code, Cursor, Pi, etc.)
+!.claude/
+!.claude/**
+!.code/
+!.code/**
+!.pi/
+!.pi/**
+!.cursor/
+!.cursor/**
+!.codex/
+!.codex/**

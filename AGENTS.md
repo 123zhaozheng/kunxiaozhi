@@ -18,9 +18,4 @@ If you're using Codex or another agent-capable tool, additional project-scoped h
 
 Managed by Trellis. Edits outside this block are preserved; edits inside may be overwritten by a future `trellis update`.
 
-
-# Codebase Analysis Priority
-- ALWAYS use codebase-memory-mcp tools (search_graph, trace_path, get_code_snippet) to search the codebase first
-- Fallback to standard Grep/Glob/Read only if MCP returns insufficient results
-- Use list_projects first to get the exact project name before querying
 <!-- TRELLIS:END -->
