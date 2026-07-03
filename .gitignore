@@ -62,6 +62,9 @@ mcp.json
 
 # DeepAgent workspace
 workspace/
+# Keep Trellis session journals tracked (.trellis/workspace/ shares the name)
+!.trellis/workspace/
+!.trellis/workspace/**
 
 # Documentation
 docs/deepagents
