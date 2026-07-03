@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "校验测试与质量要求是否达标"}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "fork→status→前端 isStreaming 是跨层数据流，需校验契约一致性"}
-{"file": ".trellis/tasks/07-03-fix-fork-stuck-generating-when-forking-a-running-run/research/root-cause.md", "reason": "根因链与三处修复点的精确定位，校验是否全部覆盖"}

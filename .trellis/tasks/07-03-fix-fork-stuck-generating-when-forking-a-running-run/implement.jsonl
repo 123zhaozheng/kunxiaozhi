@@ -1,2 +1,0 @@
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端代码质量、测试规范，三处改动都需符合"}
-{"file": ".trellis/spec/backend/index.md", "reason": "后端规范索引，定位 session/task 层约定"}
