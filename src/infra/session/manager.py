@@ -316,8 +316,11 @@ class SessionManager:
                 **(fork_metadata or {}),
             }
         )
-        if target.get("run_id"):
-            new_metadata["current_run_id"] = target["run_id"]
+        # Note: current_run_id is intentionally NOT set. clone_session_metadata
+        # already strips it — the forked session has no running task, and
+        # leaving a stale run_id here makes consumers (executor, arq_worker,
+        # status_queries, frontend loadHistory) falsely believe the new session
+        # is busy, which also causes the "stuck generating" UI bug.
 
         new_session = await self.create_session(
             SessionCreate(
@@ -510,6 +513,11 @@ class SessionManager:
         cloned["trace_id"] = f"trace_{uuid.uuid4().hex}"
         cloned["session_id"] = session_id
         cloned["user_id"] = user_id
+        # A fork produces a historical snapshot — the cloned trace can never be
+        # "running" in the new session. Force-completing prevents the frontend
+        # from treating a still-running source run as an active task (which
+        # would leave the new session's UI stuck on "generating").
+        cloned["status"] = "completed"
         return cloned
 
     def _build_partial_user_trace_doc(

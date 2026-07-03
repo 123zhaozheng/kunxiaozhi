@@ -98,3 +98,36 @@ async def test_get_run_error_fetches_single_error_event_without_full_events_proj
         ({"run_id": "run-1"}, {"metadata": 1, "trace_id": 1, "_id": 0})
     ]
     assert collection.aggregate_pipelines
+
+
+@pytest.mark.asyncio
+async def test_get_run_status_scopes_trace_lookup_by_session_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fork clones the source trace (same run_id) into a new session.
+    get_run_status must filter by session_id so the forked session doesn't
+    inherit the source run's status (and vice versa)."""
+    traces_by_session = {
+        "session-source": [{"status": "running"}],
+        "session-fork": [{"status": "completed"}],
+    }
+    find_calls: list[tuple[dict[str, Any], dict[str, Any]]] = []
+
+    class _ScopedCollection:
+        def find(self, query: dict[str, Any], projection: dict[str, Any]):
+            find_calls.append((query, projection))
+            docs = traces_by_session.get(query.get("session_id"), [])
+            return _FakeFindCursor(docs)
+
+    trace_storage = SimpleNamespace(collection=_ScopedCollection())
+    monkeypatch.setattr(
+        "src.infra.task.status_queries.get_trace_storage",
+        lambda: trace_storage,
+    )
+
+    queries = TaskStatusQueries(storage=_FakeStorage(), run_info={})
+
+    assert (await queries.get_run_status("session-source", "run-X")).value == "running"
+    assert (await queries.get_run_status("session-fork", "run-X")).value == "completed"
+
+    assert all("session_id" in query for query, _ in find_calls)

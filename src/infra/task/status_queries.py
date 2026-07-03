@@ -43,7 +43,10 @@ class TaskStatusQueries:
         try:
             trace_storage = get_trace_storage()
             cursor = (
-                trace_storage.collection.find({"run_id": run_id}, {"status": 1, "_id": 0})
+                trace_storage.collection.find(
+                    {"run_id": run_id, "session_id": session_id},
+                    {"status": 1, "_id": 0},
+                )
                 .sort("started_at", -1)
                 .limit(1)
             )

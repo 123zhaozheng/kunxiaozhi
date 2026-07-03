@@ -494,3 +494,98 @@ async def test_fork_session_continues_when_checkpoint_clone_fails(monkeypatch) -
     ]
     assert seeded_messages[0].content == "hello"
     assert seeded_messages[1].content == "hi there"
+
+
+def test_build_cloned_trace_doc_forces_completed_status() -> None:
+    """A forked trace is a historical snapshot — it must never inherit the
+    source run's "running" status, or the new session's UI gets stuck on
+    "generating"."""
+    source_trace = {
+        "run_id": "run-1",
+        "trace_id": "trace-source",
+        "session_id": "source",
+        "user_id": "user-a",
+        "status": "running",
+        "started_at": 1,
+    }
+
+    cloned = SessionManager._build_cloned_trace_doc(source_trace, "target", "user-b")
+
+    assert cloned["status"] == "completed"
+    assert cloned["session_id"] == "target"
+    assert cloned["user_id"] == "user-b"
+    assert cloned["trace_id"] != "trace-source"
+    # The source trace is not mutated
+    assert source_trace["status"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_fork_session_does_not_carry_current_run_id_and_completes_cloned_trace(
+    monkeypatch,
+) -> None:
+    """The forked session has no running task, so its metadata must not carry
+    current_run_id (otherwise executor/arq_worker/status/frontend falsely treat
+    it as busy → "stuck generating" UI), and the cloned trace must be marked
+    completed even when the source run is still running."""
+    source_events = [
+        {
+            "event_type": "user:message",
+            "data": {"content": "hello", "message_id": "run-1:user"},
+            "timestamp": "2026-01-01T00:00:00Z",
+        },
+        {
+            "event_type": "message:chunk",
+            "data": {"content": "hi"},
+            "timestamp": "2026-01-01T00:00:01Z",
+        },
+        {
+            "event_type": "done",
+            "data": {"status": "completed"},
+            "timestamp": "2026-01-01T00:00:02Z",
+        },
+    ]
+    manager = SessionManager()
+    storage = _FakeSessionStorage()
+    manager.storage = storage
+    manager._trace_storage = SimpleNamespace(
+        collection=_FakeTraceCollection(
+            [
+                {
+                    "run_id": "run-1",
+                    "trace_id": "trace-1",
+                    "session_id": "source",
+                    "user_id": "user",
+                    "events": source_events,
+                    "event_count": len(source_events),
+                    "status": "running",
+                    "started_at": 1,
+                }
+            ]
+        )
+    )
+
+    async def _get_session(session_id):
+        return Session(id=session_id, user_id="user", name="Source", metadata={})
+
+    async def _resolve_target(_session_id, _message_id):
+        return {
+            "run_id": "run-1",
+            "target_type": "assistant",
+            "turn_index": 1,
+        }
+
+    async def _noop_clone(*_args, **_kwargs):
+        return 0
+
+    manager.get_session = _get_session
+    manager._resolve_fork_target = _resolve_target
+    monkeypatch.setattr(
+        "src.infra.session.manager.clone_checkpoints_for_fork", _noop_clone
+    )
+
+    result = await manager.fork_session_from_message("source", "run-1", "user")
+
+    assert "current_run_id" not in (result["session"].metadata or {})
+    inserted_trace = manager.trace_storage.collection.inserted_docs[0]
+    assert inserted_trace["status"] == "completed"
+    assert inserted_trace["session_id"] == "target"

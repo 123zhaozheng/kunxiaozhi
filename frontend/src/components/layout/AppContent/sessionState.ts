@@ -51,3 +51,24 @@ export function getRestoredModelSelection(
     modelValue,
   };
 }
+
+/**
+ * Resolve the message id to send to the backend fork endpoint.
+ *
+ * Reconstructed assistant bubbles can carry a `:N` suffix (see
+ * `nextAssistantId` in historyLoader) when a run's events get split during
+ * history reconstruction — common for legacy events written before `seq`
+ * existed, which fall back to timestamp sorting and tie-break apart a run.
+ * The backend `_resolve_fork_target` only recognizes the real run_id, so for
+ * assistant messages we must send `runId` (which is always the real run_id),
+ * not the suffixed bubble `id`. User message ids are already backend-recognized
+ * (`message_id` or `runId:user`), so they pass through unchanged.
+ */
+export function getForkMessageId(
+  message: Pick<Message, "id" | "role" | "runId">,
+): string {
+  if (message.role === "assistant") {
+    return message.runId ?? message.id;
+  }
+  return message.id;
+}

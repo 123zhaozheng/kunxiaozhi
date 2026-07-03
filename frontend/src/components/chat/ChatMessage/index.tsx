@@ -25,6 +25,7 @@ import { useAuth } from "../../../hooks/useAuth";
 import { ModelIconImg } from "../../agent/modelIcon.tsx";
 import { shouldCloseTokenDetailsPopover } from "./tokenDetailsPopoverGuards";
 import { resolveTokenUsageModelDetails } from "./tokenUsageModel";
+import { getForkMessageId } from "../../layout/AppContent/sessionState";
 import {
   shouldAllowAutoPreviewForPart,
   type AutoPreviewTarget,
@@ -640,7 +641,7 @@ export const ChatMessage = memo(function ChatMessage({
             </button>
             {sessionId && onForkMessage && (
               <button
-                onClick={() => void onForkMessage(message.id)}
+                onClick={() => void onForkMessage(getForkMessageId(message))}
                 className={clsx(
                   "p-1.5 rounded-md transition-colors",
                   !isLastMessage && "sm:opacity-0 sm:group-hover:opacity-100",
