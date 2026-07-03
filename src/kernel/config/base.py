@@ -267,6 +267,16 @@ class Settings(BaseSettings):
     OAUTH_APPLE_TEAM_ID: str = ""
     OAUTH_APPLE_KEY_ID: str = ""
 
+    # OA SSO (enterprise portal)
+    OA_SSO_ENABLED: bool = False
+    OA_SSO_BASE_URL: str = "http://127.0.0.1"
+    OA_SSO_PUBLIC_KEY: str = ""
+    OA_SSO_CHANNEL_ID: str = "aimp"
+    OA_SSO_EMAIL_DOMAIN: str = "ksrcb.com"
+    OA_SSO_AUTO_PROVISION: bool = True
+    OA_SSO_MOCK_ENABLED: bool = False
+    OA_SSO_MOCK_WORKCODE: str = "10001"
+
     # Cloudflare Turnstile Settings
     TURNSTILE_ENABLED: bool = False
     TURNSTILE_SITE_KEY: str = ""

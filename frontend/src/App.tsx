@@ -36,6 +36,11 @@ const OAuthCallback = lazy(() =>
     default: m.OAuthCallback,
   })),
 );
+const OaSsoLogin = lazy(() =>
+  import("./components/auth/OaSsoLogin").then((m) => ({
+    default: m.OaSsoLogin,
+  })),
+);
 const ForgotPassword = lazy(() =>
   import("./components/auth/ForgotPassword").then((m) => ({
     default: m.ForgotPassword,
@@ -393,6 +398,7 @@ function App() {
             <Route path="/" element={<RootRedirect />} />
             {/* Auth routes */}
             <Route path="/auth/login" element={<AuthPageWrapper />} />
+            <Route path="/auth/oa" element={<OaSsoLogin />} />
             <Route
               path="/auth/register"
               element={<AuthPageWrapper initialMode="register" />}

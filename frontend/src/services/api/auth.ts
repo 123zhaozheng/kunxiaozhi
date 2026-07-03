@@ -152,8 +152,28 @@ export const authApi = {
   /**
    * 获取可用的 OAuth 提供商列表
    */
+  async loginWithOaSso(token: string): Promise<TokenResponse> {
+    const response = await authFetch<TokenResponse>(
+      `${API_BASE}/api/auth/login/oa-sso`,
+      {
+        method: "POST",
+        skipAuth: true,
+        body: JSON.stringify({ token }),
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+    setTokens(response.access_token, response.refresh_token);
+    window.dispatchEvent(new CustomEvent("auth:login"));
+    return response;
+  },
+
   async getOAuthProviders(): Promise<{
     providers: { id: string; name: string }[];
+    oa_sso?: {
+      enabled: boolean;
+      mock_enabled?: boolean;
+      mock_workcode?: string | null;
+    };
     registration_enabled: boolean;
     turnstile?: {
       enabled: boolean;
@@ -165,6 +185,11 @@ export const authApi = {
   }> {
     return authFetch<{
       providers: { id: string; name: string }[];
+      oa_sso?: {
+        enabled: boolean;
+        mock_enabled?: boolean;
+        mock_workcode?: string | null;
+      };
       registration_enabled: boolean;
       turnstile?: {
         enabled: boolean;

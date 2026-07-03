@@ -3,8 +3,10 @@
  */
 
 import { useState, useEffect, useRef, Fragment } from "react";
-import { Link } from "react-router-dom";
-import { User, Mail, AlertCircle, AtSign } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { User, Mail, AlertCircle, AtSign, Building2 } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { OaSsoHelpDialog } from "./OaSsoHelpDialog";
 import { PasswordInput } from "./PasswordInput";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
@@ -43,6 +45,7 @@ interface AuthPageProps {
 
 export function AuthPage({ onSuccess, initialMode }: AuthPageProps) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
 
   // 覆盖全局 overflow: hidden，允许登录页面滚动
   useEffect(() => {
@@ -74,6 +77,10 @@ export function AuthPage({ onSuccess, initialMode }: AuthPageProps) {
   }, [theme]);
 
   const { login, register, loginWithOAuth } = useAuth();
+  const [searchParams] = useSearchParams();
+  const [oaSsoEnabled, setOaSsoEnabled] = useState(false);
+  const [oaMockWorkcode, setOaMockWorkcode] = useState<string | null>(null);
+  const [oaHelpOpen, setOaHelpOpen] = useState(false);
   const [oauthProviders, setOauthProviders] = useState<
     { id: string; name: string }[]
   >([]);
@@ -105,6 +112,30 @@ export function AuthPage({ onSuccess, initialMode }: AuthPageProps) {
 
   useEffect(() => clearRedirectTimers, []);
 
+  useEffect(() => {
+    const err = searchParams.get("error");
+    if (!err?.startsWith("oa_sso")) return;
+    const map: Record<string, string> = {
+      oa_sso_failed: t("auth.oaSso.failedGeneric"),
+      oa_sso_expired: t("auth.oaSso.expired"),
+      oa_sso_no_account: t("auth.oaSso.noAccount"),
+      oa_sso_no_token: t("auth.oaSso.portalOnly"),
+    };
+    setError(map[err] ?? t("auth.oaSso.failedGeneric"));
+  }, [searchParams, t]);
+
+  useEffect(() => {
+    if (mode !== "login") return;
+    const token =
+      searchParams.get("token") || searchParams.get("oa_token");
+    if (token?.trim()) {
+      navigate(
+        `/auth/oa?token=${encodeURIComponent(token.trim())}`,
+        { replace: true },
+      );
+    }
+  }, [mode, navigate, searchParams]);
+
   // 获取 OAuth 提供商列表和认证设置
   useEffect(() => {
     let mounted = true;
@@ -113,6 +144,14 @@ export function AuthPage({ onSuccess, initialMode }: AuthPageProps) {
         const result = await authApi.getOAuthProviders();
         if (!mounted) return;
         setOauthProviders(result.providers);
+        setOaSsoEnabled(Boolean(result.oa_sso?.enabled));
+        setOaMockWorkcode(
+          result.oa_sso?.mock_enabled && result.oa_sso.mock_workcode
+            ? result.oa_sso.mock_workcode
+            : result.oa_sso?.mock_enabled
+              ? "10001"
+              : null,
+        );
         setRegistrationEnabled(result.registration_enabled);
         // 设置 Turnstile 配置
         if (result.turnstile) {
@@ -442,6 +481,42 @@ export function AuthPage({ onSuccess, initialMode }: AuthPageProps) {
               </div>
             )}
 
+            {mode === "login" && oaSsoEnabled && (
+              <div className="mb-4 sm:mb-5">
+                <button
+                  type="button"
+                  onClick={() => setOaHelpOpen(true)}
+                  className="auth-oa-button flex w-full items-center justify-center gap-2 rounded-xl border border-teal-500/25 bg-teal-500/5 px-4 py-2.5 text-sm font-medium text-teal-800 transition-all hover:bg-teal-500/10 dark:border-teal-500/30 dark:text-teal-100 dark:hover:bg-teal-500/15"
+                >
+                  <Building2 size={18} className="shrink-0" />
+                  {t("auth.oaSso.button")}
+                </button>
+                <p className="mt-1.5 text-center text-[10px] text-stone-400 dark:text-stone-500 sm:text-xs">
+                  {t("auth.oaSso.buttonHint")}
+                </p>
+                {oaMockWorkcode && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(
+                        `/auth/oa?token=${encodeURIComponent(`mock:${oaMockWorkcode}`)}`,
+                      )
+                    }
+                    className="mt-2 w-full rounded-lg border border-dashed border-amber-500/35 px-3 py-1.5 text-[11px] font-medium text-amber-800 dark:text-amber-200"
+                  >
+                    {t("auth.oaSso.mockTry", { workcode: oaMockWorkcode })}
+                  </button>
+                )}
+                <div className="relative mt-3 flex items-center sm:mt-3.5">
+                    <div className="flex-grow border-t border-stone-200 dark:border-stone-700" />
+                    <span className="mx-3 flex-shrink-0 text-[10px] font-medium uppercase tracking-widest text-stone-400 dark:text-stone-500 sm:text-xs">
+                      {t("auth.or")}
+                    </span>
+                    <div className="flex-grow border-t border-stone-200 dark:border-stone-700" />
+                </div>
+              </div>
+            )}
+
             <form
               onSubmit={handleSubmit}
               key={mode}
@@ -649,6 +724,7 @@ export function AuthPage({ onSuccess, initialMode }: AuthPageProps) {
         </div>
       </div>
 
+      <OaSsoHelpDialog open={oaHelpOpen} onClose={() => setOaHelpOpen(false)} />
       <ContactAdminDialog
         isOpen={contactAdminOpen}
         onClose={() => setContactAdminOpen(false)}

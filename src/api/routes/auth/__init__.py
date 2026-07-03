@@ -7,6 +7,7 @@ Aggregates all authentication-related routes from submodules.
 from fastapi import APIRouter
 
 from .core import router as core_router
+from .oa_sso import router as oa_sso_router
 from .oauth import router as oauth_router
 from .profile import router as profile_router
 from .rate_limiter import RateLimiter, get_rate_limiter
@@ -18,6 +19,7 @@ router = APIRouter()
 router.include_router(core_router)
 router.include_router(profile_router)
 router.include_router(oauth_router)
+router.include_router(oa_sso_router)
 router.include_router(verification_router)
 
 __all__ = [

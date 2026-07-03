@@ -23,6 +23,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/health",
         "/ready",
         "/api/auth/login",
+        "/api/auth/login/oa-sso",
         "/api/auth/register",
         "/docs",
         "/openapi.json",
