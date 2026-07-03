@@ -171,8 +171,6 @@ export const authApi = {
     providers: { id: string; name: string }[];
     oa_sso?: {
       enabled: boolean;
-      mock_enabled?: boolean;
-      mock_workcode?: string | null;
     };
     registration_enabled: boolean;
     turnstile?: {
@@ -187,8 +185,6 @@ export const authApi = {
       providers: { id: string; name: string }[];
       oa_sso?: {
         enabled: boolean;
-        mock_enabled?: boolean;
-        mock_workcode?: string | null;
       };
       registration_enabled: boolean;
       turnstile?: {

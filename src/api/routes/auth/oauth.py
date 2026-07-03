@@ -60,10 +60,6 @@ async def get_oauth_providers():
         "providers": providers,
         "oa_sso": {
             "enabled": settings.OA_SSO_ENABLED,
-            "mock_enabled": settings.OA_SSO_MOCK_ENABLED,
-            "mock_workcode": settings.OA_SSO_MOCK_WORKCODE
-            if settings.OA_SSO_MOCK_ENABLED
-            else None,
         },
         "registration_enabled": settings.ENABLE_REGISTRATION,
         "turnstile": {

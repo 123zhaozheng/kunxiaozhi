@@ -381,9 +381,7 @@
       "howToStep3": "系统将自动完成登录",
       "failedGeneric": "企业 OA 登录失败，请从门户重新打开",
       "expired": "OA 登录已过期，请从门户重新进入",
-      "noAccount": "工号尚未开通，请联系管理员",
-      "mockTry": "Mock：模拟 OA 登录（工号 {{workcode}}）",
-      "mockBadge": "Mock 模式"
+      "noAccount": "工号尚未开通，请联系管理员"
     },
     "oauthLoginFailed": "OAuth 登录失败，请稍后重试",
     "operationFailed": "操作失败，请重试",

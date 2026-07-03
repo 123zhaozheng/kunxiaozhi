@@ -49,24 +49,6 @@ export function OaSsoLogin() {
   const [activeStep, setActiveStep] = useState(0);
   const [statusLine, setStatusLine] = useState("");
   const [fatalMessage, setFatalMessage] = useState<string | null>(null);
-  const [mockWorkcode, setMockWorkcode] = useState("10001");
-  const [mockReady, setMockReady] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-    authApi.getOAuthProviders().then((r) => {
-      if (!mounted) return;
-      if (r.oa_sso?.mock_enabled) {
-        setMockReady(true);
-        if (r.oa_sso.mock_workcode) {
-          setMockWorkcode(r.oa_sso.mock_workcode);
-        }
-      }
-    });
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   useEffect(() => {
     document.documentElement.classList.add("allow-scroll");
@@ -158,20 +140,6 @@ export function OaSsoLogin() {
             <p className="mb-6 text-sm text-stone-500 dark:text-stone-400">
               {t("auth.oaSso.portalOnlyHint")}
             </p>
-            {mockReady && (
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(
-                    `/auth/oa?token=${encodeURIComponent(`mock:${mockWorkcode}`)}`,
-                    { replace: true },
-                  )
-                }
-                className="mb-4 w-full rounded-xl border border-dashed border-teal-500/40 bg-teal-500/5 px-5 py-2.5 text-sm font-medium text-teal-800 dark:text-teal-100"
-              >
-                {t("auth.oaSso.mockTry", { workcode: mockWorkcode })}
-              </button>
-            )}
             <Link
               to="/auth/login"
               className="inline-flex rounded-xl bg-stone-900 px-5 py-2.5 text-sm font-medium text-white dark:bg-stone-100 dark:text-stone-900"

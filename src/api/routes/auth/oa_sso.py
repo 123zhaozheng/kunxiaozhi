@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field
 
 from src.infra.auth.oa_login import OaLoginNotProvisionedError, login_or_provision_from_workcode
 from src.infra.auth.oa_sso import OASsoError, OASsoService
-from src.infra.auth.oa_sso_mock import is_oa_sso_mock_active, resolve_mock_workcode
 from src.infra.logging import get_logger
 from src.kernel.config import settings
 from src.kernel.exceptions import AccountNotActiveError
@@ -37,27 +36,17 @@ async def oa_sso_login(request: Request, body: OaSsoLoginRequest) -> Token:
             detail="请求过于频繁，请稍后重试",
         )
 
-    if is_oa_sso_mock_active():
-        try:
-            workcode = resolve_mock_workcode(body.token)
-            logger.info("[OA SSO mock] workcode=%s from %s", workcode, client_ip)
-        except OASsoError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=str(exc),
-            ) from exc
-    else:
-        sso_service = OASsoService()
-        try:
-            workcode = await sso_service.get_workcode(body.token)
-        except OASsoError as exc:
-            logger.warning("OA SSO failed from %s: %s", client_ip, exc)
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=str(exc),
-            ) from exc
-        finally:
-            await sso_service.close()
+    sso_service = OASsoService()
+    try:
+        workcode = await sso_service.get_workcode(body.token)
+    except OASsoError as exc:
+        logger.warning("OA SSO failed from %s: %s", client_ip, exc)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+        ) from exc
+    finally:
+        await sso_service.close()
 
     try:
         return await login_or_provision_from_workcode(workcode)

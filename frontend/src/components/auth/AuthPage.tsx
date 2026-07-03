@@ -79,7 +79,6 @@ export function AuthPage({ onSuccess, initialMode }: AuthPageProps) {
   const { login, register, loginWithOAuth } = useAuth();
   const [searchParams] = useSearchParams();
   const [oaSsoEnabled, setOaSsoEnabled] = useState(false);
-  const [oaMockWorkcode, setOaMockWorkcode] = useState<string | null>(null);
   const [oaHelpOpen, setOaHelpOpen] = useState(false);
   const [oauthProviders, setOauthProviders] = useState<
     { id: string; name: string }[]
@@ -145,13 +144,6 @@ export function AuthPage({ onSuccess, initialMode }: AuthPageProps) {
         if (!mounted) return;
         setOauthProviders(result.providers);
         setOaSsoEnabled(Boolean(result.oa_sso?.enabled));
-        setOaMockWorkcode(
-          result.oa_sso?.mock_enabled && result.oa_sso.mock_workcode
-            ? result.oa_sso.mock_workcode
-            : result.oa_sso?.mock_enabled
-              ? "10001"
-              : null,
-        );
         setRegistrationEnabled(result.registration_enabled);
         // 设置 Turnstile 配置
         if (result.turnstile) {
@@ -494,19 +486,6 @@ export function AuthPage({ onSuccess, initialMode }: AuthPageProps) {
                 <p className="mt-1.5 text-center text-[10px] text-stone-400 dark:text-stone-500 sm:text-xs">
                   {t("auth.oaSso.buttonHint")}
                 </p>
-                {oaMockWorkcode && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      navigate(
-                        `/auth/oa?token=${encodeURIComponent(`mock:${oaMockWorkcode}`)}`,
-                      )
-                    }
-                    className="mt-2 w-full rounded-lg border border-dashed border-amber-500/35 px-3 py-1.5 text-[11px] font-medium text-amber-800 dark:text-amber-200"
-                  >
-                    {t("auth.oaSso.mockTry", { workcode: oaMockWorkcode })}
-                  </button>
-                )}
                 <div className="relative mt-3 flex items-center sm:mt-3.5">
                     <div className="flex-grow border-t border-stone-200 dark:border-stone-700" />
                     <span className="mx-3 flex-shrink-0 text-[10px] font-medium uppercase tracking-widest text-stone-400 dark:text-stone-500 sm:text-xs">

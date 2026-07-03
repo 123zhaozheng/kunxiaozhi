@@ -274,8 +274,6 @@ class Settings(BaseSettings):
     OA_SSO_CHANNEL_ID: str = "aimp"
     OA_SSO_EMAIL_DOMAIN: str = "ksrcb.com"
     OA_SSO_AUTO_PROVISION: bool = True
-    OA_SSO_MOCK_ENABLED: bool = False
-    OA_SSO_MOCK_WORKCODE: str = "10001"
 
     # Cloudflare Turnstile Settings
     TURNSTILE_ENABLED: bool = False

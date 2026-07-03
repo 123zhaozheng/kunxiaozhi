@@ -381,9 +381,7 @@
       "howToStep3": "You will be signed in automatically",
       "failedGeneric": "OA sign-in failed. Please open again from the portal",
       "expired": "OA session expired. Please re-enter from the portal",
-      "noAccount": "No account for this employee ID. Contact your administrator",
-      "mockTry": "Mock: simulate OA sign-in ({{workcode}})",
-      "mockBadge": "Mock mode"
+      "noAccount": "No account for this employee ID. Contact your administrator"
     },
     "oauthLoginFailed": "OAuth login failed, please try again later",
     "operationFailed": "Operation failed, please try again",
