@@ -463,7 +463,7 @@ function SubagentPanelContent({ agentId }: { agentId: string }) {
     }
 
     scrollToBottom();
-  });
+  }, [data, scrollToBottom]);
 
   useEffect(() => {
     const scroller = scrollRef.current;
@@ -696,11 +696,10 @@ export function SubagentBlock({
     // Auto-open only when no panel is open; multiple running subagents should not steal focus.
     if (isPersistentToolPanelOpen(panelKey)) {
       updatePersistentToolPanel(
-        (prev) => ({
-          ...prev,
-          status: panelStatus,
-          subtitle,
-        }),
+        (prev) =>
+          prev.status === panelStatus && prev.subtitle === subtitle
+            ? prev
+            : { ...prev, status: panelStatus, subtitle },
         panelKey,
       );
     } else if (

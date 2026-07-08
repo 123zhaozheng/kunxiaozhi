@@ -16,6 +16,31 @@ export interface SubagentPanelData {
 
 type Listener = () => void;
 
+// 脏检查：内容相同时跳过 set 与 emit，避免高频 SSE 事件引发渲染循环。
+// parts 每次 SSE 事件都是新引用，故用 JSON.stringify 比较内容；其余字段用 ===。
+function shallowEqualPanelData(
+  a: SubagentPanelData,
+  b: SubagentPanelData,
+): boolean {
+  if (
+    a.agentId !== b.agentId ||
+    a.agentName !== b.agentName ||
+    a.input !== b.input ||
+    a.result !== b.result ||
+    a.success !== b.success ||
+    a.error !== b.error ||
+    a.isPending !== b.isPending ||
+    a.startedAt !== b.startedAt ||
+    a.completedAt !== b.completedAt ||
+    a.status !== b.status
+  ) {
+    return false;
+  }
+  if (a.parts === b.parts) return true;
+  if (!a.parts || !b.parts) return false;
+  return JSON.stringify(a.parts) === JSON.stringify(b.parts);
+}
+
 export interface SubagentPanelStore {
   delete: (agentId: string) => void;
   get: (agentId: string) => SubagentPanelData | undefined;
@@ -45,6 +70,10 @@ export function createSubagentPanelStore(): SubagentPanelStore {
       return data.get(agentId);
     },
     set(next) {
+      const prev = data.get(next.agentId);
+      if (prev && shallowEqualPanelData(prev, next)) {
+        return;
+      }
       data.set(next.agentId, next);
       emit(next.agentId);
     },
