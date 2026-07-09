@@ -683,6 +683,72 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "depends_on": "ENABLE_AUDIO_TRANSCRIPTION",
     },
     # ============================================
+    # Vision Assist Settings
+    # ============================================
+    "ENABLE_VISION_ASSIST": {
+        "type": SettingType.BOOLEAN,
+        "category": SettingCategory.VISION_ASSIST,
+        "description": "settingDesc.ENABLE_VISION_ASSIST",
+        "default": False,
+        "frontend_visible": True,
+    },
+    "VISION_ASSIST_MODEL_ID": {
+        "type": SettingType.STRING,
+        "category": SettingCategory.VISION_ASSIST,
+        "description": "settingDesc.VISION_ASSIST_MODEL_ID",
+        "default": "",
+        "depends_on": "ENABLE_VISION_ASSIST",
+        "frontend_visible": True,
+    },
+    "VISION_ASSIST_MAX_BYTES": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.VISION_ASSIST,
+        "description": "settingDesc.VISION_ASSIST_MAX_BYTES",
+        "default": 10485760,
+        "depends_on": "ENABLE_VISION_ASSIST",
+    },
+    # ============================================
+    # Document Parse Settings
+    # ============================================
+    "ENABLE_DOCUMENT_PARSE": {
+        "type": SettingType.BOOLEAN,
+        "category": SettingCategory.DOCUMENT_PARSE,
+        "description": "settingDesc.ENABLE_DOCUMENT_PARSE",
+        "default": False,
+        "frontend_visible": True,
+    },
+    "MINERU_API_BASE_URL": {
+        "type": SettingType.STRING,
+        "category": SettingCategory.DOCUMENT_PARSE,
+        "description": "settingDesc.MINERU_API_BASE_URL",
+        "default": "http://localhost:8000",
+        "depends_on": "ENABLE_DOCUMENT_PARSE",
+        "frontend_visible": True,
+    },
+    "MINERU_API_KEY": {
+        "type": SettingType.STRING,
+        "category": SettingCategory.DOCUMENT_PARSE,
+        "description": "settingDesc.MINERU_API_KEY",
+        "default": "",
+        "is_sensitive": True,
+        "depends_on": "ENABLE_DOCUMENT_PARSE",
+        "frontend_visible": True,
+    },
+    "DOCUMENT_PARSE_MAX_BYTES": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.DOCUMENT_PARSE,
+        "description": "settingDesc.DOCUMENT_PARSE_MAX_BYTES",
+        "default": 52428800,
+        "depends_on": "ENABLE_DOCUMENT_PARSE",
+    },
+    "DOCUMENT_PARSE_MAX_OUTPUT_CHARS": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.DOCUMENT_PARSE,
+        "description": "settingDesc.DOCUMENT_PARSE_MAX_OUTPUT_CHARS",
+        "default": 50000,
+        "depends_on": "ENABLE_DOCUMENT_PARSE",
+    },
+    # ============================================
     # Image Generation Settings
     # ============================================
     "ENABLE_IMAGE_GENERATION": {

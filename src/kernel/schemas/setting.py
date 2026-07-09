@@ -53,7 +53,9 @@ class SettingCategory(str, Enum):
     MEMORY_SEARCH = "memory_search"
     MEMORY_STORAGE = "memory_storage"
     AUDIO_TRANSCRIPTION = "audio_transcription"
+    VISION_ASSIST = "vision_assist"
     DIFY = "dify"
+    DOCUMENT_PARSE = "document_parse"
 
 
 class JsonSchemaField(BaseModel):

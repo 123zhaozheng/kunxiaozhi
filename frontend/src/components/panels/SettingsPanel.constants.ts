@@ -22,7 +22,9 @@ export const CATEGORY_ORDER: SettingCategory[] = [
   "skills",
   "tools",
   "audio_transcription",
+  "vision_assist",
   "dify",
+  "document_parse",
   "tracing",
   "user",
   "oauth",
@@ -56,6 +58,7 @@ export const MODEL_CONFIG_SETTING_KEYS = new Set([
 export const MODEL_CARD_KIND_FILTER: Record<string, string> = {
   NATIVE_MEMORY_MODEL_ID: "chat",
   AUDIO_TRANSCRIPTION_MODEL_ID: "transcribe",
+  VISION_ASSIST_MODEL_ID: "chat",
   NATIVE_MEMORY_EMBEDDING_MODEL_ID: "embedding",
   NATIVE_MEMORY_RERANK_MODEL_ID: "rerank",
   DIFY_KB_LLM_MODEL_ID: "chat",

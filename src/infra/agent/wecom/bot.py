@@ -53,6 +53,23 @@ def _frame_top(frame: Any, key: str, default: str = "") -> str:
     return default
 
 
+def _media_field(info: Any, *keys: str) -> str:
+    """Read the first non-empty value from a media info dict.
+
+    WeCom long-connection push frames use field names without ``_url``/``_key``
+    suffixes (``url``, ``aeskey``), while webhook-mode docs use suffixed names
+    (``pic_url``, ``file_url``, ``voice_url``, ``aes_key``). Accept both so the
+    bot works regardless of transport.
+    """
+    if not isinstance(info, dict):
+        return ""
+    for key in keys:
+        value = info.get(key)
+        if value:
+            return str(value)
+    return ""
+
+
 class WeComBot:
     """WeCom (企业微信) AI Bot — one WS connection per aibotid, mapped to one role."""
 
@@ -228,9 +245,7 @@ class WeComBot:
             self._ws_client = client
             self._set_connection_state(ConnectionState.CONNECTED)
 
-            logger.info(
-                "WeCom AI Bot started for aibotid=%s", self.aibotid
-            )
+            logger.info("WeCom AI Bot started for aibotid=%s", self.aibotid)
             return True
 
         except Exception as e:
@@ -250,7 +265,9 @@ class WeComBot:
             try:
                 self._ws_client.disconnect()
             except Exception as e:
-                logger.warning("Error disconnecting WeCom client for aibotid=%s: %s", self.aibotid, e)
+                logger.warning(
+                    "Error disconnecting WeCom client for aibotid=%s: %s", self.aibotid, e
+                )
             self._ws_client = None
 
         self._pending_frames.clear()
@@ -440,8 +457,8 @@ class WeComBot:
 
             body = _frame_body(frame)
             image_info = body.get("image", {})
-            pic_url = image_info.get("pic_url", "") if isinstance(image_info, dict) else ""
-            aes_key = image_info.get("aes_key", "") if isinstance(image_info, dict) else ""
+            pic_url = _media_field(image_info, "url", "pic_url")
+            aes_key = _media_field(image_info, "aeskey", "aes_key")
 
             metadata = {
                 "message_id": msgid,
@@ -491,9 +508,9 @@ class WeComBot:
 
             body = _frame_body(frame)
             file_info = body.get("file", {})
-            file_url = file_info.get("file_url", "") if isinstance(file_info, dict) else ""
-            file_name = file_info.get("file_name", "") if isinstance(file_info, dict) else ""
-            aes_key = file_info.get("aes_key", "") if isinstance(file_info, dict) else ""
+            file_url = _media_field(file_info, "url", "file_url")
+            file_name = _media_field(file_info, "file_name", "name")
+            aes_key = _media_field(file_info, "aeskey", "aes_key")
 
             content = f"[file: {file_name}]" if file_name else "[file]"
 
@@ -546,8 +563,8 @@ class WeComBot:
 
             body = _frame_body(frame)
             voice_info = body.get("voice", {})
-            voice_url = voice_info.get("voice_url", "") if isinstance(voice_info, dict) else ""
-            aes_key = voice_info.get("aes_key", "") if isinstance(voice_info, dict) else ""
+            voice_url = _media_field(voice_info, "url", "voice_url")
+            aes_key = _media_field(voice_info, "aeskey", "aes_key")
 
             # WeCom auto-transcribes voice messages — use the transcribed text if available
             transcribed = voice_info.get("content", "") if isinstance(voice_info, dict) else ""
@@ -563,6 +580,11 @@ class WeComBot:
                 "req_id": _frame_top(frame, "req_id"),
                 "voice_url": voice_url,
                 "aes_key": aes_key,
+                # Flag whether WeCom provided a transcription. The handler uses
+                # this to decide between passing the transcription as content
+                # (no download) and downloading the voice file as an audio
+                # attachment.
+                "voice_transcribed": bool(transcribed),
             }
 
             await self._handle_message(
@@ -647,6 +669,7 @@ class WeComBot:
             body = _frame_body(frame)
             mixed_info = body.get("mixed", {})
             content_parts = []
+            mixed_media_items: list[dict] = []
             if isinstance(mixed_info, dict):
                 items = mixed_info.get("items", [])
                 for item in items:
@@ -659,6 +682,31 @@ class WeComBot:
                             content_parts.append(text)
                     elif item_type == "image":
                         content_parts.append("[image]")
+                        image_item = (
+                            item.get("image", {}) if isinstance(item.get("image"), dict) else {}
+                        )
+                        mixed_media_items.append(
+                            {
+                                "type": "image",
+                                "url": _media_field(image_item, "url", "pic_url"),
+                                "aes_key": _media_field(image_item, "aeskey", "aes_key"),
+                                "file_name": "",
+                            }
+                        )
+                    elif item_type == "file":
+                        file_item = (
+                            item.get("file", {}) if isinstance(item.get("file"), dict) else {}
+                        )
+                        file_name = _media_field(file_item, "file_name", "name")
+                        content_parts.append(f"[file: {file_name}]" if file_name else "[file]")
+                        mixed_media_items.append(
+                            {
+                                "type": "file",
+                                "url": _media_field(file_item, "url", "file_url"),
+                                "aes_key": _media_field(file_item, "aeskey", "aes_key"),
+                                "file_name": file_name,
+                            }
+                        )
                     else:
                         content_parts.append(f"[{item_type}]")
 
@@ -672,6 +720,7 @@ class WeComBot:
                 "reply_chat_id": chat_id,
                 "frame_id": _frame_top(frame, "frame_id"),
                 "req_id": _frame_top(frame, "req_id"),
+                "mixed_media_items": mixed_media_items,
             }
 
             await self._handle_message(
@@ -694,7 +743,9 @@ class WeComBot:
         logger.info("WeCom user entered chat for aibotid=%s: chatid=%s", self.aibotid, chatid)
 
         if not self._ws_client:
-            logger.warning("WeCom WS client not connected, cannot send welcome for aibotid=%s", self.aibotid)
+            logger.warning(
+                "WeCom WS client not connected, cannot send welcome for aibotid=%s", self.aibotid
+            )
             return
 
         try:
@@ -703,9 +754,13 @@ class WeComBot:
                 "markdown": {"content": _DEFAULT_WELCOME_MESSAGE},
             }
             await self._ws_client.reply_welcome(frame, welcome_body)
-            logger.info("WeCom welcome message sent for aibotid=%s, chatid=%s", self.aibotid, chatid)
+            logger.info(
+                "WeCom welcome message sent for aibotid=%s, chatid=%s", self.aibotid, chatid
+            )
         except Exception as e:
-            logger.warning("Failed to send WeCom welcome message for aibotid=%s: %s", self.aibotid, e)
+            logger.warning(
+                "Failed to send WeCom welcome message for aibotid=%s: %s", self.aibotid, e
+            )
 
     async def _on_template_card_event(self, frame: Any) -> None:
         """Handle template card button click event - forward as user message."""
@@ -1073,7 +1128,9 @@ class WeComBot:
                     )
                     return False
                 await self._ws_client.send_media_message(chat_id, media_type, media_id)
-            logger.info("WeCom %s sent to chat %s for aibotid=%s", media_type, chat_id, self.aibotid)
+            logger.info(
+                "WeCom %s sent to chat %s for aibotid=%s", media_type, chat_id, self.aibotid
+            )
             return True
 
         except Exception as e:
@@ -1154,9 +1211,7 @@ class WeComBot:
 
     # -- File download --
 
-    async def download_media_file(
-        self, url: str, aes_key: str = ""
-    ) -> tuple[bytes, str | None]:
+    async def download_media_file(self, url: str, aes_key: str = "") -> tuple[bytes, str | None]:
         """Download and optionally decrypt a media file from WeCom.
 
         Uses the SDK's download_file method which handles AES-256-CBC
@@ -1167,7 +1222,7 @@ class WeComBot:
             aes_key: Optional AES key for decryption.
 
         Returns:
-            Tuple of (file_bytes, md5_hash_or_none).
+            Tuple of (file_bytes, filename_or_none).
             Returns (b"", None) on failure.
         """
         if not self._ws_client:
@@ -1176,7 +1231,21 @@ class WeComBot:
 
         try:
             result = await self._ws_client.download_file(url, aes_key or None)
-            return result
         except Exception as e:
             logger.error("Error downloading WeCom media file for aibotid=%s: %s", self.aibotid, e)
             return (b"", None)
+
+        # The SDK returns {"buffer": bytes, "filename": str|None} — extract the
+        # buffer so callers receive plain bytes, not the raw dict.
+        if isinstance(result, dict):
+            buffer = result.get("buffer", b"") or b""
+            filename = result.get("filename")
+            return (buffer if isinstance(buffer, bytes) else b"", filename)
+        if isinstance(result, bytes):
+            return result, None
+        logger.warning(
+            "Unexpected download_file return type %s for aibotid=%s",
+            type(result).__name__,
+            self.aibotid,
+        )
+        return (b"", None)

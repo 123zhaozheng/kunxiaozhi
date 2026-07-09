@@ -28,6 +28,7 @@ from src.agents.core.subagent_prompts import (
     get_memory_guide,
 )
 from src.agents.core.thinking import build_thinking_config
+from src.agents.core.vision_assist import describe_image_attachments
 from src.agents.fast_agent.prompt import FAST_SYSTEM_PROMPT
 from src.agents.search_agent.prompt import (
     SANDBOX_RUNTIME_SECTION as SEARCH_SANDBOX_RUNTIME_SECTION,
@@ -547,6 +548,11 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
         attachments = await inline_image_attachments_as_data_urls(
             attachments,
             base_url=configurable.get("base_url", ""),
+        )
+    else:
+        attachments = await describe_image_attachments(
+            attachments,
+            supports_vision=supports_vision,
         )
     new_message = build_human_message(user_input, attachments, supports_vision=supports_vision)
 

@@ -324,6 +324,18 @@ class Settings(BaseSettings):
     AUDIO_TRANSCRIPTION_MODEL_ID: str = ""
     AUDIO_TRANSCRIPTION_MAX_DOWNLOAD_BYTES: int = 50 * 1024 * 1024
 
+    # Vision assist settings (auxiliary vision model for non-vision main models)
+    ENABLE_VISION_ASSIST: bool = False
+    VISION_ASSIST_MODEL_ID: str = ""
+    VISION_ASSIST_MAX_BYTES: int = 10 * 1024 * 1024
+
+    # Document parse tool settings (MinerU-backed document reader for non-sandbox agents)
+    ENABLE_DOCUMENT_PARSE: bool = False
+    MINERU_API_BASE_URL: str = "http://localhost:8000"
+    MINERU_API_KEY: str = ""
+    DOCUMENT_PARSE_MAX_BYTES: int = 52428800
+    DOCUMENT_PARSE_MAX_OUTPUT_CHARS: int = 50000
+
     # Image generation tool settings
     ENABLE_IMAGE_GENERATION: bool = False
     IMAGE_GENERATION_API_KEY: str = ""

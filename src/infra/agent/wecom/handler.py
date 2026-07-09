@@ -7,16 +7,25 @@ WeCom (企业微信) 消息处理器模块
 """
 
 import asyncio
+import hashlib
 import time
+import uuid
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Callable, Optional
+from urllib.parse import quote
 
 from src.infra.agent.wecom.collector import WeComResponseCollector
 from src.infra.agent.wecom.manager import WeComBotManager
 from src.infra.logging import get_logger
+from src.infra.storage.s3.service import get_or_init_storage
+from src.infra.upload.file_record import FileRecordStorage
 from src.infra.utils.datetime import utc_now
+from src.kernel.config import settings
 
 logger = get_logger(__name__)
+
+# 单例 file_record 存储（与 Web 端 upload.py 共享同一 collection）
+_file_record_storage = FileRecordStorage()
 
 # ── 常量 ──────────────────────────────────────────────────────────────
 
@@ -120,9 +129,7 @@ async def _reconcile_wecom_session_owner(
             return
         if existing.user_id != wecom_userid:
             return
-        migrated = await storage.set_user_id_if_matches(
-            session_id, wecom_userid, mapped_user_id
-        )
+        migrated = await storage.set_user_id_if_matches(session_id, wecom_userid, mapped_user_id)
         if migrated:
             logger.info(
                 "[WeCom] Migrated session %s owner %s → %s",
@@ -272,6 +279,257 @@ async def execute_wecom_agent(
         raise
 
 
+# ── 入站附件处理（下载 → S3 → attachment）────────────────────────────
+
+
+# 扩展名 → MIME 类型映射（用于 WeCom 入站附件构造；缺失时回退到默认）。
+_EXTENSION_MIME_TYPES: dict[str, str] = {
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "gif": "image/gif",
+    "webp": "image/webp",
+    "bmp": "image/bmp",
+    "svg": "image/svg+xml",
+    "pdf": "application/pdf",
+    "txt": "text/plain",
+    "md": "text/markdown",
+    "csv": "text/csv",
+    "json": "application/json",
+    "xml": "application/xml",
+    "doc": "application/msword",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "xls": "application/vnd.ms-excel",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "ppt": "application/vnd.ms-powerpoint",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "zip": "application/zip",
+    "amr": "audio/amr",
+    "mp3": "audio/mpeg",
+    "wav": "audio/wav",
+    "m4a": "audio/mp4",
+}
+
+
+def _mime_type_for(filename: str, *, default: str) -> str:
+    """根据文件名扩展名推断 MIME 类型，缺失时返回 default。"""
+    if "." in filename:
+        ext = filename.rsplit(".", 1)[-1].lower()
+        if ext in _EXTENSION_MIME_TYPES:
+            return _EXTENSION_MIME_TYPES[ext]
+    return default
+
+
+def _app_base_url_configured() -> bool:
+    """Whether settings.APP_BASE_URL is a real, usable http(s) URL.
+
+    Guards against the default placeholder value (e.g. an example comment)
+    being used to build attachment URLs — that would produce broken URLs the
+    vision model cannot fetch.
+    """
+    base_url = (getattr(settings, "APP_BASE_URL", "") or "").strip()
+    return base_url.startswith("http://") or base_url.startswith("https://")
+
+
+def _attachment_url_from_key(key: str) -> str:
+    """构造附件访问 URL：{APP_BASE_URL}/api/upload/file/{key}。
+
+    与 Web 端 `_build_upload_response` 一致，优先使用 settings.APP_BASE_URL。
+    """
+    base_url = (getattr(settings, "APP_BASE_URL", "") or "").rstrip("/")
+    quoted_key = quote(key.lstrip("/"), safe="/")
+    return f"{base_url}/api/upload/file/{quoted_key}"
+
+
+# attachment_type → S3 folder 与 MIME 默认值（扩展名未命中时回退）
+_ATTACHMENT_DEFAULTS: dict[str, tuple[str, str]] = {
+    "image": ("image", "image/jpeg"),
+    "document": ("document", "application/octet-stream"),
+    "audio": ("audio", "audio/amr"),
+}
+
+
+async def _build_single_attachment(
+    bot: Any,
+    *,
+    url: str,
+    aes_key: str,
+    file_name: str,
+    attachment_type: str,
+    owner_id: str,
+) -> dict | None:
+    """下载单个 WeCom 媒体 → 上传 S3 → 写 file_record → 构造 attachment dict。
+
+    与 Web 端 AttachmentSchema 对齐。attachment_type ∈ "image"|"document"|"audio"。
+    下载/S3 上传/file_record 任一失败降级返回 None（记日志，不阻断消息处理）。
+    """
+    folder, default_mime = _ATTACHMENT_DEFAULTS.get(
+        attachment_type, ("document", "application/octet-stream")
+    )
+    mime_type = _mime_type_for(file_name, default=default_mime)
+
+    if not url:
+        logger.warning("[WeCom] Empty media URL, skipping attachment for owner=%s", owner_id)
+        return None
+
+    try:
+        file_bytes, _ = await bot.download_media_file(url, aes_key or "")
+    except Exception as e:
+        logger.error("[WeCom] Failed to download media url=%s: %s", url, e, exc_info=True)
+        return None
+    if not file_bytes:
+        logger.warning("[WeCom] Empty media bytes from url=%s, skipping attachment", url)
+        return None
+
+    try:
+        storage = await get_or_init_storage()
+        upload_result = await storage.upload_bytes(
+            file_bytes,
+            folder=folder,
+            filename=file_name or f"{uuid.uuid4().hex}",
+            content_type=mime_type,
+            metadata={"uploaded_by": owner_id, "source": "wecom_inbound"},
+            skip_size_limit=True,
+        )
+    except Exception as e:
+        logger.error("[WeCom] Failed to upload media to S3: %s", e, exc_info=True)
+        return None
+
+    storage_key = upload_result.key
+    size = upload_result.size
+    file_hash = hashlib.sha256(file_bytes).hexdigest()
+    logger.info(
+        "[WeCom] Media uploaded to S3: key=%s size=%d mime=%s owner=%s",
+        storage_key, size, mime_type, owner_id,
+    )
+
+    # file_record 写失败不阻断附件传递（去重失效但 agent 仍可见附件）
+    try:
+        await _file_record_storage.create(
+            file_hash=file_hash,
+            key=storage_key,
+            name=file_name or "unknown",
+            mime_type=mime_type,
+            size=size,
+            category=attachment_type,
+            uploaded_by=owner_id,
+        )
+    except Exception as e:
+        logger.warning("[WeCom] Failed to write file_record for key=%s: %s", storage_key, e)
+
+    return {
+        "id": uuid.uuid4().hex,
+        "key": storage_key,
+        "name": file_name or "unknown",
+        "type": attachment_type,
+        "mime_type": mime_type,
+        "size": size,
+        # APP_BASE_URL 未配置时留空：agent 链会按 live request base_url 重建，
+        # 或回退到内联 data_url。填占位 URL 会让 vision 模型 fetch 失败。
+        "url": _attachment_url_from_key(storage_key) if _app_base_url_configured() else "",
+    }
+
+
+async def _build_wecom_attachments(
+    manager: WeComBotManager,
+    aibotid: str,
+    metadata: dict,
+    owner_id: str,
+) -> list[dict] | None:
+    """根据 metadata 构造 WeCom 入站附件列表。失败降级返回 None。
+
+    返回 None 表示不走附件链路（保持占位符行为）；返回空列表表示无需附件
+    （如 voice 已有转写）；返回非空列表表示有附件需透传。
+    """
+    msg_type = metadata.get("msg_type", "")
+    bot = manager.find_bot(aibotid)
+    if bot is None:
+        logger.warning("[WeCom] No bot for aibotid=%s, cannot build attachments", aibotid)
+        return None
+
+    attachments: list[dict] = []
+
+    try:
+        if msg_type == "image":
+            att = await _build_single_attachment(
+                bot,
+                url=metadata.get("pic_url", ""),
+                aes_key=metadata.get("aes_key", ""),
+                file_name="image.jpg",  # WeCom 不返回图片文件名
+                attachment_type="image",
+                owner_id=owner_id,
+            )
+            if att:
+                attachments.append(att)
+
+        elif msg_type == "file":
+            file_name = metadata.get("file_name", "") or "file"
+            att = await _build_single_attachment(
+                bot,
+                url=metadata.get("file_url", ""),
+                aes_key=metadata.get("aes_key", ""),
+                file_name=file_name,
+                attachment_type="document",
+                owner_id=owner_id,
+            )
+            if att:
+                attachments.append(att)
+
+        elif msg_type == "voice":
+            # 有转写 → 用转写文本做 content，不下载语音
+            if metadata.get("voice_transcribed"):
+                return None
+            att = await _build_single_attachment(
+                bot,
+                url=metadata.get("voice_url", ""),
+                aes_key=metadata.get("aes_key", ""),
+                file_name="voice.amr",
+                attachment_type="audio",
+                owner_id=owner_id,
+            )
+            if att:
+                attachments.append(att)
+
+        elif msg_type == "mixed":
+            mixed_items = metadata.get("mixed_media_items") or []
+            for item in mixed_items:
+                if not isinstance(item, dict):
+                    continue
+                item_type = item.get("type", "")
+                url = item.get("url", "")
+                if not url:
+                    continue
+                if item_type == "image":
+                    att_type, file_name = "image", "image.jpg"
+                elif item_type == "file":
+                    att_type = "document"
+                    file_name = item.get("file_name", "") or "file"
+                else:
+                    continue
+                att = await _build_single_attachment(
+                    bot,
+                    url=url,
+                    aes_key=item.get("aes_key", ""),
+                    file_name=file_name,
+                    attachment_type=att_type,
+                    owner_id=owner_id,
+                )
+                if att:
+                    attachments.append(att)
+
+        # video 和未知类型：不构造附件，保持占位符行为
+    except Exception as e:
+        logger.error(
+            "[WeCom] Failed to build attachments for msg_type=%s: %s",
+            msg_type,
+            e,
+            exc_info=True,
+        )
+        return None
+
+    return attachments or None
+
+
 # ── 消息处理器工厂 ────────────────────────────────────────────────────
 
 
@@ -333,24 +591,26 @@ def create_wecom_message_handler(
             session_owner_id = sender_id  # fallback
             try:
                 from src.infra.user.storage import UserStorage
+
                 user_storage = UserStorage()
                 wecom_user_obj = await user_storage.get_by_username(sender_id)
                 if wecom_user_obj:
                     session_owner_id = wecom_user_obj.id
                     logger.info(
                         "[WeCom] Mapped sender %s → user_id %s",
-                        sender_id, session_owner_id,
+                        sender_id,
+                        session_owner_id,
                     )
                 else:
                     logger.warning(
-                        "[WeCom] No 昆小智 user found for username=%s, "
-                        "using sender_id as fallback",
+                        "[WeCom] No 昆小智 user found for username=%s, using sender_id as fallback",
                         sender_id,
                     )
             except Exception as e:
                 logger.warning(
                     "[WeCom] Failed to lookup user for sender %s: %s",
-                    sender_id, e,
+                    sender_id,
+                    e,
                 )
 
             # ── Persona resolve ─────────────────────────────────────
@@ -416,7 +676,9 @@ def create_wecom_message_handler(
 
             # ── 处理 /new 命令 - 严格匹配 ─────────────────────────
             if content.strip() == "/new":
-                new_session_id = await _create_new_wecom_session(chat_id, ttl_hours=session_ttl_hours)
+                new_session_id = await _create_new_wecom_session(
+                    chat_id, ttl_hours=session_ttl_hours
+                )
                 await manager.send_message(
                     aibotid,
                     delivery_chat_id,
@@ -427,12 +689,15 @@ def create_wecom_message_handler(
 
             # 获取当前 session ID
             session_id = await _get_wecom_session_id(chat_id, ttl_hours=session_ttl_hours)
-            await _reconcile_wecom_session_owner(
-                session_id, sender_id, session_owner_id
+            await _reconcile_wecom_session_owner(session_id, sender_id, session_owner_id)
+            await _bind_wecom_session_to_project(session_id, session_owner_id, project_id)
+
+            # ── 构造入站附件（下载媒体 → S3 → attachment）──────────
+            # 失败降级返回 None，保持占位符行为，不阻断消息处理。
+            attachments = await _build_wecom_attachments(
+                manager, aibotid, metadata, owner_id=session_owner_id
             )
-            await _bind_wecom_session_to_project(
-                session_id, session_owner_id, project_id
-            )
+
             task_manager = get_task_manager()
 
             # Cancel any previous running task for this session.
@@ -452,8 +717,14 @@ def create_wecom_message_handler(
                     if old_run_id:
                         for _ in range(30):
                             try:
-                                run_status = await task_manager.get_run_status(session_id, old_run_id)
-                                if run_status and str(run_status) in ("CANCELLED", "cancelled", "TaskStatus.CANCELLED"):
+                                run_status = await task_manager.get_run_status(
+                                    session_id, old_run_id
+                                )
+                                if run_status and str(run_status) in (
+                                    "CANCELLED",
+                                    "cancelled",
+                                    "TaskStatus.CANCELLED",
+                                ):
                                     break
                             except Exception:
                                 pass
@@ -528,9 +799,15 @@ def create_wecom_message_handler(
                 enabled_skills=enabled_skills,
                 persona_system_prompt=persona_system_prompt,
                 persona_preset_id=preset_id,
+                attachments=attachments or None,
             )
 
-            logger.info("[WeCom] Task submitted: session=%s, run_id=%s, user=%s", session_id, run_id, session_owner_id)
+            logger.info(
+                "[WeCom] Task submitted: session=%s, run_id=%s, user=%s",
+                session_id,
+                run_id,
+                session_owner_id,
+            )
 
             # Set run_id on collector so the first content stream frame includes feedback
             collector.set_run_id(run_id)
@@ -556,7 +833,9 @@ def create_wecom_message_handler(
             if current_run_id and current_run_id != run_id:
                 logger.info(
                     "[WeCom] Run %s superseded by %s, skipping reply for chat %s",
-                    run_id, current_run_id, chat_id,
+                    run_id,
+                    current_run_id,
+                    chat_id,
                 )
                 return
 
@@ -629,7 +908,10 @@ async def _process_events(
                     if not file_infos and "key" in result and "url" in result:
                         file_type = str(result.get("type") or "").lower()
                         mime_type = str(result.get("mime_type") or "").lower()
-                        if file_type in {"image", "file", "audio", "video", "document"} or mime_type:
+                        if (
+                            file_type in {"image", "file", "audio", "video", "document"}
+                            or mime_type
+                        ):
                             media_type = file_type
                             if file_type == "document":
                                 media_type = "file"
@@ -639,13 +921,15 @@ async def _process_events(
                                 media_type = "audio"
                             elif mime_type.startswith("video/"):
                                 media_type = "video"
-                            file_infos.append({
-                                "key": result["key"],
-                                "name": result.get("name", "unknown"),
-                                "type": media_type,
-                                "mime_type": mime_type or "application/octet-stream",
-                                "url": result.get("url", ""),
-                            })
+                            file_infos.append(
+                                {
+                                    "key": result["key"],
+                                    "name": result.get("name", "unknown"),
+                                    "type": media_type,
+                                    "mime_type": mime_type or "application/octet-stream",
+                                    "url": result.get("url", ""),
+                                }
+                            )
 
                     for fi in file_infos:
                         collector.add_file_to_reveal(fi)
@@ -747,9 +1031,7 @@ async def _handle_wecom_feedback(
 
     if feedback_type == 3:
         # Cancel: delete existing feedback record (idempotent)
-        existing = await feedback_storage.get_user_feedback_for_run(
-            user_id, session_id, run_id
-        )
+        existing = await feedback_storage.get_user_feedback_for_run(user_id, session_id, run_id)
         if existing:
             await feedback_storage.delete(existing.id)
             logger.info(
@@ -775,17 +1057,14 @@ async def _handle_wecom_feedback(
             comment_parts.append(f"用户反馈: {content}")
         if inaccurate_reasons:
             reason_texts = [
-                _INACCURATE_REASON_MAP.get(r, f"未知原因({r})")
-                for r in inaccurate_reasons
+                _INACCURATE_REASON_MAP.get(r, f"未知原因({r})") for r in inaccurate_reasons
             ]
             comment_parts.append(f"原因: {', '.join(reason_texts)}")
         if comment_parts:
             comment = " | ".join(comment_parts)
 
     # Handle duplicate: check existing feedback
-    existing = await feedback_storage.get_user_feedback_for_run(
-        user_id, session_id, run_id
-    )
+    existing = await feedback_storage.get_user_feedback_for_run(user_id, session_id, run_id)
     if existing:
         if existing.rating == rating:
             # Same rating, skip (idempotent)

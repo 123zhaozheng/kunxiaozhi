@@ -80,7 +80,9 @@ export function SettingsPanel() {
       file_upload: t("categories.file_upload"),
       tools: t("categories.tools"),
       audio_transcription: t("categories.audio_transcription"),
+      vision_assist: t("categories.vision_assist"),
       dify: t("categories.dify"),
+      document_parse: t("categories.document_parse"),
       tracing: t("categories.tracing"),
       user: t("categories.user"),
       oauth: t("categories.oauth"),
@@ -696,6 +698,7 @@ export function SettingsPanel() {
                         setting.key === "DEFAULT_AGENT" ||
                         setting.key === "DEFAULT_USER_ROLE" ||
                         MODEL_CONFIG_SETTING_KEYS.has(setting.key) ||
+                        setting.key in MODEL_CARD_KIND_FILTER ||
                         setting.type === "boolean" ||
                         (setting.type === "select" && setting.options);
 

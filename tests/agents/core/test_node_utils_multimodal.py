@@ -65,6 +65,32 @@ def test_non_vision_model_keeps_image_attachment_as_text_summary():
     assert "/api/upload/file/uploads/img.png" in message.content
 
 
+def test_non_vision_model_renders_vision_description_when_present():
+    """Image attachment with vision_description renders the description block."""
+    attachment = image_attachment(vision_description="A cat on a mat.")
+    message = build_human_message("what is this?", [attachment], supports_vision=False)
+
+    assert isinstance(message.content, str)
+    assert "视觉描述" in message.content
+    assert "A cat on a mat." in message.content
+    assert "img.png" in message.content
+    # URL must NOT be included when vision_description is present — it's an
+    # internal address the main model cannot fetch, and including it causes
+    # the model to attempt read_file on the URL and fail.
+    assert "/api/upload/file/" not in message.content
+
+
+def test_non_vision_model_renders_vision_description_without_url():
+    """vision_description renders even when url is empty (intranet base64 path)."""
+    attachment = image_attachment(url="", vision_description="A cat on a mat.")
+    message = build_human_message("what is this?", [attachment], supports_vision=False)
+
+    assert isinstance(message.content, str)
+    assert "视觉描述" in message.content
+    assert "A cat on a mat." in message.content
+    assert "User Uploaded Attachments" in message.content
+
+
 def test_vision_model_keeps_document_attachments_in_text_summary():
     message = build_human_message(
         "compare these",

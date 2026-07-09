@@ -92,10 +92,14 @@ async def _get_live_record_by_hash(file_hash: str, storage=None) -> dict | None:
 
 
 def _get_base_url(request: Request) -> str:
-    """获取 base_url，优先 APP_BASE_URL 环境变量，fallback 到 request.base_url"""
-    app_base_url = getattr(settings, "APP_BASE_URL", "").rstrip("/")
-    if app_base_url:
-        return app_base_url
+    """获取 base_url，优先 APP_BASE_URL 环境变量，fallback 到 request.base_url。
+
+    APP_BASE_URL 必须是合法的 http(s) URL 才会被采用；默认占位符（示例
+    注释）等非 URL 值会被忽略，避免拼出 vision 模型无法 fetch 的废 URL。
+    """
+    app_base_url = (getattr(settings, "APP_BASE_URL", "") or "").strip()
+    if app_base_url.startswith("http://") or app_base_url.startswith("https://"):
+        return app_base_url.rstrip("/")
     base_url = str(request.base_url).rstrip("/")
     if base_url == "http://None":
         return ""

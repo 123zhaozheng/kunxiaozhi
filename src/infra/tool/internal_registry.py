@@ -14,6 +14,7 @@ from src.infra.tool.env_var_tool import get_env_var_tools
 from src.infra.tool.image_generation_tool import get_image_generation_tool
 from src.infra.tool.mcp_client import MCPToolWithRetry
 from src.infra.tool.persona_preset_tool import get_persona_preset_tools
+from src.infra.tool.read_document_tool import get_read_document_tool
 from src.infra.tool.team_tool import get_team_tools
 from src.kernel.config import settings
 from src.kernel.schemas.mcp import (
@@ -35,6 +36,9 @@ def build_internal_tools() -> list[BaseTool]:
 
     if settings.ENABLE_AUDIO_TRANSCRIPTION:
         tools.append(get_audio_transcribe_tool())
+
+    if settings.ENABLE_DOCUMENT_PARSE:
+        tools.append(get_read_document_tool())
 
     # Dify KB retrieval requires the feature flag plus connection (base URL +
     # API key) and both model-card selections (LLM rewrite + rerank). Missing

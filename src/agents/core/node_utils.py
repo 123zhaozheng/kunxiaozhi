@@ -220,6 +220,17 @@ async def inline_image_attachments_as_data_urls(
     return inlined
 
 
+def _format_size(size: int) -> str:
+    """Format a byte size as a human-readable string."""
+    if not size:
+        return ""
+    if size < 1024:
+        return f"{size} B"
+    if size < 1024 * 1024:
+        return f"{size / 1024:.1f} KB"
+    return f"{size / (1024 * 1024):.1f} MB"
+
+
 def _format_attachment_summary(text: str, attachments: list[dict]) -> str:
     enhanced_text = text
     if not attachments:
@@ -233,18 +244,26 @@ def _format_attachment_summary(text: str, attachments: list[dict]) -> str:
         file_type = attachment.get("type", "document")
         mime_type = attachment.get("mime_type") or attachment.get("mimeType") or ""
         size = attachment.get("size", 0)
+        vision_description = attachment.get("vision_description", "")
+
+        # 有 vision 描述的图片：渲染描述块。不附带 URL——描述已是图片内容，
+        # URL 是内网地址（127.0.0.1/k8s internal），主模型无法 fetch，附带只会
+        # 诱导主模型用 read_file 之类的工具去读 URL 而失败。
+        if vision_description:
+            enhanced_text += f"\n\n**[{name}]**"
+            enhanced_text += f"\n- 类型: {file_type}"
+            if mime_type:
+                enhanced_text += f" ({mime_type})"
+            size_str = _format_size(size)
+            if size_str:
+                enhanced_text += f"\n- 大小: {size_str}"
+            enhanced_text += f"\n- 视觉描述:\n{vision_description}"
+            continue
 
         if not url:
             continue
 
-        size_str = ""
-        if size:
-            if size < 1024:
-                size_str = f"{size} B"
-            elif size < 1024 * 1024:
-                size_str = f"{size / 1024:.1f} KB"
-            else:
-                size_str = f"{size / (1024 * 1024):.1f} MB"
+        size_str = _format_size(size)
 
         enhanced_text += f"\n\n**[{name}]**"
         enhanced_text += f"\n- 类型: {file_type}"
@@ -295,7 +314,7 @@ def build_human_message(
                     "image_url": {"url": image_url},
                 }
             )
-        elif url:
+        elif url or attachment.get("vision_description"):
             text_summary_attachments.append(attachment)
 
     enhanced_text = _format_attachment_summary(text, text_summary_attachments)

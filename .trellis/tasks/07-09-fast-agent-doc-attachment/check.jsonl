@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "check 阶段确认 config→frontend 跨层同步完整：5 语言 i18n、types、constants 均覆盖。"}
+{"file": ".trellis/tasks/07-09-fast-agent-doc-attachment/prd.md", "reason": "8 条验收标准是 check 清单。逐条对照实现。"}
+{"file": ".trellis/tasks/07-09-fast-agent-doc-attachment/design.md", "reason": "失败降级矩阵（§6）+ 关键权衡（§7）是 check 重点：所有失败路径返回 JSON 不崩溃、工具签名只 url 单参数、摘要零改动。"}
+{"file": "src/infra/tool/audio_transcribe_tool.py", "reason": "对照确认 read_document_tool 结构对称：_resolve_url、下载限流、JSON error 返回。"}
+{"file": "src/agents/core/node_utils.py", "reason": "check 阶段 git diff 此文件应为空——确认摘要零改动原则落地。"}

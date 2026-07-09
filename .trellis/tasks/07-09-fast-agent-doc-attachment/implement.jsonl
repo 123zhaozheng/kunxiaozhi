@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "新工具复刻 audio_transcribe_tool 范式——同结构下载+调用外部服务+返回 JSON。复用前必读此 guide 确认不重复造轮子。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "本任务跨 config→tool→registry→frontend 多层，新增 config 项需同步前端 types/constants/i18n。跨层数据流确认。"}
+{"file": ".trellis/tasks/07-09-fast-agent-doc-attachment/prd.md", "reason": "需求与验收标准根。工具签名、配置项、注册路径、降级矩阵均锚定于此。"}
+{"file": ".trellis/tasks/07-09-fast-agent-doc-attachment/design.md", "reason": "技术设计根。MinerU 客户端契约（对齐 check-yg）、URL 下载路径、截断策略、工具签名 MVP 决策。"}
+{"file": "src/infra/tool/audio_transcribe_tool.py", "reason": "范式母本。read_document_tool 复刻其 _resolve_url、SpooledTemporaryFile 下载、run_blocking_io、JSON 返回结构。"}
+{"file": "src/infra/tool/internal_registry.py", "reason": "工具注册入口。build_internal_tools() 加一行即覆盖 Fast/Search/Team 三 agent。"}
+{"file": "src/kernel/config/definitions.py", "reason": "配置项定义母本。5 个新配置项复刻 ENABLE_AUDIO_TRANSCRIPTION 块结构。"}

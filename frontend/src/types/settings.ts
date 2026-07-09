@@ -34,7 +34,9 @@ export type SettingCategory =
   | "memory_search"
   | "memory_storage"
   | "audio_transcription"
-  | "dify";
+  | "vision_assist"
+  | "dify"
+  | "document_parse";
 
 // Setting dependency condition
 export interface SettingDependsOn {
