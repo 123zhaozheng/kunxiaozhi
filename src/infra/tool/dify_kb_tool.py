@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from typing import Annotated, Any
 
 import httpx
@@ -45,6 +46,12 @@ DIFY_QUERY_MAX_CHARS = 250  # Dify /retrieve caps query at 250 chars
 _DIFY_TIMEOUT = httpx.Timeout(20.0)
 _DIFY_LIST_PAGE_LIMIT = 20
 _DIFY_LIST_MAX_PAGES = 200  # hard safety cap
+
+# Module-level TTL cache for dataset {id: {name, description}}, keyed by Dify base
+# url so multiple instances are isolated. Avoids pulling the full dataset list on
+# every retrieval; refreshed on first miss after the TTL window elapses.
+_DATASET_DESC_CACHE: dict[str, dict[str, Any]] = {}  # base_url -> {"fetched_at", "by_id"}
+_DATASET_DESC_TTL_SECONDS = 300  # 5 min
 
 # LLM rewrite prompt (ported from search_knowledge llm_service._create_system_prompt).
 # Forces JSON output: {"need_retrieval": bool, "retrieval_queries": [{"dataset_id", "query"}]}
@@ -116,6 +123,71 @@ def _persona_dataset_ids(runtime: Any) -> list[str]:
 def _truncate_query(query: str) -> str:
     """Clamp a query to Dify's 250-char limit (search_knowledge does not do this)."""
     return query[:DIFY_QUERY_MAX_CHARS]
+
+
+# ---------------------------------------------------------------------------
+# Step 0: dataset description lookup (feeds the LLM rewrite prompt)
+# ---------------------------------------------------------------------------
+
+
+async def _fetch_dataset_descriptions(dataset_ids: list[str]) -> dict[str, dict[str, str]]:
+    """Fetch ``{id: {"name", "description"}}`` for the given dataset ids.
+
+    Pulls Dify ``GET /datasets`` with pagination, cached for ``_DATASET_DESC_TTL_SECONDS``
+    per base url. Collection stops early once all requested ids are gathered.
+    Degrades to ``{}`` on any error (network/auth/parse) so retrieval is never blocked.
+    """
+    if not dataset_ids:
+        return {}
+
+    base_url = _resolve_dify_base_url()
+    now = time.monotonic()
+    cached = _DATASET_DESC_CACHE.get(base_url)
+    if cached and (now - cached["fetched_at"]) < _DATASET_DESC_TTL_SECONDS:
+        return cached["by_id"]
+
+    wanted: set[str] = set(dataset_ids)
+    by_id: dict[str, dict[str, str]] = {}
+    headers = {"Authorization": f"Bearer {settings.DIFY_KB_API_KEY}"}
+
+    try:
+        async with httpx.AsyncClient(base_url=base_url, headers=headers, timeout=_DIFY_TIMEOUT) as client:
+            for page in range(1, _DIFY_LIST_MAX_PAGES + 1):
+                response = await client.get(
+                    "/datasets",
+                    params={"page": page, "limit": _DIFY_LIST_PAGE_LIMIT},
+                )
+                response.raise_for_status()
+                body = response.json()
+
+                items = body.get("data") if isinstance(body, dict) else None
+                if not isinstance(items, list):
+                    break
+
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+                    ds_id = item.get("id")
+                    if not isinstance(ds_id, str) or ds_id not in wanted:
+                        continue
+                    by_id[ds_id] = {
+                        "name": str(item.get("name") or ""),
+                        "description": str(item.get("description") or ""),
+                    }
+
+                # Early termination once every requested id is collected.
+                if wanted.issubset(by_id.keys()):
+                    break
+
+                has_more = body.get("has_more") if isinstance(body, dict) else None
+                if has_more is False:
+                    break
+    except Exception as exc:
+        logger.warning("[dify_kb_retrieve] failed to fetch dataset descriptions: %s", exc)
+        return {}
+
+    _DATASET_DESC_CACHE[base_url] = {"fetched_at": time.monotonic(), "by_id": by_id}
+    return by_id
 
 
 # ---------------------------------------------------------------------------
@@ -407,10 +479,15 @@ async def dify_kb_retrieve(
                 }
             )
 
-        # The LLM prompt benefits from a per-dataset description; we only have ids
-        # here (descriptions are not threaded through the persona snapshot), so we
-        # pass the ids as-is. The LLM still routes/rewrites per dataset by id.
-        datasets = [{"dataset_id": ds_id, "description": ""} for ds_id in dataset_ids]
+        # The LLM prompt benefits from a per-dataset description; pull name +
+        # description from Dify GET /datasets (TTL-cached). Missing entries
+        # degrade to the name, then to an empty string (current behaviour).
+        desc_map = await _fetch_dataset_descriptions(dataset_ids)
+        datasets: list[dict[str, str]] = []
+        for ds_id in dataset_ids:
+            info = desc_map.get(ds_id, {})
+            desc = info.get("description") or info.get("name") or ""
+            datasets.append({"dataset_id": ds_id, "description": desc})
 
         decision = await _llm_decide_retrieval(question=query, datasets=datasets)
         if not decision.get("need_retrieval"):

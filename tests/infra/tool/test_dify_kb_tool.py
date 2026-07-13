@@ -11,6 +11,7 @@ import pytest
 from src.infra.tool import dify_kb_tool
 from src.infra.tool.dify_kb_tool import (
     _batch_retrieve,
+    _fetch_dataset_descriptions,
     _is_dify_kb_configured,
     _llm_decide_retrieval,
     _persona_dataset_ids,
@@ -380,6 +381,204 @@ async def test_rerank_reorders_by_relevance_score(monkeypatch: pytest.MonkeyPatc
     ranked = await _rerank_segments(query="q", segments=segments, top_n=2)
     assert [r["segment_id"] for r in ranked] == ["s2", "s0"]
     assert ranked[0]["score"] == 0.99
+
+
+# ---------------------------------------------------------------------------
+# step 0: dataset description lookup (TTL cache + early termination + degrade)
+# ---------------------------------------------------------------------------
+
+
+def _datasets_client(pages: dict[int, dict]) -> type:
+    """Build a mock httpx.AsyncClient whose GET /datasets returns paginated bodies."""
+
+    class _Resp:
+        def __init__(self, body: dict) -> None:
+            self._body = body
+
+        def raise_for_status(self) -> None:
+            pass
+
+        def json(self) -> dict:
+            return self._body
+
+    call_log: list[dict] = []
+
+    class _Client:
+        def __init__(self, *a, **kw) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, url, params=None):
+            page = (params or {}).get("page", 1)
+            call_log.append({"url": url, "params": params})
+            if page not in pages:
+                return _Resp({"data": [], "has_more": False})
+            return _Resp(pages[page])
+
+    _Client.call_log = call_log  # type: ignore[attr-defined]
+    return _Client
+
+
+@pytest.fixture(autouse=True)
+def _clear_dataset_desc_cache() -> None:
+    """Reset the module-level TTL cache between tests so they don't leak."""
+    dify_kb_tool._DATASET_DESC_CACHE.clear()
+    yield
+    dify_kb_tool._DATASET_DESC_CACHE.clear()
+
+
+@pytest.mark.asyncio
+async def test_fetch_dataset_descriptions_returns_name_and_description(monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_dify()
+    pages = {
+        1: {
+            "data": [
+                {"id": "ds-1", "name": "Product KB", "description": "产品知识库"},
+                {"id": "ds-other", "name": "Other", "description": "x"},
+            ],
+            "has_more": False,
+        }
+    }
+    client_cls = _datasets_client(pages)
+    monkeypatch.setattr(dify_kb_tool.httpx, "AsyncClient", client_cls)
+
+    result = await _fetch_dataset_descriptions(["ds-1"])
+    assert result == {"ds-1": {"name": "Product KB", "description": "产品知识库"}}
+    # single page requested, has_more=False
+    assert len(client_cls.call_log) == 1
+
+
+@pytest.mark.asyncio
+async def test_fetch_dataset_descriptions_paginates_and_terminates_early(monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_dify()
+    pages = {
+        1: {
+            "data": [
+                {"id": "ds-1", "name": "first", "description": "d1"},
+                {"id": "ds-2", "name": "second", "description": "d2"},
+            ],
+            "has_more": True,
+        },
+        2: {
+            "data": [{"id": "ds-3", "name": "third", "description": "d3"}],
+            "has_more": True,
+        },
+        3: {
+            "data": [{"id": "ds-4", "name": "fourth", "description": "d4"}],
+            "has_more": False,
+        },
+    }
+    client_cls = _datasets_client(pages)
+    monkeypatch.setattr(dify_kb_tool.httpx, "AsyncClient", client_cls)
+
+    # All targets on page 2 → early termination, page 3 never fetched.
+    result = await _fetch_dataset_descriptions(["ds-2", "ds-3"])
+    assert set(result.keys()) == {"ds-2", "ds-3"}
+    assert result["ds-3"]["description"] == "d3"
+    assert len(client_cls.call_log) == 2
+
+
+@pytest.mark.asyncio
+async def test_fetch_dataset_descriptions_ttl_cache_hit_skips_http(monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_dify()
+    pages = {1: {"data": [{"id": "ds-1", "name": "n", "description": "d"}], "has_more": False}}
+    client_cls = _datasets_client(pages)
+    monkeypatch.setattr(dify_kb_tool.httpx, "AsyncClient", client_cls)
+
+    first = await _fetch_dataset_descriptions(["ds-1"])
+    second = await _fetch_dataset_descriptions(["ds-1"])
+
+    assert first == second == {"ds-1": {"name": "n", "description": "d"}}
+    # TTL window not elapsed → only one HTTP request across both calls.
+    assert len(client_cls.call_log) == 1
+
+
+@pytest.mark.asyncio
+async def test_fetch_dataset_descriptions_degrades_on_http_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_dify()
+
+    class _Resp:
+        def raise_for_status(self) -> None:
+            raise Exception("dify 500")
+
+        def json(self) -> dict:  # pragma: no cover - unreachable
+            return {}
+
+    class _Client:
+        def __init__(self, *a, **kw) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, url, params=None):
+            return _Resp()
+
+    monkeypatch.setattr(dify_kb_tool.httpx, "AsyncClient", _Client)
+
+    # GET /datasets fails → empty dict, no raise.
+    result = await _fetch_dataset_descriptions(["ds-1"])
+    assert result == {}
+
+
+@pytest.mark.asyncio
+async def test_retrieve_uses_real_descriptions_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tool entry wires fetched name+description into the LLM rewrite datasets."""
+    _configure_dify()
+
+    captured_datasets: list[dict] = []
+
+    async def _fake_fetch(dataset_ids: list[str]) -> dict[str, dict[str, str]]:
+        return {
+            "ds-1": {"name": "Product KB", "description": "产品手册"},
+        }
+
+    async def _fake_decide(*, question: str, datasets: list[dict[str, str]]) -> dict:
+        captured_datasets.extend(datasets)
+        return {"need_retrieval": False, "retrieval_queries": []}
+
+    monkeypatch.setattr(dify_kb_tool, "_fetch_dataset_descriptions", _fake_fetch)
+    monkeypatch.setattr(dify_kb_tool, "_llm_decide_retrieval", _fake_decide)
+
+    await dify_kb_retrieve.coroutine(query="价格", runtime=_runtime(["ds-1"]))
+
+    assert captured_datasets == [
+        {"dataset_id": "ds-1", "description": "产品手册"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_retrieve_falls_back_to_name_then_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    _configure_dify()
+
+    captured: list[dict] = []
+
+    async def _fake_fetch(dataset_ids: list[str]) -> dict[str, dict[str, str]]:
+        # ds-1 has only name, ds-2 is missing entirely.
+        return {"ds-1": {"name": "NameOnly", "description": ""}}
+
+    async def _fake_decide(*, question: str, datasets: list[dict[str, str]]) -> dict:
+        captured.extend(datasets)
+        return {"need_retrieval": False, "retrieval_queries": []}
+
+    monkeypatch.setattr(dify_kb_tool, "_fetch_dataset_descriptions", _fake_fetch)
+    monkeypatch.setattr(dify_kb_tool, "_llm_decide_retrieval", _fake_decide)
+
+    await dify_kb_retrieve.coroutine(query="q", runtime=_runtime(["ds-1", "ds-2"]))
+
+    by_id = {d["dataset_id"]: d["description"] for d in captured}
+    assert by_id["ds-1"] == "NameOnly"  # description empty → name
+    assert by_id["ds-2"] == ""  # missing entry → empty
 
 
 # ---------------------------------------------------------------------------
