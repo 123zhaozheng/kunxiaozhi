@@ -489,7 +489,10 @@ async def seed_checkpoint_from_messages(
     checkpoint = empty_checkpoint()
     copied_messages = await run_blocking_io(copy.deepcopy, messages)
     checkpoint["channel_values"] = {"messages": copied_messages}
-    checkpoint["channel_versions"] = {"messages": "1"}
+    # Version must be an int (not str): BaseCheckpointSaver.get_next_version raises
+    # NotImplementedError for str versions, and MongoDBSaver does not override it.
+    # MemorySaver's override accepts int|str|None, so int is safe for all backends.
+    checkpoint["channel_versions"] = {"messages": 1}
     checkpoint["versions_seen"] = {}
     checkpoint["updated_channels"] = ["messages"]
 

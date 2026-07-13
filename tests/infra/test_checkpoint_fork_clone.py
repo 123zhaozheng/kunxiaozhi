@@ -3,12 +3,25 @@ from typing import Annotated, TypedDict
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
 import src.infra.storage.checkpoint as checkpoint_mod
 from src.infra.storage.checkpoint import build_messages_from_trace_events
+
+
+class _MongoLikeSaver(InMemorySaver):
+    """InMemorySaver variant that restores BaseCheckpointSaver.get_next_version.
+
+    MongoDBSaver does NOT override get_next_version (unlike InMemorySaver which
+    uses str versions and masks the str-version bug). This subclass restores the
+    base int-version behavior so tests can reproduce the MongoDB crash path.
+    """
+
+    def get_next_version(self, current, channel):  # type: ignore[override]
+        return BaseCheckpointSaver.get_next_version(self, current, channel)
 
 
 class _State(TypedDict):
@@ -319,3 +332,98 @@ async def test_delete_checkpoints_for_thread_skips_when_checkpoint_disabled(
     monkeypatch.setattr(checkpoint_mod, "get_async_checkpointer", _fail_get_async_checkpointer)
 
     await checkpoint_mod.delete_checkpoints_for_thread("session-1")
+
+
+def test_get_next_version_contract_str_raises_int_increments() -> None:
+    """Lock in the LangGraph version contract that seed_checkpoint_from_messages relies on.
+
+    BaseCheckpointSaver.get_next_version raises NotImplementedError for str versions
+    (MongoDBSaver inherits this; only InMemorySaver overrides it to str). seed must
+    therefore write int versions.
+    """
+    saver = _MongoLikeSaver()
+
+    # str version -> NotImplementedError (the crash root cause)
+    with pytest.raises(NotImplementedError):
+        saver.get_next_version("1", None)
+
+    # None -> 1 (fresh channel)
+    assert saver.get_next_version(None, None) == 1
+    # int -> increments (the post-fix path)
+    assert saver.get_next_version(1, None) == 2
+
+
+@pytest.mark.asyncio
+async def test_seed_checkpoint_writes_int_version_incrementable_by_mongo_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Seed must write an int version that MongoDBSaver-style get_next_version can increment.
+
+    Regression for the fork-session crash: a str version caused
+    NotImplementedError on the first message in a forked session (Mongo backend).
+    Uses _MongoLikeSaver (base get_next_version) to avoid InMemorySaver masking the bug.
+    """
+    target_saver = _MongoLikeSaver()
+
+    async def _fake_get_async_checkpointer(thread_id: str | None = None):
+        return target_saver
+
+    monkeypatch.setattr(checkpoint_mod, "get_async_checkpointer", _fake_get_async_checkpointer)
+
+    seeded = await checkpoint_mod.seed_checkpoint_from_messages(
+        "target-thread",
+        [HumanMessage(content="seeded"), AIMessage(content="seed-reply")],
+    )
+
+    assert seeded == 1
+
+    tuples = [
+        item
+        async for item in target_saver.alist(
+            {"configurable": {"thread_id": "target-thread"}}
+        )
+    ]
+    assert tuples, "seeded checkpoint must be persisted"
+    current_version = tuples[0].checkpoint["channel_versions"]["messages"]
+    # Must be int, not str — str triggers NotImplementedError in base get_next_version.
+    assert isinstance(current_version, int)
+    assert current_version == 1
+
+    # Simulate apply_writes computing the next version: must not raise.
+    next_version = target_saver.get_next_version(current_version, None)
+    assert next_version == 2
+
+
+@pytest.mark.asyncio
+async def test_seed_int_version_does_not_break_memory_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Memory backend regression: InMemorySaver.get_next_version accepts int|str|None.
+
+    Confirms the int-version fix does not break the MemorySaver fallback path
+    (its override handles int via the isinstance(current, int) branch).
+    """
+    target_saver = InMemorySaver()
+
+    async def _fake_get_async_checkpointer(thread_id: str | None = None):
+        return target_saver
+
+    monkeypatch.setattr(checkpoint_mod, "get_async_checkpointer", _fake_get_async_checkpointer)
+
+    await checkpoint_mod.seed_checkpoint_from_messages(
+        "target-thread",
+        [HumanMessage(content="seeded"), AIMessage(content="seed-reply")],
+    )
+
+    tuples = [
+        item
+        async for item in target_saver.alist(
+            {"configurable": {"thread_id": "target-thread"}}
+        )
+    ]
+    current_version = tuples[0].checkpoint["channel_versions"]["messages"]
+    assert current_version == 1  # int seed value
+    # InMemorySaver must accept the int and produce a usable (str) next version.
+    next_version = target_saver.get_next_version(current_version, None)
+    assert isinstance(next_version, str)
+    assert next_version  # non-empty
