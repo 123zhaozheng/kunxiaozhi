@@ -1,5 +1,3 @@
-import { getFluentEmojiCDN } from "@lobehub/fluent-emoji";
-
 export type PersonaAvatarIconKey =
   | "sparkles"
   | "academic"
@@ -74,6 +72,17 @@ export function isEmojiAvatar(
   return EMOJI_RE.test(avatar) && avatar.length <= 8;
 }
 
+/**
+ * Convert an emoji to its hyphen-joined lowercase hex codepoints, matching
+ * @lobehub/fluent-emoji's internal emojiToUnicode (Array.from iterates by code
+ * point, so astral/flag emoji compose correctly).
+ */
+function emojiToCodepoints(emoji: string): string {
+  return Array.from(emoji)
+    .map((ch) => ch.codePointAt(0)!.toString(16))
+    .join("-");
+}
+
 export function getEmojiAvatarUrl(emoji: string): string {
-  return getFluentEmojiCDN(emoji, { type: "anim" });
+  return `/emoji-assets/${emojiToCodepoints(emoji)}.webp`;
 }

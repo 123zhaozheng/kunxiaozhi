@@ -14,6 +14,11 @@ RUN pnpm install --frozen-lockfile
 # Copy frontend source
 COPY frontend/ ./
 
+# Fetch persona emoji assets (curated set from scripts/emoji-allowlist.json).
+# The build host has registry mirror access; the generated webp files ship into
+# dist/emoji-assets/ so the intranet runtime has zero network dependency.
+RUN node scripts/fetch-emoji-assets.mjs
+
 # Build frontend
 RUN pnpm run build
 

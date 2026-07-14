@@ -6,7 +6,6 @@ import {
   type PersonaAvatarIconKey,
 } from "../../persona/personaAvatar";
 import { useTranslation } from "react-i18next";
-import { getFluentEmojiCDN } from "@lobehub/fluent-emoji";
 import { getFullUrl } from "../../../services/api/config";
 import {
   Code2,
@@ -32,9 +31,7 @@ const ICONS: Record<PersonaAvatarIconKey, LucideIcon> = {
 };
 
 const DEFAULT_AVATAR_EMOJI = "🤖";
-const DEFAULT_AVATAR_SRC = getFluentEmojiCDN(DEFAULT_AVATAR_EMOJI, {
-  type: "anim",
-});
+const DEFAULT_AVATAR_SRC = getEmojiAvatarUrl(DEFAULT_AVATAR_EMOJI);
 
 export function AssistantAvatar({
   className,

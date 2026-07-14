@@ -37,7 +37,6 @@ import {
   isEmojiAvatar,
   getEmojiAvatarUrl,
 } from "./personaAvatar";
-import { getFluentEmojiCDN } from "@lobehub/fluent-emoji";
 import { PersonaAvatarIcon, PersonaAvatarImage } from "./PersonaAvatarIcon";
 import { Permission } from "../../types";
 import type {
@@ -584,7 +583,7 @@ export function PersonaEditorModal({
                       title={t(item.labelKey)}
                     >
                       <img
-                        src={getFluentEmojiCDN(item.emoji, { type: "anim" })}
+                        src={getEmojiAvatarUrl(item.emoji)}
                         alt={t(item.labelKey)}
                         width={20}
                         height={20}

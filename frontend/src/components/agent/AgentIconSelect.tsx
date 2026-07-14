@@ -1,8 +1,8 @@
-import { getFluentEmojiCDN } from "@lobehub/fluent-emoji";
 import { Smile } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentIcon } from "./AgentIcon";
+import { getEmojiAvatarUrl } from "../persona/personaAvatar";
 
 const AGENT_ICON_EMOJIS: { emoji: string; labelKey: string }[] = [
   { emoji: "✨", labelKey: "personaPresets.emojiSparkles" },
@@ -76,7 +76,7 @@ export const AgentIconSelect = React.memo(function AgentIconSelect({
               title={t(item.labelKey)}
             >
               <img
-                src={getFluentEmojiCDN(item.emoji, { type: "anim" })}
+                src={getEmojiAvatarUrl(item.emoji)}
                 alt={t(item.labelKey)}
                 width={20}
                 height={20}

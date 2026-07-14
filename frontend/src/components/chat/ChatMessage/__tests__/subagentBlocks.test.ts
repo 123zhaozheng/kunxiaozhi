@@ -46,6 +46,6 @@ test("subagent avatar image url accepts role url and emoji avatars", () => {
     getSubagentAvatarImageUrl("/api/files/avatar.png"),
     "/api/files/avatar.png",
   );
-  assert.match(getSubagentAvatarImageUrl("🎨") || "", /fluent-emoji/);
+  assert.match(getSubagentAvatarImageUrl("🎨") || "", /\/emoji-assets\//);
   assert.equal(getSubagentAvatarImageUrl("icon:writing"), null);
 });

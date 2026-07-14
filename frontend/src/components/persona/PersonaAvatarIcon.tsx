@@ -12,17 +12,15 @@ import {
 } from "lucide-react";
 import {
   getPersonaAvatarIcon,
+  getEmojiAvatarUrl,
   isPersonaImageAvatar,
   type PersonaAvatarIconKey,
 } from "./personaAvatar";
-import { getFluentEmojiCDN } from "@lobehub/fluent-emoji";
 import { getCategoryIcon } from "../panels/MarketplacePanel/constants";
 import { getFullUrl } from "../../services/api";
 
 const DEFAULT_AVATAR_EMOJI = "🤖";
-const DEFAULT_AVATAR_SRC = getFluentEmojiCDN(DEFAULT_AVATAR_EMOJI, {
-  type: "anim",
-});
+const DEFAULT_AVATAR_SRC = getEmojiAvatarUrl(DEFAULT_AVATAR_EMOJI);
 
 const ICONS: Record<PersonaAvatarIconKey, LucideIcon> = {
   sparkles: Sparkles,
