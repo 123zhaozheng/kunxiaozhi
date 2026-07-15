@@ -207,3 +207,39 @@ Fixed two fork bugs. (1) Forking a still-running run left the new session UI stu
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: 对接 OpenSandbox 沙箱后端
+
+**Date**: 2026-07-15
+**Task**: 对接 OpenSandbox 沙箱后端
+**Branch**: `feat/opensandbox-backend`
+
+### Summary
+
+调研并对接 OpenSandbox（阿里开源）作为 Daytona/E2B 之外的第三个沙箱 provider，要求无感、零回归。摸清三层插件化架构（backend 工厂 + session_manager adapter+分流），坚持用已安装 opensandbox==0.1.14 源码地面核对 SDK 签名（纠正 deepwiki 的 envs/无-renew 错误：实为 env/有 renew），照 E2B 子路径镜像实现 OpenSandboxBackend + OpenSandboxSandboxAdapter + manager 分流，Daytona/E2B 一行未改。5 locale i18n 齐全。22 新测试全绿，E2B/Daytona 回归全绿，ruff 通过。沉淀 sandbox provider 对接契约 + SDK 签名地面核对 gotcha 到 spec。端到端（连真实内网 server）留待后续。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0d48091e` | (see git log) |
+| `fa7e9264` | (see git log) |
+| `aaf49ef8` | (see git log) |
+| `158e6614` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
