@@ -200,12 +200,150 @@ class E2BSandboxAdapter:
             return {"sandbox_id": self.get_sandbox_id(sandbox), "state": "unknown"}
 
 
+class OpenSandboxSandboxAdapter:
+    """OpenSandbox 沙箱生命周期适配器
+
+    镜像 E2BSandboxAdapter 的接口，底层调用 OpenSandbox SandboxSync（同步 API）。
+    支持：
+    - 跨 session 重连：SandboxSync.connect(sandbox_id) / SandboxSync.resume(sandbox_id)
+    - Pause/Resume：stop() 时 pause（保留状态），kill 永久销毁
+    - Renew 续期：renew(timedelta) 对应 E2B extend_timeout
+    - Metadata：创建沙箱时传入 user_id 用于可观测性
+    """
+
+    def __init__(
+        self,
+        domain: str,
+        api_key: str,
+        image: str,
+        timeout: int,
+        work_dir: str = "/root",
+    ):
+        self._domain = domain
+        self._api_key = api_key
+        self._image = image
+        self._timeout = timeout
+        self._work_dir = work_dir
+
+    def _sync_from_settings(self) -> None:
+        """Sync config values from global settings (after DB update)."""
+        from src.kernel.config.base import settings
+
+        self._domain = settings.OPENSANDBOX_DOMAIN
+        self._api_key = settings.OPENSANDBOX_API_KEY
+        self._image = settings.OPENSANDBOX_IMAGE
+        self._timeout = settings.OPENSANDBOX_TIMEOUT
+        self._work_dir = getattr(settings, "OPENSANDBOX_WORK_DIR", "/root")
+
+    def _get_connection_config(self):
+        from opensandbox.config import ConnectionConfigSync
+
+        return ConnectionConfigSync(domain=self._domain or None, api_key=self._api_key or None)
+
+    def _get_sandbox_class(self):
+        from opensandbox.sync.sandbox import SandboxSync
+
+        return SandboxSync
+
+    def create_sandbox(
+        self, user_id: str | None = None, envs: dict[str, str] | None = None
+    ) -> tuple[object, str]:
+        """创建沙箱，支持 metadata 和 env"""
+        from datetime import timedelta
+
+        self._sync_from_settings()
+        sandbox_class = self._get_sandbox_class()
+        cfg = self._get_connection_config()
+
+        kwargs: dict = {
+            "timeout": timedelta(seconds=self._timeout),
+            "connection_config": cfg,
+        }
+
+        # Metadata 用于可观测性
+        metadata: dict[str, str] = {}
+        if user_id:
+            metadata["user_id"] = user_id
+        if metadata:
+            kwargs["metadata"] = metadata
+
+        # 用户环境变量注入（OpenSandbox 用 env，不是 envs）
+        if envs:
+            kwargs["env"] = envs
+
+        sandbox = sandbox_class.create(self._image, **kwargs)
+        return sandbox, self._work_dir
+
+    def get_sandbox(self, sandbox_id: str) -> object | None:
+        """连接到已存在的沙箱（跨 session 重连）"""
+        try:
+            self._sync_from_settings()
+            sandbox_class = self._get_sandbox_class()
+            cfg = self._get_connection_config()
+            return sandbox_class.connect(sandbox_id, connection_config=cfg)
+        except Exception:
+            return None
+
+    def get_sandbox_id(self, sandbox) -> str:
+        return sandbox.id
+
+    def get_work_dir(self, sandbox) -> str:
+        return self._work_dir
+
+    def pause_sandbox(self, sandbox) -> None:
+        """暂停沙箱（保留文件系统和内存状态）"""
+        try:
+            sandbox.pause()
+        except Exception as e:
+            logger.warning(f"[OpenSandbox] Failed to pause sandbox: {e}")
+
+    def stop_sandbox(self, sandbox) -> None:
+        """停止沙箱 — 优先 pause（保留状态），失败则 kill"""
+        try:
+            sandbox.pause()
+        except Exception:
+            try:
+                sandbox.kill()
+            except Exception:
+                pass
+
+    def kill_sandbox(self, sandbox) -> None:
+        """永久销毁沙箱（数据丢失）"""
+        sandbox.kill()
+
+    def sandbox_is_running(self, sandbox) -> bool:
+        """用 is_healthy() 推断（OpenSandbox 无 is_running）"""
+        try:
+            return sandbox.is_healthy()
+        except Exception:
+            return False
+
+    def extend_timeout(self, sandbox, timeout: int) -> None:
+        """续期 — OpenSandbox 用 renew(timedelta)，对应 E2B set_timeout"""
+        from datetime import timedelta
+
+        sandbox.renew(timedelta(seconds=timeout))
+
+    def get_sandbox_info(self, sandbox) -> dict:
+        """获取沙箱状态信息"""
+        try:
+            info = sandbox.get_info()
+            state = info.status.state.lower() if info.status.state else "unknown"
+            return {
+                "sandbox_id": info.id,
+                "state": state,
+            }
+        except Exception:
+            return {"sandbox_id": self.get_sandbox_id(sandbox), "state": "unknown"}
+
+
 class SessionSandboxManager:
     """管理 User 与 Sandbox 的绑定关系（每个用户一个沙箱，跨 session 共享）"""
 
     def __init__(self):
         self._daytona_client: Optional["Daytona"] = None
         self._e2b_adapter: Optional[E2BSandboxAdapter] = None
+        self._opensandbox_adapter: Optional[OpenSandboxSandboxAdapter] = None
         self._collection: Any = None
         self._cache: OrderedDict[str, tuple[str, CompositeBackend, object | None]] = OrderedDict()
         self._locks: OrderedDict[str, asyncio.Lock] = OrderedDict()
@@ -219,6 +357,14 @@ class SessionSandboxManager:
                 timeout=settings.E2B_TIMEOUT,
                 auto_pause=getattr(settings, "E2B_AUTO_PAUSE", True),
                 auto_resume=getattr(settings, "E2B_AUTO_RESUME", True),
+            )
+        elif platform == "opensandbox":
+            self._opensandbox_adapter = OpenSandboxSandboxAdapter(
+                domain=settings.OPENSANDBOX_DOMAIN,
+                api_key=settings.OPENSANDBOX_API_KEY,
+                image=settings.OPENSANDBOX_IMAGE,
+                timeout=settings.OPENSANDBOX_TIMEOUT,
+                work_dir=getattr(settings, "OPENSANDBOX_WORK_DIR", "/root"),
             )
 
     @property
@@ -367,6 +513,9 @@ class SessionSandboxManager:
         if self._e2b_adapter:
             return await self._get_or_create_e2b(session_id, user_id)
 
+        if self._opensandbox_adapter:
+            return await self._get_or_create_opensandbox(session_id, user_id)
+
         lock = self._get_user_lock(user_id)
 
         async with lock:
@@ -472,6 +621,9 @@ class SessionSandboxManager:
 
         if self._e2b_adapter:
             return await self._stop_e2b(user_id)
+
+        if self._opensandbox_adapter:
+            return await self._stop_opensandbox(user_id)
 
         lock = self._get_user_lock(user_id)
 
@@ -830,6 +982,151 @@ class SessionSandboxManager:
                     return True
                 except Exception as e:
                     logger.error(f"[E2B] Failed to stop sandbox: {e}")
+                    return False
+            return False
+
+    # ── OpenSandbox platform methods ──────────────────────────────────
+
+    async def _get_or_create_opensandbox(
+        self, session_id: str, user_id: str
+    ) -> tuple[CompositeBackend, str]:
+        assert self._opensandbox_adapter is not None
+        lock = self._get_user_lock(user_id)
+        async with lock:
+            if user_id in self._cache:
+                self._cache.move_to_end(user_id)  # LRU: mark as recently used
+                sandbox_id, backend, provider_obj = self._cache[user_id]
+                try:
+                    is_running = await run_blocking_io(
+                        self._opensandbox_adapter.sandbox_is_running,
+                        provider_obj,
+                    )
+                    if is_running:
+                        await run_blocking_io(
+                            self._opensandbox_adapter.extend_timeout,
+                            provider_obj,
+                            settings.OPENSANDBOX_TIMEOUT,
+                        )
+                        await self._save_binding(user_id, sandbox_id, "running")
+                        await ensure_sandbox_mcp(backend, user_id)
+                        work_dir = await run_blocking_io(
+                            self._opensandbox_adapter.get_work_dir,
+                            provider_obj,
+                        )
+                        return backend, work_dir
+                except Exception as e:
+                    logger.warning(
+                        f"[OpenSandbox] Cache hit but sandbox {sandbox_id} unhealthy: {e}"
+                    )
+                del self._cache[user_id]
+
+            binding = await self._get_binding(user_id)
+            metadata_sandbox_id = binding.get("sandbox_id") if binding else None
+            if metadata_sandbox_id:
+                # SandboxSync.connect() 重连到已存在的沙箱
+                provider_obj = await run_blocking_io(
+                    self._opensandbox_adapter.get_sandbox, metadata_sandbox_id
+                )
+                if provider_obj:
+                    try:
+                        await run_blocking_io(
+                            self._opensandbox_adapter.extend_timeout,
+                            provider_obj,
+                            settings.OPENSANDBOX_TIMEOUT,
+                        )
+                        backend = self._build_composite_backend_opensandbox(provider_obj, user_id)
+                        self._cache[user_id] = (metadata_sandbox_id, backend, provider_obj)
+                        self._evict_if_needed()
+                        info = await run_blocking_io(
+                            self._opensandbox_adapter.get_sandbox_info,
+                            provider_obj,
+                        )
+                        await self._save_binding(
+                            user_id, metadata_sandbox_id, info.get("state", "running")
+                        )
+                        await ensure_sandbox_mcp(backend, user_id)
+                        work_dir = await run_blocking_io(
+                            self._opensandbox_adapter.get_work_dir,
+                            provider_obj,
+                        )
+                        return backend, work_dir
+                    except Exception as e:
+                        logger.warning(
+                            f"[OpenSandbox] Failed to reconnect {metadata_sandbox_id}: {e}"
+                        )
+
+            return await self._create_and_bind_opensandbox(session_id, user_id)
+
+    async def _create_and_bind_opensandbox(
+        self, session_id: str, user_id: str
+    ) -> tuple[CompositeBackend, str]:
+        assert self._opensandbox_adapter is not None
+        adapter = self._opensandbox_adapter
+        from src.infra.backend.opensandbox import OpenSandboxBackend
+
+        # 加载用户环境变量
+        user_envs = await self._get_user_env_vars(user_id)
+
+        def _sync_create():
+            sandbox, work_dir = adapter.create_sandbox(
+                user_id=user_id, envs=user_envs if user_envs else None
+            )
+            osb_backend = OpenSandboxBackend(
+                sandbox=sandbox, work_dir=adapter.get_work_dir(sandbox)
+            )
+            skills_backend = create_skills_backend(user_id=user_id)
+            composite = CompositeBackend(default=osb_backend, routes={"/skills/": skills_backend})
+            return composite, work_dir, adapter.get_sandbox_id(sandbox), sandbox
+
+        backend, work_dir, sandbox_id, provider_obj = await run_blocking_io(_sync_create)
+        try:
+            await self._save_binding(user_id, sandbox_id, "running", is_new=True)
+        except Exception as e:
+            logger.error(f"[OpenSandbox] Created {sandbox_id} but failed to save binding: {e}")
+            try:
+                await run_blocking_io(self._opensandbox_adapter.stop_sandbox, provider_obj)
+            except Exception:
+                pass
+            raise
+        self._cache[user_id] = (sandbox_id, backend, provider_obj)
+        self._evict_if_needed()
+        logger.info(
+            f"[OpenSandbox] Created sandbox {sandbox_id} for user {user_id} (session={session_id})"
+        )
+
+        await ensure_sandbox_mcp(backend, user_id)
+        return backend, work_dir
+
+    def _build_composite_backend_opensandbox(
+        self, provider_obj: object, user_id: str
+    ) -> CompositeBackend:
+        from src.infra.backend.opensandbox import OpenSandboxBackend
+
+        return CompositeBackend(
+            default=OpenSandboxBackend(
+                sandbox=provider_obj,
+                work_dir=self._opensandbox_adapter.get_work_dir(provider_obj)
+                if self._opensandbox_adapter
+                else "/root",
+            ),
+            routes={"/skills/": create_skills_backend(user_id=user_id)},
+        )
+
+    async def _stop_opensandbox(self, user_id: str) -> bool:
+        assert self._opensandbox_adapter is not None
+        lock = self._get_user_lock(user_id)
+        async with lock:
+            if user_id in self._cache:
+                sandbox_id, _, provider_obj = self._cache[user_id]
+                try:
+                    # stop_sandbox 优先 pause（保留数据），失败则 kill
+                    await run_blocking_io(self._opensandbox_adapter.stop_sandbox, provider_obj)
+                    self._cache.pop(user_id, None)
+                    await self._save_binding(user_id, sandbox_id, "paused")
+                    logger.info(f"[OpenSandbox] Paused sandbox {sandbox_id} for user {user_id}")
+                    return True
+                except Exception as e:
+                    logger.error(f"[OpenSandbox] Failed to stop sandbox: {e}")
                     return False
             return False
 

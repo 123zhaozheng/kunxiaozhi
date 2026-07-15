@@ -194,6 +194,13 @@ class Settings(BaseSettings):
     E2B_AUTO_PAUSE: bool = True
     E2B_AUTO_RESUME: bool = True
 
+    # OpenSandbox Settings
+    OPENSANDBOX_DOMAIN: str = ""
+    OPENSANDBOX_API_KEY: str = ""
+    OPENSANDBOX_IMAGE: str = "ubuntu"
+    OPENSANDBOX_TIMEOUT: int = 3600
+    OPENSANDBOX_WORK_DIR: str = "/root"
+
     # Skills Settings
     ENABLE_SKILLS: bool = True
 

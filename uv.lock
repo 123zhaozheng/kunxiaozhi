@@ -1705,6 +1705,7 @@ dependencies = [
     { name = "langsmith" },
     { name = "minio" },
     { name = "motor" },
+    { name = "opensandbox" },
     { name = "orjson" },
     { name = "oss2" },
     { name = "psutil" },
@@ -1766,6 +1767,7 @@ requires-dist = [
     { name = "langsmith", specifier = ">=0.2.0" },
     { name = "minio", specifier = ">=7.2.20" },
     { name = "motor", specifier = ">=3.7.1" },
+    { name = "opensandbox", specifier = ">=0.1.14" },
     { name = "orjson", specifier = ">=3.10.0" },
     { name = "oss2", specifier = ">=2.18.0" },
     { name = "psutil", specifier = ">=7.2.2" },
@@ -2498,6 +2500,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/8f/12/cfa322c5f5dd8fa21aab9a7a8e979e7a11123800f86ca8d82eb68a83d213/openai-2.38.0.tar.gz", hash = "sha256:798694c6cf74145541fda94325b6f8f72d8e1fd0262cc137c8d728177a6a4ce3", size = 772764, upload-time = "2026-05-21T21:23:42.105Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0a/bf/ccff9be562e24207716d04ef9dc931c76aff0c89a7265da43e2104d7fe06/openai-2.38.0-py3-none-any.whl", hash = "sha256:ec6661c57b2dcc47414a767e6e3335c7ed3d19c9696999283a3c82e95c756a3c", size = 1344910, upload-time = "2026-05-21T21:23:39.636Z" },
+]
+
+[[package]]
+name = "opensandbox"
+version = "0.1.14"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "attrs" },
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "python-dateutil" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5f/c7/cfc42df5405752818416f0791fc820b2280159164de4c25bf27d99897f05/opensandbox-0.1.14.tar.gz", hash = "sha256:c030038b168b59526010d66feb1ce3dd7e7b78e23bf263b47cf6cf44f7129fb4", size = 214016, upload-time = "2026-07-13T07:04:30.144Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/15/68/ffe6646bc081421c81d715e2a024ff197ca0512ed57143b9551c070fa917/opensandbox-0.1.14-py3-none-any.whl", hash = "sha256:2362bfbdca15e0c3c226d29fdb7eea6d1ad3e908f5c924683840e7e3b011e4b1", size = 517406, upload-time = "2026-07-13T07:04:28.907Z" },
 ]
 
 [[package]]

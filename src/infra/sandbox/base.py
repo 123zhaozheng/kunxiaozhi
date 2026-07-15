@@ -55,6 +55,19 @@ class E2BConfig(SandboxConfig):
     auto_resume: bool = True
 
 
+@dataclass
+class OpenSandboxConfig(SandboxConfig):
+    """OpenSandbox 配置"""
+
+    platform: str = field(default="opensandbox", init=False)
+    domain: str = ""
+    api_key: str = ""
+    image: str = "ubuntu"
+    timeout: int = 3600
+    work_dir: str = "/root"
+    env: dict[str, str] = field(default_factory=dict)
+
+
 # =============================================================================
 # 工厂类
 # =============================================================================
@@ -172,6 +185,58 @@ class SandboxFactory:
             raise ImportError("Please install e2b: pip install e2b") from e
 
     @classmethod
+    def create_opensandbox(
+        cls,
+        domain: str,
+        api_key: str = "",
+        image: str = "ubuntu",
+        timeout: int = 3600,
+        work_dir: str = "/root",
+        env: dict[str, str] | None = None,
+    ) -> "SandboxBackendProtocol":
+        """
+        创建 OpenSandbox Sandbox
+
+        Args:
+            domain: OpenSandbox server 域名（内网自建）
+            api_key: OpenSandbox API Key（自建 server 自行生成）
+            image: 容器镜像名 (default: "ubuntu")
+            timeout: 沙箱超时时间（秒）
+            work_dir: 工作目录
+            env: 环境变量
+
+        Returns:
+            OpenSandboxBackend 实例
+        """
+        try:
+            from datetime import timedelta
+
+            from opensandbox.config import ConnectionConfigSync
+            from opensandbox.sync.sandbox import SandboxSync
+
+            from src.infra.backend.opensandbox import OpenSandboxBackend
+
+            cfg = ConnectionConfigSync(domain=domain or None, api_key=api_key or None)
+            sandbox = SandboxSync.create(
+                image,
+                timeout=timedelta(seconds=timeout),
+                env=env or {},
+                connection_config=cfg,
+            )
+            backend = OpenSandboxBackend(sandbox=sandbox, timeout=timeout, work_dir=work_dir)
+
+            # 注册以便追踪和关闭
+            sandbox_id = sandbox.id
+            cls._sandbox_registry[sandbox_id] = (backend, sandbox)
+            logger.info(
+                f"Created OpenSandbox sandbox: {sandbox_id}, image={image}, timeout={timeout}s"
+            )
+
+            return backend
+        except ImportError as e:
+            raise ImportError("Please install opensandbox: pip install opensandbox") from e
+
+    @classmethod
     async def close_sandbox(
         cls,
         sandbox_id: str,
@@ -209,6 +274,9 @@ class SandboxFactory:
                         provider_obj.delete()
                     elif "e2b" in module_name:
                         # E2B: sandbox.kill()
+                        provider_obj.kill()
+                    elif "opensandbox" in module_name:
+                        # OpenSandbox: sandbox.kill()
                         provider_obj.kill()
                     else:
                         logger.warning(f"Unknown provider type: {module_name}")
@@ -341,6 +409,17 @@ class SandboxFactory:
                 auto_pause=config.auto_pause,
                 auto_resume=config.auto_resume,
             )
+        elif config.platform == "opensandbox":
+            if not isinstance(config, OpenSandboxConfig):
+                raise ValueError("Invalid config type for opensandbox platform")
+            return cls.create_opensandbox(
+                domain=config.domain,
+                api_key=config.api_key,
+                image=config.image,
+                timeout=config.timeout,
+                work_dir=config.work_dir,
+                env=config.env,
+            )
         else:
             raise ValueError(f"Unknown sandbox platform: {config.platform}")
 
@@ -367,6 +446,14 @@ def get_sandbox_config_from_settings() -> SandboxConfig:
             timeout=getattr(settings, "E2B_TIMEOUT", 3600),
             auto_pause=getattr(settings, "E2B_AUTO_PAUSE", True),
             auto_resume=getattr(settings, "E2B_AUTO_RESUME", True),
+        )
+    elif platform == "opensandbox":
+        return OpenSandboxConfig(
+            domain=getattr(settings, "OPENSANDBOX_DOMAIN", ""),
+            api_key=getattr(settings, "OPENSANDBOX_API_KEY", ""),
+            image=getattr(settings, "OPENSANDBOX_IMAGE", "ubuntu"),
+            timeout=getattr(settings, "OPENSANDBOX_TIMEOUT", 3600),
+            work_dir=getattr(settings, "OPENSANDBOX_WORK_DIR", "/root"),
         )
     else:
         raise ValueError(f"Unsupported sandbox platform: {platform}")
