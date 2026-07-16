@@ -163,3 +163,121 @@ print([(n, inspect.signature(getattr(SandboxSync,n))) for n in dir(SandboxSync) 
 Record the verified signatures in the task's `design.md` (a "真实 API 映射" / ground-truth section) and implement against THAT, overriding any earlier research notes.
 
 **Related**: [[prefer-codegraph]] — prefer first-hand sources (package source, code graph) over second-hand summaries.
+
+---
+
+## Scenario: Sandbox config hot-reload (soft reset of SessionSandboxManager)
+
+### 1. Scope / Trigger
+
+- Changing any sandbox-related setting (`SANDBOX_PLATFORM`, `ENABLE_SANDBOX`, `DAYTONA_*`, `E2B_*`, `OPENSANDBOX_*`) must take effect **without a backend restart**.
+- `SessionSandboxManager` is a process-level singleton (`session_manager.py`). Its adapter is typed in `__init__` from `settings.SANDBOX_PLATFORM`, so without an explicit rebuild the old adapter survives config changes. This scenario wires sandbox config into the existing settings hot-reload layer.
+
+### 2. Signatures
+
+Extension of `src/kernel/config/service.py` (mirror the `_CHECKPOINT_AFFECTED_SETTINGS` / `_reset_checkpoint_runtime_state` pair exactly):
+
+```python
+_SANDBOX_AFFECTED_SETTINGS = {                       # ~20 keys: ENABLE_SANDBOX, SANDBOX_PLATFORM,
+    "ENABLE_SANDBOX", "SANDBOX_PLATFORM",            #   DAYTONA_*, E2B_*, OPENSANDBOX_* (incl. USE_SERVER_PROXY)
+    "DAYTONA_API_KEY", ..., "E2B_API_KEY", ...,
+    "OPENSANDBOX_DOMAIN", ..., "OPENSANDBOX_USE_SERVER_PROXY",
+}
+
+async def _reset_sandbox_runtime_state(reason: str) -> None:   # coro; try/except warn-only
+    from src.infra.sandbox.session_manager import reset_session_sandbox_manager
+    reset_session_sandbox_manager()
+    logger.info("[Settings] Sandbox manager rebuilt after %s", reason)
+```
+
+Singleton reset helper in `src/infra/sandbox/session_manager.py`:
+
+```python
+def reset_session_sandbox_manager() -> None:
+    global _session_sandbox_manager
+    _session_sandbox_manager = None     # next get_session_sandbox_manager() rebuilds with current settings
+```
+
+Hooked into **both** branches of `refresh_settings(key=None)` — the single-key branch (after the checkpoint block) and the full-refresh branch (accumulate `any_sandbox_setting_changed`, trigger after the loop). Export `reset_session_sandbox_manager` from `src/infra/sandbox/__init__.py`.
+
+### 3. Contracts
+
+| Concern | Contract |
+|---|---|
+| Reset semantics | **Soft reset only**: set singleton to `None`. NEVER call stop/cleanup on running sandboxes, NEVER drop the Mongo `user_sandbox_bindings` collection. |
+| Next access after reset | Empty `_cache`; `get_or_create` re-reads the binding's `sandbox_id` and reconnects via `adapter.get_sandbox(id)`. If the old id belongs to a now-unreachable platform (platform flip), reconnect fails → falls through to create fresh; orphan is reaped by provider TTL. |
+| Failure isolation | `_reset_sandbox_runtime_state` is warn-only (`try/except` + `logger.warning`), runs AFTER `setattr(settings, ...)`, so a reset error never blocks the settings update or other modules' resets. |
+| Multi-instance sync | Reuses the existing `SETTINGS_CHANNEL` Redis pub/sub → other instances' `SettingsPubSub._handle_message` → `refresh_settings(key)` → same reset. Do NOT add a new pub/sub channel. |
+| Restart flag | Sandbox keys must NOT be in `RESTART_REQUIRED_SETTINGS` (`kernel/config/constants.py`) — they are hot-reloadable now, and the flag is a frontend UI hint. |
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+|---|---|
+| Sandbox setting changed, single instance | singleton rebuilt; log `[Settings] Sandbox manager rebuilt after setting '<key>' changed`. |
+| Sandbox setting changed, multi-instance | pub/sub fans out; each instance rebuilds. |
+| `reset_session_sandbox_manager` raises | warn-only; settings value still applied; no crash. |
+| Platform flip while user sandbox running | NOT killed; reconnect-on-next-access either reuses (same platform) or creates fresh (new platform); old sandbox self-reaps via TTL. |
+| Non-sandbox key changed | reset NOT triggered (`key not in _SANDBOX_AFFECTED_SETTINGS`). |
+
+### 5. Good / Base / Bad Cases
+
+- **Good**: admin flips `SANDBOX_PLATFORM` daytona→opensandbox in UI → no restart → next agent run builds opensandbox adapter.
+- **Base**: change `OPENSANDBOX_DOMAIN` to a wrong host → reset fires, next create fails fast with connection error (config value honored), no stale adapter reused.
+- **Bad**: hard-reset that stops running sandboxes on every save → a typo in a config field nukes all users' sandboxes. Soft reset avoids this.
+
+### 6. Tests Required
+
+`tests/kernel/config/test_sandbox_setting_refresh.py` (mirror `test_checkpoint_setting_refresh.py`):
+- refresh an `OPENSANDBOX_*` key → `reset_session_sandbox_manager` called once + `settings` updated.
+- refresh a non-sandbox key → reset NOT called.
+- `_SANDBOX_AFFECTED_SETTINGS` covers all three platforms + switches.
+- sandbox keys are NOT in `requires_restart()`.
+- `reset_session_sandbox_manager()` sets the singleton to `None`.
+
+### 7. Wrong vs Correct
+
+#### Wrong — rebuild adapter in place, keep the singleton
+```python
+# DON'T: only swap params on the existing manager. Platform flips need a different
+# adapter *class* (E2BSandboxAdapter vs OpenSandboxSandboxAdapter), so in-place
+# sync cannot represent a platform change.
+manager._opensandbox_adapter._sync_from_settings()
+```
+
+#### Correct — drop the singleton; rebuild lazily with current settings
+```python
+def reset_session_sandbox_manager() -> None:
+    global _session_sandbox_manager
+    _session_sandbox_manager = None
+# get_session_sandbox_manager() rebuilds on next call → correct adapter type + fresh params
+```
+
+---
+
+## Convention: OpenSandbox server-proxy mode for cross-network deployments
+
+**What**: `settings.OPENSANDBOX_USE_SERVER_PROXY` (bool, **default True**) is passed as `use_server_proxy=` to every `opensandbox.config.ConnectionConfigSync` construction.
+
+**Why**: The OpenSandbox SDK has two access modes for a sandbox's internal execd ports (e.g. `:44772`):
+- `use_server_proxy=False` (SDK default) — the client connects **directly** to the sandbox container's ports. Requires the caller to route into the sandbox's Docker network.
+- `use_server_proxy=True` — the client talks only to the OpenSandbox **server** (`domain`), which proxies to the sandbox internally.
+
+LambChat's real deployments are **always cross-network**: backend in k8s (or on a host) and the OpenSandbox server + its sandboxes on a separate machine's Docker bridge. The backend cannot reach sandbox container ports directly → health check times out (`[READY_TIMEOUT]`, ~30s) and the sandbox is reaped. Default `True` makes new deployments work out of the box.
+
+**Example**:
+```python
+# Two construction sites — BOTH must pass use_server_proxy:
+# (1) src/infra/sandbox/session_manager.py — OpenSandboxSandboxAdapter._get_connection_config
+ConnectionConfigSync(domain=self._domain or None, api_key=self._api_key or None,
+                     use_server_proxy=self._use_server_proxy)
+# (2) src/infra/sandbox/base.py — SandboxFactory.create_opensandbox
+ConnectionConfigSync(domain=domain or None, api_key=api_key or None,
+                     use_server_proxy=getattr(settings, "OPENSANDBOX_USE_SERVER_PROXY", True))
+```
+
+**Gotcha**: `ConnectionConfigSync` is constructed in **two** places (adapter + factory). Forgetting the factory path leaves the `SandboxFactory.create` route silently on direct mode. Grep `ConnectionConfigSync(` across `src/` — there must be no bare construction without `use_server_proxy`.
+
+**How to extend**: if a future deployment is truly same-network (backend can route to sandbox ports), flip the setting to `False` via the UI — it is `frontend_visible` and hot-reloadable (see the scenario above).
+
+**Related**: [[sandbox-providers]] Gotcha "Verify SDK signatures against the installed package" — the `use_server_proxy` field was confirmed against installed `opensandbox==0.1.14`, not research.

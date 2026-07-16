@@ -1958,6 +1958,7 @@
     "OPENSANDBOX_IMAGE": "OpenSandbox sandbox image name (e.g. 'ubuntu' or 'python:3.11')",
     "OPENSANDBOX_TIMEOUT": "OpenSandbox sandbox timeout in seconds",
     "OPENSANDBOX_WORK_DIR": "OpenSandbox sandbox working directory",
+    "OPENSANDBOX_USE_SERVER_PROXY": "Access sandbox via server proxy (required for cross-network deployments when backend can't reach sandbox container ports directly)",
     "EMAIL_ENABLED": "Enable email service (password reset, email verification)",
     "ENABLE_AUDIO_TRANSCRIPTION": "Enable audio transcription tool for transcribing audio files",
     "ENABLE_CODE_INTERPRETER": "Enable experimental QuickJS code interpreter for agent runs",

@@ -1958,6 +1958,7 @@
     "OPENSANDBOX_IMAGE": "OpenSandbox 沙箱镜像名称（如 'ubuntu' 或 'python:3.11'）",
     "OPENSANDBOX_TIMEOUT": "OpenSandbox 沙箱超时时间（秒）",
     "OPENSANDBOX_WORK_DIR": "OpenSandbox 沙箱工作目录",
+    "OPENSANDBOX_USE_SERVER_PROXY": "经 Server 代理访问沙箱（跨网络部署需开启；后端无法直连沙箱容器网络时使用）",
     "EMAIL_ENABLED": "启用邮件服务（密码重置、邮箱验证）",
     "ENABLE_AUDIO_TRANSCRIPTION": "启用音频转写工具，用于将音频文件转录为文字",
     "ENABLE_CODE_INTERPRETER": "启用实验性的 QuickJS 代码解释器供 Agent 运行使用",

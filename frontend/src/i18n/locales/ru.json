@@ -1934,6 +1934,7 @@
     "OPENSANDBOX_IMAGE": "Имя образа песочницы OpenSandbox (например, 'ubuntu' или 'python:3.11')",
     "OPENSANDBOX_TIMEOUT": "Таймаут песочницы OpenSandbox в секундах",
     "OPENSANDBOX_WORK_DIR": "Рабочий каталог песочницы OpenSandbox",
+    "OPENSANDBOX_USE_SERVER_PROXY": "Доступ к песочнице через сервер-прокси (требуется для развёртываний в разных сетях, когда бэкенд не может напрямую достичь портов контейнера песочницы)",
     "EMAIL_ENABLED": "Включить email-сервис (сброс пароля, верификация email)",
     "ENABLE_AUDIO_TRANSCRIPTION": "Включить инструмент распознавания аудио",
     "ENABLE_CODE_INTERPRETER": "Включить экспериментальный интерпретатор кода QuickJS для запусков агента",

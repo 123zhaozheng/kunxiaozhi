@@ -216,7 +216,11 @@ class SandboxFactory:
 
             from src.infra.backend.opensandbox import OpenSandboxBackend
 
-            cfg = ConnectionConfigSync(domain=domain or None, api_key=api_key or None)
+            cfg = ConnectionConfigSync(
+                domain=domain or None,
+                api_key=api_key or None,
+                use_server_proxy=getattr(settings, "OPENSANDBOX_USE_SERVER_PROXY", True),
+            )
             sandbox = SandboxSync.create(
                 image,
                 timeout=timedelta(seconds=timeout),

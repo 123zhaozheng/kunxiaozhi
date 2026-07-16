@@ -1932,6 +1932,7 @@
     "OPENSANDBOX_IMAGE": "OpenSandbox 샌드박스 이미지 이름(예: 'ubuntu' 또는 'python:3.11')",
     "OPENSANDBOX_TIMEOUT": "OpenSandbox 샌드박스 타임아웃(초)",
     "OPENSANDBOX_WORK_DIR": "OpenSandbox 샌드박스 작업 디렉터리",
+    "OPENSANDBOX_USE_SERVER_PROXY": "서버 프록시를 통해 샌드박스 접근 (백엔드가 샌드박스 컨테이너 네트워크에 직접 접근할 수 없는 크로스 네트워크 배포에 필요)",
     "EMAIL_ENABLED": "이메일 서비스 활성화(비밀번호 재설정, 이메일 인증)",
     "ENABLE_AUDIO_TRANSCRIPTION": "오디오 전사 도구를 활성화합니다",
     "ENABLE_CODE_INTERPRETER": "에이전트 실행을 위한 실험적 QuickJS 코드 인터프리터 활성화",

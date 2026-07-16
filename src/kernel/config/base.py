@@ -200,6 +200,11 @@ class Settings(BaseSettings):
     OPENSANDBOX_IMAGE: str = "ubuntu"
     OPENSANDBOX_TIMEOUT: int = 3600
     OPENSANDBOX_WORK_DIR: str = "/root"
+    # Server proxy: route execd/process requests through the OpenSandbox server
+    # instead of connecting to sandbox container ports directly. Required when
+    # the backend cannot reach the sandbox container network (k8s pod / host ->
+    # server's Docker bridge). Defaults True for cross-network deployments.
+    OPENSANDBOX_USE_SERVER_PROXY: bool = True
 
     # Skills Settings
     ENABLE_SKILLS: bool = True

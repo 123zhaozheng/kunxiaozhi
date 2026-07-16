@@ -536,6 +536,15 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "depends_on": {"key": "SANDBOX_PLATFORM", "value": "opensandbox"},
         "frontend_visible": True,
     },
+    "OPENSANDBOX_USE_SERVER_PROXY": {
+        "type": SettingType.BOOLEAN,
+        "category": SettingCategory.SANDBOX,
+        "subcategory": "opensandbox",
+        "description": "settingDesc.OPENSANDBOX_USE_SERVER_PROXY",
+        "default": True,
+        "depends_on": {"key": "SANDBOX_PLATFORM", "value": "opensandbox"},
+        "frontend_visible": True,
+    },
     # ============================================
     # Skills Settings
     # ============================================

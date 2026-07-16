@@ -42,6 +42,32 @@ _CHECKPOINT_AFFECTED_SETTINGS = {
     "CHECKPOINT_PG_POOL_MAX_SIZE",
 }
 
+# Sandbox settings that require the SessionSandboxManager singleton to be rebuilt
+# so the new platform/adapter/params take effect without a restart. Mirrors the
+# checkpoint hot-reload pattern. Soft reset: bindings & running sandboxes untouched.
+_SANDBOX_AFFECTED_SETTINGS = {
+    "ENABLE_SANDBOX",
+    "SANDBOX_PLATFORM",
+    "DAYTONA_API_KEY",
+    "DAYTONA_SERVER_URL",
+    "DAYTONA_TIMEOUT",
+    "DAYTONA_IMAGE",
+    "DAYTONA_AUTO_STOP_INTERVAL",
+    "DAYTONA_AUTO_ARCHIVE_INTERVAL",
+    "DAYTONA_AUTO_DELETE_INTERVAL",
+    "E2B_API_KEY",
+    "E2B_TEMPLATE",
+    "E2B_TIMEOUT",
+    "E2B_AUTO_PAUSE",
+    "E2B_AUTO_RESUME",
+    "OPENSANDBOX_DOMAIN",
+    "OPENSANDBOX_API_KEY",
+    "OPENSANDBOX_IMAGE",
+    "OPENSANDBOX_TIMEOUT",
+    "OPENSANDBOX_WORK_DIR",
+    "OPENSANDBOX_USE_SERVER_PROXY",
+}
+
 
 async def _reset_checkpoint_runtime_state(reason: str) -> None:
     try:
@@ -52,6 +78,24 @@ async def _reset_checkpoint_runtime_state(reason: str) -> None:
     except Exception as exc:
         logger.warning(
             "[Settings] Failed to reset checkpointer runtime state after %s: %s",
+            reason,
+            exc,
+        )
+
+
+async def _reset_sandbox_runtime_state(reason: str) -> None:
+    """Rebuild the SessionSandboxManager singleton so sandbox config changes take
+    effect without a restart. Soft reset — does not stop running sandboxes or
+    clear persisted bindings.
+    """
+    try:
+        from src.infra.sandbox.session_manager import reset_session_sandbox_manager
+
+        reset_session_sandbox_manager()
+        logger.info("[Settings] Sandbox manager rebuilt after %s", reason)
+    except Exception as exc:
+        logger.warning(
+            "[Settings] Failed to rebuild sandbox manager after %s: %s",
             reason,
             exc,
         )
@@ -310,12 +354,15 @@ async def refresh_settings(key: Optional[str] = None) -> None:
                 logger.info(f"[Settings] Memory backend reset after setting '{key}' changed")
             if key in _CHECKPOINT_AFFECTED_SETTINGS:
                 await _reset_checkpoint_runtime_state(f"setting '{key}' changed")
+            if key in _SANDBOX_AFFECTED_SETTINGS:
+                await _reset_sandbox_runtime_state(f"setting '{key}' changed")
     else:
         # Refresh all settings
         all_settings = await _settings_service.get_all(admin_mode=True, mask_sensitive=False)
         any_llm_setting_changed = False
         any_memory_setting_changed = False
         any_checkpoint_setting_changed = False
+        any_sandbox_setting_changed = False
         for items in all_settings.values():
             for item in items:
                 if (
@@ -331,6 +378,8 @@ async def refresh_settings(key: Optional[str] = None) -> None:
                         any_memory_setting_changed = True
                     if item.key in _CHECKPOINT_AFFECTED_SETTINGS:
                         any_checkpoint_setting_changed = True
+                    if item.key in _SANDBOX_AFFECTED_SETTINGS:
+                        any_sandbox_setting_changed = True
 
         # Clear LLM model cache if any affected setting changed
         if any_llm_setting_changed:
@@ -350,3 +399,6 @@ async def refresh_settings(key: Optional[str] = None) -> None:
 
         if any_checkpoint_setting_changed:
             await _reset_checkpoint_runtime_state("settings refresh")
+
+        if any_sandbox_setting_changed:
+            await _reset_sandbox_runtime_state("settings refresh")

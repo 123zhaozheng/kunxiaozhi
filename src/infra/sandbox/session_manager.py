@@ -218,12 +218,14 @@ class OpenSandboxSandboxAdapter:
         image: str,
         timeout: int,
         work_dir: str = "/root",
+        use_server_proxy: bool = True,
     ):
         self._domain = domain
         self._api_key = api_key
         self._image = image
         self._timeout = timeout
         self._work_dir = work_dir
+        self._use_server_proxy = use_server_proxy
 
     def _sync_from_settings(self) -> None:
         """Sync config values from global settings (after DB update)."""
@@ -234,11 +236,16 @@ class OpenSandboxSandboxAdapter:
         self._image = settings.OPENSANDBOX_IMAGE
         self._timeout = settings.OPENSANDBOX_TIMEOUT
         self._work_dir = getattr(settings, "OPENSANDBOX_WORK_DIR", "/root")
+        self._use_server_proxy = getattr(settings, "OPENSANDBOX_USE_SERVER_PROXY", True)
 
     def _get_connection_config(self):
         from opensandbox.config import ConnectionConfigSync
 
-        return ConnectionConfigSync(domain=self._domain or None, api_key=self._api_key or None)
+        return ConnectionConfigSync(
+            domain=self._domain or None,
+            api_key=self._api_key or None,
+            use_server_proxy=self._use_server_proxy,
+        )
 
     def _get_sandbox_class(self):
         from opensandbox.sync.sandbox import SandboxSync
@@ -365,6 +372,7 @@ class SessionSandboxManager:
                 image=settings.OPENSANDBOX_IMAGE,
                 timeout=settings.OPENSANDBOX_TIMEOUT,
                 work_dir=getattr(settings, "OPENSANDBOX_WORK_DIR", "/root"),
+                use_server_proxy=getattr(settings, "OPENSANDBOX_USE_SERVER_PROXY", True),
             )
 
     @property
@@ -1169,3 +1177,15 @@ def get_session_sandbox_manager() -> SessionSandboxManager:
     if _session_sandbox_manager is None:
         _session_sandbox_manager = SessionSandboxManager()
     return _session_sandbox_manager
+
+
+def reset_session_sandbox_manager() -> None:
+    """置空沙盒管理器单例，使其在下次 get_session_sandbox_manager() 时按最新 settings 重建。
+
+    用于沙盒相关配置热加载：改 SANDBOX_PLATFORM / 各平台参数 / ENABLE_SANDBOX 后，
+    adapter 需要按新配置重建。Soft reset —— 不清空 Mongo user_bindings、不停止运行中沙箱：
+    旧 _cache 丢弃后，下次访问会经 binding 的 sandbox_id 重连，失败则新建；
+    平台切换时旧平台沙箱由 provider 侧 TTL 自然回收。
+    """
+    global _session_sandbox_manager
+    _session_sandbox_manager = None
