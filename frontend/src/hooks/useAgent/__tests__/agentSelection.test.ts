@@ -22,26 +22,14 @@ test("replaces an unavailable current agent with the first available agent", () 
   assert.equal(resolveAvailableAgentId("default", "default", agents), "search");
 });
 
-test("persona mode keeps the current non-team agent", () => {
-  assert.equal(resolvePersonaAgentId("fast", "search", agents), "fast");
+test("persona preferred agent wins when valid", () => {
+  assert.equal(resolvePersonaAgentId("search", "fast"), "search");
+  assert.equal(resolvePersonaAgentId("team", "fast"), "team");
 });
 
-test("persona mode switches team agent to the preferred non-team default", () => {
-  assert.equal(
-    resolvePersonaAgentId("team", "fast", [
-      { id: "team", name: "Team", description: "", version: "1.0.0" },
-      ...agents,
-    ]),
-    "fast",
-  );
-});
-
-test("persona mode switches team agent to the first non-team agent when needed", () => {
-  assert.equal(
-    resolvePersonaAgentId("team", "team", [
-      { id: "team", name: "Team", description: "", version: "1.0.0" },
-      ...agents,
-    ]),
-    "search",
-  );
+test("persona missing preferred falls back to requested then fast", () => {
+  assert.equal(resolvePersonaAgentId(undefined, "search"), "search");
+  assert.equal(resolvePersonaAgentId(null, null), "fast");
+  assert.equal(resolvePersonaAgentId("invalid", "team"), "team");
+  assert.equal(resolvePersonaAgentId("invalid", "nope"), "fast");
 });

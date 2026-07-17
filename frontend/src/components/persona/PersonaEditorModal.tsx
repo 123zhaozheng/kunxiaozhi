@@ -45,6 +45,11 @@ import type {
   PersonaPresetStatus,
   PersonaPresetUpdate,
   PersonaWeComConfig,
+  PreferredAgentId,
+} from "../../types";
+import {
+  DEFAULT_PREFERRED_AGENT_ID,
+  PREFERRED_AGENT_IDS,
 } from "../../types";
 
 const PERSONA_SKILL_PAGE_SIZE = 20;
@@ -109,6 +114,9 @@ export function PersonaEditorModal({
     tags: editingPreset?.tags.join(", ") || "",
     skill_names: [...(editingPreset?.skill_names || [])] as string[],
     dify_kb_dataset_ids: [...(editingPreset?.dify_kb_dataset_ids || [])] as string[],
+    preferred_agent_id:
+      (editingPreset?.preferred_agent_id as PreferredAgentId | undefined) ||
+      DEFAULT_PREFERRED_AGENT_ID,
   });
 
   useEffect(() => {
@@ -129,6 +137,9 @@ export function PersonaEditorModal({
         tags: editingPreset?.tags.join(", ") || "",
         skill_names: [...(editingPreset?.skill_names || [])] as string[],
         dify_kb_dataset_ids: [...(editingPreset?.dify_kb_dataset_ids || [])] as string[],
+        preferred_agent_id:
+          (editingPreset?.preferred_agent_id as PreferredAgentId | undefined) ||
+          DEFAULT_PREFERRED_AGENT_ID,
       });
       setSkillSearch("");
       setSkillDropdownOpen(false);
@@ -353,6 +364,7 @@ export function PersonaEditorModal({
         .filter(Boolean),
       skill_names: draft.skill_names,
       dify_kb_dataset_ids: draft.dify_kb_dataset_ids,
+      preferred_agent_id: draft.preferred_agent_id,
     };
 
     const saved = editingPreset
@@ -688,7 +700,33 @@ export function PersonaEditorModal({
           </div>
         )}
 
-        {/* System Prompt */}
+                {/* Preferred Agent Template */}
+        <div className="ppe-field">
+          <label className="ppe-label">
+            {t("personaPresets.preferredAgent", "能力模板")}
+          </label>
+          <GlassSelect
+            value={draft.preferred_agent_id}
+            onChange={(v) =>
+              setDraft((prev) => ({
+                ...prev,
+                preferred_agent_id: v as PreferredAgentId,
+              }))
+            }
+            options={PREFERRED_AGENT_IDS.map((id) => ({
+              value: id,
+              label: t(`personaPresets.agent.${id}`, id),
+            }))}
+          />
+          <p className="ppe-hint">
+            {t(
+              "personaPresets.preferredAgentHint",
+              "使用该角色开聊时默认采用的能力模板；会话内不可切换。",
+            )}
+          </p>
+        </div>
+
+{/* System Prompt */}
         <div className="ppe-field">
           <label className="ppe-label">
             <MessageSquare size={13} className="ppe-label-icon" />

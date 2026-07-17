@@ -124,6 +124,7 @@ class BackgroundTaskManager:
         message: str,
         display_message: str | None,
         attachments: Optional[List[Dict[str, Any]]],
+        persona_preset_id: Optional[str] = None,
     ) -> str:
         """Persist the user message before the background worker starts."""
         from src.agents.core import resolve_agent_name
@@ -138,6 +139,7 @@ class BackgroundTaskManager:
                 run_id=run_id,
                 trace_id=trace_id,
                 enable_storage=True,
+                persona_preset_id=persona_preset_id,
             )
         )
         await presenter._ensure_trace()
@@ -301,6 +303,7 @@ class BackgroundTaskManager:
                     message=message,
                     display_message=display_message,
                     attachments=attachments,
+                    persona_preset_id=persona_preset_id,
                 )
                 user_message_written = True
 
@@ -400,6 +403,7 @@ class BackgroundTaskManager:
                     message=message,
                     display_message=display_message,
                     attachments=attachments,
+                    persona_preset_id=persona_preset_id,
                 )
                 user_message_written = True
 

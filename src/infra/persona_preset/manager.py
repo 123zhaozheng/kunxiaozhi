@@ -249,6 +249,7 @@ class PersonaPresetManager:
                 prompt.model_dump(mode="json") for prompt in source.starter_prompts
             ],
             "skill_names": source.skill_names,
+            "preferred_agent_id": source.preferred_agent_id,
             "visibility": PersonaPresetVisibility.PRIVATE.value,
             "status": PersonaPresetStatus.DRAFT.value,
             "source_preset_id": source.id,
@@ -284,6 +285,7 @@ class PersonaPresetManager:
             starter_prompts=preset.starter_prompts,
             skill_names=skill_names,
             dify_kb_dataset_ids=list(preset.dify_kb_dataset_ids or []),
+            preferred_agent_id=preset.preferred_agent_id,
             missing_skill_names=missing,
             version=preset.version,
             avatar=preset.avatar,

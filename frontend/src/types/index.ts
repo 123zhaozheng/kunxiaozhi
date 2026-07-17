@@ -60,6 +60,7 @@ export type {
   PersonaStarterPrompt,
   PersonaPresetUpdate,
   PersonaPresetVisibility,
+  PreferredAgentId,
   LocalizedText,
   PersonaWeComConfig,
   PersonaWeComConfigCreate,
@@ -67,6 +68,10 @@ export type {
   PersonaWeComReasonCode,
   PersonaWeComStatus,
   PersonaWeComStatusBatchResponse,
+} from "./personaPreset";
+export {
+  DEFAULT_PREFERRED_AGENT_ID,
+  PREFERRED_AGENT_IDS,
 } from "./personaPreset";
 
 // ============================================

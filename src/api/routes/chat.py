@@ -15,6 +15,7 @@ from fastapi.responses import StreamingResponse
 
 from src.agents.core import resolve_agent_name
 from src.agents.core.base import AgentFactory
+from src.agents.core.persona import resolve_persona_agent_id
 from src.api.deps import get_current_user_required, require_permissions
 from src.api.routes.auth.utils import _get_language
 from src.api.routes.chat_validation import validate_team_agent_request
@@ -377,7 +378,6 @@ async def chat_stream(
     from src.infra.task.manager import _generate_run_id
 
     session_id = request.session_id or str(uuid.uuid4())
-    validate_team_agent_request(agent_id, request)
 
     # 如果用户传入了 session_id，验证所有权
     existing_metadata: dict = {}
@@ -415,6 +415,15 @@ async def chat_stream(
         raise HTTPException(status_code=404, detail="角色预设不存在")
     except AuthorizationError as e:
         raise HTTPException(status_code=403, detail=str(e))
+
+    # Persona sessions lock to preferred/bound agent (authoritative).
+    # resolve_persona_agent_id(requested, preferred): preferred wins when valid.
+    if request.persona_preset_id and request.persona_snapshot is not None:
+        agent_id = resolve_persona_agent_id(
+            agent_id,
+            request.persona_snapshot.preferred_agent_id,
+        )
+    validate_team_agent_request(agent_id, request)
 
     # 生成 run_id（不管是否排队都需要唯一 ID）
     run_id = _generate_run_id()

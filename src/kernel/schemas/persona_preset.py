@@ -2,11 +2,15 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.infra.utils.datetime import utc_now
+
+PreferredAgentId = Literal["fast", "search", "team"]
+DEFAULT_PREFERRED_AGENT_ID: PreferredAgentId = "fast"
+PREFERRED_AGENT_IDS: frozenset[str] = frozenset({"fast", "search", "team"})
 
 
 class PersonaPresetScope(str, Enum):
@@ -76,6 +80,7 @@ class PersonaPresetBase(BaseModel):
     starter_prompts: list[PersonaStarterPrompt] = Field(default_factory=list)
     skill_names: list[str] = Field(default_factory=list)
     dify_kb_dataset_ids: list[str] = Field(default_factory=list)
+    preferred_agent_id: PreferredAgentId = DEFAULT_PREFERRED_AGENT_ID
     scope: PersonaPresetScope = PersonaPresetScope.USER
     visibility: PersonaPresetVisibility = PersonaPresetVisibility.PRIVATE
     status: PersonaPresetStatus = PersonaPresetStatus.DRAFT
@@ -109,6 +114,7 @@ class PersonaPresetUpdate(BaseModel):
     starter_prompts: Optional[list[PersonaStarterPrompt]] = None
     skill_names: Optional[list[str]] = None
     dify_kb_dataset_ids: Optional[list[str]] = None
+    preferred_agent_id: Optional[PreferredAgentId] = None
     scope: Optional[PersonaPresetScope] = None
     visibility: Optional[PersonaPresetVisibility] = None
     status: Optional[PersonaPresetStatus] = None
@@ -144,6 +150,7 @@ class PersonaPreset(BaseModel):
     starter_prompts: list[PersonaStarterPrompt] = Field(default_factory=list)
     skill_names: list[str] = Field(default_factory=list)
     dify_kb_dataset_ids: list[str] = Field(default_factory=list)
+    preferred_agent_id: PreferredAgentId = DEFAULT_PREFERRED_AGENT_ID
     visibility: PersonaPresetVisibility
     status: PersonaPresetStatus
     source_preset_id: Optional[str] = None
@@ -169,6 +176,7 @@ class PersonaPresetSnapshot(BaseModel):
     starter_prompts: list[PersonaStarterPrompt] = Field(default_factory=list)
     skill_names: list[str] = Field(default_factory=list)
     dify_kb_dataset_ids: list[str] = Field(default_factory=list)
+    preferred_agent_id: PreferredAgentId = DEFAULT_PREFERRED_AGENT_ID
     missing_skill_names: list[str] = Field(default_factory=list)
     version: int = 1
     avatar: Optional[str] = None

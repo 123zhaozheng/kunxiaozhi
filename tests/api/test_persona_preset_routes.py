@@ -119,8 +119,17 @@ async def test_update_persona_preset_preference_route(
                 updated_at=datetime(2026, 1, 2),
             )
 
+    class _Storage:
+        async def preset_has_wecom(self, preset_id: str) -> bool:
+            return preset_id == "preset-1"
+
     assert PersonaPresetPreferenceUpdate(is_favorite=True).is_favorite is True
     monkeypatch.setattr(persona_preset_route, "_manager", lambda: _FakeManager())
+    monkeypatch.setattr(
+        persona_preset_route,
+        "get_agent_config_storage",
+        lambda: _Storage(),
+    )
 
     app = FastAPI()
     app.include_router(persona_preset_route.router, prefix="/api/persona-presets")
@@ -139,6 +148,8 @@ async def test_update_persona_preset_preference_route(
     payload = response.json()
     assert payload["id"] == "preset-1"
     assert payload["is_favorite"] is True
+    # P1-3: preference PATCH must attach has_wecom like other routes
+    assert payload["has_wecom"] is True
 
 
 @pytest.mark.asyncio

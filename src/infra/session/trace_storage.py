@@ -261,8 +261,11 @@ class TraceStorage:
             )
             return True
         except DuplicateKeyError:
-            # Trace already exists (e.g., queued path created it before dequeue)
-            logger.debug("Trace %s already exists, skipping", trace_id)
+            # Trace already exists (e.g., pre-write path created it before worker).
+            # Merge missing metadata keys (esp. persona_preset_id) so analytics
+            # can attribute tokens when the first create had incomplete metadata.
+            await self._merge_trace_metadata_if_missing(trace_id, metadata or {})
+            logger.debug("Trace %s already exists, merged missing metadata", trace_id)
             return True
         except Exception as e:
             logger.error(f"Failed to create trace {trace_id}: {e}")
@@ -270,6 +273,42 @@ class TraceStorage:
 
             traceback.print_exc()
             return False
+
+    async def _merge_trace_metadata_if_missing(
+        self,
+        trace_id: str,
+        metadata: Dict[str, Any],
+    ) -> None:
+        """Fill missing metadata fields on an existing trace (idempotent).
+
+        Only sets keys that are absent or null/empty so we never overwrite
+        values written by an earlier complete create.
+        """
+        if not metadata:
+            return
+        try:
+            for key, value in metadata.items():
+                if value is None or value == "":
+                    continue
+                field = f"metadata.{key}"
+                await self.collection.update_one(
+                    {
+                        "trace_id": trace_id,
+                        "$or": [
+                            {field: {"$exists": False}},
+                            {field: None},
+                            {field: ""},
+                        ],
+                    },
+                    {
+                        "$set": {field: value},
+                        "$currentDate": {"updated_at": True},
+                    },
+                )
+        except Exception as e:
+            logger.warning(
+                "Failed to merge missing metadata for trace %s: %s", trace_id, e
+            )
 
     async def append_event(
         self,

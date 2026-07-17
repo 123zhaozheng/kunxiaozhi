@@ -177,7 +177,7 @@ export function ChatAppContent({
     clearActiveGoal,
     stopGeneration,
     clearMessages,
-    switchAgent,
+    switchAgent: switchAgentRaw,
     selectTeam,
     selectedTeamId,
     loadHistory,
@@ -225,14 +225,31 @@ export function ChatAppContent({
     },
   });
 
-  const switchToPersonaAgentMode = useCallback(() => {
-    if (currentAgent !== "team") return;
-    const nextAgentId = resolvePersonaAgentId(currentAgent, undefined, agents);
-    if (nextAgentId && nextAgentId !== currentAgent) {
-      switchAgent(nextAgentId);
-    }
-    selectTeam(null);
-  }, [agents, currentAgent, selectTeam, switchAgent]);
+  const switchToPersonaAgentMode = useCallback(
+    (preferredAgentId?: string | null) => {
+      const nextAgentId = resolvePersonaAgentId(preferredAgentId, currentAgent);
+      if (nextAgentId && nextAgentId !== currentAgent) {
+        // Bypass session lock: attaching a persona must set preferred agent.
+        switchAgentRaw(nextAgentId);
+      }
+      // Only keep a team selection when the preferred template is team.
+      if (nextAgentId !== "team") {
+        selectTeam(null);
+      }
+    },
+    [currentAgent, selectTeam, switchAgentRaw],
+  );
+
+  // Persona-bound sessions lock the capability template (server also enforces).
+  const switchAgent = useCallback(
+    (agentId: string) => {
+      if (sessionConfigRef.current.personaPresetId) {
+        return;
+      }
+      switchAgentRaw(agentId);
+    },
+    [switchAgentRaw],
+  );
 
   const prevAgentRef = useRef(currentAgent);
   useEffect(() => {
@@ -302,7 +319,7 @@ export function ChatAppContent({
       state?.personaPresetId === personaId &&
       state.personaSnapshot?.preset_id === personaId
     ) {
-      switchToPersonaAgentMode();
+      switchToPersonaAgentMode(state.personaSnapshot.preferred_agent_id);
       setPersonaPreset(personaId, state.personaSnapshot);
       return;
     }
@@ -311,7 +328,7 @@ export function ChatAppContent({
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (parsed.personaPresetId === personaId && parsed.personaSnapshot) {
-        switchToPersonaAgentMode();
+        switchToPersonaAgentMode(parsed.personaSnapshot.preferred_agent_id);
         setPersonaPreset(personaId, parsed.personaSnapshot);
       }
     } catch {
@@ -332,7 +349,7 @@ export function ChatAppContent({
     if (lastTeamRouteRequestRef.current === requestKey) return;
     lastTeamRouteRequestRef.current = requestKey;
 
-    switchAgent(teamRequest.agentId);
+    switchAgentRaw(teamRequest.agentId);
     selectTeam(teamRequest.teamId);
     setSearchParams(
       (prev) => {
@@ -342,7 +359,7 @@ export function ChatAppContent({
       },
       { replace: true },
     );
-  }, [location.state, searchParams, selectTeam, setSearchParams, switchAgent]);
+  }, [location.state, searchParams, selectTeam, setSearchParams, switchAgentRaw]);
 
   useEffect(() => {
     if (isSessionRestoredRef.current) return;
@@ -406,7 +423,9 @@ export function ChatAppContent({
     async (preset: PersonaPreset) => {
       const snapshot = await activatePersonaPreset(preset.id);
       if (snapshot) {
-        switchToPersonaAgentMode();
+        switchToPersonaAgentMode(
+          snapshot.preferred_agent_id ?? preset.preferred_agent_id,
+        );
         setPersonaPreset(preset.id, snapshot);
       }
       return snapshot;
@@ -678,7 +697,8 @@ export function ChatAppContent({
       isSessionRestoredRef.current = true;
 
       if (config.agent_id) {
-        switchAgent(config.agent_id);
+        // Bypass UI lock so restored persona sessions keep their bound agent_id.
+        switchAgentRaw(config.agent_id);
       }
 
       restoreSessionConfig(config);
@@ -701,7 +721,7 @@ export function ChatAppContent({
         }
       }
     },
-    [restoreSessionConfig, restoreAgentOptions, switchAgent, selectTeam],
+    [restoreSessionConfig, restoreAgentOptions, switchAgentRaw, selectTeam],
   );
 
   const { handleSelectSession, handleNewSession } = useSessionSync({

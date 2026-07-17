@@ -1,6 +1,8 @@
 import { useTranslation } from "react-i18next";
 import { Sparkles, Check, Copy, Pencil, Trash2, Pin, Star, BarChart3 } from "lucide-react";
 import type { PersonaPreset, PersonaWeComStatus } from "../../types";
+import { DEFAULT_PREFERRED_AGENT_ID } from "../../types";
+import { resolvePersonaAgentId } from "../../hooks/useAgent/agentSelection";
 import { PersonaAvatarIcon, PersonaAvatarImage } from "./PersonaAvatarIcon";
 import {
   isPersonaImageAvatar,
@@ -58,6 +60,9 @@ export function PersonaPresetCard({
   const { t } = useTranslation();
   const gradient = nameToGradient(preset.name);
   const primaryTag = preset.tags[0];
+  const preferredAgentId = resolvePersonaAgentId(
+    preset.preferred_agent_id ?? DEFAULT_PREFERRED_AGENT_ID,
+  );
   const CategoryIcon = primaryTag ? getCategoryIcon(primaryTag) : Sparkles;
   const capabilities = getPersonaPresetCapabilities(preset, {
     canWrite,
@@ -194,6 +199,12 @@ export function PersonaPresetCard({
                   </span>
                 </>
               )}
+              <>
+                <span className="inline-block h-1 w-1 rounded-full bg-[var(--theme-border)]" />
+                <span className="scb__status-pill scb__status-pill--installed pps-agent-badge">
+                  {t(`personaPresets.agent.${preferredAgentId}`, preferredAgentId)}
+                </span>
+              </>
             </div>
           </div>
         </div>

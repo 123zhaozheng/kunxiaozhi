@@ -16,6 +16,12 @@
 import importlib
 from typing import Any
 
+from src.kernel.schemas.persona_preset import (
+    DEFAULT_PREFERRED_AGENT_ID,
+    PREFERRED_AGENT_IDS,
+    PreferredAgentId,
+)
+
 _deepagents: Any = None
 try:
     _deepagents = importlib.import_module("deepagents")
@@ -29,6 +35,23 @@ _register_harness_profile = (
 
 
 DEFAULT_ROLE = "You are an intelligent assistant with tools and skills."
+
+
+def resolve_persona_agent_id(
+    requested_agent_id: str | None,
+    preferred_agent_id: str | None,
+) -> PreferredAgentId:
+    """Resolve agent id for persona-bound chat.
+
+    Backend authority shared by plaza use, session create, and future WeCom binding.
+    Preferred agent wins when valid; otherwise fall back to requested, then fast.
+    Missing/invalid preferred is treated as fast without side effects.
+    """
+    if preferred_agent_id in PREFERRED_AGENT_IDS:
+        return preferred_agent_id  # type: ignore[return-value]
+    if requested_agent_id in PREFERRED_AGENT_IDS:
+        return requested_agent_id  # type: ignore[return-value]
+    return DEFAULT_PREFERRED_AGENT_ID
 
 _PERSONA_HEADING = "## Persona"
 

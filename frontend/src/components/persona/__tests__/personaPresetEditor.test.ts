@@ -19,6 +19,7 @@ const draft = {
   tags: ["planning"],
   skill_names: ["planner"],
   dify_kb_dataset_ids: [],
+  preferred_agent_id: "fast" as const,
 };
 
 test("builds published global payload for new official preset", () => {
@@ -64,6 +65,7 @@ test("preserves user preset updates without admin-only fields", () => {
     starter_prompts: [],
     skill_names: [],
     dify_kb_dataset_ids: [],
+    preferred_agent_id: "fast" as const,
     visibility: "private",
     status: "draft",
     version: 1,
@@ -92,6 +94,7 @@ test("includes public global fields when editing a user preset as official", () 
     starter_prompts: [],
     skill_names: [],
     dify_kb_dataset_ids: [],
+    preferred_agent_id: "fast" as const,
     visibility: "private",
     status: "draft",
     version: 1,
@@ -126,6 +129,7 @@ test("includes private user fields when editing an official preset as mine", () 
     starter_prompts: [],
     skill_names: [],
     dify_kb_dataset_ids: [],
+    preferred_agent_id: "fast" as const,
     visibility: "public",
     status: "published",
     version: 1,
@@ -160,6 +164,7 @@ test("includes status when updating an official preset", () => {
     starter_prompts: [],
     skill_names: [],
     dify_kb_dataset_ids: [],
+    preferred_agent_id: "fast" as const,
     visibility: "public",
     status: "draft",
     version: 1,

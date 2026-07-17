@@ -1,6 +1,9 @@
 export type PersonaPresetScope = "global" | "user";
 export type PersonaPresetVisibility = "public" | "private";
 export type PersonaPresetStatus = "draft" | "published" | "archived";
+export type PreferredAgentId = "fast" | "search" | "team";
+export const DEFAULT_PREFERRED_AGENT_ID: PreferredAgentId = "fast";
+export const PREFERRED_AGENT_IDS: PreferredAgentId[] = ["fast", "search", "team"];
 export type LocalizedText = string | Record<string, string>;
 
 export interface PersonaStarterPrompt {
@@ -20,6 +23,7 @@ export interface PersonaPreset {
   starter_prompts?: PersonaStarterPrompt[];
   skill_names: string[];
   dify_kb_dataset_ids: string[];
+  preferred_agent_id?: PreferredAgentId;
   visibility: PersonaPresetVisibility;
   status: PersonaPresetStatus;
   source_preset_id?: string | null;
@@ -45,6 +49,7 @@ export interface PersonaPresetCreate {
   starter_prompts?: PersonaStarterPrompt[];
   skill_names?: string[];
   dify_kb_dataset_ids?: string[];
+  preferred_agent_id?: PreferredAgentId;
   scope?: PersonaPresetScope;
   visibility?: PersonaPresetVisibility;
   status?: PersonaPresetStatus;
@@ -59,6 +64,7 @@ export interface PersonaPresetUpdate {
   starter_prompts?: PersonaStarterPrompt[];
   skill_names?: string[];
   dify_kb_dataset_ids?: string[];
+  preferred_agent_id?: PreferredAgentId;
   scope?: PersonaPresetScope;
   visibility?: PersonaPresetVisibility;
   status?: PersonaPresetStatus;
@@ -76,6 +82,7 @@ export interface PersonaPresetSnapshot {
   starter_prompts?: PersonaStarterPrompt[];
   skill_names: string[];
   dify_kb_dataset_ids: string[];
+  preferred_agent_id?: PreferredAgentId;
   missing_skill_names: string[];
   version: number;
   avatar?: string | null;

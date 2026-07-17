@@ -47,20 +47,26 @@ test("chat app applies team route requests to agent and team selection", () => {
     chatAppContentSource,
     /getTeamRouteRequest\(searchParams,\s*location\.state\)/,
   );
-  assert.match(chatAppContentSource, /switchAgent\(teamRequest\.agentId\)/);
+  assert.match(chatAppContentSource, /switchAgentRaw\(teamRequest\.agentId\)/);
   assert.match(chatAppContentSource, /selectTeam\(teamRequest\.teamId\)/);
 });
 
-test("chat app switches team mode back to a persona-compatible agent when using a persona", () => {
+test("chat app switches to preferred persona agent when using a persona", () => {
   assert.match(chatAppContentSource, /resolvePersonaAgentId/);
   assert.match(
     chatAppContentSource,
     /const switchToPersonaAgentMode = useCallback/,
   );
-  assert.match(chatAppContentSource, /if \(currentAgent !== "team"\) return;/);
-  assert.match(chatAppContentSource, /selectTeam\(null\)/);
   assert.match(
     chatAppContentSource,
-    /switchToPersonaAgentMode\(\);[\s\S]*setPersonaPreset\(preset\.id, snapshot\)/,
+    /resolvePersonaAgentId\(preferredAgentId,\s*currentAgent\)/,
+  );
+  assert.match(
+    chatAppContentSource,
+    /if \(nextAgentId !== "team"\) \{\s*selectTeam\(null\);\s*\}/,
+  );
+  assert.match(
+    chatAppContentSource,
+    /switchToPersonaAgentMode\([\s\S]*preferred_agent_id[\s\S]*\)[\s\S]*setPersonaPreset\(preset\.id, snapshot\)/,
   );
 });

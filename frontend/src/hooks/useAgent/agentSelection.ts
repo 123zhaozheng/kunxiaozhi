@@ -1,6 +1,7 @@
 import type { AgentInfo } from "../../types";
+import type { PreferredAgentId } from "../../types/personaPreset";
 
-const TEAM_AGENT_ID = "team";
+const PREFERRED_AGENT_IDS = new Set<PreferredAgentId>(["fast", "search", "team"]);
 
 export function resolveAvailableAgentId(
   currentAgentId: string,
@@ -20,19 +21,22 @@ export function resolveAvailableAgentId(
   return agents[0]?.id || "";
 }
 
+/**
+ * Resolve the agent id for a persona-bound chat.
+ * Matches backend resolve_persona_agent_id: preferred wins when valid,
+ * otherwise requested, otherwise fast.
+ *
+ * Signature: (preferred, requested?) — preferred is persona.preferred_agent_id.
+ */
 export function resolvePersonaAgentId(
-  currentAgentId: string,
-  preferredDefaultAgentId: string | undefined,
-  agents: AgentInfo[],
-): string {
-  if (currentAgentId && currentAgentId !== TEAM_AGENT_ID) {
-    return resolveAvailableAgentId(
-      currentAgentId,
-      preferredDefaultAgentId,
-      agents,
-    );
+  preferredAgentId?: string | null,
+  requestedAgentId?: string | null,
+): PreferredAgentId {
+  if (preferredAgentId && PREFERRED_AGENT_IDS.has(preferredAgentId as PreferredAgentId)) {
+    return preferredAgentId as PreferredAgentId;
   }
-
-  const nonTeamAgents = agents.filter((agent) => agent.id !== TEAM_AGENT_ID);
-  return resolveAvailableAgentId("", preferredDefaultAgentId, nonTeamAgents);
+  if (requestedAgentId && PREFERRED_AGENT_IDS.has(requestedAgentId as PreferredAgentId)) {
+    return requestedAgentId as PreferredAgentId;
+  }
+  return "fast";
 }

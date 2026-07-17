@@ -249,12 +249,14 @@ async def update_persona_preset_preference(
 ):
     """Update the current user's favorite/pinned state for a visible preset."""
     try:
-        return await _manager().update_preference(
-            preset_id,
-            user_id=user.sub,
-            is_admin=_is_admin(user),
-            is_favorite=preference.is_favorite,
-            is_pinned=preference.is_pinned,
+        return await _attach_has_wecom_one(
+            await _manager().update_preference(
+                preset_id,
+                user_id=user.sub,
+                is_admin=_is_admin(user),
+                is_favorite=preference.is_favorite,
+                is_pinned=preference.is_pinned,
+            )
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="persona_preset_not_found")

@@ -14,6 +14,7 @@ import type {
   PersonaStarterPrompt,
   PersonaPresetSnapshot,
 } from "../../types";
+import { resolvePersonaAnalyzeSurface } from "./personaAnalyzeEntry";
 
 const SESSION_CONFIG_KEY = "kunxiaozhi_session_config";
 
@@ -262,6 +263,8 @@ export function usePersonaPlaza() {
   }, []);
 
   const handleAnalyze = useCallback((preset: PersonaPreset) => {
+    // Product rule: scoped modal only — never navigate("/analytics").
+    if (resolvePersonaAnalyzeSurface() !== "scoped_modal") return;
     setAnalyzeTarget(preset);
   }, []);
 

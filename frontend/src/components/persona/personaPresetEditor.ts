@@ -4,6 +4,7 @@ import type {
   PersonaStarterPrompt,
   PersonaPresetStatus,
   PersonaPresetUpdate,
+  PreferredAgentId,
 } from "../../types";
 
 export interface StarterPromptDraftRow {
@@ -20,6 +21,7 @@ export interface PersonaPresetEditorDraft {
   tags: string[];
   skill_names: string[];
   dify_kb_dataset_ids: string[];
+  preferred_agent_id: PreferredAgentId;
 }
 
 export interface PersonaPresetEditorOptions {
@@ -103,6 +105,7 @@ export function buildPersonaPresetPayload(
     tags: draft.tags,
     skill_names: draft.skill_names,
     dify_kb_dataset_ids: draft.dify_kb_dataset_ids,
+    preferred_agent_id: draft.preferred_agent_id,
   };
 
   if (preset) {

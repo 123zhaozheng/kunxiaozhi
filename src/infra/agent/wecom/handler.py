@@ -644,9 +644,16 @@ def create_wecom_message_handler(
             persona_system_prompt = agent_request.persona_system_prompt
             enabled_skills = agent_request.enabled_skills
 
-            # Use "search" agent (same as Web chat default).
-            # PersonaPreset provides the system_prompt and skills via snapshot.
-            agent_to_use = "search"
+            # Resolve agent from persona preferred_agent_id (same authority as Web).
+            # Missing/invalid preferred falls back to fast.
+            from src.agents.core.persona import resolve_persona_agent_id
+
+            preferred_agent_id = (
+                agent_request.persona_snapshot.preferred_agent_id
+                if agent_request.persona_snapshot is not None
+                else None
+            )
+            agent_to_use = resolve_persona_agent_id(None, preferred_agent_id)
 
             # ── WeCom 行为配置 ─────────────────────────────────────
             stream_reply = wecom_config.get("stream_reply", True)
