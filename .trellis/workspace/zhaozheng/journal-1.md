@@ -278,3 +278,12 @@ Fixed two fork bugs. (1) Forking a still-running run left the new session UI stu
 ### Next Steps
 
 - None - task complete
+
+## 2026-07-17 — persona-template-and-analytics
+
+- Completed preferred_agent_id (fast/search/team) + Web/WeCom resolve parity
+- Analytics dual-dimension lists/CSV; single-Persona analyze modal (not global board)
+- Architect P1: users  join, trace persona metadata merge, has_wecom on preference, frequency $project
+- Specs: backend/persona-preferred-agent.md, analytics-persona-and-lists.md
+- Commits: ffccc3f3, 902a396c, 442809c7, aa9bb594
+
