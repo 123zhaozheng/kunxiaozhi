@@ -243,3 +243,38 @@ Fixed two fork bugs. (1) Forking a still-running run left the new session UI stu
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: Agent emoji CDN 本地化（内网 Chrome）
+
+**Date**: 2026-07-17
+**Task**: Agent emoji CDN 本地化（内网 Chrome）
+**Branch**: `feat/opensandbox-backend`
+
+### Summary
+
+确认 agent/subagent 图标仍走 FluentEmoji 3d CDN(registry.npmmirror.com)，内网空白；用 LocalFluentEmoji+/emoji-assets 替换 DynamicIcon 与 SubagentBlocks，补 FE0F 候选与 anim 缺失 glyph 近义替换；更新 frontend quality-guidelines；归档三个 07-13 完成任务。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `380e9ecb` | (see git log) |
+| `90ee44bc` | (see git log) |
+| `54f73232` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

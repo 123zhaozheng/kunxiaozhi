@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 7
-- **Last Active**: 2026-07-15
+- **Total Sessions**: 8
+- **Last Active**: 2026-07-17
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~245 | Active |
+| `journal-1.md` | ~280 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 8 | 2026-07-17 | Agent emoji CDN 本地化（内网 Chrome） | `380e9ecb`, `90ee44bc`, `54f73232` | `feat/opensandbox-backend` |
 | 7 | 2026-07-15 | 对接 OpenSandbox 沙箱后端 | `0d48091e`, `fa7e9264`, `aaf49ef8`, `158e6614` | `feat/opensandbox-backend` |
 | 6 | 2026-07-03 | Fix fork: new session stuck generating + legacy bubble 404 | `7ced7123` | `main` |
 | 5 | 2026-07-01 | Persona 企微连接状态 UI 与 WeCom 会话 Web 对齐 | `7cdc131d`, `c9b400ec` | `main` |
