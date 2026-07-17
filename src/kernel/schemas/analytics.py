@@ -53,6 +53,10 @@ class ByLabelItem(BaseModel):
 
     label: str = Field(..., description="分组标签")
     value: float = Field(default=0.0, description="聚合数值")
+    id: Optional[str] = Field(
+        default=None,
+        description="可选稳定 ID（如 persona_preset_id），供钻取筛选；缺省时用 label",
+    )
 
 
 class ByLabelResponse(BaseModel):
@@ -126,6 +130,9 @@ class SessionListItem(BaseModel):
     id: str = Field(..., description="会话 ID")
     name: Optional[str] = Field(default=None, description="会话名称")
     user_id: Optional[str] = Field(default=None, description="用户 ID")
+    username: Optional[str] = Field(
+        default=None, description="用户名（工号），由 users 集合批量补齐"
+    )
     agent_id: str = Field(default="default", description="Agent ID")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="更新时间")
@@ -140,6 +147,25 @@ class SessionListResponse(AnalyticsListMeta):
     """会话明细列表响应"""
 
     items: list[SessionListItem] = Field(default_factory=list, description="会话条目")
+
+
+class ActiveUserListItem(BaseModel):
+    """活跃用户明细列表项（管理员钻取视图）"""
+
+    user_id: str = Field(..., description="用户 ID")
+    username: str = Field(default="", description="用户名")
+    display_name: Optional[str] = Field(default=None, description="显示名")
+    roles: list[str] = Field(default_factory=list, description="RBAC 角色 ID 列表")
+    session_count: int = Field(default=0, description="区间内会话数（频次）")
+    last_active_at: Optional[datetime] = Field(
+        default=None, description="区间内最近会话时间"
+    )
+
+
+class ActiveUserListResponse(AnalyticsListMeta):
+    """活跃用户明细列表响应"""
+
+    items: list[ActiveUserListItem] = Field(default_factory=list, description="活跃用户条目")
 
 
 class FeedbackListItem(BaseModel):

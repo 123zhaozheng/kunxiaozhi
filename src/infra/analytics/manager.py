@@ -12,6 +12,7 @@ from typing import Optional
 from src.infra.analytics.storage import AnalyticsStorage
 from src.infra.logging import get_logger
 from src.kernel.schemas.analytics import (
+    ActiveUserListResponse,
     ByLabelItem,
     ByPresetFeedbackResponse,
     FeedbackListResponse,
@@ -64,6 +65,16 @@ class AnalyticsManager:
     ) -> list[ByLabelItem]:
         return await self.storage.get_tokens_by_preset(start, end, limit=limit or 10)
 
+    async def get_sessions_by_agent(
+        self, start: datetime, end: datetime, limit: int = 10
+    ) -> list[ByLabelItem]:
+        return await self.storage.get_sessions_by_agent(start, end, limit=limit)
+
+    async def get_sessions_by_persona(
+        self, start: datetime, end: datetime, limit: int = 10
+    ) -> list[ByLabelItem]:
+        return await self.storage.get_sessions_by_persona(start, end, limit=limit)
+
     async def get_tokens_trend(
         self, start: datetime, end: datetime
     ) -> list[TrendDataPoint]:
@@ -91,8 +102,46 @@ class AnalyticsManager:
         preset_id: Optional[str] = None,
         skip: int = 0,
         limit: int = 20,
+        *,
+        agent_id: Optional[str] = None,
+        persona_preset_id: Optional[str] = None,
+        role_id: Optional[str] = None,
+        sort: str = "recent",
     ) -> SessionListResponse:
-        return await self.storage.list_sessions(start, end, preset_id, skip, limit)
+        return await self.storage.list_sessions(
+            start,
+            end,
+            preset_id=preset_id,
+            skip=skip,
+            limit=limit,
+            agent_id=agent_id,
+            persona_preset_id=persona_preset_id,
+            role_id=role_id,
+            sort=sort,
+        )
+
+    async def list_active_users(
+        self,
+        start: datetime,
+        end: datetime,
+        skip: int = 0,
+        limit: int = 20,
+        *,
+        agent_id: Optional[str] = None,
+        persona_preset_id: Optional[str] = None,
+        role_id: Optional[str] = None,
+        sort: str = "frequency",
+    ) -> ActiveUserListResponse:
+        return await self.storage.list_active_users(
+            start,
+            end,
+            skip=skip,
+            limit=limit,
+            agent_id=agent_id,
+            persona_preset_id=persona_preset_id,
+            role_id=role_id,
+            sort=sort,
+        )
 
     async def list_feedback(
         self,

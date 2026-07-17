@@ -228,29 +228,43 @@
     }
   },
   "analytics": {
+    "dimensions": {
+      "byAgent": "按智能体",
+      "byAgentHint": "会话数按智能体 agent_id 聚合",
+      "byPersona": "按 Persona",
+      "byPersonaHint": "会话数按 Persona 聚合"
+    },
     "drilldown": {
-      "agent": "Agent",
+      "agent": "智能体",
       "back": "返回",
       "comment": "评论",
       "createdAt": "创建时间",
       "empty": "暂无数据",
       "eventCount": "事件数",
       "feedbackTitle": "反馈明细",
-      "preset": "角色",
+      "lastActive": "最近活跃",
+      "persona": "Persona",
+      "preset": "Persona",
       "rating": "评分",
       "reason": "原因",
       "runId": "运行",
       "runsTitle": "运行明细",
+      "sessionCount": "会话数",
       "sessionName": "会话",
       "sessionsTitle": "会话明细",
       "startedAt": "开始时间",
       "status": "状态",
       "tokens": "Token",
-      "user": "用户"
+      "user": "用户",
+      "usersTitle": "活跃用户明细",
+      "exportCsv": "导出 CSV",
+      "exporting": "导出中…",
+      "exportFailed": "导出失败",
+      "exportHint": "导出当前筛选全量（非本页，最多 10000 行）"
     },
     "feedback": {
-      "byPreset": "按角色分反馈",
-      "byPresetHint": "按角色智能体统计好评/差评",
+      "byPreset": "按 Persona 分反馈",
+      "byPresetHint": "按 Persona 统计好评/差评",
       "down": "差评",
       "downCount": "差评数",
       "noReasons": "暂无点踩原因数据",
@@ -261,6 +275,17 @@
       "up": "好评",
       "upCount": "好评数",
       "upRate": "好评率"
+    },
+    "filters": {
+      "agent": "智能体",
+      "all": "全部",
+      "persona": "Persona",
+      "personaLocked": "已锁定为当前 Persona",
+      "personaPlaceholder": "preset id",
+      "sort": "排序",
+      "sortFrequency": "使用频次",
+      "sortRecent": "最近活跃",
+      "userRole": "用户角色"
     },
     "overview": {
       "activeUsers": "活跃用户",
@@ -273,8 +298,9 @@
       "analyze": "分析",
       "downReasons": "点踩原因分布",
       "noDownReasons": "暂无点踩原因数据",
-      "subtitle": "单角色智能体指标",
-      "title": "角色分析",
+      "subtitle": "单 Persona 指标",
+      "title": "Persona 分析",
+      "titleNamed": "「{{name}}」分析",
       "totalMessages": "总消息数",
       "totalSessions": "总会话数",
       "totalTokens": "token 消耗总计",
@@ -302,8 +328,8 @@
     "tokens": {
       "byModel": "按模型分 token",
       "byModelHint": "每个模型的总 token 数",
-      "byPreset": "按 Agent 类型分 token (Top 10)",
-      "byPresetHint": "每个 Agent 类型的总 token 数",
+      "byPreset": "按智能体类型分 token (Top 10)",
+      "byPresetHint": "每个智能体类型的总 token 数",
       "title": "Token",
       "total": "总 token",
       "trend": "Token 消耗趋势",
@@ -1668,7 +1694,15 @@
       "streamReply": "流式回复",
       "streamReplyDesc": "通过 WebSocket 流式传输回复",
       "title": "企业微信入口"
-    }
+    },
+    "preferredAgent": "能力模板",
+    "preferredAgentHint": "使用该角色开聊时默认采用的能力模板；会话内不可切换。",
+    "agent": {
+      "fast": "Fast",
+      "search": "Search",
+      "team": "Team"
+    },
+    "agentLocked": "角色会话已锁定能力模板"
   },
   "profile": {
     "appearance": "外观",

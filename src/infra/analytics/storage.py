@@ -14,6 +14,8 @@ from src.infra.logging import get_logger
 from src.infra.storage.mongodb import get_mongo_client
 from src.kernel.config import settings
 from src.kernel.schemas.analytics import (
+    ActiveUserListItem,
+    ActiveUserListResponse,
     ByLabelItem,
     ByPresetFeedbackItem,
     ByPresetFeedbackResponse,
@@ -45,6 +47,38 @@ def _ensure_datetime(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+def _compute_up_vote_rate(up_count: int, down_count: int) -> float:
+    """点赞率 = up / (up + down)；无反馈时返回 0。
+
+    Feedback.rating 仅允许 ``up`` / ``down``，禁止使用历史错误值 ``like``。
+    返回 0-100 的百分比，保留 1 位小数。
+    """
+    total = int(up_count) + int(down_count)
+    if total <= 0:
+        return 0.0
+    return round((int(up_count) / total) * 100, 1)
+
+
+def _user_object_ids(user_ids: list[str]) -> list[Any]:
+    """Convert string user ids to ObjectId; skip invalid values.
+
+    User documents are keyed by Mongo ``_id`` (ObjectId). API/session layers
+    expose ``str(_id)`` as ``user_id`` / ``id``.
+    """
+    from bson import ObjectId
+    from bson.errors import InvalidId
+
+    object_ids: list[Any] = []
+    for uid in user_ids:
+        if not uid:
+            continue
+        try:
+            object_ids.append(ObjectId(str(uid)))
+        except (InvalidId, TypeError, ValueError):
+            continue
+    return object_ids
 
 
 class AnalyticsStorage:
@@ -133,6 +167,23 @@ class AnalyticsStorage:
                 name="metadata_preset_session_id_idx",
                 sparse=True,
             )
+            # by-agent / by-persona 聚合 + 列表筛选
+            await self.sessions.create_index(
+                [("agent_id", 1), ("created_at", -1)],
+                background=True,
+                name="agent_id_created_at_idx",
+            )
+            await self.sessions.create_index(
+                [("metadata.persona_preset_id", 1), ("created_at", -1)],
+                background=True,
+                name="metadata_preset_created_at_idx",
+                sparse=True,
+            )
+            await self.sessions.create_index(
+                [("user_id", 1), ("created_at", -1)],
+                background=True,
+                name="user_id_created_at_idx",
+            )
             logger.info("Analytics indexes ensured")
         except Exception as e:
             logger.warning("Failed to ensure analytics indexes: %s", e)
@@ -196,16 +247,25 @@ class AnalyticsStorage:
                 }
             },
         ]
-        # Up vote rate (over feedback in range)
+        # Up vote rate: count rating in {up, down} only (never "like")
         feedback_stats_pipeline: list[dict[str, Any]] = [
-            {"$match": self._date_range_query(s, e)},
+            {
+                "$match": {
+                    **self._date_range_query(s, e),
+                    "rating": {"$in": ["up", "down"]},
+                }
+            },
             {
                 "$group": {
                     "_id": None,
-                    "total": {"$sum": 1},
                     "up": {
                         "$sum": {
                             "$cond": [{"$eq": ["$rating", "up"]}, 1, 0]
+                        }
+                    },
+                    "down": {
+                        "$sum": {
+                            "$cond": [{"$eq": ["$rating", "down"]}, 1, 0]
                         }
                     },
                 }
@@ -225,9 +285,9 @@ class AnalyticsStorage:
         sessions_total = sessions_count[0]["value"] if sessions_count else 0
         tokens_total = int(tokens_count[0]["value"]) if tokens_count else 0
         if feedback_stats:
-            total_fb = int(feedback_stats[0].get("total", 0) or 0)
             up_fb = int(feedback_stats[0].get("up", 0) or 0)
-            up_rate = round((up_fb / total_fb) * 100, 1) if total_fb > 0 else 0.0
+            down_fb = int(feedback_stats[0].get("down", 0) or 0)
+            up_rate = _compute_up_vote_rate(up_fb, down_fb)
         else:
             up_rate = 0.0
 
@@ -478,6 +538,103 @@ class AnalyticsStorage:
             )
         return out
 
+    async def get_sessions_by_agent(
+        self,
+        start: datetime,
+        end: datetime,
+        limit: int = _TOP_PRESET_LIMIT,
+    ) -> list[ByLabelItem]:
+        """按 agent_id 聚合会话数（by-agent 维度）。"""
+        s = _ensure_datetime(start)
+        e = _ensure_datetime(end)
+        pipeline: list[dict[str, Any]] = [
+            {"$match": {"created_at": {"$gte": s, "$lte": e}}},
+            {
+                "$group": {
+                    "_id": {"$ifNull": ["$agent_id", "default"]},
+                    "value": {"$sum": 1},
+                }
+            },
+            {"$project": {"_id": 0, "label": "$_id", "value": 1}},
+            {"$sort": {"value": -1}},
+            {"$limit": max(int(limit), 1)},
+        ]
+        out: list[ByLabelItem] = []
+        try:
+            async for doc in self.sessions.aggregate(pipeline):
+                out.append(
+                    ByLabelItem(
+                        label=str(doc.get("label", "") or "—"),
+                        value=float(doc.get("value", 0)),
+                    )
+                )
+        except Exception as ex:
+            logger.warning("get_sessions_by_agent failed: %s", ex)
+        return out
+
+    async def get_sessions_by_persona(
+        self,
+        start: datetime,
+        end: datetime,
+        limit: int = _TOP_PRESET_LIMIT,
+    ) -> list[ByLabelItem]:
+        """按 persona_preset_id 聚合会话数（by-persona 维度）。
+
+        label 优先使用 metadata.persona_preset_name，缺失时回退 preset_id。
+        """
+        s = _ensure_datetime(start)
+        e = _ensure_datetime(end)
+        pipeline: list[dict[str, Any]] = [
+            {
+                "$match": {
+                    "created_at": {"$gte": s, "$lte": e},
+                    "metadata.persona_preset_id": {"$exists": True, "$nin": [None, ""]},
+                }
+            },
+            {
+                "$group": {
+                    "_id": "$metadata.persona_preset_id",
+                    "name": {"$first": "$metadata.persona_preset_name"},
+                    "value": {"$sum": 1},
+                }
+            },
+            {
+                "$project": {
+                    "_id": 0,
+                    "id": "$_id",
+                    "label": {
+                        "$cond": [
+                            {
+                                "$and": [
+                                    {"$ne": ["$name", None]},
+                                    {"$ne": ["$name", ""]},
+                                ]
+                            },
+                            "$name",
+                            "$_id",
+                        ]
+                    },
+                    "value": 1,
+                }
+            },
+            {"$sort": {"value": -1}},
+            {"$limit": max(int(limit), 1)},
+        ]
+        out: list[ByLabelItem] = []
+        try:
+            async for doc in self.sessions.aggregate(pipeline):
+                preset_id = doc.get("id")
+                out.append(
+                    ByLabelItem(
+                        label=str(doc.get("label", "") or "—"),
+                        value=float(doc.get("value", 0)),
+                        id=str(preset_id) if preset_id else None,
+                    )
+                )
+        except Exception as ex:
+            logger.warning("get_sessions_by_persona failed: %s", ex)
+        return out
+
     async def get_tokens_trend(
         self,
         start: datetime,
@@ -685,8 +842,7 @@ class AnalyticsStorage:
             except Exception as ex:
                 logger.warning("preset feedback aggregation failed: %s", ex)
 
-        total_fb = up_count + down_total
-        up_rate = round((up_count / total_fb) * 100, 1) if total_fb > 0 else 0.0
+        up_rate = _compute_up_vote_rate(up_count, down_total)
 
         return PresetAnalyticsResponse(
             total_messages=total_messages,
@@ -729,7 +885,8 @@ class AnalyticsStorage:
                 reasons = doc.get("reasons") or []
         except Exception as ex:
             logger.warning("feedback summary aggregation failed: %s", ex)
-        up_percentage = round((up_count / total) * 100, 1) if total > 0 else 0.0
+        # 点赞率仅基于 up/down，与 get_overview 公式一致
+        up_percentage = _compute_up_vote_rate(up_count, down_count)
         return FeedbackSummaryResponse(
             total=total,
             up_count=up_count,
@@ -830,6 +987,70 @@ class AnalyticsStorage:
         items.sort(key=lambda it: it.total, reverse=True)
         return ByPresetFeedbackResponse(items=items)
 
+    async def _session_user_ids_for_role(
+        self,
+        role_id: str,
+        start: datetime,
+        end: datetime,
+    ) -> list[str]:
+        """在时间范围内，返回持有指定 RBAC 角色的 user_id 列表。"""
+        s = _ensure_datetime(start)
+        e = _ensure_datetime(end)
+        try:
+            session_user_ids = await self.sessions.distinct(
+                "user_id",
+                {
+                    "created_at": {"$gte": s, "$lte": e},
+                    "user_id": {"$exists": True, "$nin": [None, ""]},
+                },
+            )
+        except Exception as ex:
+            logger.warning("distinct session user_ids failed: %s", ex)
+            return []
+        cleaned = [str(uid) for uid in session_user_ids if uid]
+        if not cleaned:
+            return []
+        object_ids = _user_object_ids(cleaned)
+        if not object_ids:
+            return []
+        try:
+            cursor = self.users.find(
+                {"_id": {"$in": object_ids}, "roles": role_id},
+                {"_id": 1},
+            )
+            docs = await cursor.to_list(length=len(object_ids))
+            return [str(doc["_id"]) for doc in docs if doc.get("_id") is not None]
+        except Exception as ex:
+            logger.warning("filter users by role failed: %s", ex)
+            return []
+
+    def _build_session_query(
+        self,
+        start: datetime,
+        end: datetime,
+        *,
+        preset_id: str | None = None,
+        persona_preset_id: str | None = None,
+        agent_id: str | None = None,
+        role_user_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """构建会话列表查询条件。
+
+        兼容旧参数 preset_id；新参数 persona_preset_id 优先。
+        role_user_ids 为 None 表示不按角色过滤；空列表表示无匹配用户。
+        """
+        s = _ensure_datetime(start)
+        e = _ensure_datetime(end)
+        query: dict[str, Any] = {"created_at": {"$gte": s, "$lte": e}}
+        effective_preset = persona_preset_id or preset_id
+        if effective_preset:
+            query["metadata.persona_preset_id"] = effective_preset
+        if agent_id:
+            query["agent_id"] = agent_id
+        if role_user_ids is not None:
+            query["user_id"] = {"$in": role_user_ids}
+        return query
+
     async def list_sessions(
         self,
         start: datetime,
@@ -837,13 +1058,32 @@ class AnalyticsStorage:
         preset_id: str | None = None,
         skip: int = 0,
         limit: int = 20,
+        *,
+        agent_id: str | None = None,
+        persona_preset_id: str | None = None,
+        role_id: str | None = None,
+        sort: str = "recent",
     ) -> SessionListResponse:
-        """会话明细列表（时间 + preset 筛选 + 分页）。"""
+        """会话明细列表（时间 + agent/persona/角色筛选 + 排序 + 分页）。
+
+        sort:
+          - recent: 按 created_at 降序（默认，兼容现网）
+          - frequency: 按同 user_id 会话频次降序，再按 created_at 降序
+        """
         s = _ensure_datetime(start)
         e = _ensure_datetime(end)
-        query: dict[str, Any] = {"created_at": {"$gte": s, "$lte": e}}
-        if preset_id:
-            query["metadata.persona_preset_id"] = preset_id
+        role_user_ids: list[str] | None = None
+        if role_id:
+            role_user_ids = await self._session_user_ids_for_role(role_id, s, e)
+
+        query = self._build_session_query(
+            s,
+            e,
+            preset_id=preset_id,
+            persona_preset_id=persona_preset_id,
+            agent_id=agent_id,
+            role_user_ids=role_user_ids,
+        )
         projection = {
             "session_id": 1,
             "name": 1,
@@ -857,22 +1097,76 @@ class AnalyticsStorage:
             "metadata.persona_preset_id": 1,
             "metadata.persona_preset_name": 1,
         }
+        sort_mode = (sort or "recent").lower()
         try:
             total = await self.sessions.count_documents(query)
-            cursor = self.sessions.find(query, projection).sort("created_at", -1)
-            docs = await cursor.skip(skip).limit(limit).to_list(length=limit)
+            if sort_mode == "frequency":
+                pipeline: list[dict[str, Any]] = [
+                    {"$match": query},
+                    {
+                        "$addFields": {
+                            "_user_key": {
+                                "$ifNull": ["$user_id", ""]
+                            }
+                        }
+                    },
+                    {
+                        "$setWindowFields": {
+                            "partitionBy": "$_user_key",
+                            "output": {
+                                "_freq": {"$count": {}},
+                            },
+                        }
+                    },
+                    {"$sort": {"_freq": -1, "created_at": -1}},
+                    {"$skip": skip},
+                    {"$limit": limit},
+                    # inclusion projection cannot mix with field exclusion;
+                    # drop window helpers in a separate $unset stage.
+                    {"$project": projection},
+                    {"$unset": ["_freq", "_user_key"]},
+                ]
+                docs = await self.sessions.aggregate(pipeline).to_list(length=limit)
+            else:
+                cursor = self.sessions.find(query, projection).sort("created_at", -1)
+                docs = await cursor.skip(skip).limit(limit).to_list(length=limit)
         except Exception as ex:
             logger.warning("list sessions failed: %s", ex)
             return SessionListResponse(total=0, skip=skip, limit=limit, has_more=False)
 
+        # Batch-load username (employee id) to avoid N+1 and long ObjectId-only UI.
+        # Real users collection keys by ``_id`` ObjectId (mapped to ``id`` on read).
+        user_ids = [
+            str(doc.get("user_id"))
+            for doc in docs
+            if doc.get("user_id")
+        ]
+        username_by_id: dict[str, str] = {}
+        object_ids = _user_object_ids(user_ids)
+        if object_ids:
+            try:
+                async for udoc in self.users.find(
+                    {"_id": {"$in": object_ids}},
+                    {"_id": 1, "username": 1},
+                ):
+                    uid = str(udoc.get("_id") or "")
+                    if uid:
+                        username_by_id[uid] = str(udoc.get("username") or "")
+            except Exception as ex:
+                logger.warning("list sessions username lookup failed: %s", ex)
+
         items: list[SessionListItem] = []
         for doc in docs:
             metadata = doc.get("metadata") or {}
+            uid = doc.get("user_id")
+            uid_str = str(uid) if uid else ""
+            username = username_by_id.get(uid_str) or None
             items.append(
                 SessionListItem(
                     id=str(doc.get("session_id") or doc.get("_id") or ""),
                     name=doc.get("name"),
-                    user_id=doc.get("user_id"),
+                    user_id=uid_str or None,
+                    username=username if username else None,
                     agent_id=str(doc.get("agent_id") or "default"),
                     created_at=doc.get("created_at"),
                     updated_at=doc.get("updated_at"),
@@ -885,6 +1179,116 @@ class AnalyticsStorage:
             )
         has_more = (skip + len(items)) < total
         return SessionListResponse(
+            items=items, total=total, skip=skip, limit=limit, has_more=has_more
+        )
+
+    async def list_active_users(
+        self,
+        start: datetime,
+        end: datetime,
+        skip: int = 0,
+        limit: int = 20,
+        *,
+        agent_id: str | None = None,
+        persona_preset_id: str | None = None,
+        role_id: str | None = None,
+        sort: str = "frequency",
+    ) -> ActiveUserListResponse:
+        """活跃用户列表（按区间内会话聚合）。
+
+        活跃定义：区间内有会话记录的用户。
+        sort:
+          - frequency: 按会话数降序（默认）
+          - recent: 按最近会话时间降序
+        """
+        s = _ensure_datetime(start)
+        e = _ensure_datetime(end)
+        role_user_ids: list[str] | None = None
+        if role_id:
+            role_user_ids = await self._session_user_ids_for_role(role_id, s, e)
+
+        match = self._build_session_query(
+            s,
+            e,
+            persona_preset_id=persona_preset_id,
+            agent_id=agent_id,
+            role_user_ids=role_user_ids,
+        )
+        # 活跃用户必须有 user_id；角色过滤时已写入 $in
+        if "user_id" not in match:
+            match["user_id"] = {"$exists": True, "$nin": [None, ""]}
+
+        sort_mode = (sort or "frequency").lower()
+        sort_stage = (
+            {"$sort": {"last_active_at": -1, "session_count": -1}}
+            if sort_mode == "recent"
+            else {"$sort": {"session_count": -1, "last_active_at": -1}}
+        )
+        pipeline: list[dict[str, Any]] = [
+            {"$match": match},
+            {
+                "$group": {
+                    "_id": "$user_id",
+                    "session_count": {"$sum": 1},
+                    "last_active_at": {"$max": "$created_at"},
+                }
+            },
+            {
+                "$facet": {
+                    "total": [{"$count": "count"}],
+                    "items": [
+                        sort_stage,
+                        {"$skip": skip},
+                        {"$limit": limit},
+                    ],
+                }
+            },
+        ]
+        try:
+            facet_docs = await self.sessions.aggregate(pipeline).to_list(length=1)
+        except Exception as ex:
+            logger.warning("list active users failed: %s", ex)
+            return ActiveUserListResponse(total=0, skip=skip, limit=limit, has_more=False)
+
+        facet = facet_docs[0] if facet_docs else {}
+        total_arr = facet.get("total") or []
+        total = int(total_arr[0].get("count", 0)) if total_arr else 0
+        raw_items = facet.get("items") or []
+
+        user_ids = [str(doc.get("_id")) for doc in raw_items if doc.get("_id")]
+        user_meta: dict[str, dict[str, Any]] = {}
+        object_ids = _user_object_ids(user_ids)
+        if object_ids:
+            try:
+                cursor = self.users.find(
+                    {"_id": {"$in": object_ids}},
+                    {"_id": 1, "username": 1, "display_name": 1, "roles": 1},
+                )
+                async for udoc in cursor:
+                    uid = str(udoc.get("_id") or "")
+                    if uid:
+                        user_meta[uid] = udoc
+            except Exception as ex:
+                logger.warning("load active user meta failed: %s", ex)
+
+        items: list[ActiveUserListItem] = []
+        for doc in raw_items:
+            uid = str(doc.get("_id") or "")
+            meta = user_meta.get(uid) or {}
+            roles_raw = meta.get("roles") or []
+            roles = [str(r) for r in roles_raw if r]
+            items.append(
+                ActiveUserListItem(
+                    user_id=uid,
+                    username=str(meta.get("username") or ""),
+                    display_name=meta.get("display_name"),
+                    roles=roles,
+                    session_count=int(doc.get("session_count", 0) or 0),
+                    last_active_at=doc.get("last_active_at"),
+                )
+            )
+        has_more = (skip + len(items)) < total
+        return ActiveUserListResponse(
             items=items, total=total, skip=skip, limit=limit, has_more=has_more
         )
 

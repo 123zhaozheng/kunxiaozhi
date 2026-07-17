@@ -1,8 +1,8 @@
 /**
- * Preset Analytics Modal - 单角色智能体分析
+ * Preset Analytics Modal - 单 Persona 专用分析
  *
- * 复用 AnalyticsPanel 的概览卡片 + 时间筛选器模式，
- * 展示基础 4 指标 + 点赞率 + 点踩原因分布柱状图。
+ * 仅展示该人设指标（getPresetAnalytics）+ 锁死 persona 的钻取明细。
+ * 不展示全局 by-agent / by-persona 对比看板。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -36,6 +36,10 @@ import type {
   PresetAnalyticsResponse,
 } from "../../types/analytics";
 import type { PersonaPreset } from "../../types";
+import {
+  AnalyticsDrilldownList,
+  type DrilldownKind,
+} from "./AnalyticsDrilldownList";
 
 const BAR_COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444"];
 
@@ -97,13 +101,24 @@ function StatsCard({
   icon: Icon,
   label,
   value,
+  onClick,
 }: {
   icon: React.ElementType;
   label: string;
   value: string | number;
+  onClick?: () => void;
 }) {
-  return (
-    <div className="glass-card flex items-center gap-3 rounded-xl p-4">
+  const className = [
+    "glass-card flex w-full items-center gap-3 rounded-xl p-4 text-left",
+    onClick
+      ? "cursor-pointer transition-colors hover:bg-[var(--glass-bg-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]"
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const content = (
+    <>
       <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--glass-bg-subtle)]">
         <Icon
           size={22}
@@ -119,8 +134,18 @@ function StatsCard({
           {value}
         </p>
       </div>
-    </div>
+    </>
   );
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={className}>{content}</div>;
 }
 
 export function PresetAnalyticsModal({
@@ -139,6 +164,10 @@ export function PresetAnalyticsModal({
   const [metrics, setMetrics] = useState<PresetAnalyticsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [drilldown, setDrilldown] = useState<{
+    kind: DrilldownKind;
+    rating?: "up" | "down";
+  } | null>(null);
 
   const effectiveRange: DateRange = useMemo(
     () =>
@@ -181,8 +210,14 @@ export function PresetAnalyticsModal({
   useEffect(() => {
     if (open) {
       fetchMetrics();
+    } else {
+      setDrilldown(null);
     }
   }, [open, fetchMetrics]);
+
+  useEffect(() => {
+    setDrilldown(null);
+  }, [preset?.id]);
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -231,17 +266,21 @@ export function PresetAnalyticsModal({
   }, [rangePreset, customRange, t]);
 
   const downReasons = metrics?.down_reasons ?? [];
+  const personaId = preset?.id;
+  const titleName = preset?.name;
 
   return (
     <EditorSidebar
       open={open}
       onClose={onClose}
       title={
-        preset
-          ? t("analytics.preset.title", "角色分析", { name: preset.name })
-          : t("analytics.preset.title", "角色分析")
+        titleName
+          ? t("analytics.preset.titleNamed", "「{{name}}」分析", {
+              name: titleName,
+            })
+          : t("analytics.preset.title", "Persona 分析")
       }
-      subtitle={t("analytics.preset.subtitle", "单角色智能体指标")}
+      subtitle={t("analytics.preset.subtitle", "单 Persona 指标")}
       icon={<BarChart3 size={18} aria-hidden />}
       width="wide"
     >
@@ -334,43 +373,61 @@ export function PresetAnalyticsModal({
         </div>
       ) : null}
 
-      {isLoading ? (
+      {drilldown && personaId ? (
+        <AnalyticsDrilldownList
+          kind={drilldown.kind}
+          start={toIso(effectiveRange.start)}
+          end={toIso(effectiveRange.end)}
+          presetId={personaId}
+          rating={drilldown.rating}
+          initialFilters={{ personaPresetId: personaId }}
+          lockPersonaPresetId
+          onBack={() => setDrilldown(null)}
+        />
+      ) : isLoading ? (
         <LoadingSpinner />
       ) : (
         <>
-          {/* Overview cards */}
+          {/* Overview cards — clickable for locked-persona drilldown */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatsCard
-              icon={MessageSquare}
-              label={t("analytics.preset.totalMessages", "总消息数")}
-              value={metrics ? formatNumber(metrics.total_messages) : "—"}
-            />
-            <StatsCard
-              icon={Hash}
-              label={t("analytics.preset.totalSessions", "总会话数")}
-              value={metrics ? formatNumber(metrics.total_sessions) : "—"}
-            />
             <StatsCard
               icon={Users}
               label={t("analytics.preset.activeUsers", "活跃用户数")}
               value={metrics ? formatNumber(metrics.active_users) : "—"}
+              onClick={() => setDrilldown({ kind: "users" })}
             />
             <StatsCard
-              icon={BarChart3}
+              icon={MessageSquare}
+              label={t("analytics.preset.totalSessions", "总会话数")}
+              value={metrics ? formatNumber(metrics.total_sessions) : "—"}
+              onClick={() => setDrilldown({ kind: "sessions" })}
+            />
+            <StatsCard
+              icon={Hash}
               label={t("analytics.preset.totalTokens", "token 消耗总计")}
               value={metrics ? formatNumber(metrics.total_tokens) : "—"}
             />
+            <StatsCard
+              icon={ThumbsUp}
+              label={t("analytics.preset.upVoteRate", "点赞率")}
+              value={
+                metrics ? `${metrics.up_vote_rate.toFixed(1)}%` : "—"
+              }
+              onClick={() => setDrilldown({ kind: "feedback" })}
+            />
           </div>
 
-          {/* Up vote rate */}
           <div className="glass-card mt-4 rounded-xl p-4">
             <div className="flex items-center gap-2">
-              <ThumbsUp size={16} className="text-stone-600 dark:text-stone-400" />
+              <MessageSquare
+                size={16}
+                className="text-stone-600 dark:text-stone-400"
+              />
               <span className="text-sm font-medium text-stone-700 dark:text-stone-200">
-                {t("analytics.preset.upVoteRate", "点赞率")}
+                {t("analytics.preset.totalMessages", "总消息数")}
               </span>
               <span className="ml-auto text-lg font-bold text-stone-900 dark:text-stone-100">
-                {metrics ? `${metrics.up_vote_rate.toFixed(1)}%` : "—"}
+                {metrics ? formatNumber(metrics.total_messages) : "—"}
               </span>
             </div>
           </div>
@@ -385,7 +442,14 @@ export function PresetAnalyticsModal({
                 {t("analytics.preset.noDownReasons", "暂无点踩原因数据")}
               </div>
             ) : (
-              <div className="h-56">
+              <button
+                type="button"
+                className="h-56 w-full cursor-pointer rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]"
+                onClick={() =>
+                  setDrilldown({ kind: "feedback", rating: "down" })
+                }
+                aria-label={t("analytics.preset.downReasons", "点踩原因分布")}
+              >
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={downReasons}
@@ -412,7 +476,10 @@ export function PresetAnalyticsModal({
                       }
                     />
                     <Tooltip
-                      formatter={(value: number) => [formatNumber(Number(value)), ""]}
+                      formatter={(value: number) => [
+                        formatNumber(Number(value)),
+                        "",
+                      ]}
                       labelFormatter={(label: string) =>
                         t(`feedback.reason.${label}`, label)
                       }
@@ -427,7 +494,7 @@ export function PresetAnalyticsModal({
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-              </div>
+              </button>
             )}
           </div>
         </>

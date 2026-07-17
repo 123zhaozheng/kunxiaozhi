@@ -48,7 +48,11 @@ import type {
   SessionsTrendResponse,
   TrendDataPoint,
 } from "../../types/analytics";
-import { AnalyticsDrilldownList, type DrilldownKind } from "./AnalyticsDrilldownList";
+import {
+  AnalyticsDrilldownList,
+  type AnalyticsDrilldownFilters,
+  type DrilldownKind,
+} from "./AnalyticsDrilldownList";
 
 const PIE_COLORS = [
   "#6366f1",
@@ -118,13 +122,24 @@ function StatsCard({
   icon: Icon,
   label,
   value,
+  onClick,
 }: {
   icon: React.ElementType;
   label: string;
   value: string | number;
+  onClick?: () => void;
 }) {
-  return (
-    <div className="glass-card flex items-center gap-3 rounded-xl p-4 sm:p-5">
+  const className = [
+    "glass-card flex w-full items-center gap-3 rounded-xl p-4 sm:p-5 text-left",
+    onClick
+      ? "cursor-pointer transition-colors hover:bg-[var(--glass-bg-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]"
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const content = (
+    <>
       <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--glass-bg-subtle)] sm:h-12 sm:w-12">
         <Icon
           size={22}
@@ -140,8 +155,18 @@ function StatsCard({
           {value}
         </p>
       </div>
-    </div>
+    </>
   );
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={className}>{content}</div>;
 }
 
 function ChartCard({
@@ -660,11 +685,14 @@ export function AnalyticsPanel() {
   const [feedbackByPreset, setFeedbackByPreset] = useState<ByPresetFeedbackItem[]>(
     [],
   );
+  const [sessionsByAgent, setSessionsByAgent] = useState<ByLabelItem[]>([]);
+  const [sessionsByPersona, setSessionsByPersona] = useState<ByLabelItem[]>([]);
 
   const [drilldown, setDrilldown] = useState<{
     kind: DrilldownKind;
     presetId?: string;
     rating?: "up" | "down";
+    initialFilters?: AnalyticsDrilldownFilters;
   } | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -702,6 +730,8 @@ export function AnalyticsPanel() {
         tokensTrendData,
         feedbackSummaryData,
         feedbackByPresetData,
+        byAgentData,
+        byPersonaData,
       ] = await Promise.all([
         analyticsApi.getOverview(start, end),
         analyticsApi.getActiveUserTrend(start, end),
@@ -712,6 +742,8 @@ export function AnalyticsPanel() {
         analyticsApi.getTokensTrend(start, end),
         analyticsApi.getFeedbackSummary(start, end),
         analyticsApi.getFeedbackByPreset(start, end),
+        analyticsApi.getSessionsByAgent(start, end, 10),
+        analyticsApi.getSessionsByPersona(start, end, 10),
       ]);
       setOverview(overviewData ?? null);
       setActiveTrend(Array.isArray(activeData?.items) ? activeData.items : []);
@@ -729,6 +761,12 @@ export function AnalyticsPanel() {
         Array.isArray(feedbackByPresetData?.items)
           ? feedbackByPresetData.items
           : [],
+      );
+      setSessionsByAgent(
+        Array.isArray(byAgentData?.items) ? byAgentData.items : [],
+      );
+      setSessionsByPersona(
+        Array.isArray(byPersonaData?.items) ? byPersonaData.items : [],
       );
     } catch (err) {
       const message =
@@ -873,11 +911,13 @@ export function AnalyticsPanel() {
             icon={Users}
             label={t("analytics.overview.activeUsers")}
             value={overview ? formatNumber(overview.active_users) : "—"}
+            onClick={() => setDrilldown({ kind: "users" })}
           />
           <StatsCard
             icon={MessageSquare}
             label={t("analytics.overview.totalSessions")}
             value={overview ? formatNumber(overview.total_sessions) : "—"}
+            onClick={() => setDrilldown({ kind: "sessions" })}
           />
           <StatsCard
             icon={Hash}
@@ -890,6 +930,7 @@ export function AnalyticsPanel() {
             value={
               overview ? `${overview.up_vote_rate.toFixed(1)}%` : "—"
             }
+            onClick={() => setDrilldown({ kind: "feedback" })}
           />
         </div>
 
@@ -978,6 +1019,50 @@ export function AnalyticsPanel() {
                 />
               </ChartCard>
             </div>
+            <ChartCard
+              title={t("analytics.dimensions.byAgent", "按智能体")}
+              subtitle={t(
+                "analytics.dimensions.byAgentHint",
+                "会话数按 agent_id 聚合",
+              )}
+              icon={<Cpu size={16} aria-hidden />}
+              isLoading={isLoading}
+              isEmpty={!isLoading && (sessionsByAgent?.length ?? 0) === 0}
+            >
+              <PieBlock
+                title=""
+                data={sessionsByAgent}
+                onSliceClick={(entry) =>
+                  setDrilldown({
+                    kind: "sessions",
+                    initialFilters: { agentId: entry.label },
+                  })
+                }
+              />
+            </ChartCard>
+            <ChartCard
+              title={t("analytics.dimensions.byPersona", "按 Persona")}
+              subtitle={t(
+                "analytics.dimensions.byPersonaHint",
+                "会话数按 Persona 聚合",
+              )}
+              icon={<UserIcon size={16} aria-hidden />}
+              isLoading={isLoading}
+              isEmpty={!isLoading && (sessionsByPersona?.length ?? 0) === 0}
+            >
+              <PieBlock
+                title=""
+                data={sessionsByPersona}
+                onSliceClick={(entry) =>
+                  setDrilldown({
+                    kind: "sessions",
+                    initialFilters: {
+                      personaPresetId: entry.id || entry.label,
+                    },
+                  })
+                }
+              />
+            </ChartCard>
           </div>
         </section>
 
@@ -1129,6 +1214,7 @@ export function AnalyticsPanel() {
             end={toIso(effectiveRange.end)}
             presetId={drilldown.presetId}
             rating={drilldown.rating}
+            initialFilters={drilldown.initialFilters}
             onBack={() => setDrilldown(null)}
           />
         </div>

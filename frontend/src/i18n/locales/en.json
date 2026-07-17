@@ -228,6 +228,12 @@
     }
   },
   "analytics": {
+    "dimensions": {
+      "byAgent": "By agent",
+      "byAgentHint": "Session count by agent_id",
+      "byPersona": "By persona",
+      "byPersonaHint": "Session count by persona"
+    },
     "drilldown": {
       "agent": "Agent",
       "back": "Back",
@@ -236,21 +242,29 @@
       "empty": "No data",
       "eventCount": "Events",
       "feedbackTitle": "Feedback details",
-      "preset": "Agent",
+      "lastActive": "Last active",
+      "persona": "Persona",
+      "preset": "Persona",
       "rating": "Rating",
       "reason": "Reason",
       "runId": "Run",
       "runsTitle": "Run details",
+      "sessionCount": "Sessions",
       "sessionName": "Session",
       "sessionsTitle": "Session details",
       "startedAt": "Started",
       "status": "Status",
       "tokens": "Tokens",
-      "user": "User"
+      "user": "User",
+      "usersTitle": "Active user details",
+      "exportCsv": "Export CSV",
+      "exporting": "Exporting...",
+      "exportFailed": "Export failed",
+      "exportHint": "Exports full filtered set (not just this page; max 10000 rows)"
     },
     "feedback": {
-      "byPreset": "Feedback by agent",
-      "byPresetHint": "Up/down votes per agent",
+      "byPreset": "Feedback by persona",
+      "byPresetHint": "Up/down votes per persona",
       "down": "Down",
       "downCount": "Down votes",
       "noReasons": "No down-vote reason data",
@@ -261,6 +275,17 @@
       "up": "Up",
       "upCount": "Up votes",
       "upRate": "Positive rate"
+    },
+    "filters": {
+      "agent": "Agent",
+      "all": "All",
+      "persona": "Persona",
+      "personaLocked": "Locked to this persona",
+      "personaPlaceholder": "preset id",
+      "sort": "Sort",
+      "sortFrequency": "Frequency",
+      "sortRecent": "Most recent",
+      "userRole": "User role"
     },
     "overview": {
       "activeUsers": "Active users",
@@ -273,8 +298,9 @@
       "analyze": "Analyze",
       "downReasons": "Down-vote reasons",
       "noDownReasons": "No down-vote reason data",
-      "subtitle": "Per-agent metrics",
-      "title": "Agent analytics",
+      "subtitle": "Per-persona metrics",
+      "title": "Persona analytics",
+      "titleNamed": "\"{{name}}\" analytics",
       "totalMessages": "Total messages",
       "totalSessions": "Total sessions",
       "totalTokens": "Total tokens",
@@ -1668,7 +1694,15 @@
       "streamReply": "Stream Reply",
       "streamReplyDesc": "Stream responses via WebSocket",
       "title": "WeCom Entry"
-    }
+    },
+    "preferredAgent": "Capability template",
+    "preferredAgentHint": "Default capability template when starting a chat with this persona; locked for the session.",
+    "agent": {
+      "fast": "Fast",
+      "search": "Search",
+      "team": "Team"
+    },
+    "agentLocked": "Capability template is locked for persona sessions"
   },
   "profile": {
     "appearance": "Appearance",
