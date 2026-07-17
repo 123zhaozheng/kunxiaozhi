@@ -141,6 +141,17 @@ Use `LoadingSpinner` or `PanelLoadingState` for loading indicators:
 </ErrorBoundary>
 ```
 
+### Analytics: global vs single-Persona analyze
+
+| Entry | UI | Data |
+|-------|-----|------|
+| Route `/analytics` | `AnalyticsPanel` dual-dimension operator dashboard | by-agent / by-persona + lists/export |
+| Persona plaza「分析」 | `PresetAnalyticsModal` only for that preset | `getPresetAnalytics` + drilldown with `lockPersonaPresetId` |
+
+**Do not** navigate plaza analyze to full `/analytics` dual-dimension chrome. Reuse list/export APIs and `AnalyticsDrilldownList`, not the global page shell.
+
+Display users as **username** (employee id) primary, not long `user_id`.
+
 ### Forward refs
 
 Use `forwardRef` when a component needs to expose a ref:
@@ -163,3 +174,5 @@ export const PanelSearchInput = forwardRef<HTMLInputElement, PanelSearchInputPro
 - ❌ Don't forget `dark:` variants for dark mode support
 - ❌ Don't forget responsive breakpoints — mobile-first design
 - ❌ Don't create singleton class components — use `createSingletonStore` for shared state
+- ❌ Don't open global Analytics dual-dimension UI for plaza Persona「分析」— use scoped modal
+- ❌ Don't show Mongo ObjectId as the primary user label in analytics tables when `username` exists
