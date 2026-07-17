@@ -27,41 +27,32 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install uv (Node.js not needed at runtime — e2b uses remote sandboxes)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+# Create non-root user early so subsequent COPY can take ownership directly,
+# avoiding a separate `chown -R /app` layer that would duplicate ~400MB.
+RUN groupadd -r -g 1000 app && \
+    useradd -r -u 1000 -g app -m app && \
+    mkdir -p /home/app/.cache /app && \
+    chown -R app:app /home/app /app
 
-# Install uv
+# Install uv (as root; uv binary is world-executable)
 RUN pip install --no-cache-dir uv
 
-# Copy dependency files
-COPY pyproject.toml uv.lock* README.md ./
+# Copy dependency files as app so the venv it creates is app-owned
+COPY --chown=app:app pyproject.toml uv.lock* README.md ./
+
+USER app
 
 # Install runtime dependencies into the image. Keep uv's download cache during
 # builds so repeated image builds do not re-download unchanged wheels.
-RUN --mount=type=cache,target=/root/.cache/uv \
+ENV UV_PROJECT_ENVIRONMENT=/app/.venv
+RUN --mount=type=cache,target=/home/app/.cache/uv,uid=1000,gid=1000 \
     uv sync --frozen --no-dev --no-install-project
 
-# Copy source code
-COPY src/ ./src/
-COPY main.py ./
-
-# Copy frontend static files
-COPY --from=frontend-builder /app/frontend/dist ./static
-
-# Create non-root user and set up cache directory
-RUN groupadd -r app && useradd -r -g app app && \
-    mkdir -p /home/app/.cache && \
-    chown -R app:app /home/app && \
-    chown -R app:app /app
-
-# Switch to non-root user
-USER app
+# Copy source code and frontend static files as app
+COPY --chown=app:app src/ ./src/
+COPY --chown=app:app main.py ./
+COPY --chown=app:app --from=frontend-builder /app/frontend/dist ./static
 
 EXPOSE 8000
-
-ENV UV_PROJECT_ENVIRONMENT=/app/.venv
 
 CMD ["/app/.venv/bin/python", "main.py"]

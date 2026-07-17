@@ -6,16 +6,123 @@ metadata:
   name: kunxiaozhi
 
 ---
-# KunXiaoZhi App Deployment
-# Production multi-replica mode expects external or managed MongoDB, Redis, and
-# S3-compatible object storage. Replace the placeholder values before applying.
+# Secrets — 部署前用 kubectl create secret 填入真实值
+#   kubectl -n kunxiaozhi create secret generic kunxiaozhi-secrets \
+#     --from-literal=jwt-secret-key=<32+字节随机串> \
+#     --from-literal=mcp-encryption-salt=<16+字节随机串> \
+#     --from-literal=redis-password=<已有Redis密码>
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kunxiaozhi-secrets
+  namespace: kunxiaozhi
+type: Opaque
+stringData:
+  jwt-secret-key: "REPLACE_ME"
+  mcp-encryption-salt: "REPLACE_ME"
+  redis-password: "REPLACE_ME"
+
+---
+# Persistent volume claims — workspace 与 uploads 持久化
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-pvc
+  namespace: kunxiaozhi
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: uploads-pvc
+  namespace: kunxiaozhi
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+# MongoDB data PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongodb-pvc
+  namespace: kunxiaozhi
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+# MongoDB Service (headless for StatefulSet)
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: kunxiaozhi
+spec:
+  clusterIP: None
+  selector:
+    app: mongodb
+  ports:
+  - port: 27017
+    targetPort: 27017
+
+---
+# MongoDB StatefulSet — 无认证,内网 k8s 内访问
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  namespace: kunxiaozhi
+spec:
+  serviceName: mongodb
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+      - name: mongodb
+        image: mongo:8.2.5
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 27017
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: mongodb-data
+          mountPath: /data/db
+      volumes:
+      - name: mongodb-data
+        persistentVolumeClaim:
+          claimName: mongodb-pvc
+
+---
+# KunXiaoZhi App Deployment — 单副本,本地文件存储 + PVC
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kunxiaozhi
   namespace: kunxiaozhi
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: kunxiaozhi
@@ -26,11 +133,13 @@ spec:
     spec:
       containers:
       - name: kunxiaozhi
-        image: ghcr.io/123zhaozheng/kunxiaozhi:latest
-        imagePullPolicy: Always
+        image: kunxiaozhi_plus:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
         env:
+        - name: TZ
+          value: "Asia/Shanghai"
         - name: HOST
           value: "0.0.0.0"
         - name: PORT
@@ -46,64 +155,31 @@ spec:
             secretKeyRef:
               name: kunxiaozhi-secrets
               key: mcp-encryption-salt
-        # --- MongoDB ---
+        # --- MongoDB (k8s 内,无认证) ---
         - name: MONGODB_URL
-          value: "mongodb://MONGO_HOST:27017"
+          value: "mongodb://mongodb:27017"
         - name: MONGODB_DB
           value: "agent_state"
-        - name: MONGODB_ENABLED
-          value: "true"
-        - name: MONGODB_USERNAME
-          valueFrom:
-            secretKeyRef:
-              name: kunxiaozhi-secrets
-              key: mongodb-username
-        - name: MONGODB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: kunxiaozhi-secrets
-              key: mongodb-password
-        - name: MONGODB_AUTH_SOURCE
-          value: "admin"
-        # --- Redis ---
+        # --- Redis (外部已有,带密码) ---
         - name: REDIS_URL
+          # 替换 REDIS_HOST 为内网已有 Redis 地址;db 索引按需调整
           value: "redis://REDIS_HOST:6379/3"
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
               name: kunxiaozhi-secrets
               key: redis-password
-        - name: SESSION_BACKEND
-          value: "redis"
         - name: TASK_BACKEND
           value: "arq"
         - name: ARQ_EMBEDDED_WORKER
           value: "true"
-        # --- Object Storage (required for multi-replica deployments) ---
+        # --- 本地文件存储(关闭 S3) ---
         - name: S3_ENABLED
-          value: "true"
-        - name: S3_PROVIDER
-          value: "custom"
-        - name: S3_ENDPOINT_URL
-          value: "https://s3.example.com"
-        - name: S3_BUCKET_NAME
-          value: "kunxiaozhi-files"
-        - name: S3_REGION
-          value: "us-east-1"
-        - name: S3_PATH_STYLE
           value: "false"
         - name: ENABLE_LOCAL_FILESYSTEM_FALLBACK
-          value: "false"
-        - name: S3_ACCESS_KEY
-          valueFrom:
-            secretKeyRef:
-              name: kunxiaozhi-secrets
-              key: s3-access-key
-        - name: S3_SECRET_KEY
-          valueFrom:
-            secretKeyRef:
-              name: kunxiaozhi-secrets
-              key: s3-secret-key
+          value: "true"
+        - name: LOCAL_STORAGE_PATH
+          value: "/app/uploads"
         resources:
           requests:
             memory: "512Mi"
@@ -130,9 +206,15 @@ spec:
         volumeMounts:
         - name: workspace
           mountPath: /app/workspace
+        - name: uploads
+          mountPath: /app/uploads
       volumes:
       - name: workspace
-        emptyDir: {}
+        persistentVolumeClaim:
+          claimName: workspace-pvc
+      - name: uploads
+        persistentVolumeClaim:
+          claimName: uploads-pvc
 
 ---
 # KunXiaoZhi Service

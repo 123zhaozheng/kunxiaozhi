@@ -38,6 +38,9 @@ wheels/
 .env
 .env.local
 
+# Intranet deploy artifacts (images, secrets, generated yaml — not tracked)
+deploy/intranet/
+
 # Logs
 *.log
 logs/
