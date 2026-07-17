@@ -17,4 +17,18 @@ test("emoji icons render inside a fixed-size box with a tight line height", () =
   assert.match(markup, /height:18px/);
   assert.match(markup, /font-size:18px/);
   assert.match(markup, /line-height:1/);
+  assert.match(markup, /\/emoji-assets\/1f4ac\.webp/);
+  assert.doesNotMatch(markup, /npmmirror|fluent-emoji-3d|FluentEmoji/);
+});
+
+test("legacy Bot name falls back to local speech-balloon asset", () => {
+  const markup = renderToStaticMarkup(
+    React.createElement(DynamicIcon, {
+      name: "Bot",
+      size: 20,
+    }),
+  );
+
+  assert.match(markup, /\/emoji-assets\/1f4ac\.webp/);
+  assert.doesNotMatch(markup, /registry\.npmmirror\.com/);
 });

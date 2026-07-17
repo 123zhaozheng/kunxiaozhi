@@ -26,9 +26,9 @@ import {
   Star,
   type LucideIcon,
 } from "lucide-react";
-import { FluentEmoji } from "@lobehub/fluent-emoji";
 import { useTranslation } from "react-i18next";
 import { LoadingSpinner, CollapsiblePill, CopyButton } from "../../common";
+import { LocalFluentEmoji } from "../../common/LocalFluentEmoji";
 import { ImageWithSkeleton } from "./ImageWithSkeleton";
 import type { CollapsibleStatus } from "../../common";
 import { PersonaAvatarIcon } from "../../persona/PersonaAvatarIcon";
@@ -155,7 +155,8 @@ const SUBAGENT_ROLE_ICON_META: Record<
     icon: Star,
     className: "text-[var(--theme-primary)]",
     bgClassName: "bg-[var(--theme-primary-light)]",
-    emoji: "⭐",
+    // ⭐ (2b50) not in fluent-emoji-anim; 🌟 is local
+    emoji: "🌟",
   },
   general: {
     kind: "general",
@@ -800,7 +801,7 @@ export function SubagentBlock({
           )}
         >
           {roleIconMeta.emoji ? (
-            <FluentEmoji emoji={roleIconMeta.emoji} size={22} type="3d" />
+            <LocalFluentEmoji emoji={roleIconMeta.emoji} size={22} />
           ) : (
             <RoleIcon size={15} className={roleIconMeta.className} />
           )}

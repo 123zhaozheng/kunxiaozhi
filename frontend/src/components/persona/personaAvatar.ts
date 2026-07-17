@@ -77,12 +77,29 @@ export function isEmojiAvatar(
  * @lobehub/fluent-emoji's internal emojiToUnicode (Array.from iterates by code
  * point, so astral/flag emoji compose correctly).
  */
-function emojiToCodepoints(emoji: string): string {
+export function emojiToCodepoints(emoji: string): string {
   return Array.from(emoji)
     .map((ch) => ch.codePointAt(0)!.toString(16))
     .join("-");
 }
 
+/**
+ * Local anim filenames sometimes include or omit FE0F. Prefer exact codepoints,
+ * then FE0F variants, so missing allowlist/file-name mismatches degrade less.
+ */
+export function getEmojiAvatarSrcCandidates(emoji: string): string[] {
+  const base = emojiToCodepoints(emoji);
+  const candidates = [base];
+  if (!base.endsWith("-fe0f")) candidates.push(`${base}-fe0f`);
+  else candidates.push(base.replace(/-fe0f$/, ""));
+  const stripped = base
+    .split("-")
+    .filter((p) => p !== "fe0f")
+    .join("-");
+  if (stripped && stripped !== base) candidates.push(stripped);
+  return [...new Set(candidates)].map((cp) => `/emoji-assets/${cp}.webp`);
+}
+
 export function getEmojiAvatarUrl(emoji: string): string {
-  return `/emoji-assets/${emojiToCodepoints(emoji)}.webp`;
+  return getEmojiAvatarSrcCandidates(emoji)[0];
 }

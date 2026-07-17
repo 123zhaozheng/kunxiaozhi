@@ -4,15 +4,17 @@ import { useTranslation } from "react-i18next";
 import { AgentIcon } from "./AgentIcon";
 import { getEmojiAvatarUrl } from "../persona/personaAvatar";
 
+// Prefer glyphs present in fluent-emoji-anim packages (see public/emoji-assets).
+// ✨/⚡/✍️/⭐ are not in the anim set (CDN 404) — use near equivalents.
 const AGENT_ICON_EMOJIS: { emoji: string; labelKey: string }[] = [
-  { emoji: "✨", labelKey: "personaPresets.emojiSparkles" },
+  { emoji: "💫", labelKey: "personaPresets.emojiSparkles" },
   { emoji: "🤖", labelKey: "personaPresets.emojiRobot" },
   { emoji: "🎓", labelKey: "personaPresets.emojiAcademic" },
   { emoji: "💻", labelKey: "personaPresets.emojiCoding" },
-  { emoji: "✍️", labelKey: "personaPresets.emojiWriting" },
+  { emoji: "📝", labelKey: "personaPresets.emojiWriting" },
   { emoji: "🛡️", labelKey: "personaPresets.emojiSecurity" },
   { emoji: "📊", labelKey: "personaPresets.emojiData" },
-  { emoji: "⚡", labelKey: "personaPresets.emojiProductivity" },
+  { emoji: "💡", labelKey: "personaPresets.emojiProductivity" },
   { emoji: "📦", labelKey: "personaPresets.emojiGeneral" },
   { emoji: "🎨", labelKey: "personaPresets.emojiArt" },
   { emoji: "🎵", labelKey: "personaPresets.emojiMusic" },

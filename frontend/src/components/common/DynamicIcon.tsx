@@ -1,31 +1,9 @@
-import { FluentEmoji } from "@lobehub/fluent-emoji";
+import { LocalFluentEmoji } from "./LocalFluentEmoji";
 
-// Legacy default icons → mapped to 💬 FluentEmoji
+// Legacy default icons → mapped to 💬 local emoji asset
 const LEGACY_DEFAULT_ICONS = new Set(["MessageCircle", "Bot", "📁"]);
 
-function renderEmojiIcon(
-  icon: string,
-  size?: number,
-  className?: string,
-  extraClasses?: string,
-) {
-  return (
-    <span
-      className={[
-        "inline-flex items-center justify-center overflow-hidden",
-        extraClasses,
-        className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      style={{ width: size, height: size, fontSize: size, lineHeight: 1 }}
-    >
-      <FluentEmoji emoji={icon} size={size} type="3d" />
-    </span>
-  );
-}
-
-// Dynamic icon renderer - all icons rendered as FluentEmoji 3D
+// Dynamic icon renderer - emoji icons use local /emoji-assets/ anim webp
 export function DynamicIcon({
   name,
   size,
@@ -35,13 +13,14 @@ export function DynamicIcon({
   size?: number;
   className?: string;
 }) {
-  if (!name || LEGACY_DEFAULT_ICONS.has(name))
-    return renderEmojiIcon("💬", size, className);
+  if (!name || LEGACY_DEFAULT_ICONS.has(name)) {
+    return <LocalFluentEmoji emoji="💬" size={size} className={className} />;
+  }
   // Check if it's an emoji (non-ASCII character, or no ASCII letters)
   const isEmoji = !/^[a-zA-Z]+$/.test(name);
   if (isEmoji) {
-    return renderEmojiIcon(name, size, className);
+    return <LocalFluentEmoji emoji={name} size={size} className={className} />;
   }
   // Unrecognized ASCII names fall back to 💬
-  return renderEmojiIcon("💬", size, className);
+  return <LocalFluentEmoji emoji="💬" size={size} className={className} />;
 }
