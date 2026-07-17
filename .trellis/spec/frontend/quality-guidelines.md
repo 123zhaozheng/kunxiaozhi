@@ -11,11 +11,49 @@ code quality, accessibility, and responsive design.
 
 ---
 
+## Emoji icons (intranet / offline)
+
+**Problem**: Chrome 109 intranet cannot reach `registry.npmmirror.com`. `@lobehub/fluent-emoji` with `type="3d"` loads assets from that CDN at runtime, so agent / subagent emoji icons appear blank.
+
+**Rule**: Business UI must not import `FluentEmoji` or `getFluentEmojiCDN` for rendering.
+
+| Use case | Correct path |
+|----------|----------------|
+| Persona emoji avatar | `getEmojiAvatarUrl` / `PersonaAvatarIcon` → `/emoji-assets/{cp}.webp` |
+| Agent selector / DynamicIcon | `LocalFluentEmoji` → same origin anim webp |
+| Subagent default emoji | `LocalFluentEmoji` |
+| Role chrome (search/code/…) | Lucide (monochrome; not CDN) |
+| Model / vendor logos | `@lobehub/icons-static-svg` (bundled) |
+
+**Contracts**:
+- URL: `/emoji-assets/{codepoints}.webp` (hex lowercase, hyphen-joined; FE0F may be present or omitted).
+- `getEmojiAvatarSrcCandidates(emoji)` returns exact → `+fe0f` / strip-fe0f variants.
+- `LocalFluentEmoji` walks candidates on `img.onError`, then falls back to the unicode glyph (never blank).
+- Assets are produced by `frontend/scripts/fetch-emoji-assets.mjs` from allowlist + npmmirror **anim** packages; Docker frontend-builder runs that script when the builder has network/mirror.
+- Some common glyphs are **missing from fluent-emoji-anim** (permanent 404 on CDN): ✨ `2728`, ⭐ `2b50`, ⚡ `26a1`, ✍️ `270d`. Prefer near-equivalents in pickers (💫 / 🌟 / 💡 / 📝). Do not re-add those codepoints to allowlist without teaching the fetch script to ignore permanent 404s.
+
+**Don't**:
+```tsx
+// Wrong — runtime CDN
+import { FluentEmoji } from "@lobehub/fluent-emoji";
+<FluentEmoji emoji="🤖" type="3d" size={22} />
+```
+
+```tsx
+// Correct — same-origin
+import { LocalFluentEmoji } from "../common/LocalFluentEmoji";
+<LocalFluentEmoji emoji="🤖" size={22} />
+```
+
+**Intranet check**: DevTools Network → filter `npmmirror` / `fluent-emoji` → expect **0** requests for agent/subagent emoji; icons should load as `/emoji-assets/*.webp`.
+
+---
+
 ## Testing
 
 ### Framework
 
-- **Vitest** — test runner (compatible with Vite)
+- Prefer `tsx --test` for TSX source tests that import React markup helpers (plain `node --test` may fail module resolution on `.tsx`).
 - Tests are placed in `__tests__/` subdirectories next to the component/hook
 - Test files follow `<name>.test.ts` or `<name>.test.tsx` naming
 
