@@ -212,12 +212,17 @@ class Settings(BaseSettings):
     # Code Interpreter Settings
     ENABLE_CODE_INTERPRETER: bool = False
 
-    # LangSmith Tracing Settings
-    LANGSMITH_TRACING: bool = False
+    # Tracing provider: none | langsmith | phoenix (mutually exclusive).
+    TRACING_PROVIDER: str = "none"
+    # LangSmith Tracing Settings (active when TRACING_PROVIDER=langsmith)
     LANGSMITH_API_KEY: Optional[str] = None
     LANGSMITH_PROJECT: str = "lamb-agent"
     LANGSMITH_API_URL: str = "https://api.smith.langchain.com"
     LANGSMITH_SAMPLE_RATE: float = 1.0
+    # Phoenix Tracing Settings (active when TRACING_PROVIDER=phoenix)
+    PHOENIX_COLLECTOR_ENDPOINT: str = "http://localhost:6006/v1/traces"
+    PHOENIX_PROJECT_NAME: str = "lamb-agent"
+    PHOENIX_API_KEY: Optional[str] = None
 
     # JWT Authentication Settings
     JWT_SECRET_KEY: str = Field(default_factory=lambda: secrets.token_urlsafe(32))
@@ -416,17 +421,11 @@ class Settings(BaseSettings):
         if self.BUILD_TIME is None:
             self.BUILD_TIME = os.environ.get("BUILD_TIME")
 
-        # Sync LangSmith settings to os.environ (required by langsmith SDK)
-        if self.LANGSMITH_TRACING:
-            os.environ["LANGSMITH_TRACING"] = "true"
-        if self.LANGSMITH_API_KEY:
-            os.environ["LANGSMITH_API_KEY"] = self.LANGSMITH_API_KEY
-        if self.LANGSMITH_PROJECT:
-            os.environ["LANGSMITH_PROJECT"] = self.LANGSMITH_PROJECT
-        if self.LANGSMITH_API_URL:
-            os.environ["LANGSMITH_API_URL"] = self.LANGSMITH_API_URL
-        if self.LANGSMITH_SAMPLE_RATE:
-            os.environ["LANGSMITH_SAMPLE_RATE"] = str(self.LANGSMITH_SAMPLE_RATE)
+        # Sync tracing env (LangSmith SDK + provider resolution). Full Phoenix
+        # OTEL register happens in lifespan via init_tracing after DB settings load.
+        from src.infra.tracing.provider import apply_tracing_env
+
+        apply_tracing_env(self)
 
     @field_validator("DEBUG", mode="before")
     @classmethod

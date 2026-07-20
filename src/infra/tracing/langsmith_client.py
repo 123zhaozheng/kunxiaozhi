@@ -6,8 +6,6 @@ from typing import Any, Generator, Optional
 
 from langsmith import Client
 
-from src.kernel.config import settings
-
 
 class LangSmithTracer:
     """
@@ -29,6 +27,10 @@ class LangSmithTracer:
             return
 
         self._enabled = os.getenv("LANGSMITH_TRACING", "false").lower() == "true"
+
+        # Lazy import: Settings.__init__ may call into tracing.provider while
+        # src.kernel.config is still initializing — never import settings at module top.
+        from src.kernel.config import settings
 
         # settings.LANGSMITH_API_KEY 已在 initialize_settings 时从数据库加载
         if self._enabled and settings.LANGSMITH_API_KEY:

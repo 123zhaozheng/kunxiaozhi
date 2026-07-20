@@ -416,6 +416,13 @@ async def lifespan(app: FastAPI):
     await initialize_settings()
     logger.info("Settings initialized from database")
 
+    # Tracing provider (LangSmith env + optional Phoenix OpenInference). After DB
+    # settings so admin TRACING_PROVIDER / PHOENIX_* take effect. Restart required
+    # to switch provider (OTEL global instrumentor).
+    from src.infra.tracing import init_tracing
+
+    init_tracing(settings)
+
     # 初始化本地文件系统目录（使用数据库覆盖后的最终配置）
     ensure_local_filesystem_dirs(settings)
 
@@ -560,6 +567,11 @@ async def lifespan(app: FastAPI):
 
         oauth_service = get_oauth_service()
         await oauth_service.close()
+
+        # Flush / shut down Phoenix OTEL exporter if registered
+        from src.infra.tracing import shutdown_tracing
+
+        shutdown_tracing()
 
         # 关闭 MCP 连接池
         from src.infra.tool.mcp_pool import close_all_connections

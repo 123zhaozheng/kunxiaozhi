@@ -183,6 +183,7 @@ export function SettingsPanel() {
       deferred: t("subcategories.deferred"),
       connection: t("subcategories.connection"),
       langsmith: t("subcategories.langsmith"),
+      phoenix: t("subcategories.phoenix"),
       jwt: t("subcategories.jwt"),
       service: t("subcategories.service"),
       turnstile: t("subcategories.turnstile"),

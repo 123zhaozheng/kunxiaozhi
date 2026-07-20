@@ -962,14 +962,16 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "frontend_visible": False,
     },
     # ============================================
-    # LangSmith Tracing Settings
+    # Tracing provider (mutually exclusive backends)
     # ============================================
-    "LANGSMITH_TRACING": {
-        "type": SettingType.BOOLEAN,
+    "TRACING_PROVIDER": {
+        "type": SettingType.SELECT,
         "category": SettingCategory.TRACING,
-        "subcategory": "langsmith",
-        "description": "settingDesc.LANGSMITH_TRACING",
-        "default": False,
+        "subcategory": "general",
+        "description": "settingDesc.TRACING_PROVIDER",
+        "default": "none",
+        "options": ["none", "langsmith", "phoenix"],
+        "frontend_visible": True,
     },
     "LANGSMITH_API_KEY": {
         "type": SettingType.STRING,
@@ -977,7 +979,7 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "subcategory": "langsmith",
         "description": "settingDesc.LANGSMITH_API_KEY",
         "default": "",
-        "depends_on": "LANGSMITH_TRACING",
+        "depends_on": {"key": "TRACING_PROVIDER", "value": "langsmith"},
         "is_sensitive": True,
     },
     "LANGSMITH_PROJECT": {
@@ -986,7 +988,7 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "subcategory": "langsmith",
         "description": "settingDesc.LANGSMITH_PROJECT",
         "default": "lamb-agent",
-        "depends_on": "LANGSMITH_TRACING",
+        "depends_on": {"key": "TRACING_PROVIDER", "value": "langsmith"},
     },
     "LANGSMITH_API_URL": {
         "type": SettingType.STRING,
@@ -994,7 +996,7 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "subcategory": "langsmith",
         "description": "settingDesc.LANGSMITH_API_URL",
         "default": "https://api.smith.langchain.com",
-        "depends_on": "LANGSMITH_TRACING",
+        "depends_on": {"key": "TRACING_PROVIDER", "value": "langsmith"},
     },
     "LANGSMITH_SAMPLE_RATE": {
         "type": SettingType.NUMBER,
@@ -1002,7 +1004,32 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "subcategory": "langsmith",
         "description": "settingDesc.LANGSMITH_SAMPLE_RATE",
         "default": 1.0,
-        "depends_on": "LANGSMITH_TRACING",
+        "depends_on": {"key": "TRACING_PROVIDER", "value": "langsmith"},
+    },
+    "PHOENIX_COLLECTOR_ENDPOINT": {
+        "type": SettingType.STRING,
+        "category": SettingCategory.TRACING,
+        "subcategory": "phoenix",
+        "description": "settingDesc.PHOENIX_COLLECTOR_ENDPOINT",
+        "default": "http://localhost:6006/v1/traces",
+        "depends_on": {"key": "TRACING_PROVIDER", "value": "phoenix"},
+    },
+    "PHOENIX_PROJECT_NAME": {
+        "type": SettingType.STRING,
+        "category": SettingCategory.TRACING,
+        "subcategory": "phoenix",
+        "description": "settingDesc.PHOENIX_PROJECT_NAME",
+        "default": "lamb-agent",
+        "depends_on": {"key": "TRACING_PROVIDER", "value": "phoenix"},
+    },
+    "PHOENIX_API_KEY": {
+        "type": SettingType.STRING,
+        "category": SettingCategory.TRACING,
+        "subcategory": "phoenix",
+        "description": "settingDesc.PHOENIX_API_KEY",
+        "default": "",
+        "depends_on": {"key": "TRACING_PROVIDER", "value": "phoenix"},
+        "is_sensitive": True,
     },
 }
 

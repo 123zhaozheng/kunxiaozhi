@@ -1,0 +1,20 @@
+# Arize Phoenix — local observability (LangGraph / OpenTelemetry)
+# Start:  docker compose -f deploy/docker-compose.phoenix.yml up -d
+# UI:     http://localhost:6006
+# OTLP HTTP: http://localhost:6006/v1/traces
+# OTLP gRPC: localhost:4317
+services:
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: phoenix
+    restart: unless-stopped
+    ports:
+      - "6006:6006" # UI + OTLP HTTP
+      - "4317:4317" # OTLP gRPC
+    environment:
+      PHOENIX_WORKING_DIR: /mnt/data
+    volumes:
+      - phoenix_data:/mnt/data
+
+volumes:
+  phoenix_data:

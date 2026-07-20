@@ -25,6 +25,11 @@ RESTART_REQUIRED_SETTINGS = {
     "REDIS_URL",
     "REDIS_PASSWORD",
     "JWT_SECRET_KEY",
+    # OTEL instrumentor / TracerProvider cannot be hot-swapped
+    "TRACING_PROVIDER",
+    "PHOENIX_COLLECTOR_ENDPOINT",
+    "PHOENIX_PROJECT_NAME",
+    "PHOENIX_API_KEY",
 }
 
 
