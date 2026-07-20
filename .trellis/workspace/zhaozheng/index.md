@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 8
-- **Last Active**: 2026-07-17
+- **Total Sessions**: 9
+- **Last Active**: 2026-07-20
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~280 | Active |
+| `journal-1.md` | ~322 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 9 | 2026-07-20 | Selectable LangSmith and Phoenix tracing providers | `e992d1e7` | `feat/opensandbox-backend` |
 | 8 | 2026-07-17 | Agent emoji CDN 本地化（内网 Chrome） | `380e9ecb`, `90ee44bc`, `54f73232` | `feat/opensandbox-backend` |
 | 7 | 2026-07-15 | 对接 OpenSandbox 沙箱后端 | `0d48091e`, `fa7e9264`, `aaf49ef8`, `158e6614` | `feat/opensandbox-backend` |
 | 6 | 2026-07-03 | Fix fork: new session stuck generating + legacy bubble 404 | `7ced7123` | `main` |

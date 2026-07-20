@@ -287,3 +287,36 @@ Fixed two fork bugs. (1) Forking a still-running run left the new session UI stu
 - Specs: backend/persona-preferred-agent.md, analytics-persona-and-lists.md
 - Commits: ffccc3f3, 902a396c, 442809c7, aa9bb594
 
+
+
+## Session 9: Selectable LangSmith and Phoenix tracing providers
+
+**Date**: 2026-07-20
+**Task**: Selectable LangSmith and Phoenix tracing providers
+**Branch**: `feat/opensandbox-backend`
+
+### Summary
+
+Added a mutually exclusive tracing provider selector, removed the legacy LangSmith setting path, integrated Phoenix OpenInference lifecycle, updated admin UI and locales, added tests, and documented the tracing contract.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e992d1e7` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
