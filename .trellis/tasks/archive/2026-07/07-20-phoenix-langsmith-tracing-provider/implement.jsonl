@@ -1,0 +1,12 @@
+{"file": ".trellis/tasks/07-20-phoenix-langsmith-tracing-provider/prd.md", "reason": "Requirements and acceptance criteria for mutual-exclusion tracing provider"}
+{"file": ".trellis/tasks/07-20-phoenix-langsmith-tracing-provider/design.md", "reason": "Architecture: provider resolve, env apply, phoenix register, lifespan"}
+{"file": ".trellis/tasks/07-20-phoenix-langsmith-tracing-provider/implement.md", "reason": "Ordered checklist and validation commands"}
+{"file": ".trellis/tasks/07-20-phoenix-langsmith-tracing-provider/research/phoenix-otel-langgraph-integration.md", "reason": "register() API, packages, hook points"}
+{"file": ".trellis/tasks/07-20-phoenix-langsmith-tracing-provider/research/langsmith-phoenix-coexistence.md", "reason": "Mutex strategy and OTEL pitfalls"}
+{"file": ".trellis/tasks/07-20-phoenix-langsmith-tracing-provider/research/settings-enum-depends-on-ui.md", "reason": "SELECT + depends_on + restart_required pattern"}
+{"file": ".trellis/tasks/07-20-phoenix-langsmith-tracing-provider/research/tracing-call-sites-and-facade.md", "reason": "MVP boundary and call-site inventory"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend package guidelines index"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Failure isolation for register/export errors"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Logging on tracing init/fail"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality bar for implementation"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Where to place infra/tracing modules"}

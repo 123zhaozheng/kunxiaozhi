@@ -1,0 +1,8 @@
+{"file": ".trellis/tasks/07-20-phoenix-langsmith-tracing-provider/prd.md", "reason": "Acceptance criteria to verify"}
+{"file": ".trellis/tasks/07-20-phoenix-langsmith-tracing-provider/design.md", "reason": "Design contracts for compliance check"}
+{"file": ".trellis/tasks/07-20-phoenix-langsmith-tracing-provider/implement.md", "reason": "Validation commands and risk list"}
+{"file": ".trellis/tasks/07-20-phoenix-langsmith-tracing-provider/research/settings-enum-depends-on-ui.md", "reason": "UI/settings correctness for depends_on"}
+{"file": ".trellis/tasks/07-20-phoenix-langsmith-tracing-provider/research/tracing-call-sites-and-facade.md", "reason": "Ensure no wrong middleware/agent rewrites"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Check quality bar"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Error-handling compliance"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Logging compliance"}
