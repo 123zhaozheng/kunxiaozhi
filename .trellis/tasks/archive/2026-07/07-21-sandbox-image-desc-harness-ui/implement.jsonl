@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/sandbox-providers.md", "reason": "Sandbox platform settings and session manager contracts"}
+{"file": ".trellis/spec/backend/agent-harness.md", "reason": "AGENT_HARNESS_MODE restart/import-time semantics"}
+{"file": ".trellis/tasks/07-21-sandbox-image-desc-harness-ui/prd.md", "reason": "Requirements and acceptance criteria"}
+{"file": ".trellis/tasks/07-21-sandbox-image-desc-harness-ui/design.md", "reason": "Injection order, setting key, non-goals"}
+{"file": ".trellis/tasks/07-21-sandbox-image-desc-harness-ui/research/sandbox-prompt-injection-path.md", "reason": "Where main/subagent attach sandbox prompt sections"}
+{"file": ".trellis/tasks/07-21-sandbox-image-desc-harness-ui/research/settings-textarea-and-image-desc-field.md", "reason": "SettingType.TEXT and SANDBOX definition patterns"}
+{"file": ".trellis/tasks/07-21-sandbox-image-desc-harness-ui/research/harness-mode-ui-and-hotreload.md", "reason": "Harness UI placement and restart constraints"}

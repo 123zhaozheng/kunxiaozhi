@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/sandbox-providers.md", "reason": "Do not break sandbox config/hot-reload contracts"}
+{"file": ".trellis/spec/backend/agent-harness.md", "reason": "Harness remains restart-required; only category move"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Test and change scope expectations"}
+{"file": ".trellis/tasks/07-21-sandbox-image-desc-harness-ui/prd.md", "reason": "Acceptance criteria checklist"}
+{"file": ".trellis/tasks/07-21-sandbox-image-desc-harness-ui/design.md", "reason": "Order of sections, empty no-op, no _SANDBOX_AFFECTED"}
+{"file": ".trellis/tasks/07-21-sandbox-image-desc-harness-ui/research/sandbox-prompt-injection-path.md", "reason": "Verify search/team only; subagent gets capability"}
