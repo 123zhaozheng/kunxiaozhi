@@ -209,6 +209,7 @@ Hooked into **both** branches of `refresh_settings(key=None)` — the single-key
 | Failure isolation | `_reset_sandbox_runtime_state` is warn-only (`try/except` + `logger.warning`), runs AFTER `setattr(settings, ...)`, so a reset error never blocks the settings update or other modules' resets. |
 | Multi-instance sync | Reuses the existing `SETTINGS_CHANNEL` Redis pub/sub → other instances' `SettingsPubSub._handle_message` → `refresh_settings(key)` → same reset. Do NOT add a new pub/sub channel. |
 | Restart flag | Sandbox keys must NOT be in `RESTART_REQUIRED_SETTINGS` (`kernel/config/constants.py`) — they are hot-reloadable now, and the flag is a frontend UI hint. |
+| Prompt-only description | `SANDBOX_IMAGE_DESCRIPTION` is **not** in `_SANDBOX_AFFECTED_SETTINGS`. Changing it must not soft-reset the sandbox manager; agents re-read `settings` on next graph build. |
 
 ### 4. Validation & Error Matrix
 
@@ -281,3 +282,72 @@ ConnectionConfigSync(domain=domain or None, api_key=api_key or None,
 **How to extend**: if a future deployment is truly same-network (backend can route to sandbox ports), flip the setting to `False` via the UI — it is `frontend_visible` and hot-reloadable (see the scenario above).
 
 **Related**: [[sandbox-providers]] Gotcha "Verify SDK signatures against the installed package" — the `use_server_proxy` field was confirmed against installed `opensandbox==0.1.14`, not research.
+
+---
+
+## Scenario: Sandbox image capability description injection
+
+### 1. Scope / Trigger
+
+- Admin needs to tell agents the **capability boundary** of the active sandbox image/template (preinstalled tools, network policy, limits) without baking vendor-specific framing into code.
+- Applies when `sandbox_backend` is attached (search / team). Fast agent has no sandbox path.
+
+### 2. Signatures
+
+```python
+# src/infra/sandbox/capability_prompt.py
+def build_sandbox_capability_section(description: str | None) -> str:
+    """Strip only; empty/whitespace → "". No built-in heading or framing."""
+
+# Setting
+settings.SANDBOX_IMAGE_DESCRIPTION: str = ""  # SettingType.TEXT, category SANDBOX/general
+# depends_on ENABLE_SANDBOX; frontend_visible=True; not RESTART_REQUIRED; not _SANDBOX_AFFECTED_SETTINGS
+```
+
+### 3. Contracts
+
+| Concern | Contract |
+|---|---|
+| Content ownership | Admin owns **full** prompt text. Builder must not prepend fixed Chinese/English shells. |
+| Empty behavior | `strip()` empty → do not append any system section. |
+| Injection site | `SectionPromptMiddleware` on search/team main + subagents (including team role members). |
+| Order | capability section (if any) **before** `SANDBOX_RUNTIME_SECTION` (`work_dir`), then MCP/env middleware. |
+| Shared source | Single builder under `src.infra.sandbox`; team must not fork a second copy. |
+| Hot reload | Next agent graph build reads `settings.SANDBOX_IMAGE_DESCRIPTION`; no sandbox recreate. |
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+|---|---|
+| Description `""` / whitespace | No section injected; behavior matches pre-feature. |
+| Non-empty description | Section text equals stripped admin string. |
+| `sandbox_backend` is None | No capability section (even if setting non-empty). |
+| Description changed while session lives | Next turn/graph rebuild sees new text; running container unchanged. |
+
+### 5. Good / Base / Bad Cases
+
+- Good: Admin pastes a full markdown block with their own `##` title and limits; agent sees that exact block.
+- Base: Empty default — zero prompt delta.
+- Bad: Hardcoding “以下描述当前沙箱镜像…” framing in the builder (not universal; fights multi-tenant wording).
+- Bad: Adding `SANDBOX_IMAGE_DESCRIPTION` to `_SANDBOX_AFFECTED_SETTINGS` (unrelated manager rebuild).
+
+### 6. Tests Required
+
+- Unit: empty / whitespace / body-only strip on `build_sandbox_capability_section`.
+- Settings definition: TEXT, SANDBOX/general, depends_on ENABLE_SANDBOX, not restart / not sandbox-affected.
+- Optional: search/team section order when both capability and work_dir present.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+```python
+return f"## 沙箱环境能力边界\n\n固定说明…\n\n{text}"  # baked framing
+# or
+_SANDBOX_AFFECTED_SETTINGS.add("SANDBOX_IMAGE_DESCRIPTION")
+```
+
+#### Correct
+```python
+return (description or "").strip()
+# inject only if sandbox_backend and section non-empty; before SANDBOX_RUNTIME_SECTION
+```

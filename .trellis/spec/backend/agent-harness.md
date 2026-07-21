@@ -23,7 +23,9 @@ module merely to read the mode.
 
 ## 3. Contracts
 
-- `AGENT_HARNESS_MODE` is startup-only and requires restart.
+- `AGENT_HARNESS_MODE` is startup-only and requires restart. Settings definition
+  lives under category `agent` / subcategory `harness` (not `llm`/`cache`);
+  moving the UI category does **not** make the mode hot-reloadable.
 - Tool names, property names, required fields, types, enums, and defaults remain
   unchanged between modes.
 - `{available_agents}` is a template only until `SubAgentMiddleware` renders the

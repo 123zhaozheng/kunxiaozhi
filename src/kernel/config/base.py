@@ -189,6 +189,9 @@ class Settings(BaseSettings):
     # Sandbox Settings
     ENABLE_SANDBOX: bool = True
     SANDBOX_PLATFORM: str = "daytona"
+    # Admin-authored capability boundary text injected into sandbox agent prompts.
+    # Empty = no injection. Not a sandbox-manager rebuild key.
+    SANDBOX_IMAGE_DESCRIPTION: str = ""
     DAYTONA_API_KEY: str = ""
     DAYTONA_SERVER_URL: str = ""
     DAYTONA_TIMEOUT: int = 180

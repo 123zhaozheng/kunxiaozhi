@@ -65,6 +65,7 @@ from src.infra.goal import (
 )
 from src.infra.llm.client import LLMClient
 from src.infra.logging import get_logger
+from src.infra.sandbox.capability_prompt import build_sandbox_capability_section
 from src.infra.sandbox.session_manager import get_session_sandbox_manager
 from src.infra.skill.loader import build_skills_prompt
 from src.infra.storage.checkpoint import get_async_checkpointer
@@ -378,6 +379,11 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
     custom_subagents: list[SubAgent | CompiledSubAgent] = []
     subagent_display_names: dict[str, str] = {}
     subagent_avatars: dict[str, str] = {}
+    sandbox_capability_section = (
+        build_sandbox_capability_section(settings.SANDBOX_IMAGE_DESCRIPTION)
+        if sandbox_backend
+        else ""
+    )
     subagent_runtime_section = (
         SEARCH_SANDBOX_RUNTIME_SECTION.format(work_dir=sandbox_work_dir)
         if sandbox_backend and sandbox_work_dir
@@ -406,6 +412,7 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
                         role_section,
                         role_skill_prompts.get(member.member_id, skills_prompt),
                         memory_guide,
+                        sandbox_capability_section,
                         subagent_runtime_section,
                     )
                     if s
@@ -452,7 +459,13 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
     if not custom_subagents:
         subagent_prompt_sections = [
             s
-            for s in (*persona_sections, skills_prompt, memory_guide, subagent_runtime_section)
+            for s in (
+                *persona_sections,
+                skills_prompt,
+                memory_guide,
+                sandbox_capability_section,
+                subagent_runtime_section,
+            )
             if s
         ]
         custom_subagents = [
@@ -481,6 +494,8 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
         )
         if s
     ]
+    if sandbox_capability_section:
+        _prompt_sections.append(sandbox_capability_section)
     if sandbox_backend and sandbox_work_dir:
         _prompt_sections.append(SEARCH_SANDBOX_RUNTIME_SECTION.format(work_dir=sandbox_work_dir))
     active_goal = configurable.get("active_goal")

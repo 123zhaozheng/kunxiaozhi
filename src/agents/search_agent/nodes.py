@@ -58,6 +58,7 @@ from src.infra.goal import (
 )
 from src.infra.llm.client import LLMClient
 from src.infra.logging import get_logger
+from src.infra.sandbox.capability_prompt import build_sandbox_capability_section
 from src.infra.sandbox.session_manager import get_session_sandbox_manager
 from src.infra.skill.loader import build_skills_prompt
 from src.infra.storage.checkpoint import get_async_checkpointer
@@ -186,7 +187,15 @@ async def agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict[str,
 
     # 自定义子代理配置 - 强制将所有中间信息保存到文件
     search_base_url = configurable.get("base_url", "")
+    sandbox_capability_section = (
+        build_sandbox_capability_section(settings.SANDBOX_IMAGE_DESCRIPTION)
+        if sandbox_backend
+        else ""
+    )
     subagent_prompt_sections = [s for s in (*persona_sections, skills_prompt, memory_guide) if s]
+    # Capability (semi-stable) before session work_dir runtime section.
+    if sandbox_capability_section:
+        subagent_prompt_sections.append(sandbox_capability_section)
     if sandbox_backend and sandbox_work_dir:
         subagent_prompt_sections.append(SANDBOX_RUNTIME_SECTION.format(work_dir=sandbox_work_dir))
     subagent_middleware = [
@@ -236,10 +245,11 @@ async def agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict[str,
         for s in (*MAIN_AGENT_PROMPT_SECTIONS, *persona_sections, skills_prompt, memory_guide)
         if s
     ]
-    # Sandbox runtime is user/session-specific; keep it after global-stable blocks.
-    if sandbox_backend:
-        if sandbox_work_dir:
-            _prompt_sections.append(SANDBOX_RUNTIME_SECTION.format(work_dir=sandbox_work_dir))
+    # Capability boundary (admin text) then session-specific runtime work_dir.
+    if sandbox_capability_section:
+        _prompt_sections.append(sandbox_capability_section)
+    if sandbox_backend and sandbox_work_dir:
+        _prompt_sections.append(SANDBOX_RUNTIME_SECTION.format(work_dir=sandbox_work_dir))
     active_goal = configurable.get("active_goal")
     goal_section = build_goal_prompt_section(active_goal)
     if goal_section:

@@ -207,8 +207,8 @@ SETTING_DEFINITIONS: dict[str, dict] = {
     },
     "AGENT_HARNESS_MODE": {
         "type": SettingType.SELECT,
-        "category": SettingCategory.LLM,
-        "subcategory": "cache",
+        "category": SettingCategory.AGENT,
+        "subcategory": "harness",
         "description": "settingDesc.AGENT_HARNESS_MODE",
         "default": "compact_zh",
         "options": ["legacy", "compact_en", "compact_zh"],
@@ -375,6 +375,15 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "subcategory": "general",
         "description": "settingDesc.ENABLE_SANDBOX",
         "default": False,
+        "frontend_visible": True,
+    },
+    "SANDBOX_IMAGE_DESCRIPTION": {
+        "type": SettingType.TEXT,
+        "category": SettingCategory.SANDBOX,
+        "subcategory": "general",
+        "description": "settingDesc.SANDBOX_IMAGE_DESCRIPTION",
+        "default": "",
+        "depends_on": "ENABLE_SANDBOX",
         "frontend_visible": True,
     },
     "SANDBOX_PLATFORM": {

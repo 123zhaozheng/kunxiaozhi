@@ -175,6 +175,7 @@ export function SettingsPanel() {
       general: t("subcategories.general"),
       retry: t("subcategories.retry"),
       cache: t("subcategories.cache"),
+      harness: t("subcategories.harness"),
       title: t("subcategories.title"),
       events: t("subcategories.events"),
       daytona: t("subcategories.daytona"),
