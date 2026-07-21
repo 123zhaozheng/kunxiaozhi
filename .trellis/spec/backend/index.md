@@ -25,6 +25,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Analytics Persona & Lists](./analytics-persona-and-lists.md) | Dual-dimension lists/CSV, single-Persona analyze boundary, users `_id` join, trace persona merge | Filled |
 | [Sandbox Provider Integration](./sandbox-providers.md) | Pluggable sandbox provider kit (Daytona/E2B/OpenSandbox): backend+factory+adapter+dispatch, sync-SDK wrapping, cross-session reuse | Filled |
 | [Tracing Provider Integration](./tracing-providers.md) | Mutually exclusive LangSmith/Phoenix selector, derived SDK env, Phoenix lifecycle, and admin settings contract | Filled |
+| [Agent Harness Mode & Localization](./agent-harness.md) | Reversible harness modes, model-view schema localization, dynamic task/todo contracts, import boundary | Filled |
 
 ---
 

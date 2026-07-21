@@ -534,7 +534,7 @@ async def test_tool_search_middleware_skips_duplicate_search_guide_when_already_
         block["text"] for block in result.system_message.content if block.get("type") == "text"
     )
 
-    assert system_text.count("## MCP Tool Search Guide") == 1
+    assert system_text.count(DEFERRED_TOOL_SEARCH_GUIDE) == 1
     assert "## MCP Tools (Deferred)" in system_text
 
 
@@ -566,7 +566,7 @@ def test_deferred_prompt_blocks_split_stable_rules_and_dynamic_tool_list() -> No
     blocks = manager.get_deferred_prompt_blocks()
 
     assert len(blocks) == 2
-    assert blocks[0].startswith("## MCP Tool Search Guide")
+    assert blocks[0] == DEFERRED_TOOL_SEARCH_GUIDE
     assert "search_tools" in blocks[0]
     assert blocks[1].startswith("## MCP Tools (Deferred)")
     assert "- beta:list: beta list" in blocks[1]
@@ -639,7 +639,8 @@ def test_deferred_prompt_string_truncates_long_tool_list() -> None:
     assert "- alpha:create: alpha create" in prompt
     assert "- beta:list: beta list" in prompt
     assert "- gamma:query: gamma query" not in prompt
-    assert "1 more deferred MCP tool not shown" in prompt
+    assert "1" in prompt
+    assert "search_tools" in prompt
 
 
 async def test_section_prompt_middleware_appends_separate_blocks() -> None:

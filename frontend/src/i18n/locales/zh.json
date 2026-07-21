@@ -2095,6 +2095,7 @@
     "POSTGRES_POOL_MIN_SIZE": "PostgreSQL 连接池最小大小",
     "POSTGRES_PORT": "PostgreSQL 端口",
     "POSTGRES_USER": "PostgreSQL 用户名",
+    "AGENT_HARNESS_MODE": "代理 Harness 语言/压缩模式（需重启）",
     "PROMPT_CACHE_MAX_SYSTEM_BLOCKS": "最大缓存系统提示块数",
     "PROMPT_CACHE_MAX_TOOLS": "最大缓存工具定义数",
     "REDIS_PASSWORD": "Redis 密码",

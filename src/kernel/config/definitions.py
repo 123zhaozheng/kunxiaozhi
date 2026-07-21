@@ -205,6 +205,14 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "description": "settingDesc.LLM_MODEL_CACHE_SIZE",
         "default": 50,
     },
+    "AGENT_HARNESS_MODE": {
+        "type": SettingType.SELECT,
+        "category": SettingCategory.LLM,
+        "subcategory": "cache",
+        "description": "settingDesc.AGENT_HARNESS_MODE",
+        "default": "compact_zh",
+        "options": ["legacy", "compact_en", "compact_zh"],
+    },
     "PROMPT_CACHE_MAX_SYSTEM_BLOCKS": {
         "type": SettingType.NUMBER,
         "category": SettingCategory.LLM,

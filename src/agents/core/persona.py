@@ -16,11 +16,20 @@
 import importlib
 from typing import Any
 
+from src.agents.core.harness_prompt_overrides import (
+    build_harness_extra_middleware,
+    catalog_for_mode,
+)
+from src.infra.logging import get_logger
+from src.kernel.config import get_active_harness_mode
 from src.kernel.schemas.persona_preset import (
     DEFAULT_PREFERRED_AGENT_ID,
     PREFERRED_AGENT_IDS,
     PreferredAgentId,
 )
+
+logger = get_logger(__name__)
+_HARNESS_MODE = get_active_harness_mode()
 
 _deepagents: Any = None
 try:
@@ -34,7 +43,11 @@ _register_harness_profile = (
 )
 
 
-DEFAULT_ROLE = "You are an intelligent assistant with tools and skills."
+DEFAULT_ROLE = (
+    "你是具备工具和技能的智能助手。"
+    if _HARNESS_MODE == "compact_zh"
+    else "You are an intelligent assistant with tools and skills."
+)
 
 
 def resolve_persona_agent_id(
@@ -66,54 +79,52 @@ _PERSONA_HEADING = "## Persona"
 # Tasks, etc.) because those are valuable behavioral guardrails that don't
 # conflict with persona roles.
 #
-# Using a bare provider key ("anthropic") covers all Anthropic models.
+# Registering the same profile under every model adapter's resolved provider
+# keeps the core harness consistent across Anthropic, OpenAI-compatible, and
+# Google models. Model-specific deepagents profiles still merge their suffixes
+# on top of this shared base.
 # ---------------------------------------------------------------------------
-_BEHAVIOR_GUIDE = """You have access to tools and can respond with text and tool calls. The user can see your responses and tool outputs in real time.
+def _legacy_behavior_guide() -> str:
+    """Restore the pre-compression vendor behavior while keeping persona authority."""
+    try:
+        from deepagents.graph import BASE_AGENT_PROMPT
+    except ImportError:  # pragma: no cover
+        return "You have access to tools. Be accurate, complete the task, and verify your work."
+    _, separator, body = BASE_AGENT_PROMPT.partition("\n\n")
+    return (
+        "You have access to tools and can respond with text and tool calls. "
+        "The user can see your responses and tool outputs in real time."
+        + (separator + body if separator else "")
+    )
 
-## Core Behavior
 
-- Be concise and direct. Don't over-explain unless asked.
-- NEVER add unnecessary preamble ("Sure!", "Great question!", "I'll now...").
-- Don't say "I'll now do X" — just do it.
-- If the request is underspecified, ask only the minimum followup needed to take the next useful action.
-- If asked how to approach something, explain first, then act.
-
-## Professional Objectivity
-
-- Prioritize accuracy over validating the user's beliefs
-- Disagree respectfully when the user is incorrect
-- Avoid unnecessary superlatives, praise, or emotional validation
-
-## Doing Tasks
-
-When the user asks you to do something:
-
-1. **Understand first** — read relevant files, check existing patterns. Quick but thorough — gather enough evidence to start, then iterate. When reading files, always read enough to see the full picture — do not assume the default 100-line limit covers the whole file. Use offset/limit to continue reading, or increase the limit for larger files.
-2. **Act** — implement the solution. Work quickly but accurately.
-3. **Verify** — check your work against what was asked, not against your own output. Your first attempt is rarely correct — iterate.
-
-Keep working until the task is fully complete. Don't stop partway and explain what you would do — just do it. Only yield back to the user when the task is done or you're genuinely blocked.
-
-**When things go wrong:**
-- If something fails repeatedly, stop and analyze *why* — don't keep retrying the same approach.
-- If you're blocked, tell the user what's wrong and ask for guidance.
-
-## Clarifying Requests
-
-- Do not ask for details the user already supplied.
-- Use reasonable defaults when the request clearly implies them.
-- Prioritize missing semantics like content, delivery, detail level, or alert criteria.
-- Avoid opening with a long explanation of tool, scheduling, or integration limitations when a concise blocking followup question would move the task forward.
-- Ask domain-defining questions before implementation questions.
-- For monitoring or alerting requests, ask what signals, thresholds, or conditions should trigger an alert.
-
-## Progress Updates
-
-For longer tasks, provide brief progress updates at reasonable intervals — a concise sentence recapping what you've done and what's next."""
+_BEHAVIOR_GUIDE = (
+    _legacy_behavior_guide()
+    if _HARNESS_MODE == "legacy"
+    else catalog_for_mode(_HARNESS_MODE).behavior_guide
+)
 
 if _HarnessProfile is not None and _register_harness_profile is not None:
     # Register on import — this is idempotent (additive merge).
-    _register_harness_profile("anthropic", _HarnessProfile(base_system_prompt=_BEHAVIOR_GUIDE))
+    try:
+        from langchain.agents.middleware import TodoListMiddleware as _TodoListMiddleware
+    except ImportError:  # pragma: no cover - older langchain
+        _TodoListMiddleware = None  # type: ignore[misc, assignment]
+
+    _profile_kwargs: dict[str, Any] = {"base_system_prompt": _BEHAVIOR_GUIDE}
+    if _HARNESS_MODE != "legacy":
+        _catalog = catalog_for_mode(_HARNESS_MODE)
+        _profile_kwargs["tool_description_overrides"] = _catalog.tool_descriptions
+        _profile_kwargs["extra_middleware"] = lambda: build_harness_extra_middleware(
+            _HARNESS_MODE
+        )
+    if _HARNESS_MODE != "legacy" and _TodoListMiddleware is not None:
+        _profile_kwargs["excluded_middleware"] = frozenset({_TodoListMiddleware})
+
+    _shared_profile = _HarnessProfile(**_profile_kwargs)
+    for _provider_key in ("anthropic", "openai", "google_genai"):
+        _register_harness_profile(_provider_key, _shared_profile)
+    logger.info("[Harness] mode=%s", _HARNESS_MODE)
 
 
 def split_persona_prompt(system_prompt: str) -> tuple[str, str]:

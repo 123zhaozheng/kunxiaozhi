@@ -2,7 +2,11 @@
 
 import re
 
-TEAM_ROUTER_SYSTEM_PROMPT = """\
+from src.agents.core.harness_prompt_overrides import get_active_harness_mode, select_harness_text
+
+_HARNESS_MODE = get_active_harness_mode()
+
+_LEGACY_TEAM_ROUTER_SYSTEM_PROMPT = """\
 You are a team router agent. Your job is to:
 
 1. Understand the user's request.
@@ -34,7 +38,27 @@ When a task does not clearly map to a specific role, dispatch it to the default 
 Your final answer should be a clean synthesis of all role-specific findings, not a list of subagent outputs.
 """
 
-SANDBOX_SYSTEM_PROMPT = """## Storage Architecture (CRITICAL)
+TEAM_ROUTER_SYSTEM_PROMPT = select_harness_text(
+    legacy=_LEGACY_TEAM_ROUTER_SYSTEM_PROMPT,
+    compact_en="""You route work across a team: understand, split, assign via `task`, then verify and synthesize.
+
+## Team
+{team_members_description}
+{team_instructions_section}
+Default role: {default_role}.
+
+Route by role fit; send actual work, not coordination messages. Parallelize independent tasks, forward the user's timestamp, collect every result, resolve conflicts with evidence, and report failures. Final output is one coherent answer.""",
+    compact_zh="""你负责团队路由：理解请求、拆分任务、用 `task` 分派、核验并整合。
+
+## 团队
+{team_members_description}
+{team_instructions_section}
+默认角色：{default_role}。
+
+按角色能力分派实际工作，不发送协调/提醒消息；独立任务并行，转交用户时间戳。收齐结果后以证据消解冲突，明确失败，最终只输出统一答案。""",
+)
+
+_LEGACY_SANDBOX_SYSTEM_PROMPT = """## Storage Architecture (CRITICAL)
 
 | System | Paths | Access |
 |--------|-------|--------|
@@ -47,12 +71,23 @@ SANDBOX_SYSTEM_PROMPT = """## Storage Architecture (CRITICAL)
 Use `upload_url_to_sandbox(url, file_path)` to download URLs to sandbox. `file_path` must be absolute inside the current sandbox work_dir.
 """
 
-SANDBOX_RUNTIME_SECTION = """## Sandbox Runtime
+_LEGACY_SANDBOX_RUNTIME_SECTION = """## Sandbox Runtime
 
 Current sandbox work_dir: `{work_dir}`
 
 Use this absolute directory for shell-created files and absolute `upload_url_to_sandbox` paths. Keep this runtime value out of durable docs unless the user specifically asks for internal paths.
 """
+
+SANDBOX_SYSTEM_PROMPT = select_harness_text(
+    legacy=_LEGACY_SANDBOX_SYSTEM_PROMPT,
+    compact_en="Shell uses sandbox `work_dir`; `/skills/` is remote virtual storage. Transfer skill code before execution. Use `upload_url_to_sandbox` with an absolute sandbox path.",
+    compact_zh="shell 仅操作沙箱 `work_dir`；`/skills/` 是远端虚拟存储。技能代码先传入再执行；`upload_url_to_sandbox` 必须使用沙箱绝对路径。",
+)
+SANDBOX_RUNTIME_SECTION = select_harness_text(
+    legacy=_LEGACY_SANDBOX_RUNTIME_SECTION,
+    compact_en="Current sandbox work_dir: `{work_dir}`. Use it for shell files/uploads; do not persist it unless requested.",
+    compact_zh="当前 sandbox work_dir：`{work_dir}`。shell 文件/上传均使用此前缀；非用户要求不得持久化。",
+)
 
 
 def build_team_members_description(team, role_summaries: dict[str, str] | None = None) -> str:
@@ -62,12 +97,15 @@ def build_team_members_description(team, role_summaries: dict[str, str] | None =
     for m in team.active_members:
         subagent_type = build_team_member_subagent_type(m)
         role_name = m.role_name or m.member_id
-        lines.append(f"- `{subagent_type}`: **{role_name}** (member_id: {m.member_id})")
+        member_label = "成员" if _HARNESS_MODE == "compact_zh" else "member_id"
+        lines.append(f"- `{subagent_type}`: **{role_name}** ({member_label}: {m.member_id})")
         role_summary = role_summaries.get(m.member_id)
         if role_summary:
-            lines.append(f"  Capability summary: {role_summary}")
+            label = "能力" if _HARNESS_MODE == "compact_zh" else "Capability summary"
+            lines.append(f"  {label}: {role_summary}")
         if m.role_instructions:
-            lines.append(f"  Instructions: {m.role_instructions}")
+            label = "指令" if _HARNESS_MODE == "compact_zh" else "Instructions"
+            lines.append(f"  {label}: {m.role_instructions}")
     return "\n".join(lines)
 
 
@@ -87,9 +125,8 @@ def build_team_router_system_prompt(
 ) -> str:
     """Build the router system prompt for a concrete team."""
     team_instructions = (getattr(team, "team_instructions", "") or "").strip()
-    team_instructions_section = (
-        f"## Team Instructions\n{team_instructions}" if team_instructions else ""
-    )
+    heading = "## 团队指令" if _HARNESS_MODE == "compact_zh" else "## Team Instructions"
+    team_instructions_section = f"{heading}\n{team_instructions}" if team_instructions else ""
     return TEAM_ROUTER_SYSTEM_PROMPT.format(
         team_members_description=build_team_members_description(
             team,

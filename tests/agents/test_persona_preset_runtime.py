@@ -209,7 +209,7 @@ def test_persona_prompt_section_is_deterministic() -> None:
     assert build_persona_prompt_section("Plan first.") == "## Persona\n\nPlan first."
     assert (
         build_persona_prompt_section("  \n")
-        == "## Persona\n\nYou are an intelligent assistant with tools and skills."
+        == "## Persona\n\n你是具备工具和技能的智能助手。"
     )
     assert build_persona_prompt_sections("Planner\n\nPlan first.") == [
         "## Persona\n\nPlanner\n\nPlan first."

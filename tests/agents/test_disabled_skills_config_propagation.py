@@ -725,7 +725,7 @@ async def test_team_role_subagent_prompt_includes_role_instructions_and_skills(
     section_middleware = next(mw for mw in subagent["middleware"] if hasattr(mw, "_sections"))
     sections = "\n\n".join(section_middleware._sections)
     assert "你是小红书风格文案写手，语气活泼可爱。" in sections
-    assert "### Role Instructions" in sections
+    assert "### 角色指令" in sections
     assert "多用 emoji，保持小红书博主语气。" in sections
     assert "## Skills System" in sections
     assert "xiaohongshu-copy" in sections

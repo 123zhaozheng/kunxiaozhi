@@ -26,9 +26,9 @@ def test_reveal_project_tool_description_mentions_folder_reveal() -> None:
 def test_subagent_workflow_allows_folder_reveal() -> None:
     from src.agents.core.subagent_prompts import WORKFLOW_SECTION
 
-    assert "Project / Folder Reveal" in WORKFLOW_SECTION
-    assert "ordinary folders with many files" in WORKFLOW_SECTION
-    assert 'mode: "folder"' in WORKFLOW_SECTION
+    assert "reveal_project" in WORKFLOW_SECTION
+    assert "多文件项目/目录" in WORKFLOW_SECTION
+    assert "最终答复前必须成功 reveal" in WORKFLOW_SECTION
 
 
 def test_reveal_project_default_upload_concurrency_bounds_download_buffers() -> None:

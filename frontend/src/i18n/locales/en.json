@@ -2095,6 +2095,7 @@
     "POSTGRES_POOL_MIN_SIZE": "PostgreSQL connection pool minimum size",
     "POSTGRES_PORT": "PostgreSQL port",
     "POSTGRES_USER": "PostgreSQL username",
+    "AGENT_HARNESS_MODE": "Agent harness language/compression mode (restart required)",
     "PROMPT_CACHE_MAX_SYSTEM_BLOCKS": "Maximum cached system prompt blocks",
     "PROMPT_CACHE_MAX_TOOLS": "Maximum cached tool definitions",
     "REDIS_PASSWORD": "Redis password",

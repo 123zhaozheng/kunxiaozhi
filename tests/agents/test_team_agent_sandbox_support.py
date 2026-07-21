@@ -176,7 +176,7 @@ async def test_team_agent_node_uses_sandbox_backend_when_enabled(
 
     assert fake_graph.captured_create_kwargs is not None
     assert fake_graph.captured_create_kwargs["backend"] is sandbox_backend
-    assert "Storage Architecture (CRITICAL)" in fake_graph.captured_create_kwargs["system_prompt"]
+    assert "## 存储" in fake_graph.captured_create_kwargs["system_prompt"]
     assert emitted[0][0] == "starting"
     assert emitted[1][0] == "ready"
 
