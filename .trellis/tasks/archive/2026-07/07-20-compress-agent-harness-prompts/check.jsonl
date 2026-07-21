@@ -1,0 +1,5 @@
+{"path": "prd.md", "reason": "Acceptance criteria"}
+{"path": "design.md", "reason": "Design constraints"}
+{"path": "implement.md", "reason": "Done definition"}
+{"path": ".trellis/spec/backend/index.md", "reason": "Backend quality bars"}
+{"path": ".trellis/spec/guides/index.md", "reason": "Shared guides"}

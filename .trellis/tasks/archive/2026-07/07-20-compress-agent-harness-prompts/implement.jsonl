@@ -1,0 +1,5 @@
+{"path": "prd.md", "reason": "Acceptance criteria"}
+{"path": "design.md", "reason": "Technical design for profile overrides"}
+{"path": "implement.md", "reason": "Execution checklist"}
+{"path": ".trellis/spec/backend/index.md", "reason": "Backend pre-dev checklist"}
+{"path": ".trellis/spec/guides/index.md", "reason": "Shared coding guides"}
