@@ -386,3 +386,36 @@ Restored English and Simplified Chinese role max-channel labels and added a loca
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: sandbox_mcp 管理工具并入 internal 统一管控
+
+**Date**: 2026-07-21
+**Task**: sandbox_mcp 管理工具并入 internal 统一管控
+**Branch**: `feat/opensandbox-backend`
+
+### Summary
+
+将 sandbox_mcp_add/update/remove 并入 kunxiaozhi_internal，走 MCPToolPolicy 统一管控；Fast/Search 去掉直接双挂；BUILTIN_TOOLS 移除保护。28 项相关测试通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `61f2715e` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
