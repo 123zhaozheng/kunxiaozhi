@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 10
+- **Total Sessions**: 11
 - **Last Active**: 2026-07-21
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~355 | Active |
+| `journal-1.md` | ~388 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 11 | 2026-07-21 | Restore role max-channel translations | `5f246c38` | `feat/opensandbox-backend` |
 | 10 | 2026-07-21 | Reversible compact agent harness | `892ebeb8` | `feat/opensandbox-backend` |
 | 9 | 2026-07-20 | Selectable LangSmith and Phoenix tracing providers | `e992d1e7` | `feat/opensandbox-backend` |
 | 8 | 2026-07-17 | Agent emoji CDN 本地化（内网 Chrome） | `380e9ecb`, `90ee44bc`, `54f73232` | `feat/opensandbox-backend` |

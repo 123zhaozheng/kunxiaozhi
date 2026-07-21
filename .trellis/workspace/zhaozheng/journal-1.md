@@ -353,3 +353,36 @@ Implemented and hardened legacy/compact_en/compact_zh harness modes, localized m
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: Restore role max-channel translations
+
+**Date**: 2026-07-21
+**Task**: Restore role max-channel translations
+**Branch**: `feat/opensandbox-backend`
+
+### Summary
+
+Restored English and Simplified Chinese role max-channel labels and added a locale regression test; TypeScript, ESLint, targeted test, and JSON parsing passed.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5f246c38` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
