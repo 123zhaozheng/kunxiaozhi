@@ -248,3 +248,98 @@ async def test_effective_config_caps_loaded_servers(
     config = await storage.get_effective_config("user-1")
 
     assert list(config["mcpServers"]) == ["system-0", "system-1"]
+
+
+_SANDBOX_MCP_TOOL_NAMES = frozenset(
+    {"sandbox_mcp_add", "sandbox_mcp_update", "sandbox_mcp_remove"}
+)
+
+
+def test_build_internal_tools_includes_sandbox_mcp_when_sandbox_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.infra.tool import internal_registry
+
+    monkeypatch.setattr(internal_registry.settings, "ENABLE_SANDBOX", True, raising=True)
+    monkeypatch.setattr(internal_registry.settings, "ENABLE_IMAGE_GENERATION", False, raising=True)
+    monkeypatch.setattr(
+        internal_registry.settings, "ENABLE_AUDIO_TRANSCRIPTION", False, raising=True
+    )
+    monkeypatch.setattr(internal_registry.settings, "ENABLE_DOCUMENT_PARSE", False, raising=True)
+    monkeypatch.setattr(internal_registry.settings, "DIFY_KB_ENABLED", False, raising=True)
+
+    names = {tool.name for tool in internal_registry.build_internal_tools()}
+    assert _SANDBOX_MCP_TOOL_NAMES <= names
+
+
+def test_build_internal_tools_excludes_sandbox_mcp_when_sandbox_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.infra.tool import internal_registry
+
+    monkeypatch.setattr(internal_registry.settings, "ENABLE_SANDBOX", False, raising=True)
+    monkeypatch.setattr(internal_registry.settings, "ENABLE_IMAGE_GENERATION", False, raising=True)
+    monkeypatch.setattr(
+        internal_registry.settings, "ENABLE_AUDIO_TRANSCRIPTION", False, raising=True
+    )
+    monkeypatch.setattr(internal_registry.settings, "ENABLE_DOCUMENT_PARSE", False, raising=True)
+    monkeypatch.setattr(internal_registry.settings, "DIFY_KB_ENABLED", False, raising=True)
+
+    names = {tool.name for tool in internal_registry.build_internal_tools()}
+    assert not (_SANDBOX_MCP_TOOL_NAMES & names)
+
+
+@pytest.mark.asyncio
+async def test_internal_tools_policy_disabled_hides_sandbox_mcp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from langchain_core.tools import BaseTool
+
+    from src.infra.tool import internal_registry
+    from src.kernel.schemas.mcp import MCPToolPolicy
+
+    class _FakeTool(BaseTool):
+        name: str
+        description: str = ""
+
+        def _run(self, *args, **kwargs):
+            return "sync"
+
+        async def _arun(self, *args, **kwargs):
+            return "async"
+
+    class _FakeStorage:
+        async def list_tool_policies(self, server_name: str):
+            assert server_name == "kunxiaozhi_internal"
+            return {
+                "sandbox_mcp_add": MCPToolPolicy(
+                    server_name="kunxiaozhi_internal",
+                    tool_name="sandbox_mcp_add",
+                    disabled=True,
+                )
+            }
+
+    monkeypatch.setattr(internal_registry, "MCPStorage", lambda: _FakeStorage())
+    monkeypatch.setattr(
+        internal_registry,
+        "build_internal_tools",
+        lambda: [
+            _FakeTool(name="sandbox_mcp_add"),
+            _FakeTool(name="sandbox_mcp_update"),
+            _FakeTool(name="env_var_list"),
+        ],
+    )
+
+    tools = await internal_registry.get_internal_tools_for_user(
+        user_id="user-1",
+        user_roles=["user"],
+        is_admin=False,
+    )
+
+    assert [tool.name for tool in tools] == ["sandbox_mcp_update", "env_var_list"]
+
+
+def test_builtin_tools_excludes_sandbox_mcp() -> None:
+    from src.agents.core.tool_filter import BUILTIN_TOOLS
+
+    assert not (_SANDBOX_MCP_TOOL_NAMES & BUILTIN_TOOLS)

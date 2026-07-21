@@ -91,6 +91,19 @@ def _stub_context_tool_imports(monkeypatch: pytest.MonkeyPatch) -> None:
             get_transfer_path_tool=lambda: tool("transfer_path"),
         ),
     )
+    monkeypatch.setitem(
+        sys.modules,
+        "src.infra.tool.upload_url_tool",
+        SimpleNamespace(get_upload_url_tool=lambda: tool("upload_url_to_sandbox")),
+    )
+
+
+_ENV_VAR_TOOL_NAMES = frozenset(
+    {"env_var_list", "env_var_set", "env_var_delete", "env_var_delete_all"}
+)
+_SANDBOX_MCP_TOOL_NAMES = frozenset(
+    {"sandbox_mcp_add", "sandbox_mcp_update", "sandbox_mcp_remove"}
+)
 
 
 def _stub_internal_registry_env_var_tools(
@@ -357,7 +370,8 @@ async def test_search_agent_context_includes_env_var_tools_when_sandbox_enabled(
     await ctx.setup()
 
     names = {tool.name for tool in ctx.tools}
-    assert {"env_var_list", "env_var_set", "env_var_delete", "env_var_delete_all"} <= names
+    assert _ENV_VAR_TOOL_NAMES <= names
+    assert _SANDBOX_MCP_TOOL_NAMES <= names
 
 
 @pytest.mark.asyncio
@@ -379,7 +393,8 @@ async def test_search_agent_context_excludes_env_var_tools_when_sandbox_disabled
     await ctx.setup()
 
     names = {tool.name for tool in ctx.tools}
-    assert not ({"env_var_list", "env_var_set", "env_var_delete", "env_var_delete_all"} & names)
+    assert not (_ENV_VAR_TOOL_NAMES & names)
+    assert not (_SANDBOX_MCP_TOOL_NAMES & names)
 
 
 @pytest.mark.asyncio
@@ -401,7 +416,8 @@ async def test_fast_agent_context_includes_env_var_tools_when_sandbox_enabled(
     await ctx.setup()
 
     names = {tool.name for tool in ctx.tools}
-    assert {"env_var_list", "env_var_set", "env_var_delete", "env_var_delete_all"} <= names
+    assert _ENV_VAR_TOOL_NAMES <= names
+    assert _SANDBOX_MCP_TOOL_NAMES <= names
 
 
 @pytest.mark.asyncio
@@ -423,17 +439,18 @@ async def test_fast_agent_context_excludes_env_var_tools_when_sandbox_disabled(
     await ctx.setup()
 
     names = {tool.name for tool in ctx.tools}
-    assert not ({"env_var_list", "env_var_set", "env_var_delete", "env_var_delete_all"} & names)
+    assert not (_ENV_VAR_TOOL_NAMES & names)
+    assert not (_SANDBOX_MCP_TOOL_NAMES & names)
 
 
 @pytest.mark.asyncio
 async def test_search_agent_context_respects_disabled_env_var_policy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Regression: when the per-tool policy disables env_var tools, they must NOT
-    re-appear via a second load path. Before the fix, a direct get_env_var_tools()
-    call in setup() bypassed get_internal_tools_for_user's policy filter and
-    re-added the disabled tools via name-only dedup."""
+    """Regression: when the per-tool policy disables env_var / sandbox_mcp tools,
+    they must NOT re-appear via a second load path. Before the fix, a direct
+    get_env_var_tools() / get_sandbox_mcp_tools() call in setup() bypassed
+    get_internal_tools_for_user's policy filter."""
     _stub_context_tool_imports(monkeypatch)
     search_context = _load_module_from_path(
         "search_context_under_test_policy",
@@ -444,7 +461,7 @@ async def test_search_agent_context_respects_disabled_env_var_policy(
     monkeypatch.setattr(search_context.settings, "ENABLE_SANDBOX", True)
     monkeypatch.setattr(search_context.settings, "ENABLE_SKILLS", False)
 
-    # Simulate policy filtering out ALL internal tools (incl. env_var).
+    # Simulate policy filtering out ALL internal tools (incl. env_var / sandbox_mcp).
     async def fake_get_internal_tools_for_user(*, user_id, user_roles, is_admin):
         return []
 
@@ -467,4 +484,46 @@ async def test_search_agent_context_respects_disabled_env_var_policy(
     await ctx.setup()
 
     names = {tool.name for tool in ctx.tools}
-    assert not ({"env_var_list", "env_var_set", "env_var_delete", "env_var_delete_all"} & names)
+    assert not (_ENV_VAR_TOOL_NAMES & names)
+    assert not (_SANDBOX_MCP_TOOL_NAMES & names)
+
+
+@pytest.mark.asyncio
+async def test_fast_agent_context_respects_disabled_sandbox_mcp_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: Fast context must not re-add sandbox_mcp tools after policy filter."""
+    _stub_context_tool_imports(monkeypatch)
+    fast_context = _load_module_from_path(
+        "fast_context_under_test_policy",
+        "src/agents/fast_agent/context.py",
+    )
+
+    monkeypatch.setattr(fast_context.settings, "ENABLE_MEMORY", False)
+    monkeypatch.setattr(fast_context.settings, "ENABLE_SANDBOX", True)
+    monkeypatch.setattr(fast_context.settings, "ENABLE_SKILLS", False)
+
+    async def fake_get_internal_tools_for_user(*, user_id, user_roles, is_admin):
+        return []
+
+    monkeypatch.setattr(
+        fast_context,
+        "get_internal_tools_for_user",
+        fake_get_internal_tools_for_user,
+        raising=True,
+    )
+    import src.infra.mcp.quota as quota
+
+    async def fake_resolve_user_mcp_access(user_id):
+        return ([], False)
+
+    monkeypatch.setattr(
+        quota, "resolve_user_mcp_access", fake_resolve_user_mcp_access, raising=True
+    )
+
+    ctx = fast_context.FastAgentContext(user_id="user-1")
+    await ctx.setup()
+
+    names = {tool.name for tool in ctx.tools}
+    assert not (_ENV_VAR_TOOL_NAMES & names)
+    assert not (_SANDBOX_MCP_TOOL_NAMES & names)

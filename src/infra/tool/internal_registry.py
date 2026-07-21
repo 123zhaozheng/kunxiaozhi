@@ -15,6 +15,7 @@ from src.infra.tool.image_generation_tool import get_image_generation_tool
 from src.infra.tool.mcp_client import MCPToolWithRetry
 from src.infra.tool.persona_preset_tool import get_persona_preset_tools
 from src.infra.tool.read_document_tool import get_read_document_tool
+from src.infra.tool.sandbox_mcp_tool import get_sandbox_mcp_tools
 from src.infra.tool.team_tool import get_team_tools
 from src.kernel.config import settings
 from src.kernel.schemas.mcp import (
@@ -52,12 +53,13 @@ def build_internal_tools() -> list[BaseTool]:
     ):
         tools.append(get_dify_kb_retrieve_tool())
 
-    # env_var tools' only consumer is the sandbox (rebuild_sandbox_mcp /
-    # _sync_user_env_vars / EnvVarPromptMiddleware — all sandbox-gated).
-    # Load them only when a sandbox is configured so non-sandbox deployments
-    # don't expose dead-weight tools whose stored values have no consumer.
+    # env_var and sandbox_mcp management tools only make sense with a sandbox
+    # (rebuild_sandbox_mcp / _sync_user_env_vars / EnvVarPromptMiddleware /
+    # mcporter registration — all sandbox-gated). Load them only when a sandbox
+    # is configured so non-sandbox deployments don't expose dead-weight tools.
     if settings.ENABLE_SANDBOX:
         tools.extend(get_env_var_tools())
+        tools.extend(get_sandbox_mcp_tools())
 
     tools.extend(get_persona_preset_tools())
     tools.extend(get_team_tools())
