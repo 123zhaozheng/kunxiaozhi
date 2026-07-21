@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 9
-- **Last Active**: 2026-07-20
+- **Total Sessions**: 10
+- **Last Active**: 2026-07-21
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~322 | Active |
+| `journal-1.md` | ~355 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 10 | 2026-07-21 | Reversible compact agent harness | `892ebeb8` | `feat/opensandbox-backend` |
 | 9 | 2026-07-20 | Selectable LangSmith and Phoenix tracing providers | `e992d1e7` | `feat/opensandbox-backend` |
 | 8 | 2026-07-17 | Agent emoji CDN 本地化（内网 Chrome） | `380e9ecb`, `90ee44bc`, `54f73232` | `feat/opensandbox-backend` |
 | 7 | 2026-07-15 | 对接 OpenSandbox 沙箱后端 | `0d48091e`, `fa7e9264`, `aaf49ef8`, `158e6614` | `feat/opensandbox-backend` |

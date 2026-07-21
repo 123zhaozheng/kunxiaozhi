@@ -320,3 +320,36 @@ Added a mutually exclusive tracing provider selector, removed the legacy LangSmi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: Reversible compact agent harness
+
+**Date**: 2026-07-21
+**Task**: Reversible compact agent harness
+**Branch**: `feat/opensandbox-backend`
+
+### Summary
+
+Implemented and hardened legacy/compact_en/compact_zh harness modes, localized model-visible prompts and schemas, preserved dynamic task/todo contracts, added rollback/vendor snapshots and mode tests, documented the backend harness contract, and passed the final 159-test quality gate.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `892ebeb8` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
