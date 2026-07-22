@@ -11,7 +11,7 @@ import {
   useImperativeHandle,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { MoreHorizontal, Star } from "lucide-react";
+import { Bookmark, MoreHorizontal } from "lucide-react";
 import toast from "react-hot-toast";
 import type { BackendSession } from "../../services/api/session";
 import type { Project } from "../../types";
@@ -320,10 +320,10 @@ export const ProjectItem = forwardRef<ProjectItemHandle, ProjectItemProps>(
               the surrounding sidebar. Custom project emoji remain editable. */}
           {isFavorites ? (
             <span
-              className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center"
+              className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center text-[var(--theme-text-secondary)] transition-colors group-hover:text-[var(--theme-text)]"
               aria-hidden="true"
             >
-              <Star size={20} strokeWidth={1.8} />
+              <Bookmark size={20} />
             </span>
           ) : isEditingIcon ? (
             <input
