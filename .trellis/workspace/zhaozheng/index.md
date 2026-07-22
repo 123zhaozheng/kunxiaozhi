@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 13
+- **Total Sessions**: 14
 - **Last Active**: 2026-07-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~454 | Active |
+| `journal-1.md` | ~487 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 14 | 2026-07-22 | Marketplace sandbox skill tools | `ebf40dc6` | `main` |
 | 13 | 2026-07-22 | Fix subagent stream update depth | `a618b77f` | `main` |
 | 12 | 2026-07-21 | sandbox_mcp 管理工具并入 internal 统一管控 | `61f2715e` | `feat/opensandbox-backend` |
 | 11 | 2026-07-21 | Restore role max-channel translations | `5f246c38` | `feat/opensandbox-backend` |

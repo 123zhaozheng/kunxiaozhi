@@ -452,3 +452,36 @@ Coalesced high-frequency subagent panel notifications per frame, migrated React 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: Marketplace sandbox skill tools
+
+**Date**: 2026-07-22
+**Task**: Marketplace sandbox skill tools
+**Branch**: `main`
+
+### Summary
+
+Rewrote find_skills/install_skill with real sandbox work_dir, S3 binary materialization, staged atomic installation, policy-synchronized prompts, and sandbox-agent-only exposure; preserved ANY-word marketplace search and added regression coverage.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ebf40dc6` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
