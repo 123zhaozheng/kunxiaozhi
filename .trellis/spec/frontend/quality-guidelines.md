@@ -47,6 +47,57 @@ import { LocalFluentEmoji } from "../common/LocalFluentEmoji";
 
 **Intranet check**: DevTools Network → filter `npmmirror` / `fluent-emoji` → expect **0** requests for agent/subagent emoji; icons should load as `/emoji-assets/*.webp`.
 
+### Scenario: serving packaged emoji assets through FastAPI
+
+#### 1. Scope / Trigger
+
+- Trigger: adding or changing same-origin UI assets rendered by `<img>` in the packaged frontend.
+- Why: image requests do not carry the Bearer token stored by the SPA, so an asset can exist in `dist/` and still render blank when `AuthMiddleware` rejects it.
+
+#### 2. Signatures
+
+- Browser request: `GET /emoji-assets/{codepoints}.webp` (no `Authorization` header required).
+- Packaged source: `frontend/dist/emoji-assets/{codepoints}.webp`.
+- Runtime route: `app.mount("/emoji-assets", StaticFiles(...), name="emoji-assets")` in `src/api/main.py`.
+
+#### 3. Contracts
+
+- Docker runs `node scripts/fetch-emoji-assets.mjs` before `pnpm run build`; Vite copies `public/emoji-assets/` into `dist/emoji-assets/`.
+- `AuthMiddleware.PUBLIC_PREFIXES` must contain `/emoji-assets/` because browser image requests are anonymous static requests.
+- A present WebP returns `200` with `Content-Type: image/webp`; a missing asset must not be replaced by the SPA HTML.
+
+#### 4. Validation & Error Matrix
+
+| Condition | Expected result |
+|-----------|-----------------|
+| File exists; no auth header | `200`, exact WebP bytes |
+| File missing | static `404`; `LocalFluentEmoji` tries variants then Unicode fallback |
+| `dist/emoji-assets/` absent | route is not mounted; packaging/build validation fails |
+| Public auth prefix absent | `401`; visible symptom is a blank agent/persona icon |
+
+#### 5. Good / Base / Bad Cases
+
+- Good: packaged image contains the directory, FastAPI mounts it, and an anonymous request returns WebP bytes.
+- Base: an uncommon emoji file is missing and `LocalFluentEmoji` renders the Unicode glyph.
+- Bad: verifying only the React `src` URL or local Vite dev server; this misses packaged FastAPI authentication and routing.
+
+#### 6. Tests Required
+
+- API regression: build a temporary `dist/emoji-assets/1f916.webp`, call it without auth, and assert status `200`, exact bytes, and `image/webp`.
+- Frontend build check: assert `dist/emoji-assets/1f916.webp` (default Agent icon) exists and is non-empty.
+- Runtime source scan: no business import of `FluentEmoji` / `getFluentEmojiCDN` and no runtime CDN URL.
+
+#### 7. Wrong vs Correct
+
+```python
+# Wrong: the file exists in dist, but anonymous <img> requests are intercepted.
+PUBLIC_PREFIXES = ("/assets/", "/icons/")
+
+# Correct: mount the directory and exempt its URL prefix from Bearer auth.
+PUBLIC_PREFIXES = ("/assets/", "/icons/", "/emoji-assets/")
+app.mount("/emoji-assets", StaticFiles(directory=str(emoji_dir)), name="emoji-assets")
+```
+
 ---
 
 ## Testing

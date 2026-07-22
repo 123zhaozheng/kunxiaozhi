@@ -699,6 +699,10 @@ def create_app() -> FastAPI:
         if icons_dir.exists():
             app.mount("/icons", StaticFiles(directory=str(icons_dir)), name="icons")
 
+        emoji_dir = static_dir / "emoji-assets"
+        if emoji_dir.exists():
+            app.mount("/emoji-assets", StaticFiles(directory=str(emoji_dir)), name="emoji-assets")
+
         # Serve other static files (manifest.json, etc.)
         @app.get("/manifest.json")
         async def serve_manifest():

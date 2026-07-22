@@ -11,7 +11,7 @@ import {
   useImperativeHandle,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Star } from "lucide-react";
 import toast from "react-hot-toast";
 import type { BackendSession } from "../../services/api/session";
 import type { Project } from "../../types";
@@ -316,8 +316,16 @@ export const ProjectItem = forwardRef<ProjectItemHandle, ProjectItemProps>(
                 : "hover:bg-stone-100 dark:hover:bg-stone-800/30"
           }`}
         >
-          {/* Project icon - editable */}
-          {isEditingIcon ? (
+          {/* The built-in favorites entry uses the same outline icon language as
+              the surrounding sidebar. Custom project emoji remain editable. */}
+          {isFavorites ? (
+            <span
+              className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center"
+              aria-hidden="true"
+            >
+              <Star size={20} strokeWidth={1.8} />
+            </span>
+          ) : isEditingIcon ? (
             <input
               type="text"
               value={editIcon}

@@ -298,6 +298,42 @@ async def test_image_static_files_include_cache_control(
 
 
 @pytest.mark.asyncio
+async def test_emoji_assets_are_served_without_auth(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    static_dir = tmp_path / "dist"
+    emoji_dir = static_dir / "emoji-assets"
+    emoji_dir.mkdir(parents=True)
+    (static_dir / "index.html").write_text(
+        "<!doctype html><div id='root'></div>", encoding="utf-8"
+    )
+    emoji_bytes = b"fake-agent-emoji-webp"
+    (emoji_dir / "1f916.webp").write_bytes(emoji_bytes)
+
+    monkeypatch.setattr(
+        api_main,
+        "resolve_frontend_target",
+        lambda _project_root, _frontend_dev_url: ("static", static_dir),
+    )
+
+    app = api_main.create_app()
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(
+        transport=transport, base_url="https://kunxiaozhi.com"
+    ) as client:
+        response = await client.get("/emoji-assets/1f916.webp")
+        missing_response = await client.get("/emoji-assets/missing.webp")
+
+    assert response.status_code == 200
+    assert response.content == emoji_bytes
+    assert response.headers["content-type"] == "image/webp"
+    assert missing_response.status_code == 404
+    assert missing_response.headers["content-type"].startswith("application/json")
+
+
+@pytest.mark.asyncio
 async def test_service_worker_is_served_without_auth(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
