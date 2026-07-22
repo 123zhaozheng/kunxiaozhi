@@ -419,3 +419,36 @@ Restored English and Simplified Chinese role max-channel labels and added a loca
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: Fix subagent stream update depth
+
+**Date**: 2026-07-22
+**Task**: Fix subagent stream update depth
+**Branch**: `main`
+
+### Summary
+
+Coalesced high-frequency subagent panel notifications per frame, migrated React subscription to useSyncExternalStore, added regression coverage, and archived the completed task.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a618b77f` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
