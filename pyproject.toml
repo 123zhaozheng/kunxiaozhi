@@ -36,6 +36,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "colorama>=0.4.6",
     "orjson>=3.10.0",
+    "charset-normalizer>=3.4.0", # text-encoding detection for read_document plain-text path
     "email-validator>=2.3.0",
     "resend>=2.0.0",
     "bcrypt>=4.0.0",

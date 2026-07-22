@@ -26,6 +26,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Sandbox Provider Integration](./sandbox-providers.md) | Pluggable sandbox provider kit (Daytona/E2B/OpenSandbox): backend+factory+adapter+dispatch, sync-SDK wrapping, cross-session reuse | Filled |
 | [Tracing Provider Integration](./tracing-providers.md) | Mutually exclusive LangSmith/Phoenix selector, derived SDK env, Phoenix lifecycle, and admin settings contract | Filled |
 | [Agent Harness Mode & Localization](./agent-harness.md) | Reversible harness modes, model-view schema localization, dynamic task/todo contracts, import boundary | Filled |
+| [read_document Dispatch](./read-document-dispatch.md) | File-type dispatch (MinerU / plain-text / sandbox-guidance), charset-normalizer short-CJK gotcha | Filled |
 
 ---
 
