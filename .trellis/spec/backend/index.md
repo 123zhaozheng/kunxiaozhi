@@ -24,6 +24,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Persona Preferred Agent](./persona-preferred-agent.md) | `preferred_agent_id` (fast/search/team), shared resolve, Web/WeCom parity | Filled |
 | [Analytics Persona & Lists](./analytics-persona-and-lists.md) | Dual-dimension lists/CSV, single-Persona analyze boundary, users `_id` join, trace persona merge | Filled |
 | [Sandbox Provider Integration](./sandbox-providers.md) | Pluggable sandbox provider kit (Daytona/E2B/OpenSandbox): backend+factory+adapter+dispatch, sync-SDK wrapping, cross-session reuse | Filled |
+| [Marketplace Skills in Sandboxes](./marketplace-sandbox-skills.md) | Runtime tool/prompt gating, real work-dir installation, S3 binary materialization, atomic completeness | Filled |
 | [Tracing Provider Integration](./tracing-providers.md) | Mutually exclusive LangSmith/Phoenix selector, derived SDK env, Phoenix lifecycle, and admin settings contract | Filled |
 | [Agent Harness Mode & Localization](./agent-harness.md) | Reversible harness modes, model-view schema localization, dynamic task/todo contracts, import boundary | Filled |
 | [read_document Dispatch](./read-document-dispatch.md) | File-type dispatch (MinerU / plain-text / sandbox-guidance), charset-normalizer short-CJK gotcha | Filled |

@@ -206,6 +206,7 @@ class SearchAgentContext:
                 user_id=self.user_id,
                 user_roles=user_roles,
                 is_admin=is_admin,
+                include_sandbox_tools=settings.ENABLE_SANDBOX,
             )
             self.tools.extend(internal_tools)
             logger.info(f"[SearchAgentContext] Added {len(internal_tools)} internal tools")

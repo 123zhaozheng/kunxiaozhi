@@ -189,6 +189,7 @@ class FastAgentContext:
                 user_id=self.user_id,
                 user_roles=user_roles,
                 is_admin=is_admin,
+                include_sandbox_tools=settings.ENABLE_SANDBOX and self.agent_id != "fast",
             )
             self.tools.extend(internal_tools)
             logger.info(f"[FastAgentContext] Added {len(internal_tools)} internal tools")

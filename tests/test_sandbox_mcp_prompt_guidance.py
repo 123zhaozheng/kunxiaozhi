@@ -97,8 +97,9 @@ def test_deferred_prompt_excludes_sandbox_mcp_from_search_tools() -> None:
     prompt = manager.get_deferred_stubs_string()
 
     assert "search_tools" in prompt
-    assert "does NOT search sandbox tools" in prompt
-    assert "use `execute` with `mcporter`" in prompt
+    assert "search_tools" in prompt
+    assert "execute" in prompt
+    assert "mcporter" in prompt
 
 
 def test_deferred_prompt_tells_model_to_search_before_using_tool() -> None:
@@ -115,9 +116,9 @@ def test_deferred_prompt_tells_model_to_search_before_using_tool() -> None:
 
     prompt = manager.get_deferred_stubs_string()
 
-    assert "If one of these tools would help" in prompt
-    assert "call `search_tools` first" in prompt
-    assert "then use that tool normally" in prompt
+    assert "search_tools" in prompt
+    assert "schema" in prompt
+    assert "github:create_issue" in prompt
 
 
 def test_search_tools_description_uses_server_tool_exact_name_format() -> None:

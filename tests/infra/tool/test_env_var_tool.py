@@ -124,8 +124,10 @@ def _stub_internal_registry_env_var_tools(
         raising=True,
     )
 
-    async def fake_get_internal_tools_for_user(*, user_id, user_roles, is_admin):
-        return registry.build_internal_tools()
+    async def fake_get_internal_tools_for_user(
+        *, user_id, user_roles, is_admin, include_sandbox_tools=None
+    ):
+        return registry.build_internal_tools(include_sandbox_tools=include_sandbox_tools)
 
     monkeypatch.setattr(
         context_module,
@@ -398,7 +400,7 @@ async def test_search_agent_context_excludes_env_var_tools_when_sandbox_disabled
 
 
 @pytest.mark.asyncio
-async def test_fast_agent_context_includes_env_var_tools_when_sandbox_enabled(
+async def test_fast_agent_context_excludes_sandbox_tools_even_when_globally_enabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _stub_context_tool_imports(monkeypatch)
@@ -416,8 +418,8 @@ async def test_fast_agent_context_includes_env_var_tools_when_sandbox_enabled(
     await ctx.setup()
 
     names = {tool.name for tool in ctx.tools}
-    assert _ENV_VAR_TOOL_NAMES <= names
-    assert _SANDBOX_MCP_TOOL_NAMES <= names
+    assert not (_ENV_VAR_TOOL_NAMES & names)
+    assert not (_SANDBOX_MCP_TOOL_NAMES & names)
 
 
 @pytest.mark.asyncio
@@ -462,7 +464,9 @@ async def test_search_agent_context_respects_disabled_env_var_policy(
     monkeypatch.setattr(search_context.settings, "ENABLE_SKILLS", False)
 
     # Simulate policy filtering out ALL internal tools (incl. env_var / sandbox_mcp).
-    async def fake_get_internal_tools_for_user(*, user_id, user_roles, is_admin):
+    async def fake_get_internal_tools_for_user(
+        *, user_id, user_roles, is_admin, include_sandbox_tools=None
+    ):
         return []
 
     monkeypatch.setattr(
@@ -503,7 +507,9 @@ async def test_fast_agent_context_respects_disabled_sandbox_mcp_policy(
     monkeypatch.setattr(fast_context.settings, "ENABLE_SANDBOX", True)
     monkeypatch.setattr(fast_context.settings, "ENABLE_SKILLS", False)
 
-    async def fake_get_internal_tools_for_user(*, user_id, user_roles, is_admin):
+    async def fake_get_internal_tools_for_user(
+        *, user_id, user_roles, is_admin, include_sandbox_tools=None
+    ):
         return []
 
     monkeypatch.setattr(

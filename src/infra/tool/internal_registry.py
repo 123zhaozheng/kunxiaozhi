@@ -16,6 +16,7 @@ from src.infra.tool.mcp_client import MCPToolWithRetry
 from src.infra.tool.persona_preset_tool import get_persona_preset_tools
 from src.infra.tool.read_document_tool import get_read_document_tool
 from src.infra.tool.sandbox_mcp_tool import get_sandbox_mcp_tools
+from src.infra.tool.skill_marketplace_tool import get_skill_marketplace_tools
 from src.infra.tool.team_tool import get_team_tools
 from src.kernel.config import settings
 from src.kernel.schemas.mcp import (
@@ -28,9 +29,11 @@ from src.kernel.schemas.mcp import (
 INTERNAL_MCP_SERVER_NAME = "kunxiaozhi_internal"
 
 
-def build_internal_tools() -> list[BaseTool]:
+def build_internal_tools(*, include_sandbox_tools: bool | None = None) -> list[BaseTool]:
     """Build the internal tool set that 昆小智 exposes to agents."""
     tools: list[BaseTool] = []
+    if include_sandbox_tools is None:
+        include_sandbox_tools = settings.ENABLE_SANDBOX
 
     if settings.ENABLE_IMAGE_GENERATION:
         tools.append(get_image_generation_tool())
@@ -53,13 +56,15 @@ def build_internal_tools() -> list[BaseTool]:
     ):
         tools.append(get_dify_kb_retrieve_tool())
 
-    # env_var and sandbox_mcp management tools only make sense with a sandbox
-    # (rebuild_sandbox_mcp / _sync_user_env_vars / EnvVarPromptMiddleware /
-    # mcporter registration — all sandbox-gated). Load them only when a sandbox
-    # is configured so non-sandbox deployments don't expose dead-weight tools.
-    if settings.ENABLE_SANDBOX:
+    # env_var / sandbox_mcp / skill_marketplace tools only make sense with a
+    # sandbox (rebuild_sandbox_mcp / _sync_user_env_vars / EnvVarPromptMiddleware
+    # / mcporter registration / install_skill writing into the live sandbox —
+    # all sandbox-gated). Load them only when a sandbox is configured so
+    # non-sandbox deployments don't expose dead-weight tools.
+    if include_sandbox_tools:
         tools.extend(get_env_var_tools())
         tools.extend(get_sandbox_mcp_tools())
+        tools.extend(get_skill_marketplace_tools())
 
     tools.extend(get_persona_preset_tools())
     tools.extend(get_team_tools())
@@ -182,9 +187,14 @@ async def get_internal_tools_for_user(
     user_id: str | None,
     user_roles: list[str] | None,
     is_admin: bool,
+    include_sandbox_tools: bool | None = None,
 ) -> list[BaseTool]:
     """Return internal tools filtered and wrapped by per-tool policy."""
-    tools = build_internal_tools()
+    tools = (
+        build_internal_tools()
+        if include_sandbox_tools is None
+        else build_internal_tools(include_sandbox_tools=include_sandbox_tools)
+    )
     if not tools:
         return []
 

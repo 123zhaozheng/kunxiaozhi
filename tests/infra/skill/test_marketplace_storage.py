@@ -102,8 +102,43 @@ async def test_list_marketplace_skills_escapes_search_regex(
 
     assert collection.pipeline is not None
     match = collection.pipeline[0]["$match"]
+    # For single word, we still produce a top-level $or of the three fields
     regex = match["$or"][0]["skill_name"]["$regex"]
     assert regex == r"a\+b\(c\)"
+
+
+@pytest.mark.asyncio
+async def test_list_marketplace_skills_multi_word_search_any_word_is_enough(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Multi-word query should produce a top-level $or of per-word conditions.
+
+    Satisfying ANY single word (in name OR desc OR tags) is enough to return the skill.
+    """
+    collection = _FakeMarketplaceCollection()
+    storage = MarketplaceStorage()
+    monkeypatch.setattr(storage, "_get_meta_collection", lambda: collection)
+
+    async def _fake_batch_get_usernames(user_ids: list[str]) -> dict[str, str]:
+        return {}
+
+    monkeypatch.setattr(storage, "_batch_get_usernames", _fake_batch_get_usernames)
+
+    await storage.list_marketplace_skills(search="银行日报 word 公文 docx", include_inactive=True)
+
+    assert collection.pipeline is not None
+    match = collection.pipeline[0]["$match"]
+    # Should be a top-level $or over the word conditions (any word matches => hit)
+    assert "$or" in match
+    or_conds = match["$or"]
+    # We expect 4 word-level conditions for the 4 words
+    assert len(or_conds) == 4
+    for cond in or_conds:
+        assert "$or" in cond
+        field_ors = cond["$or"]
+        assert len(field_ors) == 3
+        fields = [list(branch.keys())[0] for branch in field_ors]
+        assert set(fields) == {"skill_name", "description", "tags"}
 
 
 @pytest.mark.asyncio

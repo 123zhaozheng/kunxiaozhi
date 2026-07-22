@@ -154,17 +154,36 @@ class MarketplaceStorage:
         if tags:
             query["tags"] = {"$all": tags}
         if search:
-            safe_search = re.escape(search)
-            search_or = [
-                {"skill_name": {"$regex": safe_search, "$options": "i"}},
-                {"description": {"$regex": safe_search, "$options": "i"}},
-                {"tags": {"$elemMatch": {"$regex": safe_search, "$options": "i"}}},
-            ]
-            if "$or" in query:
-                # 合并 visibility $or 和 search $or
-                query["$and"] = [{"$or": query.pop("$or")}, {"$or": search_or}]
-            else:
-                query["$or"] = search_or
+            # Split on whitespace for multi-word queries (e.g. "公文 word 文档").
+            # A skill matches if ANY of the words appears in skill_name OR description OR tags.
+            # We use a top-level $or across words (not $and), so that satisfying just one word
+            # is enough to return the skill.
+            words = [w for w in search.split() if w]
+            if words:
+                per_word_conditions: list[dict[str, Any]] = []
+                for w in words:
+                    safe = re.escape(w)
+                    word_cond = {
+                        "$or": [
+                            {"skill_name": {"$regex": safe, "$options": "i"}},
+                            {"description": {"$regex": safe, "$options": "i"}},
+                            {"tags": {"$elemMatch": {"$regex": safe, "$options": "i"}}},
+                        ]
+                    }
+                    per_word_conditions.append(word_cond)
+
+                if "$or" in query:
+                    # Preserve visibility $or (active or own) and combine with search
+                    vis_or = query.pop("$or")
+                    if len(per_word_conditions) == 1:
+                        query["$and"] = [{"$or": vis_or}, per_word_conditions[0]]
+                    else:
+                        query["$and"] = [{"$or": vis_or}, {"$or": per_word_conditions}]
+                else:
+                    if len(per_word_conditions) == 1:
+                        query["$or"] = per_word_conditions[0]["$or"]
+                    else:
+                        query["$or"] = per_word_conditions
 
         # Page marketplace metadata first, then count files without materializing
         # every file document into the aggregation result.

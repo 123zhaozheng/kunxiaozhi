@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/marketplace-sandbox-skills.md","reason":"Executable contract for sandbox-only marketplace tools, prompt/policy gating, real work_dir, binary materialization, and atomic install completeness."}
+{"file":".trellis/spec/backend/sandbox-providers.md","reason":"Existing provider work_dir and sandbox attachment contracts used by installation."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Backend lint, type-safety, async, and testing gates."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Expected versus unexpected error behavior for internal tools."}
