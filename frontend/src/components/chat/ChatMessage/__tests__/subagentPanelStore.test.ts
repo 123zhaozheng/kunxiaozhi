@@ -1,9 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  createSubagentPanelStore,
+  createSubagentPanelStore as createScheduledSubagentPanelStore,
   type SubagentPanelData,
 } from "../subagentPanelStore.ts";
+
+const createSubagentPanelStore = () =>
+  createScheduledSubagentPanelStore((callback) => callback());
+
+function createManualScheduler() {
+  const callbacks: Array<() => void> = [];
+  return {
+    schedule(callback: () => void) {
+      callbacks.push(callback);
+    },
+    flushNext() {
+      callbacks.shift()?.();
+    },
+    size() {
+      return callbacks.length;
+    },
+  };
+}
 
 function createData(agentId: string): SubagentPanelData {
   return {
@@ -76,8 +94,9 @@ test("set with identical field values does not notify listeners", () => {
   const calls: number[] = [];
   store.subscribe("agent-a", () => calls.push(calls.length + 1));
 
-  store.set(createFullData("agent-a"));
-  store.set(createFullData("agent-a"));
+  const data = createFullData("agent-a");
+  store.set(data);
+  store.set({ ...data });
 
   assert.equal(calls.length, 1);
 });
@@ -87,22 +106,23 @@ test("set notifies when any scalar field changes", () => {
   const calls: number[] = [];
   store.subscribe("agent-a", () => calls.push(calls.length + 1));
 
-  store.set(createFullData("agent-a"));
-  store.set(createFullData("agent-a", { status: "running" }));
-  store.set(createFullData("agent-a", { isPending: true }));
-  store.set(createFullData("agent-a", { result: "new-result" }));
-  store.set(createFullData("agent-a", { success: false }));
-  store.set(createFullData("agent-a", { error: "boom" }));
-  store.set(createFullData("agent-a", { startedAt: 1500 }));
-  store.set(createFullData("agent-a", { completedAt: 2500 }));
-  store.set(createFullData("agent-a", { input: "new-input" }));
-  store.set(createFullData("agent-a", { agentName: "renamed" }));
+  const base = createFullData("agent-a");
+  store.set(base);
+  store.set({ ...base, status: "running" });
+  store.set({ ...base, isPending: true });
+  store.set({ ...base, result: "new-result" });
+  store.set({ ...base, success: false });
+  store.set({ ...base, error: "boom" });
+  store.set({ ...base, startedAt: 1500 });
+  store.set({ ...base, completedAt: 2500 });
+  store.set({ ...base, input: "new-input" });
+  store.set({ ...base, agentName: "renamed" });
 
   // 初始 set + 9 次字段变化 = 10 次 emit
   assert.equal(calls.length, 10);
 });
 
-test("set with same parts content but different array reference does not notify", () => {
+test("set with same parts content but different array reference notifies", () => {
   const store = createSubagentPanelStore();
   const calls: number[] = [];
   store.subscribe("agent-a", () => calls.push(calls.length + 1));
@@ -115,7 +135,7 @@ test("set with same parts content but different array reference does not notify"
     }),
   );
 
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
 });
 
 test("set notifies when parts content changes", () => {
@@ -143,8 +163,9 @@ test("set treats undefined parts and present parts as different", () => {
   const calls: number[] = [];
   store.subscribe("agent-a", () => calls.push(calls.length + 1));
 
-  store.set(createFullData("agent-a", { parts: undefined }));
-  store.set(createFullData("agent-a", { parts: undefined }));
+  const dataWithoutParts = createFullData("agent-a", { parts: undefined });
+  store.set(dataWithoutParts);
+  store.set({ ...dataWithoutParts });
 
   assert.equal(calls.length, 1);
 
@@ -160,4 +181,96 @@ test("first set for a new agent id always notifies", () => {
   store.set(createFullData("agent-a"));
 
   assert.equal(calls.length, 1);
+});
+
+test("coalesces 100 writes for one agent into one scheduled notification", () => {
+  const scheduler = createManualScheduler();
+  const store = createScheduledSubagentPanelStore(scheduler.schedule);
+  const snapshots: Array<SubagentPanelData | undefined> = [];
+  store.subscribe("agent-a", () => snapshots.push(store.get("agent-a")));
+
+  for (let index = 0; index < 100; index += 1) {
+    store.set(
+      createFullData("agent-a", {
+        parts: [{ type: "text", content: `chunk-${index}` }],
+      }),
+    );
+  }
+
+  assert.equal(scheduler.size(), 1);
+  assert.equal(snapshots.length, 0);
+  const latestPart = store.get("agent-a")?.parts?.[0];
+  assert.equal(
+    latestPart?.type === "text" ? latestPart.content : undefined,
+    "chunk-99",
+  );
+
+  scheduler.flushNext();
+
+  assert.equal(snapshots.length, 1);
+  assert.equal(snapshots[0], store.get("agent-a"));
+});
+
+test("coalesces different agents while keeping notifications isolated", () => {
+  const scheduler = createManualScheduler();
+  const store = createScheduledSubagentPanelStore(scheduler.schedule);
+  const calls: string[] = [];
+  store.subscribe("agent-a", () => calls.push("a"));
+  store.subscribe("agent-b", () => calls.push("b"));
+
+  store.set(createData("agent-a"));
+  store.set(createData("agent-b"));
+  store.set({ ...createData("agent-a"), status: "complete" });
+
+  assert.equal(scheduler.size(), 1);
+  scheduler.flushNext();
+  assert.deepEqual(calls, ["a", "b"]);
+});
+
+test("set then delete in one frame exposes the deleted snapshot once", () => {
+  const scheduler = createManualScheduler();
+  const store = createScheduledSubagentPanelStore(scheduler.schedule);
+  const snapshots: Array<SubagentPanelData | undefined> = [];
+  store.subscribe("agent-a", () => snapshots.push(store.get("agent-a")));
+
+  store.set(createData("agent-a"));
+  store.delete("agent-a");
+  scheduler.flushNext();
+
+  assert.deepEqual(snapshots, [undefined]);
+});
+
+test("does not call a listener that unsubscribes before the frame flush", () => {
+  const scheduler = createManualScheduler();
+  const store = createScheduledSubagentPanelStore(scheduler.schedule);
+  const calls: number[] = [];
+  const unsubscribe = store.subscribe("agent-a", () => calls.push(1));
+
+  store.set(createData("agent-a"));
+  unsubscribe();
+  scheduler.flushNext();
+
+  assert.deepEqual(calls, []);
+});
+
+test("a listener write is deferred to the next scheduled flush", () => {
+  const scheduler = createManualScheduler();
+  const store = createScheduledSubagentPanelStore(scheduler.schedule);
+  const snapshots: string[] = [];
+  store.subscribe("agent-a", () => {
+    const status = store.get("agent-a")?.status;
+    snapshots.push(status ?? "missing");
+    if (status === "running") {
+      store.set({ ...createData("agent-a"), status: "complete" });
+    }
+  });
+
+  store.set(createData("agent-a"));
+  scheduler.flushNext();
+
+  assert.deepEqual(snapshots, ["running"]);
+  assert.equal(scheduler.size(), 1);
+
+  scheduler.flushNext();
+  assert.deepEqual(snapshots, ["running", "complete"]);
 });

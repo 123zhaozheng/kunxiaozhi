@@ -4,6 +4,7 @@ import {
   useCallback,
   useRef,
   useLayoutEffect,
+  useSyncExternalStore,
 } from "react";
 import { clsx } from "clsx";
 import {
@@ -68,14 +69,16 @@ import {
 import { formatDateTime } from "../../../utils/datetime";
 
 function useSubagentPanelData(agentId: string): SubagentPanelData | undefined {
-  const [, forceRender] = useState(0);
+  const subscribe = useCallback(
+    (listener: () => void) => subagentPanelStore.subscribe(agentId, listener),
+    [agentId],
+  );
+  const getSnapshot = useCallback(
+    () => subagentPanelStore.get(agentId),
+    [agentId],
+  );
 
-  useEffect(() => {
-    const listener = () => forceRender((n) => n + 1);
-    return subagentPanelStore.subscribe(agentId, listener);
-  }, [agentId]);
-
-  return subagentPanelStore.get(agentId);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
 function formatSubagentName(agentName: string): string {

@@ -15,9 +15,18 @@ export interface SubagentPanelData {
 }
 
 type Listener = () => void;
+type ScheduleNotification = (callback: () => void) => void;
 
-// 脏检查：内容相同时跳过 set 与 emit，避免高频 SSE 事件引发渲染循环。
-// parts 每次 SSE 事件都是新引用，故用 JSON.stringify 比较内容；其余字段用 ===。
+const scheduleNotificationOnNextFrame: ScheduleNotification = (callback) => {
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(() => callback());
+    return;
+  }
+  queueMicrotask(callback);
+};
+
+// Message parts follow the app's immutable-update contract. Reference equality
+// avoids serializing an ever-growing streaming transcript on every token.
 function shallowEqualPanelData(
   a: SubagentPanelData,
   b: SubagentPanelData,
@@ -36,9 +45,7 @@ function shallowEqualPanelData(
   ) {
     return false;
   }
-  if (a.parts === b.parts) return true;
-  if (!a.parts || !b.parts) return false;
-  return JSON.stringify(a.parts) === JSON.stringify(b.parts);
+  return a.parts === b.parts;
 }
 
 export interface SubagentPanelStore {
@@ -49,14 +56,31 @@ export interface SubagentPanelStore {
   subscribe: (agentId: string, listener: Listener) => () => void;
 }
 
-export function createSubagentPanelStore(): SubagentPanelStore {
+export function createSubagentPanelStore(
+  scheduleNotification: ScheduleNotification = scheduleNotificationOnNextFrame,
+): SubagentPanelStore {
   const data = new Map<string, SubagentPanelData>();
   const listeners = new Map<string, Set<Listener>>();
+  const dirtyAgentIds = new Set<string>();
+  let flushScheduled = false;
 
-  function emit(agentId: string) {
-    const subscribed = listeners.get(agentId);
-    if (!subscribed) return;
-    subscribed.forEach((listener) => listener());
+  function flush() {
+    flushScheduled = false;
+    const agentIds = [...dirtyAgentIds];
+    dirtyAgentIds.clear();
+
+    for (const agentId of agentIds) {
+      const subscribed = listeners.get(agentId);
+      if (!subscribed) continue;
+      [...subscribed].forEach((listener) => listener());
+    }
+  }
+
+  function scheduleEmit(agentId: string) {
+    dirtyAgentIds.add(agentId);
+    if (flushScheduled) return;
+    flushScheduled = true;
+    scheduleNotification(flush);
   }
 
   return {
@@ -64,7 +88,7 @@ export function createSubagentPanelStore(): SubagentPanelStore {
       if (!data.delete(agentId)) {
         return;
       }
-      emit(agentId);
+      scheduleEmit(agentId);
     },
     get(agentId) {
       return data.get(agentId);
@@ -75,7 +99,7 @@ export function createSubagentPanelStore(): SubagentPanelStore {
         return;
       }
       data.set(next.agentId, next);
-      emit(next.agentId);
+      scheduleEmit(next.agentId);
     },
     size() {
       return data.size;

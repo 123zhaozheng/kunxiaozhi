@@ -65,6 +65,42 @@ Used for:
 - Reveal preview state (`activeRevealPreviewStore.ts`)
 - Sidebar navigation history (`sidebarHistoryStore.ts`)
 
+### High-frequency external-store updates
+
+Streaming stores are different from low-frequency imperative panel stores. When a
+store can receive many updates in one browser frame, follow this contract:
+
+1. `set()` updates the snapshot synchronously, so `get()` immediately returns the
+   latest value.
+2. Subscriber notifications are coalesced to one notification per browser frame.
+3. React consumers use `useSyncExternalStore`; a producer effect must not
+   synchronously call a listener that performs a manual `setState`.
+4. Streaming snapshots use immutable references. Compare growing collections such
+   as message `parts` by reference; never `JSON.stringify` the full history for
+   every token.
+
+```tsx
+// Wrong: every token synchronously re-enters React and rescans all prior content.
+store.set(next);
+listeners.forEach((listener) => listener());
+JSON.stringify(previous.parts) === JSON.stringify(next.parts);
+
+// Correct: publish the latest snapshot immediately, but notify once per frame.
+data.set(next.agentId, next);
+dirtyAgentIds.add(next.agentId);
+scheduleFrame(flushDirtyAgents);
+
+const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+```
+
+Required regression tests for a frame-coalesced store:
+
+- 100 distinct writes for one key schedule one notification and expose the last snapshot.
+- Different keys notify only their own subscribers.
+- `set` followed by `delete` in one frame exposes the deleted snapshot once.
+- Unsubscribing before flush prevents a stale callback.
+- A listener write is scheduled for the next frame instead of recursively flushing.
+
 ### Server state (API cache)
 
 API services implement in-memory TTL caches for frequently accessed data:
@@ -118,3 +154,5 @@ Component → api module → authFetch → Backend
 - ❌ Don't forget to clean up subscriptions: `useEffect(() => store.subscribe(...), [])`
 - ❌ Don't create stores for state that only one component uses — keep it local with `useState`
 - ❌ Don't read from createSingletonStore in render without a subscription — it won't re-render on changes
+- ❌ Don't synchronously bridge a high-frequency external store into React with `forceRender`
+- ❌ Don't deep-serialize a growing streaming snapshot to suppress duplicate updates
