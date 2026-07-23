@@ -299,7 +299,7 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "category": SettingCategory.SESSION,
         "subcategory": "title",
         "description": "settingDesc.SESSION_TITLE_PROMPT",
-        "default": "请您用简短的3-5个字的标题加上一个表情符号作为用户对话的提示标题。请您选取适合用于总结的表情符号来增强理解，但请避免使用符号或特殊格式。请您根据提示回复一个提示标题文本。\n\n回复示例：\n\n📉 股市趋势\n\n🍪 完美巧克力曲奇食谱\n\n🎮 视频游戏开发洞察\n\n# 重要\n\n1. 请务必用{lang}回复我\n2. 回复字数控制在3-5个字\n\nPrompt: {message}",
+        "default": "请根据用户消息生成一个简洁、准确的会话标题。\n\n# 要求\n\n1. 请务必使用{lang}回复\n2. 标题长度控制在5-8个字\n3. 只返回标题文本，不要添加Emoji、表情符号、引号或其他特殊格式\n\n用户消息：{message}",
     },
     "ENABLE_RECOMMEND_QUESTIONS": {
         "type": SettingType.BOOLEAN,
