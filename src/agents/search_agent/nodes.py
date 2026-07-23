@@ -21,7 +21,7 @@ from src.agents.core.node_utils import (
     resolve_fallback_model,
     resolve_model_supports_vision,
 )
-from src.agents.core.persona import build_channel_prompt_section, build_persona_prompt_sections
+from src.agents.core.persona import build_persona_prompt_sections
 from src.agents.core.subagent_prompts import (
     MAIN_AGENT_PROMPT_SECTIONS,
     SUBAGENT_PROMPT,
@@ -148,9 +148,6 @@ async def agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict[str,
 
     # 构建 persona + skills 提示（使用预加载的 skills，避免重复数据库查询）
     persona_sections = build_persona_prompt_sections(configurable.get("persona_system_prompt"))
-    channel_section = build_channel_prompt_section(agent_options.get("_channel_context"))
-    if channel_section:
-        persona_sections.append(channel_section)
 
     skills_prompt = ""
     if settings.ENABLE_SKILLS and context.skills:

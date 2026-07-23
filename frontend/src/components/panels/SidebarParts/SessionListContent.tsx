@@ -28,7 +28,11 @@ import { SessionItem } from "../../sidebar/SessionItem";
 import { APP_NAME } from "../../../constants";
 import { isSessionFavorite } from "../../sidebar/sessionFavorites";
 import type { Project } from "../../../types";
-import { isSidebarProject } from "./projectFilters";
+import {
+  isSidebarProject,
+  isWeComChannelProject,
+} from "./projectFilters";
+import { WeComChannelGroup } from "./WeComChannelGroup";
 
 export interface SessionActions {
   onDeleteSession: (id: string) => void;
@@ -302,6 +306,21 @@ export function SessionListContent({
                 />
               );
             })()}
+
+          {/* WeCom channels: virtual parent → Persona channel project → sessions */}
+          {!isProjectsCollapsed && (
+            <WeComChannelGroup
+              projects={projects}
+              channelProjects={projects.filter(isWeComChannelProject)}
+              currentSessionId={currentSessionId}
+              unreadBySession={unreadBySession}
+              sessionActions={sessionActions}
+              projectActions={projectActions}
+              scrollRoot={scrollEl}
+              autoExpandProjectId={autoExpandProjectId}
+              onConsumeAutoExpandProjectId={onConsumeAutoExpandProjectId}
+            />
+          )}
 
           {/* Custom projects */}
           {!isProjectsCollapsed &&

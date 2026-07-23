@@ -67,21 +67,6 @@ def resolve_persona_agent_id(
     return DEFAULT_PREFERRED_AGENT_ID
 
 _PERSONA_HEADING = "## Persona"
-_CHANNEL_HEADING = "## Delivery channel"
-
-
-def build_channel_prompt_section(channel_context: Any) -> str | None:
-    """Build a run-scoped delivery-channel prompt section."""
-    if not isinstance(channel_context, dict) or channel_context.get("channel") != "wecom":
-        return None
-    return (
-        f"{_CHANNEL_HEADING}\n\n"
-        "You are replying through WeCom (企业微信) on a mobile chat. Keep the response "
-        "readable in short sections. If the user needs a file, call `reveal_file` for exactly "
-        "one concrete file. The channel will attempt to deliver that revealed file. Do not use "
-        "`reveal_project` to deliver a directory or project, do not expose local paths, and do not "
-        "claim delivery succeeded until the tool/channel reports success."
-    )
 
 # ---------------------------------------------------------------------------
 # Strip the identity line from BASE_AGENT_PROMPT so persona has full control.

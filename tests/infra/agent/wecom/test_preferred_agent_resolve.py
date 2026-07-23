@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.kernel.schemas.agent import AgentRequest
 from src.kernel.schemas.persona_preset import PersonaPresetSnapshot
 
 
@@ -60,6 +61,10 @@ def _install_handler_env(
     )
     monkeypatch.setattr("src.infra.agent.wecom.handler._store_run_session_mapping", AsyncMock())
     monkeypatch.setattr("src.infra.agent.wecom.handler._process_events", AsyncMock())
+    monkeypatch.setattr(
+        "src.infra.agent.wecom.handler._persist_wecom_session_config",
+        AsyncMock(return_value=True),
+    )
 
     manager = MagicMock()
     manager.get_preset_id_for_aibotid.return_value = "preset-1"
@@ -143,6 +148,72 @@ async def test_unmapped_wecom_user_gets_visible_error_and_is_not_submitted(
     assert captured == {}
     manager.send_message.assert_awaited_once()
     assert "尚未绑定" in manager.send_message.await_args.args[2]
+
+
+@pytest.mark.asyncio
+async def test_wecom_persists_persona_restore_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.infra.agent.wecom.handler import _persist_wecom_session_config
+
+    update_metadata = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        "src.infra.session.manager.SessionManager",
+        lambda: SimpleNamespace(update_session_metadata=update_metadata),
+    )
+    snapshot = PersonaPresetSnapshot(
+        preset_id="preset-1",
+        name="企业助理",
+        system_prompt="persona prompt",
+        preferred_agent_id="fast",
+    )
+    request = AgentRequest(
+        message="hello",
+        persona_preset_id="preset-1",
+        persona_snapshot=snapshot,
+        enabled_skills=["skill-a"],
+    )
+
+    assert await _persist_wecom_session_config(
+        session_id="session-1",
+        run_id="run-1",
+        agent_id="fast",
+        agent_request=request,
+        agent_options={"dify_kb_dataset_ids": ["kb-1"]},
+        project_id="project-1",
+    )
+
+    metadata = update_metadata.await_args.args[1]
+    assert metadata["agent_id"] == "fast"
+    assert metadata["persona_preset_id"] == "preset-1"
+    assert metadata["persona_preset_name"] == "企业助理"
+    assert metadata["persona_snapshot"]["preset_id"] == "preset-1"
+    assert metadata["project_id"] == "project-1"
+    assert metadata["agent_options"] == {"dify_kb_dataset_ids": ["kb-1"]}
+
+
+@pytest.mark.asyncio
+async def test_wecom_persona_metadata_failure_does_not_break_delivery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.infra.agent.wecom.handler import _persist_wecom_session_config
+
+    monkeypatch.setattr(
+        "src.infra.session.manager.SessionManager",
+        lambda: SimpleNamespace(
+            update_session_metadata=AsyncMock(side_effect=RuntimeError("mongo unavailable"))
+        ),
+    )
+    request = AgentRequest(message="hello")
+
+    assert not await _persist_wecom_session_config(
+        session_id="session-1",
+        run_id="run-1",
+        agent_id="fast",
+        agent_request=request,
+        agent_options={},
+        project_id="project-1",
+    )
 
 
 @pytest.mark.asyncio

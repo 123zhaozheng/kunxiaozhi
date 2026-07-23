@@ -57,6 +57,10 @@ def _install_handler_env(monkeypatch: pytest.MonkeyPatch) -> tuple[dict, MagicMo
     )
     monkeypatch.setattr("src.infra.agent.wecom.handler._store_run_session_mapping", AsyncMock())
     monkeypatch.setattr("src.infra.agent.wecom.handler._process_events", AsyncMock())
+    monkeypatch.setattr(
+        "src.infra.agent.wecom.handler._persist_wecom_session_config",
+        AsyncMock(return_value=True),
+    )
 
     manager = MagicMock()
     manager.get_preset_id_for_aibotid.return_value = "preset-1"

@@ -11,7 +11,7 @@ import {
   useImperativeHandle,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { Bookmark, MoreHorizontal } from "lucide-react";
+import { Bot, Bookmark, MoreHorizontal } from "lucide-react";
 import toast from "react-hot-toast";
 import type { BackendSession } from "../../services/api/session";
 import type { Project } from "../../types";
@@ -99,6 +99,7 @@ export const ProjectItem = forwardRef<ProjectItemHandle, ProjectItemProps>(
     const touchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const isFavorites = project.type === "favorites";
+    const isChannel = project.type === "channel";
 
     // ─── Per-project session list ──────────────────────────────────
     const listState = useFilteredSessionList(
@@ -167,6 +168,7 @@ export const ProjectItem = forwardRef<ProjectItemHandle, ProjectItemProps>(
 
     // Start editing
     const handleStartEdit = () => {
+      if (isChannel) return;
       setEditName(project.name);
       setIsEditing(true);
       setIsMenuOpen(false);
@@ -176,6 +178,7 @@ export const ProjectItem = forwardRef<ProjectItemHandle, ProjectItemProps>(
     const [editIcon, setEditIcon] = useState("");
 
     const handleStartIconEdit = () => {
+      if (isChannel) return;
       setEditIcon(project.icon || "📁");
       setIsEditingIcon(true);
     };
@@ -270,14 +273,14 @@ export const ProjectItem = forwardRef<ProjectItemHandle, ProjectItemProps>(
 
     // Drag and drop handlers
     const handleDragOver = (e: React.DragEvent) => {
-      if (favoritesOnly) return;
+      if (favoritesOnly || isChannel) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
       setIsDragOver(true);
     };
 
     const handleDragLeave = (e: React.DragEvent) => {
-      if (favoritesOnly) return;
+      if (favoritesOnly || isChannel) return;
       // Only set dragOver to false if we're leaving the project entirely
       const relatedTarget = e.relatedTarget as Node;
       if (!e.currentTarget.contains(relatedTarget)) {
@@ -286,7 +289,7 @@ export const ProjectItem = forwardRef<ProjectItemHandle, ProjectItemProps>(
     };
 
     const handleDrop = (e: React.DragEvent) => {
-      if (favoritesOnly) return;
+      if (favoritesOnly || isChannel) return;
       e.preventDefault();
       setIsDragOver(false);
 
@@ -305,11 +308,13 @@ export const ProjectItem = forwardRef<ProjectItemHandle, ProjectItemProps>(
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          data-project-drop={favoritesOnly ? undefined : true}
-          data-project-id={favoritesOnly ? undefined : project.id}
-          className={`group relative flex cursor-pointer items-center gap-3 h-10 rounded-[10px] px-[9px] transition-colors ${
-            (!favoritesOnly && isDragOver) ||
-            (!favoritesOnly && draggingSessionId)
+          data-project-drop={favoritesOnly || isChannel ? undefined : true}
+          data-project-id={favoritesOnly || isChannel ? undefined : project.id}
+          className={`group relative flex cursor-pointer items-center gap-3 ${
+            isChannel ? "h-8" : "h-10"
+          } rounded-[10px] px-[9px] transition-colors ${
+            (!favoritesOnly && !isChannel && isDragOver) ||
+            (!favoritesOnly && !isChannel && draggingSessionId)
               ? "bg-stone-200/60 dark:bg-stone-700/40 ring-1 ring-inset ring-stone-300 dark:ring-stone-600"
               : isExpanded
                 ? "bg-stone-100/60 dark:bg-stone-800/40"
@@ -324,6 +329,13 @@ export const ProjectItem = forwardRef<ProjectItemHandle, ProjectItemProps>(
               aria-hidden="true"
             >
               <Bookmark size={20} />
+            </span>
+          ) : isChannel ? (
+            <span
+              className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center text-[var(--theme-text-secondary)] transition-colors group-hover:text-[var(--theme-text)]"
+              aria-hidden="true"
+            >
+              <Bot size={18} />
             </span>
           ) : isEditingIcon ? (
             <input
@@ -380,7 +392,7 @@ export const ProjectItem = forwardRef<ProjectItemHandle, ProjectItemProps>(
           )}
 
           {/* Menu button - only for custom projects */}
-          {!isFavorites && !isEditing && (
+          {!isFavorites && !isChannel && !isEditing && (
             <button
               ref={menuButtonRef}
               onClick={handleMenuClick}
@@ -429,6 +441,7 @@ export const ProjectItem = forwardRef<ProjectItemHandle, ProjectItemProps>(
                     }
                     onSessionUpdate={updateSession}
                     isFavorite={isSessionFavorite(session)}
+                    isMovable={!isChannel}
                     onDragStartTouch={undefined}
                     isDraggingTouch={draggingSessionId === session.id}
                   />
@@ -449,7 +462,7 @@ export const ProjectItem = forwardRef<ProjectItemHandle, ProjectItemProps>(
         )}
 
         {/* Context Menu */}
-        {!isFavorites && (
+        {!isFavorites && !isChannel && (
           <ProjectMenu
             project={project}
             isOpen={isMenuOpen}

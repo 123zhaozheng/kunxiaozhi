@@ -8,10 +8,10 @@
 
 依赖：无。后续 B/C/D 的测试都依赖稳定的 run/session identity。
 
-- 引入 `ChannelEnvelope/ChannelRunContext` schema 和 TaskManager/ARQ/agent graph 透传。
-- Fast/Search/Team 共用 prompt section；增加 Web 无企微提示回归测试。
+- 删除企微 channel prompt 与 Fast/Search/Team 注入点，验证 Web/企微 prompt 同构。
 - 将 session key 升级为 aibotid + chat type + chat id，设计 legacy claim/migration。
 - 修复用户映射失败策略和可观察错误。
+- 企微提交后持久化与 Web 一致的 persona session metadata，确保历史会话恢复 Persona。
 - 测试同一 userid 两个 aibotid、同 bot 单聊/群聊、`/new`、cancel 和 project binding。
 
 ### B. 连接状态与分布式重连
@@ -43,6 +43,13 @@
 - 按类型和大小预检，采用流式/spooled S3 下载，调用 SDK 上传/发送。
 - 给额外文件与失败情况生成用户回执和 audit event。
 - 测试 image/file、多个 reveal、超限、不支持类型、跨用户 key、SDK 无能力、上传/发送失败。
+
+### E. 企微渠道侧栏聚合
+
+- 普通项目过滤器只保留 `type=custom`，channel 项目不再平铺。
+- 增加“企微渠道”虚拟父级，子级复用每机器人 channel project 的懒加载 session 列表。
+- channel 机器人目录采用只读、紧凑、Lucide 线性图标样式；禁用编辑、删除、拖放和手工新会话。
+- 增加项目过滤、层级渲染、i18n 和 Persona metadata 恢复测试。
 
 ## 预计风险文件
 

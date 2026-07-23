@@ -21,7 +21,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | To fill |
 | [Persona Runtime & Dify KB](./persona-runtime-and-dify-kb.md) | Persona KB ids → `agent_options`, tool gating, channel parity | Filled |
 | [WeCom Persona Connection Status](./wecom-persona-connection-status.md) | Redis WS health, freshness, status/reconnect API, plaza `has_wecom` vs admin poll | Filled |
-| [WeCom Runtime & Delivery](./wecom-runtime-delivery.md) | Bot-scoped sessions, user ownership, run-scoped channel prompt, long-text segmentation, reveal-file boundary | Filled |
+| [WeCom Runtime & Delivery](./wecom-runtime-delivery.md) | Bot-scoped sessions, cross-channel Persona parity/restore, long-text segmentation, reveal-file boundary | Filled |
 | [Persona Preferred Agent](./persona-preferred-agent.md) | `preferred_agent_id` (fast/search/team), shared resolve, Web/WeCom parity | Filled |
 | [Analytics Persona & Lists](./analytics-persona-and-lists.md) | Dual-dimension lists/CSV, single-Persona analyze boundary, users `_id` join, trace persona merge | Filled |
 | [Sandbox Provider Integration](./sandbox-providers.md) | Pluggable sandbox provider kit (Daytona/E2B/OpenSandbox): backend+factory+adapter+dispatch, sync-SDK wrapping, cross-session reuse | Filled |

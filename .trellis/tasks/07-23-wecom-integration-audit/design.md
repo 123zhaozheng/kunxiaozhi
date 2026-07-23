@@ -28,27 +28,18 @@ WeCom frame
 
 迁移策略：首次访问 v2 key 时，仅在确认旧 key 尚未被另一个 aibotid claim 的情况下迁移旧 session；在 Redis 记录 legacy owner aibotid。无法唯一归属时创建新 session，保留旧数据只读，避免把已污染历史继续扩散。发布期同时记录 v1/v2 命中指标，稳定后移除 v1 fallback。
 
-## 4. Run-scoped ChannelRunContext
+## 4. 跨渠道 Persona 同构
 
-建议新增：
+企微不注入任何 channel-specific system section。`resolve_persona_request` 仍作为 Web/企微共享的权威解析入口，产出相同的 persona snapshot、system prompt、skills、Dify 知识库范围和 preferred agent。
 
-```python
-class ChannelRunContext(BaseModel):
-    channel: Literal["web", "wecom"]
-    account_id: str | None
-    chat_type: Literal["single", "group"] | None
-    supports_file_delivery: bool
-    max_revealed_files: int = 0
-```
+企微 `task_manager.submit` 后必须将以下配置写入 session metadata，与 Web `build_conversation_config` 契约一致：
 
-它作为 `TaskManager.submit/run_task/ARQ payload/execute_*` 的当前 run 参数传递。共享 prompt builder 生成企微 section：
+- `agent_id`：底层执行器，仅用于运行；
+- `persona_preset_id` / `persona_preset_name` / `persona_snapshot`：用于 UI 恢复 Persona；
+- `agent_options` / skills / MCP 工具配置；
+- `project_id`：机器人 channel 项目。
 
-- 你正在通过企业微信回复用户，最终文本和明确 reveal 的文件会由渠道适配层交付；
-- 如需交付文件，仅调用一次 `reveal_file`；不要调用 `reveal_project` 交付目录/项目；
-- 不要声称任意本地路径已发送；以工具结果和渠道回执为准；
-- 回复宜适合手机阅读。
-
-该 section 不写入 persona preset、长期 memory 或 session metadata。Web run 不携带企微 context，因此每次 prompt 重建时自然消失。Fast/Search/Team 共用同一 section middleware，避免三套漂移。
+前端恢复时由 `persona_snapshot` 显示 Persona chip；`agent_id` 不作为 Persona 身份展示。
 
 ## 5. 长文本 ReplyPlan
 
@@ -96,8 +87,21 @@ POST 重连不直接假设当前 API 节点是 owner。建议：
 ## 9. 兼容与回滚
 
 - session v2 通过 feature flag 双读/单写切换，可回退旧 key，但不删除新 session。
-- channel context 默认无值，Web 行为零变化。
+- 不存在 channel prompt，Web 与企微提示完全同构。
 - segmented delivery 可按 persona config/全局 flag 关闭，回到现有 stream。
 - reconnect command bus 可先单节点 direct + 统一结果类型，随后启用分布式消费。
 - 文件新策略上线前保持“文本正常、附件失败不阻断回答”；可通过 flag 关闭企微附件投递。
 
+## 10. 企微渠道虚拟层级
+
+MongoDB `projects` 暂不增加 `parent_id`。现有每机器人一个 `type=channel` 项目已经提供稳定的 session 过滤和历史兼容；前端将所有 channel 项目映射为虚拟树：
+
+```text
+企微渠道（虚拟、不可编辑）
+  ├─ Persona A（现有 channel project）
+  │   └─ sessions
+  └─ Persona B（现有 channel project）
+      └─ sessions
+```
+
+普通项目列表只渲染 `type=custom`；`type=channel` 只出现在企微渠道组。父级和子级均使用 Lucide 线性图标与紧凑导航行，不新增卡片组件。

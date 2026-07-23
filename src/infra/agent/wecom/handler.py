@@ -234,6 +234,45 @@ async def _bind_wecom_session_to_project(
         )
 
 
+async def _persist_wecom_session_config(
+    *,
+    session_id: str,
+    run_id: str,
+    agent_id: str,
+    agent_request: Any,
+    agent_options: dict[str, Any],
+    project_id: str | None,
+) -> bool:
+    """Persist the same Persona restore metadata used by Web chat."""
+    try:
+        from src.api.routes.chat import build_conversation_config
+        from src.infra.session.manager import SessionManager
+
+        agent_request.agent_options = agent_options or None
+        agent_request.project_id = project_id
+        conversation_config = build_conversation_config(
+            session_id=session_id,
+            run_id=run_id,
+            agent_id=agent_id,
+            request=agent_request,
+            language="zh-CN",
+        )
+        saved = await SessionManager().update_session_metadata(
+            session_id, conversation_config
+        )
+        if not saved:
+            logger.warning(
+                "[WeCom] Failed to persist Persona config for session %s", session_id
+            )
+        return saved
+    except Exception:
+        logger.exception(
+            "[WeCom] Failed to build or persist Persona config for session %s",
+            session_id,
+        )
+        return False
+
+
 # ── Agent 执行 ────────────────────────────────────────────────────────
 
 
@@ -667,13 +706,6 @@ def create_wecom_message_handler(
                 {},
                 persona_snapshot=agent_request.persona_snapshot,
             )
-            wecom_agent_options["_channel_context"] = {
-                "channel": "wecom",
-                "account_id": aibotid,
-                "chat_type": chat_type_from_msg or "single",
-                "supports_file_delivery": True,
-                "max_revealed_files": 1,
-            }
 
             # The persona snapshot and system prompt are now filled
             persona_system_prompt = agent_request.persona_system_prompt
@@ -857,6 +889,14 @@ def create_wecom_message_handler(
                 session_id,
                 run_id,
                 session_owner_id,
+            )
+            await _persist_wecom_session_config(
+                session_id=session_id,
+                run_id=run_id,
+                agent_id=agent_to_use,
+                agent_request=agent_request,
+                agent_options=wecom_agent_options,
+                project_id=project_id,
             )
 
             # Set run_id on collector so the first content stream frame includes feedback

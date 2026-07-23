@@ -32,6 +32,7 @@ interface SessionItemProps {
     clientY: number,
   ) => void;
   isDraggingTouch?: boolean;
+  isMovable?: boolean;
 }
 
 export function SessionItem({
@@ -50,6 +51,7 @@ export function SessionItem({
   onDragEnd,
   onDragStartTouch,
   isDraggingTouch = false,
+  isMovable = true,
 }: SessionItemProps) {
   const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
@@ -156,11 +158,13 @@ export function SessionItem({
     touchShowTimerRef.current = setTimeout(() => setIsTouched(false), 3000);
 
     // Long press (400ms) to start drag
-    longPressTimerRef.current = setTimeout(() => {
-      setIsDragging(true);
-      wasDraggingRef.current = true;
-      onDragStartTouch?.(session.id, touch.clientX, touch.clientY);
-    }, 400);
+    if (isMovable) {
+      longPressTimerRef.current = setTimeout(() => {
+        setIsDragging(true);
+        wasDraggingRef.current = true;
+        onDragStartTouch?.(session.id, touch.clientX, touch.clientY);
+      }, 400);
+    }
   };
 
   const handleItemTouchMove = (e: React.TouchEvent) => {
@@ -206,6 +210,10 @@ export function SessionItem({
 
   // Drag handlers (desktop)
   const handleDragStart = (e: React.DragEvent) => {
+    if (!isMovable) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.setData("text/plain", session.id);
     e.dataTransfer.effectAllowed = "move";
     setIsDragging(true);
@@ -223,7 +231,7 @@ export function SessionItem({
   return (
     <>
       <div
-        draggable
+        draggable={isMovable}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onTouchStart={handleItemTouchStart}
@@ -312,6 +320,7 @@ export function SessionItem({
         anchorEl={menuAnchor}
         isFavorite={isFavorite}
         currentProjectId={currentProjectId}
+        canMove={isMovable}
       />
     </>
   );

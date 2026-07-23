@@ -2,7 +2,7 @@
 
 ## Goal
 
-在不修改业务代码的规划阶段，确认 LambChat 当前企业微信 AI Bot 接入的真实完成度，并形成可实施方案，使用户能从手机企业微信与指定 persona 数字人稳定交流；连接状态可观测且可恢复；长回复能按人类阅读节奏安全分段；智能体明确 reveal 的单个文件可由企微渠道投递；企微渠道提示仅对当前企微 run 生效，不污染 PC/Web 会话。
+确认并完善 LambChat 企业微信 AI Bot 接入，使用户能从手机企业微信与指定 persona 数字人稳定交流；连接状态可观测且可恢复；长回复能安全分段；智能体明确 reveal 的单个文件可由企微渠道投递；企微与 Web 使用完全一致的 Persona 提示；企微会话在侧栏中按“企微渠道 → 机器人名称 → 聊天记录”聚合展示。
 
 ## Background
 
@@ -54,20 +54,28 @@
 ### R5. 出站附件与 harness
 
 - 不新增企微专属“上传文件”工具；继续复用 `reveal_file` 作为跨渠道的用户交付语义。
-- 为企微 run 注入提示：明确当前回复将送达企业微信；只有本轮显式 `reveal_file` 的单个文件会被尝试推送；`reveal_project`、目录、整个项目和未 reveal 路径不会推送。
+- 不注入企微专属 system prompt；Web 与企微复用完全一致的 Persona prompt，以保持行为同步并提高 KV cache 复用。
 - 渠道适配层必须强制只发送一个合格文件，不能只依赖模型遵守提示词。
 - 文件须属于当前用户/session/trace 的 reveal 记录；路径、目录、工作区外文件、任意已知 S3 key 和未经控制的远程 URL 不得绕过校验。
 - 发送前按 SDK/企微媒体类型校验大小和格式；上传采用 `upload_media → media_id → reply_media/send_media_message`。
 - 额外文件、过大/不支持类型、上传失败和发送失败必须产生用户可见反馈及结构化审计日志。
 
-### R6. 渠道上下文隔离
+### R6. 跨渠道 Persona 与缓存一致性
 
-- 新增 run-scoped、结构化 `delivery_context`/`channel_context`，不要把企微说明写回 persona preset。
-- Fast/Search/Team 三条 agent 构建路径都在当前 run 的 system section 中消费该上下文。
-- Web/PC run 使用 `channel=web` 或无企微 section；即使复用同一 checkpoint，也要在下一次 prompt 构建时移除企微 section。
-- 渠道上下文不得进入长期记忆、persona snapshot 或跨 run 的 session metadata；恢复/队列执行必须显式携带当前 run 的上下文。
+- Web/PC 与企微使用同一个 persona snapshot、system prompt、skills、知识库与 preferred agent。
+- 不向 Fast/Search/Team system prompt 注入任何企微专属段落。
+- 渠道差异只存在于消息收发、长文本分段和附件安全投递适配层，不进入模型提示、长期记忆或 persona snapshot。
+- 企微创建/恢复 session 时必须持久化与 Web 相同的 `persona_preset_id`、`persona_preset_name`、`persona_snapshot` 和执行配置；UI 恢复时显示 Persona，而不是只显示底层 `fast/search/team`。
 
-### R7. 证据与验证
+### R7. 企微会话聚合与侧栏
+
+- 企微产生的 `type=channel` 项目继续按机器人 Persona 名称保存，兼容已有数据。
+- 侧栏不把每个 channel 项目与用户自建项目并列；统一放入一个“企微渠道”父级入口。
+- 展开“企微渠道”后显示聊过天的机器人名称目录，展开机器人目录后显示普通聊天记录。
+- “企微渠道”和机器人目录使用与“收藏/新建项目”一致的轻量 Lucide 描边、主题颜色和紧凑行高；不得使用卡片、小组件或可编辑 emoji。
+- channel 项目在此视图只读，不允许重命名、删除、修改图标、拖入普通会话或手工新建会话。
+
+### R8. 证据与验证
 
 - 官方协议结论引用企业微信开发者中心或官方 SDK；开源实践与本项目推断分开标注。
 - 单元测试覆盖分段器、文件选择/安全边界和状态新鲜度；集成测试覆盖路由、跨 persona 隔离、重连 owner、正常流式长回复和 reveal 文件发送。
@@ -82,7 +90,9 @@
 - [ ] 默认 `stream_reply=true` 且回复超长时，用户收到多个有序、限长、格式尽量完整的独立消息，而非一个无限增长 stream。
 - [ ] 同一 run reveal 多个文件时只推送一个合格文件，并对其余文件给出明确反馈。
 - [ ] 目录、`reveal_project`、其他用户/trace 的 key、超限文件和不支持类型均不能被推送。
-- [ ] 企微 run 能看到渠道交付说明；随后 Web/PC run 的最终 system prompt 不含任何企微专属说明。
+- [ ] 同一 Persona 从企微和 Web 执行时 system prompt 一致，不含企微专属说明。
+- [ ] 点开企微历史会话后，输入区恢复并显示对应 Persona，而不是底层 `fast/search/team`。
+- [ ] 侧栏按“企微渠道 → 机器人名称 → 聊天记录”展示现有与新增 channel 会话，入口为轻量行式 UI。
 - [ ] 入站 image/file/voice/mixed 和出站 image/file 至少各有自动化契约测试；视频能力明确为支持或明确拒绝。
 - [ ] 真机验收记录包含单聊、群聊、长回复、文件、断线重连和多数字人隔离。
 
@@ -92,4 +102,3 @@
 - 不把目录或完整项目作为企微附件自动发送。
 - 不在缺少授权时向真实企业微信用户发送测试消息。
 - 不承诺企微未公开接口或第三方插件的非官方行为。
-

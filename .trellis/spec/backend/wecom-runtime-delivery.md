@@ -1,6 +1,6 @@
 # WeCom Runtime and Delivery
 
-> Executable contracts for persona routing, session identity, channel prompts, text segmentation, and outbound files.
+> Executable contracts for persona routing, session identity, cross-channel prompt parity, text segmentation, and outbound files.
 
 ## Scenario: WeCom run identity and outbound delivery
 
@@ -13,7 +13,15 @@
 
 ```python
 def _wecom_session_key(aibotid: str, chat_type: str, chat_id: str) -> str: ...
-def build_channel_prompt_section(channel_context: Any) -> str | None: ...
+async def _persist_wecom_session_config(
+    *,
+    session_id: str,
+    run_id: str,
+    agent_id: str,
+    agent_request: Any,
+    agent_options: dict[str, Any],
+    project_id: str | None,
+) -> bool: ...
 
 class RevealedFileStorage:
     async def owns_run_file(
@@ -32,14 +40,14 @@ class WeComResponseCollector:
 |----------|-------------------|
 | Session Redis key | `wecom:session:v2:{aibotid}:{chat_type}:{chat_id}` |
 | Runtime owner | Resolve `UserStorage.get_by_username(sender_id).id`; never use a raw WeCom userid as a Mongo owner id |
-| Run option | Set `agent_options["_channel_context"]` only on the current WeCom submission |
-| Agent graphs | Fast, Search, and Team rebuild and consume the channel section per run |
+| Prompt parity | Do not inject channel-specific system prompts or `_channel_context`; Web and WeCom use the same Persona prompt |
+| Session restore | After submission, persist `agent_id`, `persona_preset_id`, `persona_preset_name`, `persona_snapshot`, `project_id`, and normal agent options through the shared Web conversation-config builder |
 | Tool event | Only `tool == "reveal_file"` may add a candidate |
 | Selection | Retain at most the first candidate per run |
 | Ownership query | Exact `user_id + session_id + trace_id + file_key + source="reveal_file"` match |
 | Long text | UTF-8 byte-safe segments; finalize the original stream with segment 1, then send later segments serially with one bounded retry |
 
-The channel context is never written to persona snapshots, session metadata, or memory. Web/PC runs omit it, so their rebuilt system prompt contains no WeCom section.
+Channel differences belong in transport handling, not the model prompt. This keeps Web/PC and WeCom behavior synchronized and preserves system-prompt KV-cache reuse. A WeCom session must persist the same Persona restore metadata as a Web-created conversation so reopening it does not fall back to the base agent label.
 
 ### 4. Validation & Error Matrix
 
@@ -47,7 +55,7 @@ The channel context is never written to persona snapshots, session metadata, or 
 |-----------|----------|
 | Same chat opens another `aibotid` or changes single/group type | Different session key and session id |
 | User mapping missing or lookup fails | Send a visible account error and stop before session/task creation |
-| Channel context missing or `channel != wecom` | No delivery-channel prompt section |
+| Persona session metadata is absent | Treat as a restore defect: the Web UI may display only `fast`, `search`, or `team` |
 | `reveal_project` or another tool returns a file-like dict | Ignore it |
 | More than one `reveal_file` result | Keep the first; ignore and log later candidates |
 | Reveal scope missing, index lookup fails, or ownership does not match | Fail closed before storage download/upload |
@@ -56,19 +64,20 @@ The channel context is never written to persona snapshots, session metadata, or 
 ### 5. Good / Base / Bad Cases
 
 - **Good**: user `u1`, session `s1`, trace `t1` reveals key `k1`; the same fields exist in `revealed_files`, so WeCom may upload it.
+- **Good**: a Persona-routed WeCom run stores the shared conversation config; reopening the chat restores the Persona name and snapshot.
 - **Base**: the model returns only text; no file storage or media upload path is entered.
 - **Bad**: a tool returns a known S3 key from another trace; ownership lookup rejects it.
-- **Bad**: storing WeCom instructions in a persona prompt; later Web runs inherit channel-only behavior.
+- **Bad**: adding WeCom-only text to the system prompt; equivalent Web and WeCom runs lose prompt parity and KV-cache reuse.
 
 ### 6. Tests Required
 
 | Test | Assertion point |
 |------|-----------------|
 | `tests/infra/agent/wecom/test_session_identity.py` | Different bot/chat-type inputs create different v2 keys and sessions |
-| `tests/agents/core/test_channel_prompt.py` | WeCom gets the section; Web/missing context does not |
 | `tests/infra/agent/wecom/test_collector_delivery.py` | Byte limit, exact text preservation, ordered independent segments, first-file selection |
 | `tests/infra/test_revealed_file_storage.py` | Ownership query includes all five fields including `source` |
-| Handler integration tests | Submit receives channel context; persisted trace is bound to collector; unmapped user is rejected visibly |
+| `tests/infra/agent/wecom/test_preferred_agent_resolve.py` | Persona restore metadata is persisted after submit |
+| Handler integration tests | Submit receives Persona/Dify options without channel prompt state; persisted trace is bound to collector; unmapped user is rejected visibly |
 
 ### 7. Wrong vs Correct
 
@@ -76,6 +85,7 @@ The channel context is never written to persona snapshots, session metadata, or 
 
 ```python
 session_key = f"wecom:session:{chat_id}"
+request.agent_options["_channel_context"] = {"channel": "wecom"}
 collector.add_file_to_reveal(any_tool_result)
 await backend.download(file_key)
 ```
@@ -84,6 +94,9 @@ await backend.download(file_key)
 
 ```python
 session_key = _wecom_session_key(aibotid, chat_type, chat_id)
+await _persist_wecom_session_config(
+    request=request, session_id=session_id, project_id=project_id
+)
 if tool_name == "reveal_file":
     collector.add_file_to_reveal(result)
 if await revealed_files.owns_run_file(
