@@ -161,6 +161,11 @@ PERMISSION_METADATA: dict[str, dict[str, str]] = {
         "label": "上传头像",
         "description": "允许上传和删除用户头像",
     },
+    # Profile
+    Permission.USERNAME_UPDATE.value: {
+        "label": "修改用户名",
+        "description": "允许修改自己的用户名",
+    },
     # Feedback
     Permission.FEEDBACK_WRITE.value: {
         "label": "提交反馈",
@@ -325,6 +330,12 @@ PERMISSION_GROUPS_CONFIG: list[PermissionGroupConfig] = [
         "name": "头像",
         "permissions": [
             Permission.AVATAR_UPLOAD.value,
+        ],
+    },
+    {
+        "name": "个人资料",
+        "permissions": [
+            Permission.USERNAME_UPDATE.value,
         ],
     },
     {

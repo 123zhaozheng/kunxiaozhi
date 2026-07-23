@@ -41,6 +41,8 @@ export enum Permission {
   FILE_UPLOAD_DOCUMENT = "file:upload:document",
   // Avatar
   AVATAR_UPLOAD = "avatar:upload",
+  // Profile
+  USERNAME_UPDATE = "username:update",
   // Feedback
   FEEDBACK_WRITE = "feedback:write",
   FEEDBACK_READ = "feedback:read",

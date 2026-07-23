@@ -5,11 +5,12 @@ User profile routes (password change, avatar, profile, username)
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from src.api.deps import get_current_user_required
+from src.api.deps import get_current_user_required, require_permissions
 from src.infra.logging import get_logger
 from src.infra.user.manager import UserManager
 from src.kernel.exceptions import ValidationError
 from src.kernel.schemas.user import TokenPayload, User, UserUpdate
+from src.kernel.types import Permission
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -105,12 +106,14 @@ async def get_user_profile(
 @router.post("/update-username")
 async def update_username(
     request: UsernameUpdateRequest,
-    current_user: TokenPayload = Depends(get_current_user_required),
+    current_user: TokenPayload = Depends(
+        require_permissions(Permission.USERNAME_UPDATE.value)
+    ),
 ):
     """
     更新当前用户名
 
-    用户名不能与现有用户名重复。
+    需要 username:update 权限。用户名不能与现有用户名重复。
     """
     from src.infra.user.storage import UserStorage
 

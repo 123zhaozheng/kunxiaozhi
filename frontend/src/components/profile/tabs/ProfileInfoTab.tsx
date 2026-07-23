@@ -25,8 +25,9 @@ export function ProfileInfoTab() {
   const [isUploading, setIsUploading] = useState(false);
   const [imgError, setImgError] = useState(false);
 
-  // Permission check for avatar upload
+  // Permission checks for profile edits
   const canUploadAvatar = hasPermission(Permission.AVATAR_UPLOAD);
+  const canUpdateUsername = hasPermission(Permission.USERNAME_UPDATE);
 
   // Compress image file to target size (default 100KB)
   const compressImage = async (
@@ -211,9 +212,9 @@ export function ProfileInfoTab() {
 
       {/* User Info */}
       <div className="space-y-0">
-        {/* Username - editable */}
+        {/* Username - editable when permitted */}
         <div className="py-3.5 border-b border-stone-100 dark:border-stone-700/60">
-          {isEditingUsername ? (
+          {isEditingUsername && canUpdateUsername ? (
             <div className="space-y-2">
               <input
                 type="text"
@@ -266,16 +267,18 @@ export function ProfileInfoTab() {
                 <span className="text-sm font-medium text-stone-900 dark:text-stone-100 truncate">
                   {user?.username || "-"}
                 </span>
-                <button
-                  onClick={() => {
-                    setNewUsername(user?.username || "");
-                    setIsEditingUsername(true);
-                  }}
-                  className="shrink-0 text-amber-500 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-md p-1 transition-colors"
-                  title={t("common.edit")}
-                >
-                  <Pencil size={13} />
-                </button>
+                {canUpdateUsername && (
+                  <button
+                    onClick={() => {
+                      setNewUsername(user?.username || "");
+                      setIsEditingUsername(true);
+                    }}
+                    className="shrink-0 text-amber-500 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-md p-1 transition-colors"
+                    title={t("common.edit")}
+                  >
+                    <Pencil size={13} />
+                  </button>
+                )}
               </div>
             </div>
           )}

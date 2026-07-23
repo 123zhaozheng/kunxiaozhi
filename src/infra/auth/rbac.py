@@ -170,6 +170,8 @@ class RBACManager:
                     # Persona Preset
                     Permission.PERSONA_PRESET_READ.value,
                     Permission.PERSONA_PRESET_WRITE.value,
+                    # Profile
+                    Permission.USERNAME_UPDATE.value,
                 ],
                 "limits": {"max_channels": 10},
                 "is_system": False,

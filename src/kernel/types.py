@@ -70,6 +70,9 @@ class Permission(str, Enum):
     # Avatar
     AVATAR_UPLOAD = "avatar:upload"
 
+    # Profile
+    USERNAME_UPDATE = "username:update"
+
     # Channel - Role entry config (e.g. WeCom)
     CHANNEL_MANAGE = "channel:manage"
 

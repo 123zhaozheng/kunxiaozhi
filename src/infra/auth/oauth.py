@@ -443,6 +443,14 @@ class OAuthService:
             )
             return await self.storage.get_by_id(existing_user.id)
 
+        # 新用户注册受 ENABLE_REGISTRATION 约束（已有用户登录不受影响）
+        if not settings.ENABLE_REGISTRATION:
+            logger.warning(
+                "OAuth registration denied for %s: registration is disabled",
+                user_info.email,
+            )
+            return None
+
         # 创建新用户 - 使用重试机制处理并发用户名冲突
         base_username = user_info.username
         max_retries = 10
