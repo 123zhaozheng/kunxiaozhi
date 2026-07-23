@@ -978,6 +978,15 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "depends_on": {"key": "TASK_BACKEND", "value": "arq"},
         "frontend_visible": False,
     },
+    "WECOM_RUNTIME_MODE": {
+        "type": SettingType.SELECT,
+        "category": SettingCategory.REDIS,
+        "subcategory": "task",
+        "description": "settingDesc.WECOM_RUNTIME_MODE",
+        "default": "embedded",
+        "options": ["embedded", "external", "disabled"],
+        "frontend_visible": False,
+    },
     # ============================================
     # Tracing provider (mutually exclusive backends)
     # ============================================

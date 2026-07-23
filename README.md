@@ -76,6 +76,22 @@ uv run python main.py
 
 默认监听 `http://localhost:8000`。
 
+#### 企业微信进程隔离
+
+生产环境建议将 `WECOM_RUNTIME_MODE` 设置为 `external`，并分别启动 Web API
+与企业微信 runtime。企微握手超时、重连或 SDK 异常将不会占用 Web API 的事件循环。
+
+```bash
+# 终端 1
+WECOM_RUNTIME_MODE=external uv run python main.py
+
+# 终端 2
+WECOM_RUNTIME_MODE=external uv run python -m src.infra.agent.wecom.runtime
+```
+
+也可以运行 `make dev-external`。`embedded` 保留用于兼容现有单进程部署；
+`disabled` 完全禁用企微连接。
+
 ### 前端
 
 ```bash

@@ -135,6 +135,7 @@ class Settings(BaseSettings):
     ARQ_WORKER_MAX_JOBS: int = 64
     ARQ_JOB_TIMEOUT_SECONDS: int = 86400
     TASK_STARTUP_CLEANUP_CONCURRENCY: int = 16
+    WECOM_RUNTIME_MODE: str = "embedded"  # embedded | external | disabled
 
     # MongoDB Settings
     MONGODB_URL: str = "mongodb://localhost:27017"

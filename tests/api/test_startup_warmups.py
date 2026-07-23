@@ -10,6 +10,49 @@ from src.api import main as api_main
 
 
 @pytest.mark.asyncio
+async def test_schedule_embedded_wecom_does_not_block_startup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def _slow_wecom_startup() -> None:
+        started.set()
+        await release.wait()
+
+    monkeypatch.setattr(api_main, "_run_embedded_wecom", _slow_wecom_startup)
+    monkeypatch.setattr(api_main.settings, "WECOM_RUNTIME_MODE", "embedded")
+    app = SimpleNamespace(state=SimpleNamespace())
+
+    task = api_main._schedule_wecom_startup(app)
+
+    assert task is app.state.wecom_task
+    assert task is not None
+    await asyncio.wait_for(started.wait(), timeout=1)
+    assert task.done() is False
+
+    release.set()
+    await task
+
+
+@pytest.mark.asyncio
+async def test_external_wecom_mode_does_not_start_sdk_in_api_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _unexpected_start() -> None:
+        raise AssertionError("embedded WeCom runtime must not start")
+
+    monkeypatch.setattr(api_main, "_run_embedded_wecom", _unexpected_start)
+    monkeypatch.setattr(api_main.settings, "WECOM_RUNTIME_MODE", "external")
+    app = SimpleNamespace(state=SimpleNamespace())
+
+    task = api_main._schedule_wecom_startup(app)
+
+    assert task is None
+    assert app.state.wecom_task is None
+
+
+@pytest.mark.asyncio
 async def test_schedule_models_cache_warmup_does_not_wait_for_refresh(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

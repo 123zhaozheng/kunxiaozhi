@@ -113,6 +113,10 @@ async def test_reconnect_calls_reload_preset(
         "src.infra.agent.wecom.manager.get_wecom_bot_manager",
         lambda: _Manager(),
     )
+    monkeypatch.setattr(
+        "src.infra.agent.wecom.control.get_wecom_runtime_mode",
+        lambda: "embedded",
+    )
 
     app = FastAPI()
     app.include_router(persona_preset_route.router, prefix="/api/persona-presets")
@@ -131,6 +135,63 @@ async def test_reconnect_calls_reload_preset(
 
     assert response.status_code == 503
     assert response.json()["detail"] == "wecom_reconnect_not_executed_on_this_node"
+
+
+@pytest.mark.asyncio
+async def test_reconnect_uses_runtime_control_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    global_preset = PersonaPreset(
+        id="preset-global",
+        scope=PersonaPresetScope.GLOBAL,
+        owner_user_id=None,
+        name="Bot",
+        system_prompt="Hi",
+        visibility=PersonaPresetVisibility.PUBLIC,
+        status=PersonaPresetStatus.PUBLISHED,
+        created_at=datetime(2026, 1, 1),
+        updated_at=datetime(2026, 1, 1),
+    )
+
+    async def _validate(_preset_id: str) -> PersonaPreset:
+        return global_preset
+
+    class _Storage:
+        async def preset_has_wecom(self, _preset_id: str) -> bool:
+            return True
+
+    requests: list[tuple[str, str | None]] = []
+
+    async def _request_reload(
+        preset_id: str,
+        *,
+        requested_by: str | None = None,
+        **_: object,
+    ) -> bool:
+        requests.append((preset_id, requested_by))
+        return True
+
+    monkeypatch.setattr(persona_preset_route, "_validate_global_preset", _validate)
+    monkeypatch.setattr(
+        persona_preset_route,
+        "get_agent_config_storage",
+        lambda: _Storage(),
+    )
+    monkeypatch.setattr(
+        "src.infra.agent.wecom.control.request_wecom_reload",
+        _request_reload,
+    )
+
+    app = FastAPI()
+    app.include_router(persona_preset_route.router, prefix="/api/persona-presets")
+    app.dependency_overrides[api_deps.get_current_user_required] = _channel_admin
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post("/api/persona-presets/preset-global/wecom/reconnect")
+
+    assert response.status_code == 200
+    assert requests == [("preset-global", "admin-1")]
 
 
 @pytest.mark.asyncio

@@ -25,6 +25,7 @@ RESTART_REQUIRED_SETTINGS = {
     "REDIS_URL",
     "REDIS_PASSWORD",
     "JWT_SECRET_KEY",
+    "WECOM_RUNTIME_MODE",
     # Harness profiles register at import time.
     "AGENT_HARNESS_MODE",
     # OTEL instrumentor / TracerProvider cannot be hot-swapped

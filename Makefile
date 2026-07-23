@@ -1,4 +1,4 @@
-.PHONY: help install install-pnpm dev build clean docker-up docker-down docker-logs docker-build test lint format typecheck check-all frontend-dev frontend-build frontend-install
+.PHONY: help install install-pnpm dev dev-external wecom-runtime build clean docker-up docker-down docker-logs docker-build test lint format typecheck check-all frontend-dev frontend-build frontend-install
 
 # 默认目标
 help:
@@ -12,6 +12,8 @@ help:
 	@echo ""
 	@echo "开发运行:"
 	@echo "  make dev              - 启动后端开发服务器"
+	@echo "  make dev-external     - 启动后端与独立企业微信 runtime"
+	@echo "  make wecom-runtime    - 仅启动独立企业微信 runtime"
 	@echo "  make frontend-dev     - 启动前端开发服务器"
 	@echo "  make dev-all          - 同时启动前后端"
 	@echo ""
@@ -59,6 +61,14 @@ install-all: install frontend-install
 dev:
 	@echo "🚀 启动后端开发服务器..."
 	uv run python main.py
+
+wecom-runtime:
+	@echo "🚀 启动独立企业微信 runtime..."
+	WECOM_RUNTIME_MODE=external uv run python -m src.infra.agent.wecom.runtime
+
+dev-external:
+	@echo "🚀 启动隔离的后端与企业微信 runtime..."
+	WECOM_RUNTIME_MODE=external $(MAKE) -j2 dev wecom-runtime
 
 frontend-dev:
 	@echo "🎨 启动前端开发服务器..."

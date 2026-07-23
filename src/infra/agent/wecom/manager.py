@@ -368,7 +368,10 @@ class WeComBotManager:
             existing_bot.message_handler = self.message_handler
             existing_bot.feedback_handler = self.feedback_handler
             self._ensure_lease_refresh_task(aibotid)
-            await self._publish_bot_status(aibotid, state=ConnectionState.CONNECTED)
+            await self._publish_bot_status(
+                aibotid,
+                state=existing_bot._get_connection_state(),
+            )
             return True
 
         if not await self._acquire_lease(aibotid):

@@ -173,6 +173,8 @@ spec:
           value: "arq"
         - name: ARQ_EMBEDDED_WORKER
           value: "true"
+        - name: WECOM_RUNTIME_MODE
+          value: "external"
         # --- 本地文件存储(关闭 S3) ---
         - name: S3_ENABLED
           value: "false"
@@ -203,6 +205,52 @@ spec:
           periodSeconds: 15
           timeoutSeconds: 10
           failureThreshold: 5
+        volumeMounts:
+        - name: workspace
+          mountPath: /app/workspace
+        - name: uploads
+          mountPath: /app/uploads
+      - name: wecom-runtime
+        image: kunxiaozhi_plus:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /app/.venv/bin/python
+        - -m
+        - src.infra.agent.wecom.runtime
+        env:
+        - name: TZ
+          value: "Asia/Shanghai"
+        - name: WECOM_RUNTIME_MODE
+          value: "external"
+        - name: MCP_ENCRYPTION_SALT
+          valueFrom:
+            secretKeyRef:
+              name: kunxiaozhi-secrets
+              key: mcp-encryption-salt
+        - name: MONGODB_URL
+          value: "mongodb://mongodb:27017"
+        - name: MONGODB_DB
+          value: "agent_state"
+        - name: REDIS_URL
+          value: "redis://REDIS_HOST:6379/3"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: kunxiaozhi-secrets
+              key: redis-password
+        - name: S3_ENABLED
+          value: "false"
+        - name: ENABLE_LOCAL_FILESYSTEM_FALLBACK
+          value: "true"
+        - name: LOCAL_STORAGE_PATH
+          value: "/app/uploads"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
         volumeMounts:
         - name: workspace
           mountPath: /app/workspace

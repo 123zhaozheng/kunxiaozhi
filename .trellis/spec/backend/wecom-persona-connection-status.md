@@ -138,3 +138,99 @@ Map once per message; legacy sessions with `user_id=10325` are migrated on next 
 - No `users.username == sender_id` → send a visible binding error and stop; never persist the raw WeCom userid as a Mongo owner id.
 - `session.user_id` neither wecom userid nor mapped id → reconcile skips (manual DB fix).
 - Duplicate channel projects (old on `10325`, new on mapped user) → prefer mapped user's project; old project's sessions may need rebinding if `project_id` pointed at old id.
+
+---
+
+## Scenario: Isolate the WeCom transport from Web chat
+
+### 1. Scope / Trigger
+
+- Trigger: enabling Persona WeCom bots in a deployment that also serves Web HTTP/SSE/WebSocket traffic.
+- Production uses a separate WeCom runtime process so SDK handshakes, reconnect loops, and callbacks do not share the FastAPI event loop.
+- `embedded` remains a compatibility mode; it is not a hard fault-isolation boundary.
+
+### 2. Signatures
+
+```python
+# src/infra/agent/wecom/mode.py
+def get_wecom_runtime_mode(value: object | None = None) -> Literal[
+    "embedded", "external", "disabled"
+]: ...
+
+# src/infra/agent/wecom/control.py
+async def request_wecom_reload(
+    preset_id: str,
+    *,
+    requested_by: str | None = None,
+    wait_for_result: bool = True,
+    timeout_seconds: float = 5.0,
+) -> bool: ...
+
+# Process entry point
+# WECOM_RUNTIME_MODE=external python -m src.infra.agent.wecom.runtime
+```
+
+### 3. Contracts
+
+| Contract | Required behavior |
+|----------|-------------------|
+| `WECOM_RUNTIME_MODE=embedded` | FastAPI starts WeCom in a background task; API readiness never awaits the initial handshake |
+| `WECOM_RUNTIME_MODE=external` | FastAPI does not import/start the SDK; a separate process owns `WeComBotManager` |
+| `WECOM_RUNTIME_MODE=disabled` | No bot starts and reconnect requests fail closed |
+| Redis control channel | `wecom:control`, action `reload_preset`, unique `command_id` |
+| Redis result key | `wecom:control:result:{command_id}`, short TTL, only the owning runtime writes `status=ok` |
+| Connected state | Only an SDK `authenticated` event may set `CONNECTED`; `connect()` returning is not authentication |
+| Shutdown | `WeComBot.stop()` awaits SDK `disconnect()` and drains/cancels project-owned status tasks |
+
+The SDK may catch an opening-handshake timeout internally, schedule another attempt, and return from
+`connect()`. Therefore `connect()` completion means only that the SDK supervisor was started.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+|-----------|----------|
+| Invalid runtime mode | Log a warning and fall back to `embedded` for backward compatibility |
+| External runtime has no Redis subscriber | Reconnect returns HTTP 503; never report success |
+| Redis publish/read fails or owner ACK times out | Return HTTP 503; Web chat remains available |
+| Non-owner runtime receives a broadcast command | It may reconcile ownership but must not win the ACK result race |
+| Initial SDK handshake fails but retry is scheduled | State is `reconnecting`, not `connected` |
+| FastAPI shuts down in embedded mode | Cancel startup task, then await bot disconnect/cleanup |
+
+### 5. Good / Base / Bad Cases
+
+- **Good**: API and WeCom runtime run as separate containers/processes with shared MongoDB and Redis; killing the WeCom runtime does not stop Web chat.
+- **Base**: local development uses `embedded`; a slow handshake yields to the event loop and does not delay API readiness.
+- **Bad**: treating `await client.connect()` as proof of authentication.
+- **Bad**: calling the async SDK `disconnect()` without `await`.
+- **Bad**: importing `setup_wecom_handler()` from FastAPI while mode is `external`.
+
+### 6. Tests Required
+
+| Test | Assertion point |
+|------|-----------------|
+| `tests/infra/agent/wecom/test_bot_lifecycle.py` | failed initial handshake is not connected; disconnect is awaited; status tasks drain |
+| `tests/infra/agent/wecom/test_runtime_isolation.py` | mode normalization, external ACK/timeout/failure containment, runtime lifecycle |
+| `tests/api/test_startup_warmups.py` | embedded startup is non-blocking; external mode never starts the SDK |
+| `tests/api/test_persona_wecom_status_routes.py` | reconnect crosses the control boundary and maps a missing owner to HTTP 503 |
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+await client.connect()
+self._set_connection_state(ConnectionState.CONNECTED)
+client.disconnect()
+```
+
+#### Correct
+
+```python
+self._ws_client = client
+await client.connect()
+if not client.is_connected:
+    self._set_connection_state(ConnectionState.RECONNECTING)
+
+# The authenticated callback is the only path to CONNECTED.
+await client.disconnect()
+```

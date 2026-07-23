@@ -281,6 +281,31 @@ async def _stop_wecom_bots_for_shutdown(app: FastAPI) -> None:
         logger.warning(f"Failed to stop WeCom bots: {e}")
 
 
+async def _run_embedded_wecom() -> None:
+    try:
+        from src.infra.agent.wecom.handler import setup_wecom_handler
+
+        await setup_wecom_handler()
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        logger.warning("Failed to start embedded WeCom runtime: %s", e)
+
+
+def _schedule_wecom_startup(app: FastAPI) -> asyncio.Task[None] | None:
+    from src.infra.agent.wecom.mode import get_wecom_runtime_mode
+
+    mode = get_wecom_runtime_mode()
+    if mode != "embedded":
+        app.state.wecom_task = None
+        logger.info("Embedded WeCom runtime disabled (mode=%s)", mode)
+        return None
+
+    task = asyncio.create_task(_run_embedded_wecom(), name="wecom-runtime:embedded")
+    app.state.wecom_task = task
+    return task
+
+
 async def _cancel_lifespan_background_tasks_for_shutdown(app: FastAPI) -> None:
     await _cancel_background_tasks(app, *_LIFESPAN_BACKGROUND_TASK_NAMES)
 
@@ -467,17 +492,9 @@ async def lifespan(app: FastAPI):
     _session_search_backfill_task = asyncio.create_task(_backfill_session_search())
     app.state.session_search_backfill_task = _session_search_backfill_task
 
-    # Start WeCom bots in background (don't block app startup)
-    async def _start_wecom():
-        try:
-            from src.infra.agent.wecom.handler import setup_wecom_handler
-
-            await setup_wecom_handler()
-        except Exception as e:
-            logger.warning(f"Failed to start WeCom bots: {e}")
-
-    _wecom_task = asyncio.create_task(_start_wecom())
-    app.state.wecom_task = _wecom_task
+    # Start embedded WeCom in a background task. External/disabled modes never
+    # import the SDK into the FastAPI process.
+    _schedule_wecom_startup(app)
 
     async def _reset_memory_monitor_after_startup() -> None:
         try:

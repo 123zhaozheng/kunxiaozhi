@@ -303,10 +303,10 @@ async def get_persona_wecom_connection_status(
 @router.post("/{preset_id}/wecom/reconnect", response_model=WeComConnectionStatus)
 async def reconnect_persona_wecom(
     preset_id: str,
-    _: TokenPayload = Depends(require_permissions("channel:manage")),
+    user: TokenPayload = Depends(require_permissions("channel:manage")),
 ):
     """Restart WeCom bot for this preset (reload_preset)."""
-    from src.infra.agent.wecom.manager import get_wecom_bot_manager
+    from src.infra.agent.wecom.control import request_wecom_reload
     from src.infra.agent.wecom.status import resolve_wecom_status
 
     await _validate_global_preset(preset_id)
@@ -314,8 +314,7 @@ async def reconnect_persona_wecom(
     if not await storage.preset_has_wecom(preset_id):
         raise HTTPException(status_code=404, detail="wecom_config_not_found")
 
-    manager = get_wecom_bot_manager()
-    reloaded = await manager.reload_preset(preset_id)
+    reloaded = await request_wecom_reload(preset_id, requested_by=user.sub)
     if not reloaded:
         raise HTTPException(status_code=503, detail="wecom_reconnect_not_executed_on_this_node")
 
@@ -360,13 +359,14 @@ async def set_persona_wecom_config(
         session_ttl_hours=config_data.session_ttl_hours,
     )
 
-    # Notify the WeCom bot manager to reload this preset's bot
+    # Notify the embedded or external WeCom runtime to reload this preset's bot.
     try:
-        from src.infra.agent.wecom.manager import get_wecom_bot_manager
+        from src.infra.agent.wecom.control import request_wecom_reload
 
-        manager = get_wecom_bot_manager()
-        if manager._running:
-            await manager.reload_preset(preset_id)
+        await request_wecom_reload(
+            preset_id,
+            wait_for_result=False,
+        )
     except Exception as e:
         logger.warning("Failed to reload WeCom bot for preset %s: %s", preset_id, e)
 
@@ -386,13 +386,14 @@ async def delete_persona_wecom_config(
     if not deleted:
         raise HTTPException(status_code=404, detail="wecom_config_not_found")
 
-    # Notify the WeCom bot manager to reload this preset's bot
+    # Notify the embedded or external WeCom runtime to reload this preset's bot.
     try:
-        from src.infra.agent.wecom.manager import get_wecom_bot_manager
+        from src.infra.agent.wecom.control import request_wecom_reload
 
-        manager = get_wecom_bot_manager()
-        if manager._running:
-            await manager.reload_preset(preset_id)
+        await request_wecom_reload(
+            preset_id,
+            wait_for_result=False,
+        )
     except Exception as e:
         logger.warning("Failed to reload WeCom bot for preset %s after delete: %s", preset_id, e)
 

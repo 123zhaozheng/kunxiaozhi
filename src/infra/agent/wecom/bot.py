@@ -27,6 +27,7 @@ _DEFAULT_WELCOME_MESSAGE = "你好！我是 AI 助手，有什么可以帮你的
 WECOM_AVAILABLE = importlib.util.find_spec("wecom_aibot_sdk") is not None
 _PROCESSED_MESSAGE_TTL_SECONDS = 15 * 60
 _PROCESSED_MESSAGE_CACHE_MAX = 1000
+_STATUS_TASK_DRAIN_TIMEOUT_SECONDS = 5.0
 
 
 def _frame_body(frame: Any) -> dict[str, Any]:
@@ -94,6 +95,7 @@ class WeComBot:
         self._server_replaced = False
         self._ws_client: Any = None
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._status_publish_tasks: set[asyncio.Future[Any]] = set()
         self._processed_message_ids: OrderedDict[str, None] = OrderedDict()
 
         # Connection state tracking
@@ -176,18 +178,41 @@ class WeComBot:
         if not self.status_callback:
             return
         try:
-            loop = asyncio.get_running_loop()
-            asyncio.ensure_future(
+            task: asyncio.Future[None] = asyncio.ensure_future(
                 self.status_callback(
                     self.aibotid,
                     state=state,
                     reason_code=reason_code,
                     reason_detail=reason_detail,
-                ),
-                loop=loop,
+                )
             )
+            self._status_publish_tasks.add(task)
+            task.add_done_callback(self._status_publish_tasks.discard)
+            task.add_done_callback(self._log_status_publish_failure)
         except RuntimeError:
             pass
+
+    @staticmethod
+    def _log_status_publish_failure(task: asyncio.Future[Any]) -> None:
+        if task.cancelled():
+            return
+        try:
+            task.result()
+        except Exception as e:
+            logger.warning("Failed to publish WeCom connection status: %s", e)
+
+    async def _drain_status_publish_tasks(self) -> None:
+        tasks = tuple(task for task in self._status_publish_tasks if not task.done())
+        if not tasks:
+            return
+        _, pending = await asyncio.wait(
+            tasks,
+            timeout=_STATUS_TASK_DRAIN_TIMEOUT_SECONDS,
+        )
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
 
     def _get_connection_state(self) -> ConnectionState:
         """Get current connection state."""
@@ -225,6 +250,7 @@ class WeComBot:
                 secret=self.secret,
                 ws_url=ws_url,
             )
+            self._ws_client = client
 
             # Register event handlers
             client.on("authenticated", self._on_authenticated)
@@ -243,12 +269,26 @@ class WeComBot:
             client.on("event.feedback_event", self._on_feedback_event)
 
             await client.connect()
-            self._ws_client = client
-            self._set_connection_state(ConnectionState.CONNECTED)
+            # WSClient.connect() starts the SDK connection supervisor. The SDK
+            # catches handshake failures internally and may return after merely
+            # scheduling a reconnect, so only the authenticated event is allowed
+            # to publish CONNECTED.
+            if not client.is_connected:
+                self._set_connection_state(
+                    ConnectionState.RECONNECTING,
+                    reason_detail="initial_connect_pending",
+                )
 
-            logger.info("WeCom AI Bot started for aibotid=%s", self.aibotid)
+            logger.info("WeCom AI Bot connection supervisor started for aibotid=%s", self.aibotid)
             return True
 
+        except asyncio.CancelledError:
+            self._running = False
+            client = self._ws_client
+            self._ws_client = None
+            if client is not None:
+                await client.disconnect()
+            raise
         except Exception as e:
             logger.error("WeCom AI Bot failed to start for aibotid=%s: %s", self.aibotid, e)
             self._set_connection_state(
@@ -257,19 +297,31 @@ class WeComBot:
                 reason_detail=str(e),
             )
             self._running = False
+            client = self._ws_client
+            self._ws_client = None
+            if client is not None:
+                try:
+                    await client.disconnect()
+                except Exception as disconnect_error:
+                    logger.warning(
+                        "Error cleaning up failed WeCom client for aibotid=%s: %s",
+                        self.aibotid,
+                        disconnect_error,
+                    )
             return False
 
     async def stop(self) -> None:
         """Stop the WeCom AI Bot."""
         self._running = False
-        if self._ws_client is not None:
+        client = self._ws_client
+        self._ws_client = None
+        if client is not None:
             try:
-                self._ws_client.disconnect()
+                await client.disconnect()
             except Exception as e:
                 logger.warning(
                     "Error disconnecting WeCom client for aibotid=%s: %s", self.aibotid, e
                 )
-            self._ws_client = None
 
         self._pending_frames.clear()
         reason = (
@@ -282,6 +334,7 @@ class WeComBot:
             reason_code=reason,
             reason_detail="stopped" if not self._server_replaced else "server_replaced",
         )
+        await self._drain_status_publish_tasks()
         self._server_replaced = False
         logger.info("WeCom AI Bot stopped for aibotid=%s", self.aibotid)
 
