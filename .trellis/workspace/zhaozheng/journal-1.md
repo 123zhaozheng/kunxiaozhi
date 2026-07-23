@@ -518,3 +518,38 @@ Implemented bot-scoped sessions, fail-closed user mapping and reveal-file owners
 ### Next Steps
 
 - None - task complete
+
+
+## Session 16: Complete WeCom persona integration and configurable delivery
+
+**Date**: 2026-07-23
+**Task**: Complete WeCom persona integration and configurable delivery
+**Branch**: `main`
+
+### Summary
+
+Hardened WeCom persona routing, session isolation and restore metadata; grouped channel conversations in the sidebar; unified Web/WeCom prompts; added safe long-text delivery, single-file reveal enforcement, and configurable 300/500/600-character segment targets with UTF-8 byte limits.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5cbb0052` | (see git log) |
+| `69eedd84` | (see git log) |
+| `ced6a4ac` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 15
+- **Total Sessions**: 16
 - **Last Active**: 2026-07-23
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~520 | Active |
+| `journal-1.md` | ~555 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 16 | 2026-07-23 | Complete WeCom persona integration and configurable delivery | `5cbb0052`, `69eedd84`, `ced6a4ac` | `main` |
 | 15 | 2026-07-23 | Harden WeCom persona delivery runtime | `5cbb0052` | `main` |
 | 14 | 2026-07-22 | Marketplace sandbox skill tools | `ebf40dc6` | `main` |
 | 13 | 2026-07-22 | Fix subagent stream update depth | `a618b77f` | `main` |
