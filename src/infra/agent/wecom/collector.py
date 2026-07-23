@@ -17,6 +17,7 @@ from tempfile import NamedTemporaryFile
 from src.infra.agent.wecom.bot import WeComBot
 from src.infra.agent.wecom.manager import WeComBotManager
 from src.infra.logging import get_logger
+from src.kernel.schemas.wecom import WECOM_DEFAULT_SEGMENT_TARGET_CHARS
 
 logger = get_logger(__name__)
 
@@ -35,8 +36,12 @@ _STREAM_UPDATE_SIGNAL = object()
 # ── 长消息分段 ────────────────────────────────────────────────────────
 
 
-def _split_by_utf8_byte_limit(text: str, byte_limit: int = WECOM_MESSAGE_BYTE_LIMIT) -> list[str]:
-    """Split text into chunks that don't exceed byte_limit UTF-8 bytes.
+def _split_by_utf8_byte_limit(
+    text: str,
+    byte_limit: int = WECOM_MESSAGE_BYTE_LIMIT,
+    char_limit: int | None = None,
+) -> list[str]:
+    """Split text by an approximate character target and a hard UTF-8 byte limit.
 
     Uses binary search to find safe split points that don't break multi-byte characters.
     Tries to split on paragraph breaks (\\n\\n), then line breaks (\\n), then character boundaries.
@@ -45,7 +50,7 @@ def _split_by_utf8_byte_limit(text: str, byte_limit: int = WECOM_MESSAGE_BYTE_LI
         return []
 
     encoded = text.encode("utf-8")
-    if len(encoded) <= byte_limit:
+    if len(encoded) <= byte_limit and (char_limit is None or len(text) <= char_limit):
         return [text]
 
     chunks: list[str] = []
@@ -53,12 +58,14 @@ def _split_by_utf8_byte_limit(text: str, byte_limit: int = WECOM_MESSAGE_BYTE_LI
 
     while remaining:
         encoded = remaining.encode("utf-8")
-        if len(encoded) <= byte_limit:
+        if len(encoded) <= byte_limit and (
+            char_limit is None or len(remaining) <= char_limit
+        ):
             chunks.append(remaining)
             break
 
-        # Binary search for the maximum prefix that fits in byte_limit
-        lo, hi = 0, len(remaining)
+        # Binary search for the maximum prefix that fits both limits.
+        lo, hi = 0, min(len(remaining), char_limit or len(remaining))
         while lo < hi:
             mid = (lo + hi + 1) // 2
             if len(remaining[:mid].encode("utf-8")) <= byte_limit:
@@ -111,6 +118,7 @@ class WeComResponseCollector:
         stream_reply: bool = True,
         send_thinking_message: bool = True,
         segmented_reply: bool = True,
+        segment_target_chars: int = WECOM_DEFAULT_SEGMENT_TARGET_CHARS,
     ):
         self.manager = manager
         self.aibotid = aibotid
@@ -121,6 +129,7 @@ class WeComResponseCollector:
         self.stream_reply = stream_reply
         self.send_thinking_message = send_thinking_message
         self.segmented_reply = segmented_reply
+        self.segment_target_chars = segment_target_chars
 
         # 内容收集
         self.text_parts: list[str] = []
@@ -195,7 +204,9 @@ class WeComResponseCollector:
         # 第一个 chunk：启动流式消息
         content = self._current_stream_content()
         if self.segmented_reply:
-            content = _split_by_utf8_byte_limit(content)[0]
+            content = _split_by_utf8_byte_limit(
+                content, char_limit=self.segment_target_chars
+            )[0]
         initial_content = self._first_paint_content(content)
         async with self._stream_lock:
             if self._stream_failed or self._stream_finalized:
@@ -327,7 +338,9 @@ class WeComResponseCollector:
 
             content = self._current_stream_content()
             if self.segmented_reply:
-                content = _split_by_utf8_byte_limit(content)[0]
+                content = _split_by_utf8_byte_limit(
+                    content, char_limit=self.segment_target_chars
+                )[0]
             if content == self._stream_last_pushed_content:
                 continue
 
@@ -365,7 +378,9 @@ class WeComResponseCollector:
             if not content.strip():
                 content = "(处理超时，请稍后查看完整回复)"
             elif self.segmented_reply:
-                content = _split_by_utf8_byte_limit(content)[0]
+                content = _split_by_utf8_byte_limit(
+                    content, char_limit=self.segment_target_chars
+                )[0]
 
             if not self._stream_id:
                 self._stream_failed = True
@@ -591,7 +606,11 @@ class WeComResponseCollector:
                 final_text = final_content.strip()
 
             segments = (
-                _split_by_utf8_byte_limit(final_text) if self.segmented_reply else [final_text]
+                _split_by_utf8_byte_limit(
+                    final_text, char_limit=self.segment_target_chars
+                )
+                if self.segmented_reply
+                else [final_text]
             )
 
             success = await client.reply_stream(
@@ -627,24 +646,30 @@ class WeComResponseCollector:
         else:
             final_text = final_content.strip()
 
-        # 分段发送：超过字节限制时自动拆分
-        if self.segmented_reply and len(final_text.encode("utf-8")) > WECOM_MESSAGE_BYTE_LIMIT:
-            chunks = _split_by_utf8_byte_limit(final_text)
-            all_success = True
-            for i, chunk in enumerate(chunks):
-                success = await self._send_proactive_with_retry(client, chunk)
-                if not success:
-                    all_success = False
-                    logger.warning(
-                        "[WeCom] Failed to send timeout fallback part %d/%d for chat %s",
-                        i + 1, len(chunks), self.chat_id,
+        # 分段发送：超过目标字符数或字节硬限制时自动拆分
+        if self.segmented_reply:
+            chunks = _split_by_utf8_byte_limit(
+                final_text, char_limit=self.segment_target_chars
+            )
+            if len(chunks) > 1:
+                all_success = True
+                for i, chunk in enumerate(chunks):
+                    success = await self._send_proactive_with_retry(client, chunk)
+                    if not success:
+                        all_success = False
+                        logger.warning(
+                            "[WeCom] Failed to send timeout fallback part %d/%d for chat %s",
+                            i + 1,
+                            len(chunks),
+                            self.chat_id,
+                        )
+                if all_success:
+                    logger.info(
+                        "[WeCom] Sent timeout fallback (%d parts) to chat %s",
+                        len(chunks),
+                        self.chat_id,
                     )
-            if all_success:
-                logger.info(
-                    "[WeCom] Sent timeout fallback (%d parts) to chat %s",
-                    len(chunks), self.chat_id,
-                )
-            return all_success
+                return all_success
 
         success = await client.send_proactive_message(self.chat_id, final_text)
         if success:
@@ -694,27 +719,34 @@ class WeComResponseCollector:
         if metadata_parts:
             content += "\n\n---\n" + " · ".join(metadata_parts)
 
-        # 分段发送：超过字节限制时自动拆分
-        if self.segmented_reply and len(content.encode("utf-8")) > WECOM_MESSAGE_BYTE_LIMIT:
-            chunks = _split_by_utf8_byte_limit(content)
-            all_success = True
-            for i, chunk in enumerate(chunks):
-                success = await self._send_proactive_with_retry(client, chunk)
-                if not success:
-                    all_success = False
-                    logger.warning(
-                        "[WeCom] Failed to send segmented message part %d/%d to %s",
-                        i + 1, len(chunks), self.chat_id,
+        # 分段发送：超过目标字符数或字节硬限制时自动拆分
+        if self.segmented_reply:
+            chunks = _split_by_utf8_byte_limit(
+                content, char_limit=self.segment_target_chars
+            )
+            if len(chunks) > 1:
+                all_success = True
+                for i, chunk in enumerate(chunks):
+                    success = await self._send_proactive_with_retry(client, chunk)
+                    if not success:
+                        all_success = False
+                        logger.warning(
+                            "[WeCom] Failed to send segmented message part %d/%d to %s",
+                            i + 1,
+                            len(chunks),
+                            self.chat_id,
+                        )
+                if all_success:
+                    reply_info = (
+                        f" (reply to {self.reply_to_msgid})" if self.reply_to_msgid else ""
                     )
-            if all_success:
-                reply_info = (
-                    f" (reply to {self.reply_to_msgid})" if self.reply_to_msgid else ""
-                )
-                logger.info(
-                    "[WeCom] Segmented message (%d parts) sent to %s%s",
-                    len(chunks), self.chat_id, reply_info,
-                )
-            return all_success
+                    logger.info(
+                        "[WeCom] Segmented message (%d parts) sent to %s%s",
+                        len(chunks),
+                        self.chat_id,
+                        reply_info,
+                    )
+                return all_success
 
         success = await client.reply_message(self.chat_id, content)
         if success:

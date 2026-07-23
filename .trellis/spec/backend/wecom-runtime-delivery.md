@@ -45,7 +45,7 @@ class WeComResponseCollector:
 | Tool event | Only `tool == "reveal_file"` may add a candidate |
 | Selection | Retain at most the first candidate per run |
 | Ownership query | Exact `user_id + session_id + trace_id + file_key + source="reveal_file"` match |
-| Long text | UTF-8 byte-safe segments; finalize the original stream with segment 1, then send later segments serially with one bounded retry |
+| Long text | Persona config supplies an approximate Unicode character target; every segment also stays within the 2048 UTF-8 byte hard limit |
 
 Channel differences belong in transport handling, not the model prompt. This keeps Web/PC and WeCom behavior synchronized and preserves system-prompt KV-cache reuse. A WeCom session must persist the same Persona restore metadata as a Web-created conversation so reopening it does not fall back to the base agent label.
 
@@ -59,7 +59,7 @@ Channel differences belong in transport handling, not the model prompt. This kee
 | `reveal_project` or another tool returns a file-like dict | Ignore it |
 | More than one `reveal_file` result | Keep the first; ignore and log later candidates |
 | Reveal scope missing, index lookup fails, or ownership does not match | Fail closed before storage download/upload |
-| Text exceeds 2048 UTF-8 bytes | Split at paragraph, line, sentence punctuation, space, then Unicode-safe hard boundary |
+| Text exceeds the configured character target or 2048 UTF-8 bytes | Split at paragraph, line, sentence punctuation, space, then Unicode-safe hard boundary |
 
 ### 5. Good / Base / Bad Cases
 
@@ -103,4 +103,93 @@ if await revealed_files.owns_run_file(
     user_id=user_id, session_id=session_id, trace_id=trace_id, file_key=file_key
 ):
     await deliver(file_key)
+```
+
+## Scenario: Configurable WeCom segment target
+
+### 1. Scope / Trigger
+
+- Trigger: changing Persona WeCom settings or delivering a segmented reply through the normal stream, non-stream fallback, or six-minute timeout path.
+- The UI value is an approximate readability target, while the byte limit remains the transport safety boundary.
+
+### 2. Signatures
+
+```python
+class PersonaWeComConfigBase(BaseModel):
+    segmented_reply: bool = True
+    segment_target_chars: int = Field(600, ge=100, le=600)
+
+def _split_by_utf8_byte_limit(
+    text: str,
+    byte_limit: int = 2048,
+    char_limit: int | None = None,
+) -> list[str]: ...
+```
+
+Frontend request/response types expose the same snake-case field:
+
+```typescript
+interface PersonaWeComConfig {
+  segmented_reply: boolean;
+  segment_target_chars: number;
+}
+```
+
+Mongo collection `persona_wecom_config` stores `segment_target_chars` beside
+`segmented_reply`. Existing documents without the field read as `600`.
+
+### 3. Contracts
+
+- UI presets are approximately `300`, `500`, and `600` Unicode characters.
+- The selector is visible only while `segmented_reply` is enabled.
+- Natural paragraph, line, sentence, and whitespace boundaries may make a segment shorter than the selected target.
+- Every segment must satisfy both `len(segment) <= segment_target_chars` and `len(segment.encode("utf-8")) <= 2048`.
+- Stream finalization sends segment 1 through `reply_stream(..., finish=True)` and remaining segments serially through proactive delivery.
+- Non-stream and timeout fallback paths apply the same two-limit planner; they must not check only the byte limit.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+|-----------|----------|
+| Field omitted in an old Mongo document or API payload | Use `600` |
+| API value below `100` or above `600` | Reject with Pydantic validation error / HTTP 422 |
+| Selected target is `600`, but Emoji reaches 2048 bytes first | Split at the byte-safe Unicode boundary |
+| Text is below 2048 bytes but exceeds the selected target | Still split |
+| `segmented_reply=false` | Preserve the existing single-message behavior; target remains stored for later re-enable |
+
+### 5. Good / Base / Bad Cases
+
+- **Good**: 650 ASCII characters with target 300 become `300 + 300 + 50`.
+- **Good**: Emoji input with target 600 splits before any segment exceeds 2048 bytes.
+- **Base**: a short reply stays as one message.
+- **Bad**: applying `segment_target_chars` only during stream finalization; fallback paths behave differently.
+- **Bad**: converting the UI number directly to bytes; Chinese, ASCII, and Emoji would produce misleading character counts.
+
+### 6. Tests Required
+
+- Schema test: default 600; 99 and 601 are rejected.
+- Splitter test: preserve exact text while enforcing both character and UTF-8 byte limits.
+- Collector tests: configured target applies to normal stream finalization and non-stream delivery below 2048 bytes.
+- Handler test: missing runtime field passes 600; configured value passes through to `WeComResponseCollector`.
+- Frontend contract test: selector is conditional, offers 300/500/600, and the save payload contains `segment_target_chars`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+if len(text.encode("utf-8")) > 2048:
+    chunks = split(text)
+```
+
+#### Correct
+
+```python
+chunks = _split_by_utf8_byte_limit(
+    text,
+    byte_limit=2048,
+    char_limit=config.segment_target_chars,
+)
+if len(chunks) > 1:
+    await send_in_order(chunks)
 ```

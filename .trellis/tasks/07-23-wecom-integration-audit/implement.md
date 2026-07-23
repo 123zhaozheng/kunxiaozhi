@@ -26,6 +26,8 @@
 
 ### C. 正常流式长文本分段
 
+- [x] 在 Persona 企业微信设置中增加每段大致字符数（300/500/600），贯通 API、Mongo、热重载和 collector，并为字符目标与字节硬上限补回归测试。
+
 依赖：A 的 run context/delivery identity。
 
 - 从 collector 抽出纯 segment planner 与 ordered delivery queue。

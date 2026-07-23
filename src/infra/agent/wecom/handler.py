@@ -21,6 +21,7 @@ from src.infra.storage.s3.service import get_or_init_storage
 from src.infra.upload.file_record import FileRecordStorage
 from src.infra.utils.datetime import utc_now
 from src.kernel.config import settings
+from src.kernel.schemas.wecom import WECOM_DEFAULT_SEGMENT_TARGET_CHARS
 
 logger = get_logger(__name__)
 
@@ -726,6 +727,9 @@ def create_wecom_message_handler(
             stream_reply = wecom_config.get("stream_reply", True)
             send_thinking_message = wecom_config.get("send_thinking_message", True)
             segmented_reply = wecom_config.get("segmented_reply", True)
+            segment_target_chars = wecom_config.get(
+                "segment_target_chars", WECOM_DEFAULT_SEGMENT_TARGET_CHARS
+            )
             session_ttl_hours = wecom_config.get("session_ttl_hours", 24)
 
             # ── Project 自动创建 / 迁移（Web 侧按 user_id + metadata.project_id 展示）──
@@ -824,6 +828,7 @@ def create_wecom_message_handler(
                 stream_reply=stream_reply,
                 send_thinking_message=send_thinking_message,
                 segmented_reply=segmented_reply,
+                segment_target_chars=segment_target_chars,
             )
 
             # 立即发送思考占位消息（满足 5 秒回调截止要求）

@@ -13,7 +13,10 @@ from src.infra.agent.model_access import ROLE_MODEL_ACCESS_LIMIT
 from src.infra.utils.datetime import utc_now, utc_now_iso
 from src.kernel.config import settings
 from src.kernel.schemas.agent import AgentCatalogConfig, AgentConfig, UserAgentPreference
-from src.kernel.schemas.wecom import PersonaWeComConfig
+from src.kernel.schemas.wecom import (
+    WECOM_DEFAULT_SEGMENT_TARGET_CHARS,
+    PersonaWeComConfig,
+)
 
 # MongoDB 集合名称
 _COLL_AGENT_CONFIG = "agent_config"
@@ -361,6 +364,9 @@ class AgentConfigStorage:
             stream_reply=doc.get("stream_reply", True),
             send_thinking_message=doc.get("send_thinking_message", True),
             segmented_reply=doc.get("segmented_reply", True),
+            segment_target_chars=doc.get(
+                "segment_target_chars", WECOM_DEFAULT_SEGMENT_TARGET_CHARS
+            ),
             session_ttl_hours=doc.get("session_ttl_hours", 24),
             created_at=doc.get("created_at"),
             updated_at=doc.get("updated_at"),
@@ -375,7 +381,8 @@ class AgentConfigStorage:
             preset_id: Persona preset ID
             aibotid: 企业微信机器人 ID
             secret: 机器人密钥（None 表示保留原值）
-            **kwargs: 其他可选字段（stream_reply, send_thinking_message, segmented_reply, session_ttl_hours）
+            **kwargs: 其他可选字段（stream_reply, send_thinking_message,
+                segmented_reply, segment_target_chars, session_ttl_hours）
         """
         now = utc_now()
         update_fields: dict[str, Any] = {
@@ -384,7 +391,13 @@ class AgentConfigStorage:
         }
         if secret is not None and secret != "":
             update_fields["secret"] = secret
-        for key in ("stream_reply", "send_thinking_message", "segmented_reply", "session_ttl_hours"):
+        for key in (
+            "stream_reply",
+            "send_thinking_message",
+            "segmented_reply",
+            "segment_target_chars",
+            "session_ttl_hours",
+        ):
             if key in kwargs and kwargs[key] is not None:
                 update_fields[key] = kwargs[key]
 
@@ -398,6 +411,9 @@ class AgentConfigStorage:
             update_fields.setdefault("stream_reply", True)
             update_fields.setdefault("send_thinking_message", True)
             update_fields.setdefault("segmented_reply", True)
+            update_fields.setdefault(
+                "segment_target_chars", WECOM_DEFAULT_SEGMENT_TARGET_CHARS
+            )
             update_fields.setdefault("session_ttl_hours", 24)
             if secret is not None and secret != "":
                 update_fields.setdefault("secret", secret)
@@ -421,7 +437,8 @@ class AgentConfigStorage:
 
         Returns:
             List of raw config dicts with keys: preset_id, aibotid, secret,
-            stream_reply, send_thinking_message, segmented_reply, session_ttl_hours.
+            stream_reply, send_thinking_message, segmented_reply,
+            segment_target_chars, session_ttl_hours.
         """
         cursor = self._get_collection(_COLL_PERSONA_WECOM_CONFIG).find(
             {"aibotid": {"$ne": ""}, "secret": {"$ne": "", "$exists": True}},
@@ -435,6 +452,9 @@ class AgentConfigStorage:
                 "stream_reply": doc.get("stream_reply", True),
                 "send_thinking_message": doc.get("send_thinking_message", True),
                 "segmented_reply": doc.get("segmented_reply", True),
+                "segment_target_chars": doc.get(
+                    "segment_target_chars", WECOM_DEFAULT_SEGMENT_TARGET_CHARS
+                ),
                 "session_ttl_hours": doc.get("session_ttl_hours", 24),
             })
         return results

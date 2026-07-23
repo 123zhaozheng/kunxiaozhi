@@ -99,6 +99,7 @@ export interface PersonaWeComConfig {
   stream_reply: boolean;
   send_thinking_message: boolean;
   segmented_reply: boolean;
+  segment_target_chars: number;
   session_ttl_hours: number;
   created_at?: string;
   updated_at?: string;
@@ -110,6 +111,7 @@ export interface PersonaWeComConfigCreate {
   stream_reply?: boolean;
   send_thinking_message?: boolean;
   segmented_reply?: boolean;
+  segment_target_chars?: number;
   session_ttl_hours?: number;
 }
 

@@ -53,6 +53,8 @@ import {
 } from "../../types";
 
 const PERSONA_SKILL_PAGE_SIZE = 20;
+const WECOM_DEFAULT_SEGMENT_TARGET_CHARS = 600;
+const WECOM_SEGMENT_TARGET_CHAR_OPTIONS = [300, 500, 600] as const;
 
 const AVATAR_EMOJIS: { emoji: string; labelKey: string }[] = [
   { emoji: "✨", labelKey: "personaPresets.emojiSparkles" },
@@ -152,6 +154,7 @@ export function PersonaEditorModal({
         stream_reply: true,
         send_thinking_message: true,
         segmented_reply: true,
+        segment_target_chars: WECOM_DEFAULT_SEGMENT_TARGET_CHARS,
         session_ttl_hours: 24,
       });
     }
@@ -183,6 +186,7 @@ export function PersonaEditorModal({
     stream_reply: true,
     send_thinking_message: true,
     segmented_reply: true,
+    segment_target_chars: WECOM_DEFAULT_SEGMENT_TARGET_CHARS,
     session_ttl_hours: 24,
   });
 
@@ -212,6 +216,9 @@ export function PersonaEditorModal({
             stream_reply: config.stream_reply,
             send_thinking_message: config.send_thinking_message,
             segmented_reply: config.segmented_reply,
+            segment_target_chars:
+              config.segment_target_chars ??
+              WECOM_DEFAULT_SEGMENT_TARGET_CHARS,
             session_ttl_hours: config.session_ttl_hours,
           });
         }
@@ -239,6 +246,7 @@ export function PersonaEditorModal({
           stream_reply: wecomDraft.stream_reply,
           send_thinking_message: wecomDraft.send_thinking_message,
           segmented_reply: wecomDraft.segmented_reply,
+          segment_target_chars: wecomDraft.segment_target_chars,
           session_ttl_hours: wecomDraft.session_ttl_hours,
         },
       );
@@ -269,6 +277,7 @@ export function PersonaEditorModal({
         stream_reply: true,
         send_thinking_message: true,
         segmented_reply: true,
+        segment_target_chars: WECOM_DEFAULT_SEGMENT_TARGET_CHARS,
         session_ttl_hours: 24,
       });
       toast.success(
@@ -1320,6 +1329,51 @@ export function PersonaEditorModal({
                           />
                         </button>
                       </div>
+                      {wecomDraft.segmented_reply && (
+                        <div className="mt-3">
+                          <label
+                            htmlFor="wecom-segment-target-chars"
+                            className="ppe-label"
+                          >
+                            {t(
+                              "personaPresets.wecom.segmentTargetChars",
+                              "Approximate characters per segment",
+                            )}
+                          </label>
+                          <select
+                            id="wecom-segment-target-chars"
+                            className="ppe-input mt-1"
+                            value={wecomDraft.segment_target_chars}
+                            onChange={(e) =>
+                              setWeComDraft((prev) => ({
+                                ...prev,
+                                segment_target_chars: Number(e.target.value),
+                              }))
+                            }
+                          >
+                            {WECOM_SEGMENT_TARGET_CHAR_OPTIONS.map((value) => (
+                              <option key={value} value={value}>
+                                {t(
+                                  "personaPresets.wecom.segmentTargetCharsOption",
+                                  "About {{count}} characters",
+                                  { count: value },
+                                )}
+                              </option>
+                            ))}
+                          </select>
+                          <p
+                            className="text-xs mt-1"
+                            style={{
+                              color: "var(--theme-text-secondary)",
+                            }}
+                          >
+                            {t(
+                              "personaPresets.wecom.segmentTargetCharsDesc",
+                              "Actual segments may be shorter at natural boundaries and always stay within WeCom's byte limit.",
+                            )}
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     {/* session_ttl_hours */}

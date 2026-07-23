@@ -356,6 +356,7 @@ async def set_persona_wecom_config(
         stream_reply=config_data.stream_reply,
         send_thinking_message=config_data.send_thinking_message,
         segmented_reply=config_data.segmented_reply,
+        segment_target_chars=config_data.segment_target_chars,
         session_ttl_hours=config_data.session_ttl_hours,
     )
 

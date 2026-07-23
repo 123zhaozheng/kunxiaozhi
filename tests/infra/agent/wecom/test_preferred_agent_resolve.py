@@ -134,6 +134,33 @@ async def test_wecom_preferred_team_submits_team_agent(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("configured_target", "expected_target"),
+    [(None, 600), (300, 300)],
+)
+async def test_wecom_collector_uses_segment_character_target(
+    monkeypatch: pytest.MonkeyPatch,
+    configured_target: int | None,
+    expected_target: int,
+) -> None:
+    _, manager = _install_handler_env(monkeypatch, preferred_agent_id="fast")
+    if configured_target is not None:
+        manager.get_config_for_aibotid.return_value["segment_target_chars"] = (
+            configured_target
+        )
+
+    from src.infra.agent.wecom import handler as handler_module
+
+    await _send_text_message(manager)
+
+    collector_class = handler_module.WeComResponseCollector
+    assert (
+        collector_class.call_args.kwargs["segment_target_chars"]
+        == expected_target
+    )
+
+
+@pytest.mark.asyncio
 async def test_unmapped_wecom_user_gets_visible_error_and_is_not_submitted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

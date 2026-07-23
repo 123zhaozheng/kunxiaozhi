@@ -43,6 +43,8 @@ WeCom frame
 
 ## 5. 长文本 ReplyPlan
 
+Persona WeCom 配置新增 `segment_target_chars`（100..600，UI 预设 300/500/600，默认 600）。字符目标按 Unicode 字符近似表达可读长度，2048 UTF-8 字节继续作为不可突破的协议安全上限；正常流式、非流式和超时回退必须复用同一分段器。
+
 新增纯函数 `plan_wecom_text_delivery(text, policy) -> list[Segment]`：
 
 - hard limit 按官方/SDK实测确定，内部目标建议 1200–1800 UTF-8 bytes；
