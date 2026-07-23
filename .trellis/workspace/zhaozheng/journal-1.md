@@ -485,3 +485,36 @@ Rewrote find_skills/install_skill with real sandbox work_dir, S3 binary material
 ### Next Steps
 
 - None - task complete
+
+
+## Session 15: Harden WeCom persona delivery runtime
+
+**Date**: 2026-07-23
+**Task**: Harden WeCom persona delivery runtime
+**Branch**: `main`
+
+### Summary
+
+Implemented bot-scoped sessions, fail-closed user mapping and reveal-file ownership, run-scoped WeCom prompts, normal-stream long-text segmentation, status freshness, and honest non-owner reconnect errors. Automated WeCom checks pass; real-device validation and distributed reconnect forwarding remain.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5cbb0052` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
