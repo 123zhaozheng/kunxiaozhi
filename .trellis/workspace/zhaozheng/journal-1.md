@@ -553,3 +553,37 @@ Hardened WeCom persona routing, session isolation and restore metadata; grouped 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 17: 隔离企微运行时并调整会话标题
+
+**Date**: 2026-07-23
+**Task**: 隔离企微运行时并调整会话标题
+**Branch**: `main`
+
+### Summary
+
+会话标题改为5-8字且不含Emoji；修复企微连接状态与异步断连，并新增独立企微runtime、Redis控制通道、部署配置和回归测试，避免企微握手/重连占用Web API事件循环。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4ea908fb` | (see git log) |
+| `80750376` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
