@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -39,6 +40,31 @@ class _FakeCursor:
         elif length is not None:
             docs = docs[:length]
         return [dict(doc) for doc in docs]
+
+
+@pytest.mark.asyncio
+async def test_owns_run_file_uses_full_delivery_scope() -> None:
+    storage = RevealedFileStorage()
+    collection = Mock()
+    collection.find_one = AsyncMock(return_value={"_id": "file-1"})
+    storage._collection = collection
+
+    assert await storage.owns_run_file(
+        user_id="user-1",
+        session_id="session-1",
+        trace_id="trace-1",
+        file_key="files/report.pdf",
+    )
+    collection.find_one.assert_awaited_once_with(
+        {
+            "user_id": "user-1",
+            "session_id": "session-1",
+            "trace_id": "trace-1",
+            "file_key": "files/report.pdf",
+            "source": "reveal_file",
+        },
+        {"_id": 1},
+    )
 
 
 class _FakeAggregateResult:

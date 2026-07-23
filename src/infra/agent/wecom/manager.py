@@ -217,7 +217,7 @@ class WeComBotManager:
                 nodes.append(self._node_id)
             if self._preferred_owner(aibotid, sorted(nodes)) != self._node_id:
                 logger.info("[WeCom] Preset %s bot should run on another node", preset_id)
-                return True
+                return False
 
         # Store config and start
         self._aibotid_to_preset[aibotid] = preset_id
@@ -368,6 +368,7 @@ class WeComBotManager:
             existing_bot.message_handler = self.message_handler
             existing_bot.feedback_handler = self.feedback_handler
             self._ensure_lease_refresh_task(aibotid)
+            await self._publish_bot_status(aibotid, state=ConnectionState.CONNECTED)
             return True
 
         if not await self._acquire_lease(aibotid):

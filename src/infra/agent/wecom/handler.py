@@ -46,17 +46,27 @@ EVENT_DONE = "done"
 # ── Session 辅助函数 ──────────────────────────────────────────────────
 
 
-async def _get_wecom_session_id(chat_id: str, ttl_hours: int | None = 24) -> str:
+def _wecom_session_key(aibotid: str, chat_type: str, chat_id: str) -> str:
+    """Return a bot-scoped session key so persona conversations cannot collide."""
+    return f"{WECOM_SESSION_KEY_PREFIX}v2:{aibotid}:{chat_type}:{chat_id}"
+
+
+async def _get_wecom_session_id(
+    chat_id: str,
+    ttl_hours: int | None = 24,
+    *,
+    aibotid: str = "legacy",
+    chat_type: str = "single",
+) -> str:
     """获取 WeCom 聊天对应的当前 session ID，如果不存在则创建默认的"""
     from src.infra.storage.redis import RedisStorage
 
     storage = RedisStorage()
-    key = f"{WECOM_SESSION_KEY_PREFIX}{chat_id}"
+    key = _wecom_session_key(aibotid, chat_type, chat_id)
     session_id = await storage.get(key)
 
     if session_id is None:
-        # 默认使用 chat_id 作为 session ID（兼容旧数据）
-        session_id = f"wecom_{chat_id}"
+        session_id = f"wecom_{aibotid}_{chat_type}_{chat_id}"
         ttl_seconds = (ttl_hours or 0) * 3600 + 3600  # +1h buffer
         if ttl_hours:  # 0 means no expiry
             await storage.set(key, session_id, ttl=ttl_seconds)
@@ -66,16 +76,22 @@ async def _get_wecom_session_id(chat_id: str, ttl_hours: int | None = 24) -> str
     return session_id
 
 
-async def _create_new_wecom_session(chat_id: str, ttl_hours: int | None = 24) -> str:
+async def _create_new_wecom_session(
+    chat_id: str,
+    ttl_hours: int | None = 24,
+    *,
+    aibotid: str = "legacy",
+    chat_type: str = "single",
+) -> str:
     """为 WeCom 聊天创建新的 session ID"""
     from src.infra.storage.redis import RedisStorage
 
     storage = RedisStorage()
-    key = f"{WECOM_SESSION_KEY_PREFIX}{chat_id}"
+    key = _wecom_session_key(aibotid, chat_type, chat_id)
 
     # 使用时间戳生成唯一的 session ID
     timestamp = int(time.time())
-    session_id = f"wecom_{chat_id}_{timestamp}"
+    session_id = f"wecom_{aibotid}_{chat_type}_{chat_id}_{timestamp}"
 
     ttl_seconds = (ttl_hours or 0) * 3600 + 3600  # +1h buffer
     if ttl_hours:  # 0 means no expiry
@@ -588,7 +604,7 @@ def create_wecom_message_handler(
             # WeCom userid (e.g. employee ID "10325") is used as the
             # 昆小智 username during registration. Look up the real
             # 昆小智 user_id (MongoDB ObjectId) via username.
-            session_owner_id = sender_id  # fallback
+            session_owner_id: str | None = None
             try:
                 from src.infra.user.storage import UserStorage
 
@@ -603,15 +619,27 @@ def create_wecom_message_handler(
                     )
                 else:
                     logger.warning(
-                        "[WeCom] No 昆小智 user found for username=%s, using sender_id as fallback",
+                        "[WeCom] No user found for WeCom username=%s",
                         sender_id,
                     )
+                    await manager.send_message(
+                        aibotid,
+                        delivery_chat_id,
+                        "当前企业微信账号尚未绑定系统用户，请先在网页端完成账号注册或联系管理员。",
+                    )
+                    return
             except Exception as e:
                 logger.warning(
                     "[WeCom] Failed to lookup user for sender %s: %s",
                     sender_id,
                     e,
                 )
+                await manager.send_message(
+                    aibotid,
+                    delivery_chat_id,
+                    "暂时无法确认企业微信账号身份，请稍后重试。",
+                )
+                return
 
             # ── Persona resolve ─────────────────────────────────────
             from src.api.routes.chat import resolve_persona_request
@@ -639,6 +667,13 @@ def create_wecom_message_handler(
                 {},
                 persona_snapshot=agent_request.persona_snapshot,
             )
+            wecom_agent_options["_channel_context"] = {
+                "channel": "wecom",
+                "account_id": aibotid,
+                "chat_type": chat_type_from_msg or "single",
+                "supports_file_delivery": True,
+                "max_revealed_files": 1,
+            }
 
             # The persona snapshot and system prompt are now filled
             persona_system_prompt = agent_request.persona_system_prompt
@@ -684,7 +719,10 @@ def create_wecom_message_handler(
             # ── 处理 /new 命令 - 严格匹配 ─────────────────────────
             if content.strip() == "/new":
                 new_session_id = await _create_new_wecom_session(
-                    chat_id, ttl_hours=session_ttl_hours
+                    chat_id,
+                    ttl_hours=session_ttl_hours,
+                    aibotid=aibotid,
+                    chat_type=chat_type_from_msg or "single",
                 )
                 await manager.send_message(
                     aibotid,
@@ -695,7 +733,12 @@ def create_wecom_message_handler(
                 return
 
             # 获取当前 session ID
-            session_id = await _get_wecom_session_id(chat_id, ttl_hours=session_ttl_hours)
+            session_id = await _get_wecom_session_id(
+                chat_id,
+                ttl_hours=session_ttl_hours,
+                aibotid=aibotid,
+                chat_type=chat_type_from_msg or "single",
+            )
             await _reconcile_wecom_session_owner(session_id, sender_id, session_owner_id)
             await _bind_wecom_session_to_project(session_id, session_owner_id, project_id)
 
@@ -792,7 +835,7 @@ def create_wecom_message_handler(
             # Use time-based session title for WeCom
             session_title = utc_now().strftime("%Y-%m-%d %H:%M")
 
-            run_id, _ = await task_manager.submit(
+            run_id, trace_id = await task_manager.submit(
                 session_id=session_id,
                 agent_id=agent_to_use,
                 message=content,
@@ -818,6 +861,11 @@ def create_wecom_message_handler(
 
             # Set run_id on collector so the first content stream frame includes feedback
             collector.set_run_id(run_id)
+            collector.set_reveal_scope(
+                user_id=session_owner_id,
+                session_id=session_id,
+                trace_id=trace_id,
+            )
 
             # Store run_id→session_id mapping for later feedback lookup
             await _store_run_session_mapping(run_id, session_id)
@@ -907,7 +955,7 @@ async def _process_events(
             elif event_type == EVENT_TOOL_RESULT:
                 tool_name = data.get("tool", "")
                 result = data.get("result", {})
-                if isinstance(result, dict):
+                if tool_name == "reveal_file" and isinstance(result, dict):
                     file_infos = _extract_tool_media_files(result)
 
                     # Also handle reveal_file direct result format:

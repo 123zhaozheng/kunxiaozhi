@@ -27,6 +27,7 @@ WECOM_STREAM_TIMEOUT_SECONDS = 360
 WECOM_STREAM_FIRST_PAINT_CHARS = 50
 WECOM_THINKING_MESSAGE = "思考中..."
 WECOM_MESSAGE_BYTE_LIMIT = 2048
+WECOM_SEGMENT_RETRY_COUNT = 1
 
 _STREAM_UPDATE_SIGNAL = object()
 
@@ -65,7 +66,7 @@ def _split_by_utf8_byte_limit(text: str, byte_limit: int = WECOM_MESSAGE_BYTE_LI
             else:
                 hi = mid - 1
 
-        # Try to split on paragraph break within the prefix
+        # Prefer semantic boundaries before a Unicode-safe hard cut.
         split_pos = lo
         last_para = remaining.rfind("\n\n", 0, lo)
         if last_para > 0:
@@ -74,6 +75,14 @@ def _split_by_utf8_byte_limit(text: str, byte_limit: int = WECOM_MESSAGE_BYTE_LI
             last_line = remaining.rfind("\n", 0, lo)
             if last_line > 0:
                 split_pos = last_line + 1
+            else:
+                last_sentence = max(remaining.rfind(mark, 0, lo) for mark in "。！？.!?；;")
+                if last_sentence > 0:
+                    split_pos = last_sentence + 1
+                else:
+                    last_space = remaining.rfind(" ", 0, lo)
+                    if last_space > 0:
+                        split_pos = last_space + 1
 
         chunks.append(remaining[:split_pos])
         remaining = remaining[split_pos:]
@@ -119,6 +128,7 @@ class WeComResponseCollector:
         self.subagents_used: list[str] = []
         self.files_to_reveal: list[dict] = []
         self._sent_file_keys: set[str] = set()
+        self._reveal_scope: tuple[str, str, str] | None = None
 
         # 流式状态
         self._stream_id: str | None = None
@@ -145,6 +155,10 @@ class WeComResponseCollector:
         The run_id is used as feedback.id in the first content stream frame.
         """
         self._run_id = run_id
+
+    def set_reveal_scope(self, *, user_id: str, session_id: str, trace_id: str) -> None:
+        """Bind outbound file delivery to the current persisted agent run."""
+        self._reveal_scope = (user_id, session_id, trace_id)
 
     def _current_stream_content(self) -> str:
         """获取当前累积的文本内容"""
@@ -180,6 +194,8 @@ class WeComResponseCollector:
 
         # 第一个 chunk：启动流式消息
         content = self._current_stream_content()
+        if self.segmented_reply:
+            content = _split_by_utf8_byte_limit(content)[0]
         initial_content = self._first_paint_content(content)
         async with self._stream_lock:
             if self._stream_failed or self._stream_finalized:
@@ -310,6 +326,8 @@ class WeComResponseCollector:
                     return
 
             content = self._current_stream_content()
+            if self.segmented_reply:
+                content = _split_by_utf8_byte_limit(content)[0]
             if content == self._stream_last_pushed_content:
                 continue
 
@@ -346,6 +364,8 @@ class WeComResponseCollector:
             content = self._current_stream_content()
             if not content.strip():
                 content = "(处理超时，请稍后查看完整回复)"
+            elif self.segmented_reply:
+                content = _split_by_utf8_byte_limit(content)[0]
 
             if not self._stream_id:
                 self._stream_failed = True
@@ -387,7 +407,22 @@ class WeComResponseCollector:
 
     def add_file_to_reveal(self, file_info: dict) -> None:
         """添加待展示的文件"""
+        if self.files_to_reveal:
+            logger.warning(
+                "[WeCom] Ignoring additional revealed file %s; one file is delivered per run",
+                file_info.get("name"),
+            )
+            return
         self.files_to_reveal.append(file_info)
+
+    async def _send_proactive_with_retry(self, client: WeComBot, content: str) -> bool:
+        """Send one ordered segment with one bounded retry."""
+        for attempt in range(WECOM_SEGMENT_RETRY_COUNT + 1):
+            if await client.send_proactive_message(self.chat_id, content):
+                return True
+            if attempt < WECOM_SEGMENT_RETRY_COUNT:
+                await asyncio.sleep(0.2)
+        return False
 
     async def upload_and_send_files(self) -> None:
         """上传文件并发送到 WeCom。
@@ -399,6 +434,7 @@ class WeComResponseCollector:
             WECOM_REVEAL_DOWNLOAD_CHUNK_SIZE,
             _download_storage_object_to_file,
         )
+        from src.infra.revealed_file.storage import get_revealed_file_storage
         from src.infra.storage.s3.service import get_or_init_storage
 
         if not self.files_to_reveal:
@@ -431,6 +467,26 @@ class WeComResponseCollector:
                     logger.warning("[WeCom] No key for file %s", file_name)
                     continue
                 if file_key in self._sent_file_keys:
+                    continue
+
+                if self._reveal_scope is None:
+                    logger.warning(
+                        "[WeCom] Refusing file delivery without a reveal scope: %s",
+                        file_key,
+                    )
+                    continue
+                user_id, session_id, trace_id = self._reveal_scope
+                revealed_files = get_revealed_file_storage()
+                if not await revealed_files.owns_run_file(
+                    user_id=user_id,
+                    session_id=session_id,
+                    trace_id=trace_id,
+                    file_key=file_key,
+                ):
+                    logger.warning(
+                        "[WeCom] Refusing file outside current reveal_file run: %s",
+                        file_key,
+                    )
                     continue
 
                 logger.info(
@@ -534,11 +590,24 @@ class WeComResponseCollector:
             else:
                 final_text = final_content.strip()
 
+            segments = (
+                _split_by_utf8_byte_limit(final_text) if self.segmented_reply else [final_text]
+            )
+
             success = await client.reply_stream(
-                self.chat_id, self._stream_id, final_text, finish=True
+                self.chat_id, self._stream_id, segments[0], finish=True
             )
             if success:
                 self._stream_finalized = True
+                for index, segment in enumerate(segments[1:], start=2):
+                    if not await self._send_proactive_with_retry(client, segment):
+                        logger.warning(
+                            "[WeCom] Failed to send streamed segment %d/%d to %s",
+                            index,
+                            len(segments),
+                            self.chat_id,
+                        )
+                        return False
             return success
 
     async def _send_timeout_fallback(self) -> bool:
@@ -563,7 +632,7 @@ class WeComResponseCollector:
             chunks = _split_by_utf8_byte_limit(final_text)
             all_success = True
             for i, chunk in enumerate(chunks):
-                success = await client.send_proactive_message(self.chat_id, chunk)
+                success = await self._send_proactive_with_retry(client, chunk)
                 if not success:
                     all_success = False
                     logger.warning(
@@ -630,7 +699,7 @@ class WeComResponseCollector:
             chunks = _split_by_utf8_byte_limit(content)
             all_success = True
             for i, chunk in enumerate(chunks):
-                success = await client.send_proactive_message(self.chat_id, chunk)
+                success = await self._send_proactive_with_retry(client, chunk)
                 if not success:
                     all_success = False
                     logger.warning(

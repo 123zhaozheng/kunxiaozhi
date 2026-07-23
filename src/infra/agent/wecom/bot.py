@@ -177,13 +177,14 @@ class WeComBot:
             return
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(
+            asyncio.ensure_future(
                 self.status_callback(
                     self.aibotid,
                     state=state,
                     reason_code=reason_code,
                     reason_detail=reason_detail,
-                )
+                ),
+                loop=loop,
             )
         except RuntimeError:
             pass

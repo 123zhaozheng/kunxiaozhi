@@ -315,7 +315,9 @@ async def reconnect_persona_wecom(
         raise HTTPException(status_code=404, detail="wecom_config_not_found")
 
     manager = get_wecom_bot_manager()
-    await manager.reload_preset(preset_id)
+    reloaded = await manager.reload_preset(preset_id)
+    if not reloaded:
+        raise HTTPException(status_code=503, detail="wecom_reconnect_not_executed_on_this_node")
 
     raw = await resolve_wecom_status(preset_id, has_wecom=True)
     return WeComConnectionStatus(**raw)

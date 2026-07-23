@@ -116,4 +116,11 @@ async def test_wecom_submit_includes_dify_kb_dataset_ids_from_snapshot(
     fake_task_manager.submit.assert_awaited_once()
     assert captured.get("agent_options") == {
         "dify_kb_dataset_ids": ["dataset-wecom-1"],
+        "_channel_context": {
+            "channel": "wecom",
+            "account_id": "bot-1",
+            "chat_type": "single",
+            "supports_file_delivery": True,
+            "max_revealed_files": 1,
+        },
     }

@@ -19,6 +19,7 @@ logger = get_logger(__name__)
 
 WECOM_STATUS_KEY_PREFIX = "wecom:status:"
 WECOM_STATUS_TTL_SECONDS = 7 * 24 * 3600
+WECOM_STATUS_STALE_SECONDS = 60
 
 
 class WeComStatusReasonCode(str, Enum):
@@ -139,5 +140,22 @@ async def resolve_wecom_status(
         }
     stored = await read_wecom_status(preset_id)
     if stored:
+        if stored.get("state") == ConnectionState.CONNECTED.value:
+            updated_at = stored.get("updated_at")
+            try:
+                updated = datetime.fromisoformat(str(updated_at).replace("Z", "+00:00"))
+                if updated.tzinfo is None:
+                    updated = updated.replace(tzinfo=timezone.utc)
+                age_seconds = (datetime.now(timezone.utc) - updated).total_seconds()
+            except (TypeError, ValueError):
+                age_seconds = WECOM_STATUS_STALE_SECONDS + 1
+
+            if age_seconds > WECOM_STATUS_STALE_SECONDS:
+                return {
+                    **stored,
+                    "state": ConnectionState.DISCONNECTED.value,
+                    "reason_code": WeComStatusReasonCode.DISCONNECTED.value,
+                    "reason_detail": "status_stale",
+                }
         return stored
     return default_status_for_configured_preset(preset_id)

@@ -172,6 +172,37 @@ class RevealedFileStorage:
         except Exception as e:
             logger.warning(f"Failed to upsert revealed file record by name: {e}")
 
+    async def owns_run_file(
+        self,
+        *,
+        user_id: str,
+        session_id: str,
+        trace_id: str,
+        file_key: str,
+    ) -> bool:
+        """Return whether a file was revealed by this exact user/session/run.
+
+        WeCom delivery uses this as a fail-closed boundary before downloading
+        an object from storage and uploading it to an external channel.
+        """
+        if not all((user_id, session_id, trace_id, file_key)):
+            return False
+        try:
+            document = await self.collection.find_one(
+                {
+                    "user_id": user_id,
+                    "session_id": session_id,
+                    "trace_id": trace_id,
+                    "file_key": file_key,
+                    "source": "reveal_file",
+                },
+                {"_id": 1},
+            )
+            return document is not None
+        except Exception as e:
+            logger.warning("Failed to verify revealed file ownership: %s", e)
+            return False
+
     @staticmethod
     def _serialize_item(item: Dict[str, Any]) -> Dict[str, Any]:
         """Normalize MongoDB records for API responses."""

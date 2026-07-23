@@ -16,9 +16,17 @@
 
 ```python
 # src/infra/agent/wecom/status.py
-async def publish_wecom_status(preset_id: str, payload: dict[str, Any]) -> None: ...
+async def write_wecom_status(
+    preset_id: str,
+    *,
+    state: ConnectionState,
+    reason_code: WeComStatusReasonCode | str | None = None,
+    reason_detail: str | None = None,
+    node_id: str | None = None,
+    aibotid: str | None = None,
+) -> None: ...
 async def read_wecom_status(preset_id: str) -> WeComConnectionStatus | None: ...
-async def resolve_wecom_status_for_preset(preset_id: str) -> WeComConnectionStatus: ...
+async def resolve_wecom_status(preset_id: str, *, has_wecom: bool) -> dict[str, Any]: ...
 ```
 
 ```python
@@ -44,7 +52,7 @@ POST /wecom/status  # body: {"preset_ids": list[str]}  # max 200, returns {"stat
 
 | Key / field | Type | Notes |
 |-------------|------|--------|
-| Redis `wecom:status:{preset_id}` | JSON | TTL 7d; written on bot state change |
+| Redis `wecom:status:{preset_id}` | JSON | TTL 7d for diagnostics; `connected` is fresh for only 60s |
 | `PersonaPreset.has_wecom` | `bool` | `true` iff global preset has wecom config with `aibotid` |
 | Poll interval (frontend) | 15s | While plaza mounted; ids with `has_wecom` only |
 | `reason_code` | enum | Maps SDK/manager events (see research `07-01-persona/research/wecom-status-ui.md`) |
@@ -59,8 +67,10 @@ POST /wecom/status  # body: {"preset_ids": list[str]}  # max 200, returns {"stat
 | Condition | Behavior |
 |-----------|----------|
 | No Redis row, `has_wecom` true | `state: disconnected`, `reason_code: null` |
+| Stored `connected` older than 60s or invalid `updated_at` | resolve as `disconnected`, `reason_detail: status_stale` |
 | Batch id without wecom config | entry with `reason_detail: wecom_not_configured` |
 | Reconnect without `channel:manage` | HTTP 403 |
+| Reconnect API node is not the preferred owner | HTTP 503; never report false success |
 | `disconnected_event` (new connection elsewhere) | `reason_code: replaced`; SDK stops auto-reconnect |
 
 ### 5. Good / Base / Bad Cases
@@ -105,7 +115,7 @@ authFetch(`/persona-presets/wecom/status`, {
 
 - Inbound: WeCom `sender_id` / single-chat `chat_id` = enterprise **userid** (e.g. `10325`).
 - Runtime owner: `UserStorage.get_by_username(sender_id).id` → Mongo **user id** (e.g. `6a2a…`); used for `submit`, `cancel`, projects, `move_to_project`.
-- Redis `wecom:session:{chat_id}` → custom `session_id` (e.g. `wecom_10325`); unchanged by mapping.
+- Redis `wecom:session:v2:{aibotid}:{chat_type}:{chat_id}` → bot- and chat-type-scoped custom `session_id`.
 
 ### On each normal message (before `submit`)
 
@@ -123,8 +133,8 @@ Using `sender_id` as `user_id` in `submit` while Web lists sessions for `User.id
 
 Map once per message; legacy sessions with `user_id=10325` are migrated on next WeCom message.
 
-### Edge cases (documented, not auto-fixed)
+### Edge cases
 
-- No `users.username == sender_id` → fallback `session_owner_id = sender_id` (Web mismatch until user registered).
+- No `users.username == sender_id` → send a visible binding error and stop; never persist the raw WeCom userid as a Mongo owner id.
 - `session.user_id` neither wecom userid nor mapped id → reconcile skips (manual DB fix).
 - Duplicate channel projects (old on `10325`, new on mapped user) → prefer mapped user's project; old project's sessions may need rebinding if `project_id` pointed at old id.

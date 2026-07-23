@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -31,17 +32,17 @@ class _FakeRedis:
         self._data.pop(key, None)
 
 
-class _ReconnectExhausted(Exception):
+class _ReconnectExhaustedError(Exception):
     pass
 
 
-class _AuthFailure(Exception):
+class _AuthFailureError(Exception):
     pass
 
 
 def test_map_error_to_reason_code_by_type_name() -> None:
     assert (
-        map_error_to_reason_code(_ReconnectExhausted("max"))
+        map_error_to_reason_code(_ReconnectExhaustedError("max"))
         == WeComStatusReasonCode.DISCONNECTED
     )
     err = type("WSReconnectExhaustedError", (Exception,), {})()
@@ -99,3 +100,24 @@ async def test_resolve_wecom_status_defaults(monkeypatch: pytest.MonkeyPatch) ->
     configured = await resolve_wecom_status("p2", has_wecom=True)
     assert configured["state"] == "disconnected"
     assert configured["reason_code"] is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_marks_stale_connected_status_disconnected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _FakeRedis()
+    monkeypatch.setattr("src.infra.agent.wecom.status.get_redis_client", lambda: fake)
+    fake._data[wecom_status_redis_key("p1")] = json.dumps(
+        {
+            "preset_id": "p1",
+            "state": "connected",
+            "updated_at": (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat(),
+        }
+    )
+
+    status = await resolve_wecom_status("p1", has_wecom=True)
+
+    assert status["state"] == "disconnected"
+    assert status["reason_code"] == "disconnected"
+    assert status["reason_detail"] == "status_stale"

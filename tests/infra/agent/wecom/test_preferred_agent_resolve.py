@@ -129,6 +129,23 @@ async def test_wecom_preferred_team_submits_team_agent(
 
 
 @pytest.mark.asyncio
+async def test_unmapped_wecom_user_gets_visible_error_and_is_not_submitted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured, manager = _install_handler_env(monkeypatch)
+    monkeypatch.setattr(
+        "src.infra.user.storage.UserStorage",
+        lambda: SimpleNamespace(get_by_username=AsyncMock(return_value=None)),
+    )
+
+    await _send_text_message(manager)
+
+    assert captured == {}
+    manager.send_message.assert_awaited_once()
+    assert "尚未绑定" in manager.send_message.await_args.args[2]
+
+
+@pytest.mark.asyncio
 async def test_wecom_missing_preferred_falls_back_to_fast(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

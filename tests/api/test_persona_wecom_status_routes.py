@@ -96,11 +96,12 @@ async def test_reconnect_calls_reload_preset(
             return True
 
     reloaded: list[str] = []
+    reload_result = [True]
 
     class _Manager:
         async def reload_preset(self, preset_id: str) -> bool:
             reloaded.append(preset_id)
-            return True
+            return reload_result[0]
 
     monkeypatch.setattr(persona_preset_route, "_validate_global_preset", _validate)
     monkeypatch.setattr(
@@ -123,6 +124,13 @@ async def test_reconnect_calls_reload_preset(
 
     assert response.status_code == 200
     assert reloaded == ["preset-global"]
+
+    reload_result[0] = False
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post("/api/persona-presets/preset-global/wecom/reconnect")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "wecom_reconnect_not_executed_on_this_node"
 
 
 @pytest.mark.asyncio
