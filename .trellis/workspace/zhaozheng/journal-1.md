@@ -653,3 +653,36 @@ Root cause: pdfjs-dist modern build uses Promise.withResolvers (Chrome 119+); in
 ### Next Steps
 
 - None - task complete
+
+
+## Session 20: OA SSO configurable timeout
+
+**Date**: 2026-07-24
+**Task**: OA SSO configurable timeout
+**Branch**: `main`
+
+### Summary
+
+Made the OA SSO HTTP timeout configurable with a 60-second default, exposed it in system settings and environment examples, added a dedicated 300-second Nginx proxy timeout for the OA login route, and added backend/frontend regression coverage. Also diagnosed the unrelated ARQ 0.28.0 Windows shutdown SIGUSR1 incompatibility without changing it.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ccf4c5bf` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
