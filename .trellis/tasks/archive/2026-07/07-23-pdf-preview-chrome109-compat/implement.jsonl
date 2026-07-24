@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend package entry — coding conventions before PDF preview change"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Component patterns for PdfPreview change"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Quality bar for frontend tests and minimal diff"}
+{"file": ".trellis/tasks/07-23-pdf-preview-chrome109-compat/design.md", "reason": "Legacy pdfjs alias + worker design contract"}
+{"file": ".trellis/tasks/07-23-pdf-preview-chrome109-compat/implement.md", "reason": "Ordered implementation checklist"}
