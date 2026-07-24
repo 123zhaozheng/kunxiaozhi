@@ -587,3 +587,36 @@ Hardened WeCom persona routing, session isolation and restore metadata; grouped 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 18: Fix PDF preview crash on Chrome 109
+
+**Date**: 2026-07-24
+**Task**: Fix PDF preview crash on Chrome 109
+**Branch**: `main`
+
+### Summary
+
+Root cause: pdfjs-dist modern build uses Promise.withResolvers (Chrome 119+); intranet Chrome 109 crashes ErrorBoundary when opening PDF sidebar. Fixed by Vite aliases + PdfPreview worker path to pdfjs-dist legacy build; tests lock contract; frontend quality-guidelines document the rule.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0189cc06` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
