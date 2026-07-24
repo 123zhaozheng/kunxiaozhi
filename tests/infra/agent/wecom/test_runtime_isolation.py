@@ -8,7 +8,11 @@ import pytest
 
 from src.infra.agent.wecom import control
 from src.infra.agent.wecom import runtime as wecom_runtime
-from src.infra.agent.wecom.control import WeComControlListener, request_wecom_reload
+from src.infra.agent.wecom.control import (
+    WeComControlListener,
+    request_wecom_network_reload,
+    request_wecom_reload,
+)
 from src.infra.agent.wecom.mode import get_wecom_runtime_mode
 
 
@@ -46,6 +50,20 @@ class _FakeRedis:
 
     async def delete(self, key: str) -> None:
         self.data.pop(key, None)
+
+    async def rpush(self, key: str, value: str) -> None:
+        existing = json.loads(self.data.get(key, "[]"))
+        existing.append(value)
+        self.data[key] = json.dumps(existing)
+
+    async def expire(self, _key: str, _seconds: int) -> None:
+        return None
+
+    async def llen(self, key: str) -> int:
+        return len(json.loads(self.data.get(key, "[]")))
+
+    async def lrange(self, key: str, _start: int, _end: int) -> list[str]:
+        return json.loads(self.data.get(key, "[]"))
 
 
 @pytest.mark.asyncio
@@ -126,6 +144,82 @@ async def test_control_listener_only_owner_writes_ack() -> None:
 
 
 @pytest.mark.asyncio
+async def test_control_listener_reports_network_reload_result() -> None:
+    redis = _FakeRedis()
+
+    class _Manager:
+        _node_id = "node-1"
+
+        async def reload_network_config(self, revision: str) -> list[dict[str, Any]]:
+            assert revision == "revision-2"
+            return [
+                {
+                    "preset_id": "preset-1",
+                    "aibotid": "bot-1",
+                    "state": "connected",
+                }
+            ]
+
+    listener = WeComControlListener(_Manager(), redis=redis)
+    await listener._handle_message(
+        {
+            "data": json.dumps(
+                {
+                    "command_id": "network-command-1",
+                    "action": "reload_network",
+                    "revision": "revision-2",
+                }
+            )
+        }
+    )
+
+    key = control.wecom_network_result_key("network-command-1")
+    payload = json.loads(json.loads(redis.data[key])[0])
+    assert payload["revision"] == "revision-2"
+    assert payload["results"][0]["state"] == "connected"
+
+
+@pytest.mark.asyncio
+async def test_external_network_reload_aggregates_runtime_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _NetworkRedis(_FakeRedis):
+        async def publish(self, channel: str, payload: str) -> int:
+            self.published.append((channel, payload))
+            command_id = json.loads(payload)["command_id"]
+            key = control.wecom_network_result_key(command_id)
+            await self.rpush(
+                key,
+                json.dumps(
+                    {
+                        "results": [
+                            {
+                                "preset_id": "preset-1",
+                                "aibotid": "bot-1",
+                                "state": "connected",
+                            }
+                        ]
+                    }
+                ),
+            )
+            return 1
+
+    redis = _NetworkRedis()
+    monkeypatch.setattr(control, "get_wecom_runtime_mode", lambda: "external")
+    monkeypatch.setattr(control, "get_redis_client", lambda: redis)
+
+    results = await request_wecom_network_reload("revision-2")
+
+    assert results == [
+        {
+            "preset_id": "preset-1",
+            "aibotid": "bot-1",
+            "state": "connected",
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_external_runtime_starts_and_stops_owned_services(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -170,6 +264,7 @@ async def test_external_runtime_starts_and_stops_owned_services(
         "setup_wecom_handler",
         lambda: _record_async("wecom:start"),
     )
+
     class _Manager:
         async def start(self) -> None:
             calls.append("wecom:reconcile")

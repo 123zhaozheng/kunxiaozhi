@@ -11,6 +11,7 @@ export type SettingType =
   | "select";
 export type SettingCategory =
   | "frontend"
+  | "wecom"
   | "agent"
   | "llm"
   | "session"
@@ -94,6 +95,68 @@ export interface SettingUpdate {
 export interface SettingResetResponse {
   message: string;
   reset_count: number;
+}
+
+export type WeComNetworkMode =
+  | "direct"
+  | "reverse_gateway"
+  | "forward_proxy";
+
+export interface WeComNetworkConfig {
+  mode: WeComNetworkMode;
+  websocket_url: string;
+  media_gateway_url: string;
+  forward_proxy_url: string;
+  forward_proxy_username: string;
+  has_forward_proxy_password: boolean;
+  ca_bundle_path: string;
+  connect_timeout_seconds: number;
+  media_download_timeout_seconds: number;
+  media_max_bytes: number;
+  revision: string;
+  updated_at?: string | null;
+  updated_by?: string | null;
+}
+
+export interface WeComNetworkConfigUpdate {
+  mode: WeComNetworkMode;
+  websocket_url: string;
+  media_gateway_url: string;
+  forward_proxy_url: string;
+  forward_proxy_username: string;
+  forward_proxy_password?: string;
+  clear_forward_proxy_password: boolean;
+  expected_revision?: string;
+  ca_bundle_path: string;
+  connect_timeout_seconds: number;
+  media_download_timeout_seconds: number;
+  media_max_bytes: number;
+}
+
+export interface WeComNetworkBotResult {
+  preset_id: string;
+  aibotid: string;
+  state: string;
+  reason_code?: string | null;
+  reason_detail?: string | null;
+  node_id?: string | null;
+}
+
+export type WeComNetworkOperationStatus =
+  | "connected"
+  | "partial_failure"
+  | "rolled_back"
+  | "saved_unverified"
+  | "test_ok"
+  | "test_failed";
+
+export interface WeComNetworkOperationResponse {
+  operation_id: string;
+  status: WeComNetworkOperationStatus;
+  revision: string;
+  config: WeComNetworkConfig;
+  results: WeComNetworkBotResult[];
+  detail?: string | null;
 }
 
 // ============================================

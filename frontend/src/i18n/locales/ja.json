@@ -1,4 +1,38 @@
 {
+  "wecomNetwork": {
+    "title": "WeCom ネットワーク",
+    "description": "WeCom の WebSocket とメディア取得だけに使用する送信経路です。保存すると Web サービスを再起動せず、全 WeCom ボットを直ちに再接続します。",
+    "mode": "接続モード",
+    "modes": {
+      "direct": "WeCom に直接接続",
+      "reverse_gateway": "DMZ リバースゲートウェイ",
+      "forward_proxy": "DMZ フォワードプロキシ"
+    },
+    "directHint": "WebSocket と添付ファイルは WeCom に直接接続します。WebSocket URL は {{url}} です。",
+    "websocketUrl": "WebSocket ゲートウェイ URL",
+    "mediaGatewayUrl": "メディアゲートウェイ URL",
+    "mediaGatewayHint": "ゲートウェイは target クエリパラメーターで暗号化された WeCom ダウンロード URL を受け取ります。",
+    "proxyUrl": "フォワードプロキシ URL",
+    "proxyUsername": "プロキシユーザー名",
+    "proxyPassword": "プロキシパスワード",
+    "passwordPreserved": "空欄の場合は保存済みパスワードを維持",
+    "clearPassword": "保存済みプロキシパスワードを削除",
+    "caBundlePath": "カスタム CA バンドルパス",
+    "caBundleHint": "銀行または DMZ のプライベート CA を使う場合、コンテナ内 PEM の絶対パスを入力します。",
+    "connectTimeout": "接続タイムアウト（秒）",
+    "mediaTimeout": "メディア取得タイムアウト（秒）",
+    "mediaMaxBytes": "メディア上限（バイト）",
+    "test": "ネットワークをテスト",
+    "saveAndReconnect": "保存して直ちに再接続",
+    "status": {
+      "connected": "設定を適用し、全ボットが接続しました",
+      "partial_failure": "設定を維持しましたが、一部のボットが失敗しました",
+      "rolled_back": "全ボットが失敗したため、設定をロールバックしました",
+      "saved_unverified": "設定を保存しました。検証できるボットはありません",
+      "test_ok": "ネットワークテストに成功しました",
+      "test_failed": "ネットワークテストに失敗しました"
+    }
+  },
   "about": {
     "appVersion": "バージョン",
     "buildTime": "ビルド時刻",

@@ -1,4 +1,38 @@
 {
+  "wecomNetwork": {
+    "title": "企业微信网络",
+    "description": "仅控制企业微信长连接和媒体下载的出网路径。保存后立即重连所有企业微信机器人，不会重启 Web 服务。",
+    "mode": "连接模式",
+    "modes": {
+      "direct": "直接访问企业微信",
+      "reverse_gateway": "DMZ 反向网关",
+      "forward_proxy": "DMZ 正向代理"
+    },
+    "directHint": "长连接和附件将直接访问企业微信；长连接地址固定为 {{url}}。",
+    "websocketUrl": "长连接网关地址",
+    "mediaGatewayUrl": "附件下载网关地址",
+    "mediaGatewayHint": "网关会收到 target 查询参数，其值是企业微信返回的加密附件下载地址。",
+    "proxyUrl": "正向代理地址",
+    "proxyUsername": "代理用户名",
+    "proxyPassword": "代理密码",
+    "passwordPreserved": "留空则保留已保存密码",
+    "clearPassword": "清除已保存的代理密码",
+    "caBundlePath": "自定义 CA 证书路径",
+    "caBundleHint": "银行或 DMZ 使用私有 CA 时填写容器内 PEM 文件绝对路径；留空使用系统证书。",
+    "connectTimeout": "连接超时（秒）",
+    "mediaTimeout": "附件下载超时（秒）",
+    "mediaMaxBytes": "附件大小上限（字节）",
+    "test": "测试网络",
+    "saveAndReconnect": "保存并立即重连",
+    "status": {
+      "connected": "配置已生效，全部机器人连接成功",
+      "partial_failure": "配置已保留，部分机器人连接失败",
+      "rolled_back": "全部机器人连接失败，已自动回滚",
+      "saved_unverified": "配置已保存，当前没有可验证的机器人",
+      "test_ok": "网络连通测试成功",
+      "test_failed": "网络连通测试失败"
+    }
+  },
   "about": {
     "appVersion": "版本",
     "buildTime": "构建时间",

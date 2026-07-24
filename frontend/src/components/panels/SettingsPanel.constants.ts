@@ -2,6 +2,7 @@ import type { SettingCategory, SettingType } from "../../types";
 
 export const CATEGORY_ORDER: SettingCategory[] = [
   "frontend",
+  "wecom",
   "agent",
   "llm",
   "session",

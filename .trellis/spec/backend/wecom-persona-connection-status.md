@@ -24,6 +24,7 @@ async def write_wecom_status(
     reason_detail: str | None = None,
     node_id: str | None = None,
     aibotid: str | None = None,
+    network_revision: str | None = None,
 ) -> None: ...
 async def read_wecom_status(preset_id: str) -> WeComConnectionStatus | None: ...
 async def resolve_wecom_status(preset_id: str, *, has_wecom: bool) -> dict[str, Any]: ...
@@ -39,6 +40,7 @@ class WeComConnectionStatus(BaseModel):
     updated_at: datetime | None
     node_id: str | None
     aibotid: str | None
+    network_revision: str | None
 ```
 
 ```python

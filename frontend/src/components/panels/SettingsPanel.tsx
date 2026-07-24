@@ -22,6 +22,7 @@ import { useTranslation } from "react-i18next";
 import { useSettingsContext } from "../../contexts/SettingsContext";
 import { JsonSchemaEditor } from "./JsonSchemaEditor";
 import { SystemHealthSection } from "./SystemHealthSection";
+import { WeComNetworkSettings } from "./WeComNetworkSettings";
 import { useAuth } from "../../hooks/useAuth";
 import { roleApi, agentApi, modelApi } from "../../services/api";
 import type { ModelOption } from "../../services/api/model";
@@ -60,6 +61,7 @@ export function SettingsPanel() {
   const CATEGORY_LABELS = useMemo<Record<SettingCategory, string>>(
     () => ({
       frontend: t("categories.frontend"),
+      wecom: t("wecomNetwork.title"),
       agent: t("categories.agent"),
       llm: t("categories.llm"),
       session: t("categories.session"),
@@ -516,9 +518,12 @@ export function SettingsPanel() {
           <nav className="flex-1 overflow-y-auto px-3 py-2">
             {CATEGORY_ORDER.map((category) => {
               const categoryItems = settings?.settings[category] ?? [];
-              const visibleCount = categoryItems.filter((s) =>
-                isSettingVisible(s),
-              ).length;
+              const visibleCount =
+                category === "wecom"
+                  ? canManage
+                    ? 1
+                    : 0
+                  : categoryItems.filter((s) => isSettingVisible(s)).length;
               if (visibleCount === 0) return null;
               const isActive = activeCategory === category;
               return (
@@ -573,10 +578,14 @@ export function SettingsPanel() {
               <GlassSelect
                 value={activeCategory}
                 onChange={(v) => setActiveCategory(v as SettingCategory)}
-                options={CATEGORY_ORDER.map((category) => ({
+                options={CATEGORY_ORDER.filter(
+                  (category) => category !== "wecom" || canManage,
+                ).map((category) => ({
                   value: category,
                   label: `${CATEGORY_LABELS[category]} (${
-                    settings?.settings[category]?.length ?? 0
+                    category === "wecom"
+                      ? 1
+                      : (settings?.settings[category]?.length ?? 0)
                   })`,
                 }))}
               />
@@ -665,7 +674,9 @@ export function SettingsPanel() {
             {/* System Health Monitor */}
             <SystemHealthSection />
 
-            {isLoading && !settings ? (
+            {!searchQuery && activeCategory === "wecom" && canManage ? (
+              <WeComNetworkSettings canManage={canManage} />
+            ) : isLoading && !settings ? (
               <PanelLoadingState text={t("settings.loading")} />
             ) : filteredSettings.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center text-stone-400 dark:text-stone-500">

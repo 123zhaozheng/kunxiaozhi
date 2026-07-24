@@ -65,13 +65,16 @@ async def write_wecom_status(
     reason_detail: str | None = None,
     node_id: str | None = None,
     aibotid: str | None = None,
+    network_revision: str | None = None,
 ) -> None:
     if not preset_id:
         return
     payload: dict[str, Any] = {
         "preset_id": preset_id,
         "state": connection_state_to_api_state(state),
-        "reason_code": reason_code.value if isinstance(reason_code, WeComStatusReasonCode) else reason_code,
+        "reason_code": reason_code.value
+        if isinstance(reason_code, WeComStatusReasonCode)
+        else reason_code,
         "reason_detail": reason_detail,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -79,6 +82,8 @@ async def write_wecom_status(
         payload["node_id"] = node_id
     if aibotid:
         payload["aibotid"] = aibotid
+    if network_revision:
+        payload["network_revision"] = network_revision
     try:
         redis = get_redis_client()
         await redis.set(

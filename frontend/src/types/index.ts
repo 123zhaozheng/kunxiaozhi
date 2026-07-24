@@ -201,6 +201,12 @@ export type {
   SettingsResponse,
   SettingUpdate,
   SettingResetResponse,
+  WeComNetworkMode,
+  WeComNetworkConfig,
+  WeComNetworkConfigUpdate,
+  WeComNetworkBotResult,
+  WeComNetworkOperationStatus,
+  WeComNetworkOperationResponse,
 } from "./settings";
 
 // ============================================

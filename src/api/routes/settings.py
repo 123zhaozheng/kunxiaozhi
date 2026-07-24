@@ -2,6 +2,7 @@
 Settings API router
 """
 
+import uuid
 from typing import Any
 
 import httpx
@@ -18,6 +19,13 @@ from src.kernel.schemas.setting import (
     SettingUpdateResponse,
 )
 from src.kernel.schemas.user import TokenPayload
+from src.kernel.schemas.wecom_network import (
+    WeComNetworkBotResult,
+    WeComNetworkConfigResponse,
+    WeComNetworkConfigUpdate,
+    WeComNetworkOperationResponse,
+    WeComNetworkOperationStatus,
+)
 
 router = APIRouter()
 
@@ -32,6 +40,129 @@ async def get_settings(
     has_admin = "settings:manage" in (user.permissions or [])
     settings = await service.get_all(admin_mode=has_admin)
     return SettingsResponse(settings=settings)
+
+
+@router.get("/wecom-network", response_model=WeComNetworkConfigResponse)
+async def get_wecom_network_config(
+    _: TokenPayload = Depends(require_permissions("settings:manage")),
+):
+    """Return deployment-level WeCom transport settings with secrets redacted."""
+    from src.infra.agent.wecom.network_config import (
+        get_wecom_network_config_storage,
+    )
+
+    stored = await get_wecom_network_config_storage().get_current()
+    return stored.to_response()
+
+
+@router.post("/wecom-network/test", response_model=WeComNetworkOperationResponse)
+async def test_wecom_network_config(
+    data: WeComNetworkConfigUpdate,
+    _: TokenPayload = Depends(require_permissions("settings:manage")),
+):
+    """Probe the candidate WSS path without persisting or authenticating a bot."""
+    from src.infra.agent.wecom.network import WeComNetworkTransport
+    from src.infra.agent.wecom.network_config import (
+        get_wecom_network_config_storage,
+    )
+
+    current = await get_wecom_network_config_storage().get_current()
+    candidate = data.merge_secret(current.config.forward_proxy_password)
+    operation_id = uuid.uuid4().hex
+    try:
+        await WeComNetworkTransport(candidate).probe_websocket()
+        status = WeComNetworkOperationStatus.TEST_OK
+        detail = None
+    except Exception as exc:
+        status = WeComNetworkOperationStatus.TEST_FAILED
+        detail = getattr(exc, "reason_code", type(exc).__name__)
+    response_config = WeComNetworkConfigResponse(
+        **candidate.model_dump(exclude={"forward_proxy_password"}),
+        has_forward_proxy_password=bool(candidate.forward_proxy_password),
+        revision=current.revision,
+        updated_at=current.updated_at,
+        updated_by=current.updated_by,
+    )
+    return WeComNetworkOperationResponse(
+        operation_id=operation_id,
+        status=status,
+        revision=current.revision,
+        config=response_config,
+        detail=detail,
+    )
+
+
+@router.put("/wecom-network", response_model=WeComNetworkOperationResponse)
+async def update_wecom_network_config(
+    data: WeComNetworkConfigUpdate,
+    user: TokenPayload = Depends(require_permissions("settings:manage")),
+):
+    """Atomically save network settings, restart all bots, and roll back on total failure."""
+    from src.infra.agent.config_storage import get_agent_config_storage
+    from src.infra.agent.wecom.control import request_wecom_network_reload
+    from src.infra.agent.wecom.network_config import (
+        get_wecom_network_config_storage,
+    )
+
+    operation_id = uuid.uuid4().hex
+    storage = get_wecom_network_config_storage()
+    current = await storage.get_current()
+    candidate = data.merge_secret(current.config.forward_proxy_password)
+    try:
+        _, saved = await storage.save_candidate(
+            candidate,
+            updated_by=user.sub,
+            expected_revision=data.expected_revision,
+        )
+    except ValueError as exc:
+        status_code = 409 if "revision_conflict" in str(exc) else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+    configured_bots = await get_agent_config_storage().get_all_persona_wecom_configs_raw()
+    raw_results = await request_wecom_network_reload(
+        saved.revision,
+        requested_by=user.sub,
+    )
+    results = [WeComNetworkBotResult.model_validate(item) for item in raw_results]
+    connected_presets = {
+        item.preset_id for item in results if item.state == "connected" and item.preset_id
+    }
+
+    if configured_bots and not connected_presets:
+        rolled_back = await storage.rollback(saved.revision, updated_by=user.sub)
+        if rolled_back is None:
+            raise HTTPException(
+                status_code=409,
+                detail="wecom_network_config_changed_before_rollback",
+            )
+        await request_wecom_network_reload(
+            rolled_back.revision,
+            requested_by=user.sub,
+        )
+        return WeComNetworkOperationResponse(
+            operation_id=operation_id,
+            status=WeComNetworkOperationStatus.ROLLED_BACK,
+            revision=rolled_back.revision,
+            config=rolled_back.to_response(),
+            results=results,
+            detail="all_enabled_bots_failed; previous configuration restored",
+        )
+
+    await storage.promote(saved.revision)
+    status = (
+        WeComNetworkOperationStatus.SAVED_UNVERIFIED
+        if not configured_bots
+        else WeComNetworkOperationStatus.CONNECTED
+        if len(connected_presets) >= len(configured_bots)
+        else WeComNetworkOperationStatus.PARTIAL_FAILURE
+    )
+    return WeComNetworkOperationResponse(
+        operation_id=operation_id,
+        status=status,
+        revision=saved.revision,
+        config=saved.to_response(),
+        results=results,
+    )
 
 
 @router.get("/{key}", response_model=SettingItem)
@@ -128,7 +259,9 @@ async def list_dify_knowledge_bases(
     connection settings are configured.
     """
     if not (settings.DIFY_KB_ENABLED and settings.DIFY_KB_BASE_URL and settings.DIFY_KB_API_KEY):
-        raise HTTPException(status_code=400, detail="Dify knowledge base is not enabled or configured")
+        raise HTTPException(
+            status_code=400, detail="Dify knowledge base is not enabled or configured"
+        )
 
     base_url = str(settings.DIFY_KB_BASE_URL).rstrip("/")
     headers = {"Authorization": f"Bearer {settings.DIFY_KB_API_KEY}"}

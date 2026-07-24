@@ -258,13 +258,9 @@ async def _persist_wecom_session_config(
             request=agent_request,
             language="zh-CN",
         )
-        saved = await SessionManager().update_session_metadata(
-            session_id, conversation_config
-        )
+        saved = await SessionManager().update_session_metadata(session_id, conversation_config)
         if not saved:
-            logger.warning(
-                "[WeCom] Failed to persist Persona config for session %s", session_id
-            )
+            logger.warning("[WeCom] Failed to persist Persona config for session %s", session_id)
         return saved
     except Exception:
         logger.exception(
@@ -431,10 +427,10 @@ async def _build_single_attachment(
     try:
         file_bytes, _ = await bot.download_media_file(url, aes_key or "")
     except Exception as e:
-        logger.error("[WeCom] Failed to download media url=%s: %s", url, e, exc_info=True)
+        logger.error("[WeCom] Failed to download inbound media: %s", e, exc_info=True)
         return None
     if not file_bytes:
-        logger.warning("[WeCom] Empty media bytes from url=%s, skipping attachment", url)
+        logger.warning("[WeCom] Empty inbound media bytes, skipping attachment")
         return None
 
     try:
@@ -456,7 +452,10 @@ async def _build_single_attachment(
     file_hash = hashlib.sha256(file_bytes).hexdigest()
     logger.info(
         "[WeCom] Media uploaded to S3: key=%s size=%d mime=%s owner=%s",
-        storage_key, size, mime_type, owner_id,
+        storage_key,
+        size,
+        mime_type,
+        owner_id,
     )
 
     # file_record 写失败不阻断附件传递（去重失效但 agent 仍可见附件）

@@ -6,6 +6,9 @@ import type {
   SettingItem,
   SettingsResponse,
   SettingResetResponse,
+  WeComNetworkConfig,
+  WeComNetworkConfigUpdate,
+  WeComNetworkOperationResponse,
 } from "../../types";
 import { API_BASE } from "./config";
 import { authFetch } from "./fetch";
@@ -68,6 +71,36 @@ export const settingsApi = {
       `${API_BASE}/api/settings/dify-kb/datasets`,
     );
     return res.datasets ?? [];
+  },
+
+  async getWeComNetwork(): Promise<WeComNetworkConfig> {
+    return authFetch<WeComNetworkConfig>(
+      `${API_BASE}/api/settings/wecom-network`,
+    );
+  },
+
+  async testWeComNetwork(
+    config: WeComNetworkConfigUpdate,
+  ): Promise<WeComNetworkOperationResponse> {
+    return authFetch<WeComNetworkOperationResponse>(
+      `${API_BASE}/api/settings/wecom-network/test`,
+      {
+        method: "POST",
+        body: JSON.stringify(config),
+      },
+    );
+  },
+
+  async updateWeComNetwork(
+    config: WeComNetworkConfigUpdate,
+  ): Promise<WeComNetworkOperationResponse> {
+    return authFetch<WeComNetworkOperationResponse>(
+      `${API_BASE}/api/settings/wecom-network`,
+      {
+        method: "PUT",
+        body: JSON.stringify(config),
+      },
+    );
   },
 };
 

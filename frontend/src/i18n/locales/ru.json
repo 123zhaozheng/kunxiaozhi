@@ -1,4 +1,38 @@
 {
+  "wecomNetwork": {
+    "title": "Сеть WeCom",
+    "description": "Маршрут исходящего трафика только для WebSocket и загрузки файлов WeCom. При сохранении все боты WeCom переподключаются без перезапуска веб-сервиса.",
+    "mode": "Режим подключения",
+    "modes": {
+      "direct": "Прямое подключение к WeCom",
+      "reverse_gateway": "Обратный шлюз DMZ",
+      "forward_proxy": "Прямой прокси DMZ"
+    },
+    "directHint": "WebSocket и вложения подключаются напрямую к WeCom. Адрес WebSocket: {{url}}.",
+    "websocketUrl": "URL шлюза WebSocket",
+    "mediaGatewayUrl": "URL шлюза медиафайлов",
+    "mediaGatewayHint": "Шлюз получает зашифрованный URL загрузки WeCom в параметре запроса target.",
+    "proxyUrl": "URL прямого прокси",
+    "proxyUsername": "Имя пользователя прокси",
+    "proxyPassword": "Пароль прокси",
+    "passwordPreserved": "Оставьте пустым, чтобы сохранить пароль",
+    "clearPassword": "Удалить сохранённый пароль прокси",
+    "caBundlePath": "Путь к пакету CA",
+    "caBundleHint": "Для частного CA банка или DMZ укажите абсолютный путь к PEM внутри контейнера.",
+    "connectTimeout": "Тайм-аут подключения (сек.)",
+    "mediaTimeout": "Тайм-аут загрузки медиа (сек.)",
+    "mediaMaxBytes": "Лимит медиафайла (байт)",
+    "test": "Проверить сеть",
+    "saveAndReconnect": "Сохранить и переподключить",
+    "status": {
+      "connected": "Настройки применены, все боты подключены",
+      "partial_failure": "Настройки сохранены, часть ботов не подключилась",
+      "rolled_back": "Все боты не подключились, выполнен откат",
+      "saved_unverified": "Настройки сохранены, но нет ботов для проверки",
+      "test_ok": "Проверка сети выполнена",
+      "test_failed": "Проверка сети не выполнена"
+    }
+  },
   "about": {
     "appVersion": "Версия",
     "buildTime": "Время сборки",

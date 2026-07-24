@@ -24,6 +24,7 @@ class WeComConnectionStatus(BaseModel):
     updated_at: Optional[datetime] = None
     node_id: Optional[str] = None
     aibotid: Optional[str] = None
+    network_revision: Optional[str] = None
 
 
 class WeComStatusBatchRequest(BaseModel):

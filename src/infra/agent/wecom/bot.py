@@ -11,6 +11,7 @@ import time
 from collections import OrderedDict
 from typing import Any, Awaitable, Callable, Optional
 
+from src.infra.agent.wecom.network import WeComNetworkTransport
 from src.infra.agent.wecom.state import ConnectionState
 from src.infra.agent.wecom.status import (
     WeComStatusReasonCode,
@@ -19,6 +20,7 @@ from src.infra.agent.wecom.status import (
 from src.infra.logging import get_logger
 from src.infra.storage.redis import get_redis_client
 from src.kernel.schemas.wecom import WeComGroupPolicy
+from src.kernel.schemas.wecom_network import WeComNetworkConfig
 
 logger = get_logger(__name__)
 
@@ -79,6 +81,7 @@ class WeComBot:
         aibotid: str,
         secret: str,
         websocket_url: str = "wss://openws.work.weixin.qq.com",
+        network_config: WeComNetworkConfig | None = None,
         group_policy: WeComGroupPolicy = WeComGroupPolicy.MENTION,
         message_handler: Optional[Callable] = None,
         feedback_handler: Optional[Callable] = None,
@@ -86,7 +89,10 @@ class WeComBot:
     ):
         self.aibotid = aibotid
         self.secret = secret
-        self.websocket_url = websocket_url
+        self._network_transport = WeComNetworkTransport(network_config or WeComNetworkConfig())
+        self.websocket_url = (
+            self._network_transport.websocket_url if network_config is not None else websocket_url
+        )
         self.group_policy = group_policy
         self.message_handler = message_handler
         self.feedback_handler = feedback_handler
@@ -97,6 +103,7 @@ class WeComBot:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._status_publish_tasks: set[asyncio.Future[Any]] = set()
         self._processed_message_ids: OrderedDict[str, None] = OrderedDict()
+        self._state_changed = asyncio.Event()
 
         # Connection state tracking
         self._connection_state = ConnectionState.DISCONNECTED
@@ -154,6 +161,7 @@ class WeComBot:
         state_changed = old_state != new_state
         if state_changed:
             self._connection_state = new_state
+            self._state_changed.set()
             logger.info(
                 "WeCom connection state changed for aibotid=%s: %s -> %s",
                 self.aibotid,
@@ -249,6 +257,7 @@ class WeComBot:
                 bot_id=self.aibotid,
                 secret=self.secret,
                 ws_url=ws_url,
+                ws_options=self._network_transport.websocket_options(),
             )
             self._ws_client = client
 
@@ -309,6 +318,25 @@ class WeComBot:
                         disconnect_error,
                     )
             return False
+
+    async def wait_until_authenticated(self, timeout_seconds: float) -> bool:
+        """Wait until SDK authentication succeeds or a terminal failure is observed."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + max(0.0, timeout_seconds)
+        while loop.time() < deadline:
+            self._state_changed.clear()
+            if self._connection_state == ConnectionState.CONNECTED:
+                return True
+            if self._connection_state == ConnectionState.FAILED:
+                return False
+            try:
+                await asyncio.wait_for(
+                    self._state_changed.wait(),
+                    timeout=max(0.0, deadline - loop.time()),
+                )
+            except asyncio.TimeoutError:
+                break
+        return self._connection_state == ConnectionState.CONNECTED
 
     async def stop(self) -> None:
         """Stop the WeCom AI Bot."""
@@ -1279,27 +1307,14 @@ class WeComBot:
             Tuple of (file_bytes, filename_or_none).
             Returns (b"", None) on failure.
         """
-        if not self._ws_client:
-            logger.warning("WeCom WS client not connected for aibotid=%s", self.aibotid)
-            return (b"", None)
-
         try:
-            result = await self._ws_client.download_file(url, aes_key or None)
+            result = await self._network_transport.download_media(url, aes_key)
         except Exception as e:
-            logger.error("Error downloading WeCom media file for aibotid=%s: %s", self.aibotid, e)
+            reason_code = getattr(e, "reason_code", "media_download_failed")
+            logger.error(
+                "[WeCom] Media download failed for aibotid=%s reason=%s",
+                self.aibotid,
+                reason_code,
+            )
             return (b"", None)
-
-        # The SDK returns {"buffer": bytes, "filename": str|None} — extract the
-        # buffer so callers receive plain bytes, not the raw dict.
-        if isinstance(result, dict):
-            buffer = result.get("buffer", b"") or b""
-            filename = result.get("filename")
-            return (buffer if isinstance(buffer, bytes) else b"", filename)
-        if isinstance(result, bytes):
-            return result, None
-        logger.warning(
-            "Unexpected download_file return type %s for aibotid=%s",
-            type(result).__name__,
-            self.aibotid,
-        )
-        return (b"", None)
+        return result.content, result.filename

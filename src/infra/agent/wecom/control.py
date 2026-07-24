@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
-from typing import Any
+from typing import Any, Awaitable, cast
 
 from src.infra.async_utils import run_blocking_io
 from src.infra.logging import get_logger
@@ -19,10 +19,15 @@ _CONTROL_RESULT_PREFIX = "wecom:control:result"
 _CONTROL_RESULT_TTL_SECONDS = 30
 _CONTROL_POLL_INTERVAL_SECONDS = 0.05
 _DEFAULT_CONTROL_TIMEOUT_SECONDS = 5.0
+_NETWORK_RESULT_PREFIX = "wecom:control:network-result"
 
 
 def wecom_control_result_key(command_id: str) -> str:
     return f"{_CONTROL_RESULT_PREFIX}:{command_id}"
+
+
+def wecom_network_result_key(command_id: str) -> str:
+    return f"{_NETWORK_RESULT_PREFIX}:{command_id}"
 
 
 async def request_wecom_reload(
@@ -36,7 +41,6 @@ async def request_wecom_reload(
     mode = get_wecom_runtime_mode()
     if mode == "disabled":
         return False
-
     if mode == "embedded":
         from .manager import get_wecom_bot_manager
 
@@ -56,6 +60,70 @@ async def request_wecom_reload(
     except Exception as e:
         logger.warning("External WeCom reload request failed for %s: %s", preset_id, e)
         return False
+
+
+async def request_wecom_network_reload(
+    revision: str,
+    *,
+    requested_by: str | None = None,
+    timeout_seconds: float = 20.0,
+) -> list[dict[str, Any]]:
+    """Restart all bots on their owning runtime nodes and aggregate results."""
+    mode = get_wecom_runtime_mode()
+    if mode == "disabled":
+        return []
+    if mode == "embedded":
+        from .manager import get_wecom_bot_manager
+
+        manager = get_wecom_bot_manager()
+        if not manager._running:
+            return []
+        return await manager.reload_network_config(revision)
+
+    redis = get_redis_client()
+    command_id = uuid.uuid4().hex
+    payload = await run_blocking_io(
+        json.dumps,
+        {
+            "command_id": command_id,
+            "action": "reload_network",
+            "revision": revision,
+            "requested_by": requested_by,
+        },
+    )
+    try:
+        subscriber_count = await redis.publish(WECOM_CONTROL_CHANNEL, payload)
+        if not subscriber_count:
+            return []
+        result_key = wecom_network_result_key(command_id)
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + max(0.0, timeout_seconds)
+        while loop.time() < deadline:
+            count = await cast(Awaitable[int], redis.llen(result_key))
+            if count >= subscriber_count:
+                break
+            await asyncio.sleep(
+                min(_CONTROL_POLL_INTERVAL_SECONDS, max(0.0, deadline - loop.time()))
+            )
+        raw_results = await cast(
+            Awaitable[list[Any]],
+            redis.lrange(result_key, 0, -1),
+        )
+        await redis.delete(result_key)
+    except Exception as exc:
+        logger.warning("[WeComNetwork] External network reload failed: %s", exc)
+        return []
+
+    merged: list[dict[str, Any]] = []
+    for raw in raw_results:
+        try:
+            node_result = await run_blocking_io(json.loads, raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        results = node_result.get("results")
+        if isinstance(results, list):
+            merged.extend(item for item in results if isinstance(item, dict))
+    return merged
 
 
 async def _request_external_reload(
@@ -96,9 +164,7 @@ async def _request_external_reload(
                 logger.warning("Invalid WeCom control result for command %s", command_id)
                 return False
             return result.get("status") == "ok"
-        await asyncio.sleep(
-            min(_CONTROL_POLL_INTERVAL_SECONDS, max(0.0, deadline - loop.time()))
-        )
+        await asyncio.sleep(min(_CONTROL_POLL_INTERVAL_SECONDS, max(0.0, deadline - loop.time())))
 
     logger.warning("Timed out waiting for external WeCom reload command %s", command_id)
     return False
@@ -144,12 +210,26 @@ class WeComControlListener:
 
     async def _handle_message(self, message: dict[str, Any]) -> None:
         command_id = ""
+        network_revision = ""
         try:
             payload = await run_blocking_io(json.loads, message["data"])
             command_id = str(payload.get("command_id") or "")
             action = payload.get("action")
             preset_id = str(payload.get("preset_id") or "")
-            if not command_id or action != "reload_preset" or not preset_id:
+            if not command_id:
+                logger.warning("Ignoring invalid WeCom control command")
+                return
+
+            if action == "reload_network":
+                network_revision = str(payload.get("revision") or "")
+                if not network_revision:
+                    logger.warning("Ignoring WeCom network reload without revision")
+                    return
+                results = await self._manager.reload_network_config(network_revision)
+                await self._write_network_result(command_id, network_revision, results)
+                return
+
+            if action != "reload_preset" or not preset_id:
                 logger.warning("Ignoring invalid WeCom control command")
                 return
 
@@ -166,11 +246,14 @@ class WeComControlListener:
         except Exception as e:
             logger.error("Failed to handle WeCom control command: %s", e)
             if command_id:
-                await self._write_result(
-                    command_id,
-                    status="failed",
-                    detail=str(e),
-                )
+                if network_revision:
+                    await self._write_network_result(command_id, network_revision, [])
+                else:
+                    await self._write_result(
+                        command_id,
+                        status="failed",
+                        detail=str(e),
+                    )
 
     async def _write_result(
         self,
@@ -193,3 +276,22 @@ class WeComControlListener:
             payload,
             ex=_CONTROL_RESULT_TTL_SECONDS,
         )
+
+    async def _write_network_result(
+        self,
+        command_id: str,
+        revision: str,
+        results: list[dict[str, Any]],
+    ) -> None:
+        payload = await run_blocking_io(
+            json.dumps,
+            {
+                "command_id": command_id,
+                "revision": revision,
+                "node_id": getattr(self._manager, "_node_id", None),
+                "results": results,
+            },
+        )
+        key = wecom_network_result_key(command_id)
+        await cast(Awaitable[int], self._redis.rpush(key, payload))
+        await self._redis.expire(key, _CONTROL_RESULT_TTL_SECONDS)

@@ -1,4 +1,38 @@
 {
+  "wecomNetwork": {
+    "title": "WeCom 네트워크",
+    "description": "WeCom WebSocket과 미디어 다운로드에만 적용되는 송신 경로입니다. 저장하면 웹 서비스를 재시작하지 않고 모든 WeCom 봇을 즉시 다시 연결합니다.",
+    "mode": "연결 모드",
+    "modes": {
+      "direct": "WeCom 직접 연결",
+      "reverse_gateway": "DMZ 역방향 게이트웨이",
+      "forward_proxy": "DMZ 정방향 프록시"
+    },
+    "directHint": "WebSocket과 첨부 파일이 WeCom에 직접 연결됩니다. WebSocket URL은 {{url}}입니다.",
+    "websocketUrl": "WebSocket 게이트웨이 URL",
+    "mediaGatewayUrl": "미디어 게이트웨이 URL",
+    "mediaGatewayHint": "게이트웨이는 target 쿼리 매개변수로 암호화된 WeCom 다운로드 URL을 받습니다.",
+    "proxyUrl": "정방향 프록시 URL",
+    "proxyUsername": "프록시 사용자 이름",
+    "proxyPassword": "프록시 비밀번호",
+    "passwordPreserved": "비워 두면 저장된 비밀번호 유지",
+    "clearPassword": "저장된 프록시 비밀번호 삭제",
+    "caBundlePath": "사용자 CA 번들 경로",
+    "caBundleHint": "은행 또는 DMZ 사설 CA를 사용하는 경우 컨테이너 내부 PEM 절대 경로를 입력하세요.",
+    "connectTimeout": "연결 제한 시간(초)",
+    "mediaTimeout": "미디어 다운로드 제한 시간(초)",
+    "mediaMaxBytes": "미디어 크기 제한(바이트)",
+    "test": "네트워크 테스트",
+    "saveAndReconnect": "저장 후 즉시 재연결",
+    "status": {
+      "connected": "설정이 적용되었고 모든 봇이 연결되었습니다",
+      "partial_failure": "설정은 유지되었지만 일부 봇 연결에 실패했습니다",
+      "rolled_back": "모든 봇이 실패하여 설정을 롤백했습니다",
+      "saved_unverified": "설정이 저장되었지만 확인할 봇이 없습니다",
+      "test_ok": "네트워크 테스트 성공",
+      "test_failed": "네트워크 테스트 실패"
+    }
+  },
   "about": {
     "appVersion": "버전",
     "buildTime": "빌드 시간",

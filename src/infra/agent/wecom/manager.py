@@ -19,6 +19,7 @@ from src.infra.agent.wecom.status import WeComStatusReasonCode, write_wecom_stat
 from src.infra.logging import get_logger
 from src.infra.storage.redis import create_redis_client
 from src.kernel.schemas.wecom import WeComGroupPolicy
+from src.kernel.schemas.wecom_network import WeComNetworkBotResult, WeComNetworkConfig
 
 logger = get_logger(__name__)
 _WECOM_LEASE_PREFIX = "wecom:lease"
@@ -53,7 +54,11 @@ class WeComBotManager:
     each aibotid is only connected from one node.
     """
 
-    def __init__(self, message_handler: Optional[Callable] = None, feedback_handler: Optional[Callable] = None):
+    def __init__(
+        self,
+        message_handler: Optional[Callable] = None,
+        feedback_handler: Optional[Callable] = None,
+    ):
         self.message_handler = message_handler
         self.feedback_handler = feedback_handler
         self._bots: dict[str, WeComBot] = {}  # aibotid -> WeComBot
@@ -65,6 +70,8 @@ class WeComBotManager:
         self._lease_tasks: dict[str, asyncio.Task] = {}
         self._lease_redis: Redis | None = None
         self._rebalance_task: asyncio.Task | None = None
+        self._network_config = WeComNetworkConfig()
+        self._network_revision = "default"
 
     async def start(self) -> None:
         """Start all enabled WeCom bots based on persona_wecom_config."""
@@ -73,6 +80,14 @@ class WeComBotManager:
             return
 
         self._running = True
+
+        from src.infra.agent.wecom.network_config import (
+            get_wecom_network_config_storage,
+        )
+
+        stored_network = await get_wecom_network_config_storage().get_current()
+        self._network_config = stored_network.config
+        self._network_revision = stored_network.revision
 
         started, skipped = await self._reconcile_preset_configs()
         self._ensure_rebalance_task()
@@ -99,6 +114,92 @@ class WeComBotManager:
         self._bots.clear()
         self._aibotid_to_preset.clear()
         self._aibotid_configs.clear()
+
+    async def reload_network_config(
+        self,
+        revision: str,
+        *,
+        authentication_timeout_seconds: float = 15.0,
+    ) -> list[dict[str, Any]]:
+        """Restart locally owned bots using one persisted network revision."""
+        from src.infra.agent.wecom.network_config import (
+            get_wecom_network_config_storage,
+        )
+
+        stored = await get_wecom_network_config_storage().get_current()
+        if stored.revision != revision:
+            logger.warning(
+                "[WeComNetwork] Ignoring stale reload revision=%s current=%s",
+                revision,
+                stored.revision,
+            )
+            return []
+
+        self._network_config = stored.config
+        self._network_revision = stored.revision
+
+        for aibotid in list(self._bots):
+            await self._stop_bot(aibotid)
+        self._aibotid_to_preset.clear()
+        self._aibotid_configs.clear()
+        await self._reconcile_preset_configs()
+
+        from src.infra.agent.config_storage import get_agent_config_storage
+
+        node_ids = await self._list_active_node_ids()
+        if self._node_id not in node_ids:
+            node_ids.append(self._node_id)
+            node_ids.sort()
+        raw_configs = await get_agent_config_storage().get_all_persona_wecom_configs_raw()
+
+        async def _result_for_config(
+            config: dict[str, Any],
+        ) -> dict[str, Any] | None:
+            aibotid = str(config.get("aibotid") or "")
+            preset_id = str(config.get("preset_id") or "")
+            if aibotid:
+                if self._preferred_owner(aibotid, node_ids) != self._node_id:
+                    return None
+            elif node_ids and node_ids[0] != self._node_id:
+                return None
+
+            bot = self._bots.get(aibotid)
+            if bot is None:
+                return WeComNetworkBotResult(
+                    preset_id=preset_id,
+                    aibotid=aibotid,
+                    state=ConnectionState.FAILED.value,
+                    reason_code=WeComStatusReasonCode.DISCONNECTED.value,
+                    reason_detail=(
+                        "invalid_bot_configuration"
+                        if not aibotid or not config.get("secret")
+                        else "bot_start_failed"
+                    ),
+                    node_id=self._node_id,
+                ).model_dump()
+
+            authenticated = await bot.wait_until_authenticated(authentication_timeout_seconds)
+            state = bot._get_connection_state()
+            result = WeComNetworkBotResult(
+                preset_id=preset_id,
+                aibotid=aibotid,
+                state=ConnectionState.CONNECTED.value if authenticated else state.value,
+                reason_code=(
+                    None
+                    if authenticated
+                    else WeComStatusReasonCode.AUTH_FAILED.value
+                    if state == ConnectionState.FAILED
+                    else WeComStatusReasonCode.DISCONNECTED.value
+                ),
+                reason_detail=None if authenticated else "authentication_timeout_or_failure",
+                node_id=self._node_id,
+            )
+            return result.model_dump()
+
+        local_results = await asyncio.gather(
+            *(_result_for_config(config) for config in raw_configs)
+        )
+        return [result for result in local_results if result is not None]
 
     async def _reconcile_preset_configs(self) -> tuple[int, int]:
         """Load persona_wecom_config entries and start bots for entries assigned to this node."""
@@ -235,7 +336,10 @@ class WeComBotManager:
         state: ConnectionState,
         reason_code: WeComStatusReasonCode | str | None = None,
         reason_detail: str | None = None,
+        expected_revision: str | None = None,
     ) -> None:
+        if expected_revision is not None and expected_revision != self._network_revision:
+            return
         preset_id = self._aibotid_to_preset.get(aibotid)
         if not preset_id:
             return
@@ -246,6 +350,7 @@ class WeComBotManager:
             reason_detail=reason_detail,
             node_id=self._node_id,
             aibotid=aibotid,
+            network_revision=self._network_revision,
         )
 
     async def _write_lease_lost_status(self, aibotid: str) -> None:
@@ -259,6 +364,7 @@ class WeComBotManager:
             reason_detail="lease_refresh_lost",
             node_id=self._node_id,
             aibotid=aibotid,
+            network_revision=self._network_revision,
         )
 
     def get_config_for_aibotid(self, aibotid: str) -> dict[str, Any] | None:
@@ -386,14 +492,19 @@ class WeComBotManager:
                 await self._bots[aibotid].stop()
 
             config = self._aibotid_configs.get(aibotid, {})
+            bot_revision = self._network_revision
             bot = WeComBot(
                 aibotid=aibotid,
                 secret=secret,
-                websocket_url=config.get("websocket_url", "wss://openws.work.weixin.qq.com"),
+                network_config=self._network_config,
                 group_policy=WeComGroupPolicy(config.get("group_policy", "mention")),
                 message_handler=self.message_handler,
                 feedback_handler=self.feedback_handler,
-                status_callback=self._publish_bot_status,
+                status_callback=lambda aid, **kwargs: self._publish_bot_status(
+                    aid,
+                    expected_revision=bot_revision,
+                    **kwargs,
+                ),
             )
             success = await bot.start()
 

@@ -1,4 +1,38 @@
 {
+  "wecomNetwork": {
+    "title": "WeCom Network",
+    "description": "Controls outbound routing only for WeCom WebSocket and media downloads. Saving reconnects all WeCom bots immediately without restarting the web service.",
+    "mode": "Connection mode",
+    "modes": {
+      "direct": "Direct to WeCom",
+      "reverse_gateway": "DMZ reverse gateway",
+      "forward_proxy": "DMZ forward proxy"
+    },
+    "directHint": "The WebSocket and attachments connect directly to WeCom. The WebSocket URL is fixed at {{url}}.",
+    "websocketUrl": "WebSocket gateway URL",
+    "mediaGatewayUrl": "Media gateway URL",
+    "mediaGatewayHint": "The gateway receives the encrypted WeCom download URL in the target query parameter.",
+    "proxyUrl": "Forward proxy URL",
+    "proxyUsername": "Proxy username",
+    "proxyPassword": "Proxy password",
+    "passwordPreserved": "Leave blank to keep the saved password",
+    "clearPassword": "Clear the saved proxy password",
+    "caBundlePath": "Custom CA bundle path",
+    "caBundleHint": "For a private bank or DMZ CA, enter the absolute PEM path inside the container. Leave blank to use system certificates.",
+    "connectTimeout": "Connection timeout (seconds)",
+    "mediaTimeout": "Media download timeout (seconds)",
+    "mediaMaxBytes": "Media size limit (bytes)",
+    "test": "Test network",
+    "saveAndReconnect": "Save and reconnect now",
+    "status": {
+      "connected": "Configuration applied; all bots connected",
+      "partial_failure": "Configuration retained; some bots failed",
+      "rolled_back": "All bots failed; configuration rolled back",
+      "saved_unverified": "Configuration saved; no bots are available to verify it",
+      "test_ok": "Network test succeeded",
+      "test_failed": "Network test failed"
+    }
+  },
   "about": {
     "appVersion": "Version",
     "buildTime": "Build Time",

@@ -89,6 +89,9 @@ WECOM_RUNTIME_MODE=external uv run python main.py
 WECOM_RUNTIME_MODE=external uv run python -m src.infra.agent.wecom.runtime
 ```
 
+企业微信位于银行内网、需经 DMZ Nginx 或正向代理出网时，请参考
+[企业微信内网与 DMZ 网关部署](docs/wecom-intranet-deployment.md)。
+
 也可以运行 `make dev-external`。`embedded` 保留用于兼容现有单进程部署；
 `disabled` 完全禁用企微连接。
 
