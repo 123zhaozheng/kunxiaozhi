@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 18
+- **Total Sessions**: 19
 - **Last Active**: 2026-07-24
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~622 | Active |
+| `journal-1.md` | ~655 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 19 | 2026-07-24 | 企业微信内网 DMZ 网络配置 | `710db83a` | `main` |
 | 18 | 2026-07-24 | Fix PDF preview crash on Chrome 109 | `0189cc06` | `main` |
 | 17 | 2026-07-23 | 隔离企微运行时并调整会话标题 | `4ea908fb`, `80750376` | `main` |
 | 16 | 2026-07-23 | Complete WeCom persona integration and configurable delivery | `5cbb0052`, `69eedd84`, `ced6a4ac` | `main` |

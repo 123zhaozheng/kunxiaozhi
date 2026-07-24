@@ -620,3 +620,36 @@ Root cause: pdfjs-dist modern build uses Promise.withResolvers (Chrome 119+); in
 ### Next Steps
 
 - None - task complete
+
+
+## Session 19: 企业微信内网 DMZ 网络配置
+
+**Date**: 2026-07-24
+**Task**: 企业微信内网 DMZ 网络配置
+**Branch**: `main`
+
+### Summary
+
+新增管理员企业微信网络设置，支持直连、DMZ 反向网关和正向代理；保存后立即重连，部分失败保留配置，全部失败自动回滚；补齐附件链路、加密存储、前端状态展示、部署文档与测试。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `710db83a` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
