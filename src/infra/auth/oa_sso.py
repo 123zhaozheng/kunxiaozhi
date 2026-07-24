@@ -10,8 +10,6 @@ from src.kernel.config import settings
 
 logger = get_logger(__name__)
 
-HTTP_TIMEOUT = 10.0
-
 
 class OASsoError(Exception):
     """OA SSO verification failed."""
@@ -27,7 +25,7 @@ class OASsoService:
         self.base_url = (base_url or settings.OA_SSO_BASE_URL).rstrip("/")
         self.public_key = public_key or settings.OA_SSO_PUBLIC_KEY
         self.channel_id = channel_id or settings.OA_SSO_CHANNEL_ID
-        self._client = httpx.AsyncClient(timeout=HTTP_TIMEOUT)
+        self._client = httpx.AsyncClient(timeout=settings.OA_SSO_TIMEOUT_SECONDS)
 
         if not self.public_key:
             logger.warning("OA_SSO_PUBLIC_KEY is not set; OA SSO will not work")

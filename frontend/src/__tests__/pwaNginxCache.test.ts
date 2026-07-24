@@ -23,6 +23,10 @@ test("nginx serves stable icon assets with immutable long-lived caching", () => 
 test("nginx keeps only the chat event stream open for 24 hours", () => {
   assert.match(
     nginxSource,
+    /location = \/api\/auth\/login\/oa-sso \{[^}]*proxy_read_timeout 300s;/s,
+  );
+  assert.match(
+    nginxSource,
     /location ~ \^\/api\/chat\/sessions\/\[\^\/\]\+\/stream\$ \{[^}]*proxy_read_timeout 86400s;/s,
   );
   assert.match(

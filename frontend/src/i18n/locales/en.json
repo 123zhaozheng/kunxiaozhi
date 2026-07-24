@@ -2122,6 +2122,7 @@
     "OA_SSO_EMAIL_DOMAIN": "Email domain for OA auto-provisioned users",
     "OA_SSO_ENABLED": "Enable enterprise OA passwordless login",
     "OA_SSO_PUBLIC_KEY": "OA SSO SM2 public key (130 hex chars)",
+    "OA_SSO_TIMEOUT_SECONDS": "OA SSO request timeout in seconds",
     "PASSWORD_RESET_EXPIRE_HOURS": "Password reset link expiration in hours",
     "POSTGRES_DB": "PostgreSQL database name",
     "POSTGRES_HOST": "PostgreSQL host for long-term storage",

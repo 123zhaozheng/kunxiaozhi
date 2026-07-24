@@ -480,6 +480,14 @@ EXTRA_SETTING_DEFINITIONS: dict[str, dict] = {
         "depends_on": "OA_SSO_ENABLED",
         "frontend_visible": True,
     },
+    "OA_SSO_TIMEOUT_SECONDS": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.SECURITY,
+        "subcategory": "oa_sso",
+        "description": "settingDesc.OA_SSO_TIMEOUT_SECONDS",
+        "default": 60.0,
+        "depends_on": "OA_SSO_ENABLED",
+    },
     # ============================================
     # OAuth Settings
     # ============================================
