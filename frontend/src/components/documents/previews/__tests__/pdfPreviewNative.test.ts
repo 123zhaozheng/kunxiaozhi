@@ -61,3 +61,33 @@ test("PDF preview uses a PDF.js worker version compatible with react-pdf", () =>
   assert.equal(frontendPackage.dependencies["react-pdf"], "^10.4.0");
   assert.equal(frontendPackage.dependencies["pdfjs-dist"], "^5.4.296");
 });
+
+test("PDF preview loads the legacy PDF.js worker for Chrome 109 compatibility", () => {
+  assert.match(
+    source,
+    /from\s+"pdfjs-dist\/legacy\/build\/pdf\.worker\.min\.mjs\?url"/,
+  );
+  assert.doesNotMatch(
+    source,
+    /from\s+"pdfjs-dist\/build\/pdf\.worker(?:\.min)?\.mjs/,
+  );
+  assert.match(source, /GlobalWorkerOptions\.workerSrc\s*=\s*pdfWorkerUrl/);
+});
+
+test("Vite aliases pdfjs-dist to the legacy build for Chrome 109 compatibility", () => {
+  const viteConfig = readFileSync(
+    new URL("../../../../../vite.config.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    viteConfig,
+    /pdfjs-dist\/legacy\/build\/pdf\.worker\.min\.mjs/,
+  );
+  assert.match(viteConfig, /pdfjs-dist\/legacy\/build\/pdf\.mjs/);
+  assert.match(
+    viteConfig,
+    /find:\s*"pdfjs-dist\/build\/pdf\.worker\.min\.mjs"/,
+  );
+  // Bare package alias must be exact so subpath imports keep working.
+  assert.match(viteConfig, /find:\s*\/\^pdfjs-dist\$\//);
+});

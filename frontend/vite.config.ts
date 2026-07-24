@@ -109,6 +109,30 @@ export default defineConfig({
           "node_modules/opentype.js/dist/opentype.js",
         ),
       },
+      // Chrome 109 lacks Promise.withResolvers; force pdf.js legacy builds.
+      // More-specific worker aliases first; bare package must be exact (/^pdfjs-dist$/)
+      // so subpaths like pdfjs-dist/types/* and pdfjs-dist/legacy/* still resolve.
+      {
+        find: "pdfjs-dist/build/pdf.worker.min.mjs",
+        replacement: path.resolve(
+          __dirname,
+          "node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs",
+        ),
+      },
+      {
+        find: "pdfjs-dist/build/pdf.worker.mjs",
+        replacement: path.resolve(
+          __dirname,
+          "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+        ),
+      },
+      {
+        find: /^pdfjs-dist$/,
+        replacement: path.resolve(
+          __dirname,
+          "node_modules/pdfjs-dist/legacy/build/pdf.mjs",
+        ),
+      },
       {
         find: /^stream$/,
         replacement: path.resolve(__dirname, "node_modules/stream-browserify"),

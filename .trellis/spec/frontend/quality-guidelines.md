@@ -11,6 +11,39 @@ code quality, accessibility, and responsive design.
 
 ---
 
+## PDF preview (Chrome 109 / pdf.js)
+
+**Problem**: Intranet baseline is Chrome 109. `pdfjs-dist` modern build (`build/pdf*.mjs`) calls `Promise.withResolvers()`, which exists only in Chrome ≥119. Opening sidebar PDF preview then throws and hits the top-level `ErrorBoundary` ("出了点问题").
+
+**Rule**: Always load **legacy** pdf.js for both main library and worker. Keep main + worker on the same build (never mix modern main with legacy worker or the reverse). Do not load workers from CDN.
+
+| Piece | Correct path |
+|-------|----------------|
+| Vite bare `pdfjs-dist` (used by `react-pdf`) | alias `/^pdfjs-dist$/` → `pdfjs-dist/legacy/build/pdf.mjs` |
+| Modern worker paths | alias `pdfjs-dist/build/pdf.worker(.min).mjs` → `legacy/build/...` |
+| `PdfPreview` worker URL | `import ... from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url"` |
+
+**Why bare package is exact regex**: `find: /^pdfjs-dist$/` so subpaths (`types/*`, `legacy/*`) still resolve normally. Worker aliases must be listed **before** the bare package alias.
+
+**Don't**:
+```ts
+// Wrong — modern build on Chrome 109
+import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import * as pdfjs from "pdfjs-dist"; // without Vite legacy alias
+```
+
+```ts
+// Correct — explicit legacy worker + Vite aliases for react-pdf
+import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+```
+
+**Tests**: `pdfPreviewNative.test.ts` must lock the legacy worker import and the Vite aliases.
+
+**Out of scope for this rule**: `/api/feedback` 403 when listing feedback without `feedback:read` (separate permission issue).
+
+---
+
 ## Emoji icons (intranet / offline)
 
 **Problem**: Chrome 109 intranet cannot reach `registry.npmmirror.com`. `@lobehub/fluent-emoji` with `type="3d"` loads assets from that CDN at runtime, so agent / subagent emoji icons appear blank.
