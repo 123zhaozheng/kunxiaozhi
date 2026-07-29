@@ -17,15 +17,14 @@ import { BrandWordmark } from "../common/BrandWordmark";
 import { LanguageToggle } from "../common/LanguageToggle";
 import { ThemeToggle } from "../common/ThemeToggle";
 import { APP_NAME } from "../../constants";
-
-function readOaToken(params: URLSearchParams): string | null {
-  return params.get("token") || params.get("oa_token");
-}
+import {
+  readOaSsoToken,
+  removeOaSsoTokenParams,
+} from "./oaSsoToken";
 
 function stripTokenFromUrl() {
   const url = new URL(window.location.href);
-  url.searchParams.delete("token");
-  url.searchParams.delete("oa_token");
+  removeOaSsoTokenParams(url.searchParams);
   const next = `${url.pathname}${url.search}${url.hash}`;
   window.history.replaceState({}, "", next);
 }
@@ -56,7 +55,7 @@ export function OaSsoLogin() {
   }, []);
 
   useEffect(() => {
-    const token = readOaToken(searchParams);
+    const token = readOaSsoToken(searchParams);
     if (!token?.trim()) {
       setMissingToken(true);
       setActiveStep(0);

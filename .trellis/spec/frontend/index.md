@@ -21,6 +21,7 @@ This directory contains guidelines for frontend development. Fill in each file w
 | [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns; Chrome 109 PDF/pdf.js legacy + emoji offline | Filled (partial) |
 | [Type Safety](./type-safety.md) | Type patterns, validation | To fill |
 | [WeCom Channel Sidebar](./wecom-channel-sidebar.md) | Virtual channel/Persona/session hierarchy and read-only compact navigation | Filled |
+| [OA SSO Portal Entry](./oa-sso-entry.md) | Exact `Accesstoken` deep-link contract, legacy aliases, and token stripping | Filled |
 
 ---
 

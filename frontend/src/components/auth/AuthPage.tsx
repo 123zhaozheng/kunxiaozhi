@@ -26,6 +26,7 @@ import {
   AUTH_REDIRECT_FAILSAFE_MS,
   resolvePostAuthRedirectPath,
 } from "./authRedirectTransition";
+import { readOaSsoToken } from "./oaSsoToken";
 
 type AuthMode = "login" | "register";
 
@@ -125,8 +126,7 @@ export function AuthPage({ onSuccess, initialMode }: AuthPageProps) {
 
   useEffect(() => {
     if (mode !== "login") return;
-    const token =
-      searchParams.get("token") || searchParams.get("oa_token");
+    const token = readOaSsoToken(searchParams);
     if (token?.trim()) {
       navigate(
         `/auth/oa?token=${encodeURIComponent(token.trim())}`,
