@@ -719,3 +719,36 @@ Implemented coordinated publication of Persona-bound personal Skills to Marketpl
 ### Next Steps
 
 - None - task complete
+
+
+## Session 22: 归档企业微信 DMZ 正向代理部署
+
+**Date**: 2026-07-29
+**Task**: 归档企业微信 DMZ 正向代理部署
+**Branch**: `main`
+
+### Summary
+
+归档基于 Squid 的企业微信 DMZ HTTP CONNECT 正向代理；验证无需自定义 CA 的 WSS 探测和目标域名白名单，并排除反向 Nginx 与测试证书。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8c792cca` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

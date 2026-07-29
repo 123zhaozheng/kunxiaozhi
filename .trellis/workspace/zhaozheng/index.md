@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 21
+- **Total Sessions**: 22
 - **Last Active**: 2026-07-29
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~721 | Active |
+| `journal-1.md` | ~754 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 22 | 2026-07-29 | 归档企业微信 DMZ 正向代理部署 | `8c792cca` | `main` |
 | 21 | 2026-07-29 | Public Persona Marketplace Skill dependencies | `74f24044` | `main` |
 | 20 | 2026-07-24 | OA SSO configurable timeout | `ccf4c5bf` | `main` |
 | 19 | 2026-07-24 | 企业微信内网 DMZ 网络配置 | `710db83a` | `main` |
