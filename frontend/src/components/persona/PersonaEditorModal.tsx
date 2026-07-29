@@ -19,6 +19,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import { LoadingSpinner } from "../common/LoadingSpinner";
+import { ConfirmDialog } from "../common/ConfirmDialog";
 import { EditorSidebar } from "../common/EditorSidebar";
 import toast from "react-hot-toast";
 import { useSkills } from "../../hooks/useSkills";
@@ -44,13 +45,11 @@ import type {
   PersonaPresetCreate,
   PersonaPresetStatus,
   PersonaPresetUpdate,
+  PersonaSkillPublicationPreflightResponse,
   PersonaWeComConfig,
   PreferredAgentId,
 } from "../../types";
-import {
-  DEFAULT_PREFERRED_AGENT_ID,
-  PREFERRED_AGENT_IDS,
-} from "../../types";
+import { DEFAULT_PREFERRED_AGENT_ID, PREFERRED_AGENT_IDS } from "../../types";
 
 const PERSONA_SKILL_PAGE_SIZE = 20;
 const WECOM_DEFAULT_SEGMENT_TARGET_CHARS = 600;
@@ -107,6 +106,9 @@ export function PersonaEditorModal({
     editingPreset?.status ??
       (initialScope === "global" ? "published" : "draft"),
   );
+  const [publicationPlan, setPublicationPlan] =
+    useState<PersonaSkillPublicationPreflightResponse | null>(null);
+  const [publicationSaving, setPublicationSaving] = useState(false);
   const [draft, setDraft] = useState({
     name: editingPreset?.name || "",
     description: editingPreset?.description || "",
@@ -115,7 +117,9 @@ export function PersonaEditorModal({
     starter_prompts: starterPromptsToDraftRows(editingPreset?.starter_prompts),
     tags: editingPreset?.tags.join(", ") || "",
     skill_names: [...(editingPreset?.skill_names || [])] as string[],
-    dify_kb_dataset_ids: [...(editingPreset?.dify_kb_dataset_ids || [])] as string[],
+    dify_kb_dataset_ids: [
+      ...(editingPreset?.dify_kb_dataset_ids || []),
+    ] as string[],
     preferred_agent_id:
       (editingPreset?.preferred_agent_id as PreferredAgentId | undefined) ||
       DEFAULT_PREFERRED_AGENT_ID,
@@ -138,7 +142,9 @@ export function PersonaEditorModal({
         ),
         tags: editingPreset?.tags.join(", ") || "",
         skill_names: [...(editingPreset?.skill_names || [])] as string[],
-        dify_kb_dataset_ids: [...(editingPreset?.dify_kb_dataset_ids || [])] as string[],
+        dify_kb_dataset_ids: [
+          ...(editingPreset?.dify_kb_dataset_ids || []),
+        ] as string[],
         preferred_agent_id:
           (editingPreset?.preferred_agent_id as PreferredAgentId | undefined) ||
           DEFAULT_PREFERRED_AGENT_ID,
@@ -217,8 +223,7 @@ export function PersonaEditorModal({
             send_thinking_message: config.send_thinking_message,
             segmented_reply: config.segmented_reply,
             segment_target_chars:
-              config.segment_target_chars ??
-              WECOM_DEFAULT_SEGMENT_TARGET_CHARS,
+              config.segment_target_chars ?? WECOM_DEFAULT_SEGMENT_TARGET_CHARS,
             session_ttl_hours: config.session_ttl_hours,
           });
         }
@@ -241,8 +246,7 @@ export function PersonaEditorModal({
         editingPreset.id,
         {
           aibotid: wecomDraft.aibotid,
-          secret:
-            wecomDraft.secret || (wecomConfig?.has_secret ? "" : ""),
+          secret: wecomDraft.secret || (wecomConfig?.has_secret ? "" : ""),
           stream_reply: wecomDraft.stream_reply,
           send_thinking_message: wecomDraft.send_thinking_message,
           segmented_reply: wecomDraft.segmented_reply,
@@ -258,7 +262,10 @@ export function PersonaEditorModal({
     } catch (err) {
       toast.error(
         (err as Error).message ||
-          t("personaPresets.wecom.saveFailed", "Failed to save WeCom configuration"),
+          t(
+            "personaPresets.wecom.saveFailed",
+            "Failed to save WeCom configuration",
+          ),
       );
     } finally {
       setWeComSaving(false);
@@ -286,7 +293,10 @@ export function PersonaEditorModal({
     } catch (err) {
       toast.error(
         (err as Error).message ||
-          t("personaPresets.wecom.deleteFailed", "Failed to delete WeCom configuration"),
+          t(
+            "personaPresets.wecom.deleteFailed",
+            "Failed to delete WeCom configuration",
+          ),
       );
     } finally {
       setWeComSaving(false);
@@ -359,66 +369,125 @@ export function PersonaEditorModal({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [skillDropdownOpen, iconPickerOpen]);
 
-  const handleSave = useCallback(async () => {
-    if (!draft.name.trim() || !draft.system_prompt.trim()) return;
-    const normalizedDraft = {
-      name: draft.name.trim(),
-      description: draft.description.trim(),
-      avatar: draft.avatar,
-      system_prompt: draft.system_prompt.trim(),
-      starter_prompts: draftRowsToStarterPrompts(draft.starter_prompts),
-      tags: draft.tags
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-      skill_names: draft.skill_names,
-      dify_kb_dataset_ids: draft.dify_kb_dataset_ids,
-      preferred_agent_id: draft.preferred_agent_id,
-    };
+  const savePreset = useCallback(
+    async (publishPersonalSkills: boolean) => {
+      if (!draft.name.trim() || !draft.system_prompt.trim()) return;
+      const normalizedDraft = {
+        name: draft.name.trim(),
+        description: draft.description.trim(),
+        avatar: draft.avatar,
+        system_prompt: draft.system_prompt.trim(),
+        starter_prompts: draftRowsToStarterPrompts(draft.starter_prompts),
+        tags: draft.tags
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+        skill_names: draft.skill_names,
+        dify_kb_dataset_ids: draft.dify_kb_dataset_ids,
+        preferred_agent_id: draft.preferred_agent_id,
+      };
 
-    const saved = editingPreset
-      ? await updatePreset(
-          editingPreset.id,
-          buildPersonaPresetPayload(editingPreset, normalizedDraft, {
-            scope: editorScope,
-            status: editorStatus,
-          }),
-        )
-      : await createPreset(
-          buildPersonaPresetPayload(null, normalizedDraft, {
-            scope: editorScope,
-            status: editorStatus,
-          }),
+      const editorOptions = {
+        scope: editorScope,
+        status: editorStatus,
+      };
+      const payload = editingPreset
+        ? buildPersonaPresetPayload(
+            editingPreset,
+            normalizedDraft,
+            editorOptions,
+          )
+        : buildPersonaPresetPayload(null, normalizedDraft, editorOptions);
+      if (publishPersonalSkills) {
+        payload.publish_personal_skills = true;
+      }
+
+      const saved = editingPreset
+        ? await updatePreset(editingPreset.id, payload as PersonaPresetUpdate)
+        : await createPreset(payload as PersonaPresetCreate);
+      if (!saved) {
+        toast.error(
+          editingPreset
+            ? t("personaPresets.updateFailed", "角色更新失败")
+            : t("personaPresets.createFailed", "角色创建失败"),
         );
-    if (!saved) {
-      toast.error(
+        return;
+      }
+
+      setPublicationPlan(null);
+      onClose();
+      toast.success(
         editingPreset
-          ? t("personaPresets.updateFailed", "角色更新失败")
-          : t("personaPresets.createFailed", "角色创建失败"),
+          ? t("personaPresets.updateSuccess", "角色「{{name}}」已更新", {
+              name: normalizedDraft.name,
+            })
+          : t("personaPresets.createSuccess", "角色「{{name}}」已创建", {
+              name: normalizedDraft.name,
+            }),
       );
+    },
+    [
+      onClose,
+      createPreset,
+      draft,
+      editingPreset,
+      editorScope,
+      editorStatus,
+      t,
+      updatePreset,
+    ],
+  );
+
+  const handleSave = useCallback(async () => {
+    if (
+      editorScope !== "global" ||
+      editorStatus !== "published" ||
+      draft.skill_names.length === 0
+    ) {
+      await savePreset(false);
       return;
     }
 
-    onClose();
-    toast.success(
-      editingPreset
-        ? t("personaPresets.updateSuccess", "角色「{{name}}」已更新", {
-            name: normalizedDraft.name,
-          })
-        : t("personaPresets.createSuccess", "角色「{{name}}」已创建", {
-            name: normalizedDraft.name,
-          }),
-    );
-  }, [
-    onClose,
-    createPreset,
-    draft,
-    editingPreset,
-    editorScope,
-    editorStatus,
-    t,
-    updatePreset,
-  ]);
+    try {
+      const plan = await personaPresetApi.preflightSkillPublication(
+        draft.skill_names,
+      );
+      if (plan.conflicts.length > 0) {
+        const names = plan.conflicts
+          .map((item) => item.marketplace_name)
+          .join("、");
+        toast.error(
+          t(
+            "personaPresets.skillNameConflict",
+            "Skill 名称冲突：{{names}}。请验证来源或重命名；Skills 商城不允许同名 Skill。",
+            { names },
+          ),
+        );
+        return;
+      }
+      if (plan.requires_publish.length > 0) {
+        setPublicationPlan(plan);
+        return;
+      }
+      await savePreset(false);
+    } catch {
+      toast.error(
+        t(
+          "personaPresets.skillPreflightFailed",
+          "无法验证 Persona 绑定的 Skills，请稍后重试",
+        ),
+      );
+    }
+  }, [draft.skill_names, editorScope, editorStatus, savePreset, t]);
+
+  const confirmSkillPublication = useCallback(async () => {
+    setPublicationSaving(true);
+    try {
+      await savePreset(true);
+    } finally {
+      setPublicationSaving(false);
+    }
+  }, [savePreset]);
 
   const handleAvatarUpload = useCallback(
     async (file: File) => {
@@ -462,991 +531,1036 @@ export function PersonaEditorModal({
       : t("personaPresets.createHint", "定义角色的行为、语气和能力边界");
 
   return (
-    <EditorSidebar
-      open={showModal}
-      onClose={onClose}
-      title={title}
-      subtitle={subtitle}
-      icon={editingPreset ? <Pencil size={16} /> : <Plus size={16} />}
-      footer={
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="btn-secondary">
-            {t("common.cancel", "取消")}
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={isMutating || !isFormValid}
-            className="btn-primary disabled:opacity-50"
-          >
-            {isMutating ? <LoadingSpinner size="sm" /> : <Save size={16} />}
-            {t("common.save", "保存")}
-          </button>
-        </div>
-      }
-    >
-      <div className="es-form">
-        {/* Profile: Avatar + Name + Description */}
-        <div className="ppe-profile-section">
-          <div className="ppe-avatar-upload">
-            <div
-              className="ppe-avatar-preview"
-              onClick={() =>
-                !draft.avatar &&
-                !isUploadingAvatar &&
-                avatarInputRef.current?.click()
-              }
+    <>
+      <EditorSidebar
+        open={showModal}
+        onClose={onClose}
+        title={title}
+        subtitle={subtitle}
+        icon={editingPreset ? <Pencil size={16} /> : <Plus size={16} />}
+        footer={
+          <div className="flex justify-end gap-2">
+            <button onClick={onClose} className="btn-secondary">
+              {t("common.cancel", "取消")}
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isMutating || !isFormValid}
+              className="btn-primary disabled:opacity-50"
             >
-              {isEmojiAvatar(draft.avatar) ? (
-                <>
-                  <PersonaAvatarImage
-                    avatar={getEmojiAvatarUrl(draft.avatar)}
-                    alt=""
-                    className="ppe-avatar-img"
-                  />
-                  <button
-                    type="button"
-                    className="ppe-avatar-remove"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDraft((prev) => ({ ...prev, avatar: "" }));
-                    }}
-                    title={t("common.remove", "移除")}
-                  >
-                    <X size={12} />
-                  </button>
-                </>
-              ) : isPersonaImageAvatar(draft.avatar) ? (
-                <>
-                  <PersonaAvatarImage
-                    avatar={draft.avatar}
-                    alt=""
-                    className="ppe-avatar-img"
-                    onError={() =>
-                      setDraft((prev) => ({ ...prev, avatar: "" }))
-                    }
-                  />
-                  <button
-                    type="button"
-                    className="ppe-avatar-remove"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDraft((prev) => ({ ...prev, avatar: "" }));
-                    }}
-                    title={t("common.remove", "移除")}
-                  >
-                    <X size={12} />
-                  </button>
-                </>
-              ) : draft.avatar ? (
-                <>
-                  <div className="ppe-avatar-placeholder">
-                    <PersonaAvatarIcon avatar={draft.avatar} size={20} />
-                  </div>
-                  <button
-                    type="button"
-                    className="ppe-avatar-remove"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDraft((prev) => ({ ...prev, avatar: "" }));
-                    }}
-                    title={t("common.remove", "移除")}
-                  >
-                    <X size={12} />
-                  </button>
-                </>
-              ) : (
-                <div className="ppe-avatar-placeholder">
-                  <Camera size={18} />
-                </div>
-              )}
-              {isUploadingAvatar && (
-                <div className="ppe-avatar-uploading">
-                  <Loader2 size={16} className="animate-spin" />
-                </div>
-              )}
-            </div>
-            <input
-              ref={avatarInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              disabled={isUploadingAvatar}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleAvatarUpload(file);
-                e.target.value = "";
-              }}
-            />
-            <div ref={iconPickerRef} className="relative">
-              <button
-                type="button"
-                className="ppe-avatar-hint-btn"
-                disabled={isUploadingAvatar}
-                onClick={() => setIconPickerOpen((v) => !v)}
+              {isMutating ? <LoadingSpinner size="sm" /> : <Save size={16} />}
+              {t("common.save", "保存")}
+            </button>
+          </div>
+        }
+      >
+        <div className="es-form">
+          {/* Profile: Avatar + Name + Description */}
+          <div className="ppe-profile-section">
+            <div className="ppe-avatar-upload">
+              <div
+                className="ppe-avatar-preview"
+                onClick={() =>
+                  !draft.avatar &&
+                  !isUploadingAvatar &&
+                  avatarInputRef.current?.click()
+                }
               >
-                <Smile size={12} />
-                {t("personaPresets.pickIcon", "选择图标")}
-              </button>
-              {iconPickerOpen && (
-                <div className="ppe-icon-picker">
-                  {AVATAR_EMOJIS.map((item) => (
+                {isEmojiAvatar(draft.avatar) ? (
+                  <>
+                    <PersonaAvatarImage
+                      avatar={getEmojiAvatarUrl(draft.avatar)}
+                      alt=""
+                      className="ppe-avatar-img"
+                    />
                     <button
-                      key={item.emoji}
                       type="button"
-                      className="ppe-icon-picker-item"
-                      onClick={() => {
-                        setDraft((prev) => ({
-                          ...prev,
-                          avatar: item.emoji,
-                        }));
-                        setIconPickerOpen(false);
+                      className="ppe-avatar-remove"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDraft((prev) => ({ ...prev, avatar: "" }));
                       }}
-                      title={t(item.labelKey)}
+                      title={t("common.remove", "移除")}
                     >
-                      <img
-                        src={getEmojiAvatarUrl(item.emoji)}
-                        alt={t(item.labelKey)}
-                        width={20}
-                        height={20}
-                        style={{ objectFit: "contain" }}
-                      />
+                      <X size={12} />
                     </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="ppe-profile-fields">
-            <div className="ppe-field">
-              <label className="ppe-label">
-                {t("personaPresets.name", "名称")}
-                <span className="ppe-required">*</span>
-              </label>
-              <input
-                value={draft.name}
-                onChange={(e) =>
-                  setDraft((prev) => ({ ...prev, name: e.target.value }))
-                }
-                className="ppe-input"
-                placeholder={t(
-                  "personaPresets.namePlaceholder",
-                  "给角色起个名字",
+                  </>
+                ) : isPersonaImageAvatar(draft.avatar) ? (
+                  <>
+                    <PersonaAvatarImage
+                      avatar={draft.avatar}
+                      alt=""
+                      className="ppe-avatar-img"
+                      onError={() =>
+                        setDraft((prev) => ({ ...prev, avatar: "" }))
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="ppe-avatar-remove"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDraft((prev) => ({ ...prev, avatar: "" }));
+                      }}
+                      title={t("common.remove", "移除")}
+                    >
+                      <X size={12} />
+                    </button>
+                  </>
+                ) : draft.avatar ? (
+                  <>
+                    <div className="ppe-avatar-placeholder">
+                      <PersonaAvatarIcon avatar={draft.avatar} size={20} />
+                    </div>
+                    <button
+                      type="button"
+                      className="ppe-avatar-remove"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDraft((prev) => ({ ...prev, avatar: "" }));
+                      }}
+                      title={t("common.remove", "移除")}
+                    >
+                      <X size={12} />
+                    </button>
+                  </>
+                ) : (
+                  <div className="ppe-avatar-placeholder">
+                    <Camera size={18} />
+                  </div>
                 )}
-              />
-            </div>
-            <div className="ppe-field">
-              <label className="ppe-label">
-                {t("personaPresets.description", "简介")}
-              </label>
-              <input
-                value={draft.description}
-                onChange={(e) =>
-                  setDraft((prev) => ({ ...prev, description: e.target.value }))
-                }
-                className="ppe-input"
-                placeholder={t(
-                  "personaPresets.descriptionPlaceholder",
-                  "简短描述角色的能力和特点",
+                {isUploadingAvatar && (
+                  <div className="ppe-avatar-uploading">
+                    <Loader2 size={16} className="animate-spin" />
+                  </div>
                 )}
+              </div>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={isUploadingAvatar}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleAvatarUpload(file);
+                  e.target.value = "";
+                }}
               />
+              <div ref={iconPickerRef} className="relative">
+                <button
+                  type="button"
+                  className="ppe-avatar-hint-btn"
+                  disabled={isUploadingAvatar}
+                  onClick={() => setIconPickerOpen((v) => !v)}
+                >
+                  <Smile size={12} />
+                  {t("personaPresets.pickIcon", "选择图标")}
+                </button>
+                {iconPickerOpen && (
+                  <div className="ppe-icon-picker">
+                    {AVATAR_EMOJIS.map((item) => (
+                      <button
+                        key={item.emoji}
+                        type="button"
+                        className="ppe-icon-picker-item"
+                        onClick={() => {
+                          setDraft((prev) => ({
+                            ...prev,
+                            avatar: item.emoji,
+                          }));
+                          setIconPickerOpen(false);
+                        }}
+                        title={t(item.labelKey)}
+                      >
+                        <img
+                          src={getEmojiAvatarUrl(item.emoji)}
+                          alt={t(item.labelKey)}
+                          width={20}
+                          height={20}
+                          style={{ objectFit: "contain" }}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        </div>
 
-        {/* Admin: Scope & Status */}
-        {canAdmin && (
-          <div
-            className="ppe-section ppe-field-animated"
-            style={{ animationDelay: "0ms" }}
-          >
-            <div className="grid gap-2 sm:gap-3 sm:grid-cols-2 ppe-admin-grid">
+            <div className="ppe-profile-fields">
               <div className="ppe-field">
                 <label className="ppe-label">
-                  {t("personaPresets.scope", "范围")}
+                  {t("personaPresets.name", "名称")}
+                  <span className="ppe-required">*</span>
                 </label>
-                <GlassSelect
-                  value={editorScope}
-                  onChange={(v) => setEditorScope(v as "user" | "global")}
-                  options={[
-                    {
-                      value: "user",
-                      label: t("personaPresets.mine", "我的"),
-                    },
-                    {
-                      value: "global",
-                      label: t("personaPresets.official", "官方"),
-                    },
-                  ]}
+                <input
+                  value={draft.name}
+                  onChange={(e) =>
+                    setDraft((prev) => ({ ...prev, name: e.target.value }))
+                  }
+                  className="ppe-input"
+                  placeholder={t(
+                    "personaPresets.namePlaceholder",
+                    "给角色起个名字",
+                  )}
                 />
               </div>
-              {editorScope === "global" && (
+              <div className="ppe-field">
+                <label className="ppe-label">
+                  {t("personaPresets.description", "简介")}
+                </label>
+                <input
+                  value={draft.description}
+                  onChange={(e) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      description: e.target.value,
+                    }))
+                  }
+                  className="ppe-input"
+                  placeholder={t(
+                    "personaPresets.descriptionPlaceholder",
+                    "简短描述角色的能力和特点",
+                  )}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Admin: Scope & Status */}
+          {canAdmin && (
+            <div
+              className="ppe-section ppe-field-animated"
+              style={{ animationDelay: "0ms" }}
+            >
+              <div className="grid gap-2 sm:gap-3 sm:grid-cols-2 ppe-admin-grid">
                 <div className="ppe-field">
                   <label className="ppe-label">
-                    {t("personaPresets.status", "状态")}
+                    {t("personaPresets.scope", "范围")}
                   </label>
                   <GlassSelect
-                    value={editorStatus}
-                    onChange={(v) => setEditorStatus(v as PersonaPresetStatus)}
+                    value={editorScope}
+                    onChange={(v) => setEditorScope(v as "user" | "global")}
                     options={[
                       {
-                        value: "draft",
-                        label: t("personaPresets.draft", "草稿"),
+                        value: "user",
+                        label: t("personaPresets.mine", "我的"),
                       },
                       {
-                        value: "published",
-                        label: t("personaPresets.published", "已发布"),
-                      },
-                      {
-                        value: "archived",
-                        label: t("personaPresets.archived", "已归档"),
+                        value: "global",
+                        label: t("personaPresets.official", "官方"),
                       },
                     ]}
                   />
                 </div>
-              )}
-            </div>
-          </div>
-        )}
-
-                {/* Preferred Agent Template */}
-        <div className="ppe-field">
-          <label className="ppe-label">
-            {t("personaPresets.preferredAgent", "能力模板")}
-          </label>
-          <GlassSelect
-            value={draft.preferred_agent_id}
-            onChange={(v) =>
-              setDraft((prev) => ({
-                ...prev,
-                preferred_agent_id: v as PreferredAgentId,
-              }))
-            }
-            options={PREFERRED_AGENT_IDS.map((id) => ({
-              value: id,
-              label: t(`personaPresets.agent.${id}`, id),
-            }))}
-          />
-          <p className="ppe-hint">
-            {t(
-              "personaPresets.preferredAgentHint",
-              "使用该角色开聊时默认采用的能力模板；会话内不可切换。",
-            )}
-          </p>
-        </div>
-
-{/* System Prompt */}
-        <div className="ppe-field">
-          <label className="ppe-label">
-            <MessageSquare size={13} className="ppe-label-icon" />
-            {t("personaPresets.systemPrompt", "系统提示词")}
-            <span className="ppe-required">*</span>
-          </label>
-          <div className="ppe-textarea-wrap">
-            <textarea
-              value={draft.system_prompt}
-              onChange={(e) =>
-                setDraft((prev) => ({ ...prev, system_prompt: e.target.value }))
-              }
-              rows={8}
-              className="ppe-textarea"
-              placeholder={t(
-                "personaPresets.systemPromptPlaceholder",
-                "定义角色的行为、语气和能力边界...",
-              )}
-            />
-            <div className="ppe-char-counter">{draft.system_prompt.length}</div>
-          </div>
-        </div>
-
-        {/* Starter Prompts */}
-        <div className="ppe-field">
-          <label className="ppe-label">
-            <Sparkles size={13} className="ppe-label-icon" />
-            {t("personaPresets.starterPrompts", "开场提示词")}
-          </label>
-          <div className="ppe-starter-list">
-            {draft.starter_prompts.map((prompt, index) => (
-              <div key={index} className="ppe-starter-row">
-                <input
-                  value={prompt.icon}
-                  onChange={(e) =>
-                    setDraft((prev) => ({
-                      ...prev,
-                      starter_prompts: prev.starter_prompts.map((item, i) =>
-                        i === index ? { ...item, icon: e.target.value } : item,
-                      ),
-                    }))
-                  }
-                  className="ppe-input ppe-starter-icon"
-                  placeholder={t("personaPresets.starterIcon", "图标")}
-                />
-                <input
-                  value={prompt.text}
-                  onChange={(e) =>
-                    setDraft((prev) => ({
-                      ...prev,
-                      starter_prompts: prev.starter_prompts.map((item, i) =>
-                        i === index ? { ...item, text: e.target.value } : item,
-                      ),
-                    }))
-                  }
-                  className="ppe-input ppe-starter-text"
-                  placeholder={t(
-                    "personaPresets.starterPromptPlaceholder",
-                    '输入提示词，或使用 {"zh":"...","en":"..."}',
-                  )}
-                />
-                <button
-                  type="button"
-                  className="ppe-starter-remove"
-                  onClick={() =>
-                    setDraft((prev) => ({
-                      ...prev,
-                      starter_prompts: prev.starter_prompts.filter(
-                        (_, i) => i !== index,
-                      ),
-                    }))
-                  }
-                  title={t("common.delete", "删除")}
-                >
-                  <X size={14} />
-                </button>
+                {editorScope === "global" && (
+                  <div className="ppe-field">
+                    <label className="ppe-label">
+                      {t("personaPresets.status", "状态")}
+                    </label>
+                    <GlassSelect
+                      value={editorStatus}
+                      onChange={(v) =>
+                        setEditorStatus(v as PersonaPresetStatus)
+                      }
+                      options={[
+                        {
+                          value: "draft",
+                          label: t("personaPresets.draft", "草稿"),
+                        },
+                        {
+                          value: "published",
+                          label: t("personaPresets.published", "已发布"),
+                        },
+                        {
+                          value: "archived",
+                          label: t("personaPresets.archived", "已归档"),
+                        },
+                      ]}
+                    />
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
-          <button
-            type="button"
-            className="ppe-starter-add"
-            onClick={() =>
-              setDraft((prev) => ({
-                ...prev,
-                starter_prompts: [
-                  ...prev.starter_prompts,
-                  { icon: "", text: "" },
-                ],
-              }))
-            }
-          >
-            <Plus size={13} />
-            {t("personaPresets.addStarterPrompt", "添加开场提示词")}
-          </button>
-        </div>
+            </div>
+          )}
 
-        {/* Tags + Skills */}
-        <div className="ppe-meta-grid">
+          {/* Preferred Agent Template */}
           <div className="ppe-field">
             <label className="ppe-label">
-              <Tag size={13} className="ppe-label-icon" />
-              {t("personaPresets.tagsInput", "标签")}
+              {t("personaPresets.preferredAgent", "能力模板")}
             </label>
-            <input
-              value={draft.tags}
-              onChange={(e) =>
-                setDraft((prev) => ({ ...prev, tags: e.target.value }))
+            <GlassSelect
+              value={draft.preferred_agent_id}
+              onChange={(v) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  preferred_agent_id: v as PreferredAgentId,
+                }))
               }
-              className="ppe-input"
-              placeholder={t(
-                "personaPresets.tagsInputPlaceholder",
-                "写作, 翻译, 代码",
-              )}
+              options={PREFERRED_AGENT_IDS.map((id) => ({
+                value: id,
+                label: t(`personaPresets.agent.${id}`, id),
+              }))}
             />
-            {draft.tags.trim() && (
-              <div className="ppe-chip-row">
-                {draft.tags
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean)
-                  .map((tag) => (
-                    <span key={tag} className="ppe-tag-chip">
-                      {tag}
-                    </span>
-                  ))}
-              </div>
-            )}
+            <p className="ppe-hint">
+              {t(
+                "personaPresets.preferredAgentHint",
+                "使用该角色开聊时默认采用的能力模板；会话内不可切换。",
+              )}
+            </p>
           </div>
 
+          {/* System Prompt */}
+          <div className="ppe-field">
+            <label className="ppe-label">
+              <MessageSquare size={13} className="ppe-label-icon" />
+              {t("personaPresets.systemPrompt", "系统提示词")}
+              <span className="ppe-required">*</span>
+            </label>
+            <div className="ppe-textarea-wrap">
+              <textarea
+                value={draft.system_prompt}
+                onChange={(e) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    system_prompt: e.target.value,
+                  }))
+                }
+                rows={8}
+                className="ppe-textarea"
+                placeholder={t(
+                  "personaPresets.systemPromptPlaceholder",
+                  "定义角色的行为、语气和能力边界...",
+                )}
+              />
+              <div className="ppe-char-counter">
+                {draft.system_prompt.length}
+              </div>
+            </div>
+          </div>
+
+          {/* Starter Prompts */}
           <div className="ppe-field">
             <label className="ppe-label">
               <Sparkles size={13} className="ppe-label-icon" />
-              {t("personaPresets.skillsInput", "Skills")}
+              {t("personaPresets.starterPrompts", "开场提示词")}
             </label>
-            <div ref={skillDropdownRef} className="relative">
-              <button
-                type="button"
-                onClick={() => {
-                  setSkillDropdownOpen((v) => !v);
-                  setSkillSearch("");
-                  setSkillPage(1);
-                }}
-                className={`ppe-skill-trigger ${
-                  skillDropdownOpen ? "ppe-skill-trigger--open" : ""
-                }`}
-              >
-                {draft.skill_names.length > 0 ? (
-                  <span className="ppe-skill-trigger__count">
-                    <Sparkles size={12} />
-                    {t("personaPresets.skillCount", "{{count}} 个技能已选择", {
-                      count: draft.skill_names.length,
-                    })}
-                  </span>
-                ) : (
-                  <span className="ppe-skill-trigger__placeholder">
-                    {t("personaPresets.skillsInputPlaceholder", "选择技能...")}
-                  </span>
-                )}
-                <ChevronDown
-                  size={14}
-                  className={`ppe-skill-trigger__chevron ${
-                    skillDropdownOpen ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
-
-              {draft.skill_names.length > 0 && !skillDropdownOpen && (
-                <div className="ppe-skill-selected-area">
-                  {draft.skill_names.map((name) => (
-                    <span key={name} className="ppe-skill-chip">
-                      {name}
-                      <X
-                        size={11}
-                        className="ppe-skill-chip-remove"
-                        onClick={() =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            skill_names: prev.skill_names.filter(
-                              (n) => n !== name,
-                            ),
-                          }))
-                        }
-                      />
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {skillDropdownOpen && (
-                <div className="ppe-skill-dropdown">
-                  <div className="ppe-skill-dropdown__header">
-                    <div className="ppe-skill-dropdown__search-wrap">
-                      <Search
-                        size={14}
-                        className="ppe-skill-dropdown__search-icon"
-                      />
-                      <input
-                        type="text"
-                        value={skillSearch}
-                        onChange={(e) => {
-                          setSkillSearch(e.target.value);
-                          setSkillPage(1);
-                        }}
-                        placeholder={t(
-                          "skills.searchPlaceholder",
-                          "搜索技能...",
-                        )}
-                        className="ppe-skill-search"
-                        autoFocus
-                      />
-                    </div>
-                    {draft.skill_names.length > 0 && (
-                      <button
-                        type="button"
-                        className="ppe-skill-dropdown__clear-all"
-                        onClick={() =>
-                          setDraft((prev) => ({ ...prev, skill_names: [] }))
-                        }
-                      >
-                        {t("common.clearAll", "清除全部")}
-                      </button>
+            <div className="ppe-starter-list">
+              {draft.starter_prompts.map((prompt, index) => (
+                <div key={index} className="ppe-starter-row">
+                  <input
+                    value={prompt.icon}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        starter_prompts: prev.starter_prompts.map((item, i) =>
+                          i === index
+                            ? { ...item, icon: e.target.value }
+                            : item,
+                        ),
+                      }))
+                    }
+                    className="ppe-input ppe-starter-icon"
+                    placeholder={t("personaPresets.starterIcon", "图标")}
+                  />
+                  <input
+                    value={prompt.text}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        starter_prompts: prev.starter_prompts.map((item, i) =>
+                          i === index
+                            ? { ...item, text: e.target.value }
+                            : item,
+                        ),
+                      }))
+                    }
+                    className="ppe-input ppe-starter-text"
+                    placeholder={t(
+                      "personaPresets.starterPromptPlaceholder",
+                      '输入提示词，或使用 {"zh":"...","en":"..."}',
                     )}
-                  </div>
-
-                  {draft.skill_names.length > 0 && (
-                    <div className="ppe-skill-selected-bar">
-                      {draft.skill_names.map((name) => (
-                        <span key={name} className="ppe-skill-chip">
-                          {name}
-                          <X
-                            size={11}
-                            className="ppe-skill-chip-remove"
-                            onClick={() =>
-                              setDraft((prev) => ({
-                                ...prev,
-                                skill_names: prev.skill_names.filter(
-                                  (n) => n !== name,
-                                ),
-                              }))
-                            }
-                          />
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <div
-                    className="ppe-skill-dropdown__list"
-                    onScroll={handleSkillListScroll}
+                  />
+                  <button
+                    type="button"
+                    className="ppe-starter-remove"
+                    onClick={() =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        starter_prompts: prev.starter_prompts.filter(
+                          (_, i) => i !== index,
+                        ),
+                      }))
+                    }
+                    title={t("common.delete", "删除")}
                   >
-                    {displayedSkills.length > 0 ? (
-                      displayedSkills.map((skill) => {
-                        const isSelected = draft.skill_names.includes(
-                          skill.name,
-                        );
-                        return (
-                          <button
-                            key={skill.name}
-                            type="button"
-                            onClick={() => {
-                              setDraft((prev) => ({
-                                ...prev,
-                                skill_names: isSelected
-                                  ? prev.skill_names.filter(
-                                      (n) => n !== skill.name,
-                                    )
-                                  : [...prev.skill_names, skill.name],
-                              }));
-                            }}
-                            className={`ppe-skill-option ${
-                              isSelected ? "ppe-skill-option--selected" : ""
-                            }`}
-                          >
-                            <div className="ppe-skill-option__check-ring">
-                              {isSelected ? (
-                                <Check
-                                  size={12}
-                                  className="ppe-skill-option__check-icon"
-                                />
-                              ) : (
-                                <Plus
-                                  size={12}
-                                  className="ppe-skill-option__plus-icon"
-                                />
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium truncate">
-                                {skill.name}
-                              </div>
-                              {skill.description && (
-                                <div className="text-[11px] text-[var(--theme-text-secondary)] truncate mt-0.5">
-                                  {skill.description}
-                                </div>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })
-                    ) : (
-                      <div className="ppe-skill-dropdown__empty">
-                        <Sparkles
-                          size={20}
-                          className="ppe-skill-dropdown__empty-icon"
-                        />
-                        <span>
-                          {t("skills.noMatchingSkills", "没有匹配的技能")}
-                        </span>
-                      </div>
-                    )}
-                    {skillsLoading && displayedSkills.length > 0 && (
-                      <div className="ppe-skill-dropdown__loading">
-                        <Loader2 size={14} className="animate-spin" />
-                        <span>{t("common.loading", "加载中...")}</span>
-                      </div>
-                    )}
-                  </div>
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="ppe-starter-add"
+              onClick={() =>
+                setDraft((prev) => ({
+                  ...prev,
+                  starter_prompts: [
+                    ...prev.starter_prompts,
+                    { icon: "", text: "" },
+                  ],
+                }))
+              }
+            >
+              <Plus size={13} />
+              {t("personaPresets.addStarterPrompt", "添加开场提示词")}
+            </button>
+          </div>
+
+          {/* Tags + Skills */}
+          <div className="ppe-meta-grid">
+            <div className="ppe-field">
+              <label className="ppe-label">
+                <Tag size={13} className="ppe-label-icon" />
+                {t("personaPresets.tagsInput", "标签")}
+              </label>
+              <input
+                value={draft.tags}
+                onChange={(e) =>
+                  setDraft((prev) => ({ ...prev, tags: e.target.value }))
+                }
+                className="ppe-input"
+                placeholder={t(
+                  "personaPresets.tagsInputPlaceholder",
+                  "写作, 翻译, 代码",
+                )}
+              />
+              {draft.tags.trim() && (
+                <div className="ppe-chip-row">
+                  {draft.tags
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean)
+                    .map((tag) => (
+                      <span key={tag} className="ppe-tag-chip">
+                        {tag}
+                      </span>
+                    ))}
                 </div>
               )}
             </div>
-          </div>
-        </div>
 
-        {/* Dify Knowledge Bases (only when DIFY_KB_ENABLED) */}
-        {difyKbEnabled && (
-          <div className="ppe-field">
-            <label className="ppe-label">
-              <BookOpen size={13} className="ppe-label-icon" />
-              {t("personaPresets.difyKb", "Dify 知识库")}
-            </label>
-            <p
-              className="text-xs mt-0.5 mb-2"
-              style={{ color: "var(--theme-text-secondary)" }}
-            >
-              {t(
-                "personaPresets.difyKbHint",
-                "选择该角色可检索的 Dify 知识库；留空则不启用知识库检索。",
-              )}
-            </p>
-            <DifyKbMultiSelect
-              value={draft.dify_kb_dataset_ids}
-              onChange={(ids) =>
-                setDraft((prev) => ({ ...prev, dify_kb_dataset_ids: ids }))
-              }
-            />
-          </div>
-        )}
+            <div className="ppe-field">
+              <label className="ppe-label">
+                <Sparkles size={13} className="ppe-label-icon" />
+                {t("personaPresets.skillsInput", "Skills")}
+              </label>
+              <div ref={skillDropdownRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSkillDropdownOpen((v) => !v);
+                    setSkillSearch("");
+                    setSkillPage(1);
+                  }}
+                  className={`ppe-skill-trigger ${
+                    skillDropdownOpen ? "ppe-skill-trigger--open" : ""
+                  }`}
+                >
+                  {draft.skill_names.length > 0 ? (
+                    <span className="ppe-skill-trigger__count">
+                      <Sparkles size={12} />
+                      {t(
+                        "personaPresets.skillCount",
+                        "{{count}} 个技能已选择",
+                        {
+                          count: draft.skill_names.length,
+                        },
+                      )}
+                    </span>
+                  ) : (
+                    <span className="ppe-skill-trigger__placeholder">
+                      {t(
+                        "personaPresets.skillsInputPlaceholder",
+                        "选择技能...",
+                      )}
+                    </span>
+                  )}
+                  <ChevronDown
+                    size={14}
+                    className={`ppe-skill-trigger__chevron ${
+                      skillDropdownOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
 
-        {/* WeCom Entry Config (global scope + channel:manage + editing existing preset only) */}
-        {showWeComSection && (
-          <div className="ppe-section ppe-field-animated">
-            <button
-              type="button"
-              onClick={() => setShowWeCom(!showWeCom)}
-              className="ppe-section-header cursor-pointer w-full flex items-center"
-              style={{
-                background: "none",
-                border: "none",
-                padding: 0,
-                font: "inherit",
-                color: "inherit",
-              }}
-            >
-              <MessageSquare size={13} className="ppe-label-icon" />
-              <span className="text-sm font-medium">
-                {t("personaPresets.wecom.title", "WeCom Entry")}
-              </span>
-              <ChevronDown
-                size={14}
-                className={`ml-auto transition-transform ${
-                  showWeCom ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-            {showWeCom && (
-              <div className="mt-3 space-y-3">
-                {wecomLoading ? (
-                  <div className="flex items-center justify-center py-4">
-                    <LoadingSpinner size="sm" />
+                {draft.skill_names.length > 0 && !skillDropdownOpen && (
+                  <div className="ppe-skill-selected-area">
+                    {draft.skill_names.map((name) => (
+                      <span key={name} className="ppe-skill-chip">
+                        {name}
+                        <X
+                          size={11}
+                          className="ppe-skill-chip-remove"
+                          onClick={() =>
+                            setDraft((prev) => ({
+                              ...prev,
+                              skill_names: prev.skill_names.filter(
+                                (n) => n !== name,
+                              ),
+                            }))
+                          }
+                        />
+                      </span>
+                    ))}
                   </div>
-                ) : (
-                  <>
-                    {/* aibotid */}
-                    <div className="ppe-field">
-                      <label className="ppe-label">
-                        {t("personaPresets.wecom.aibotid", "Bot ID (aibotid)")}
-                      </label>
-                      <input
-                        type="text"
-                        value={wecomDraft.aibotid}
-                        onChange={(e) =>
-                          setWeComDraft((prev) => ({
-                            ...prev,
-                            aibotid: e.target.value,
-                          }))
-                        }
-                        className="ppe-input"
-                        placeholder={t(
-                          "personaPresets.wecom.aibotidPlaceholder",
-                          "bot_xxxxxxxxxx",
-                        )}
-                      />
+                )}
+
+                {skillDropdownOpen && (
+                  <div className="ppe-skill-dropdown">
+                    <div className="ppe-skill-dropdown__header">
+                      <div className="ppe-skill-dropdown__search-wrap">
+                        <Search
+                          size={14}
+                          className="ppe-skill-dropdown__search-icon"
+                        />
+                        <input
+                          type="text"
+                          value={skillSearch}
+                          onChange={(e) => {
+                            setSkillSearch(e.target.value);
+                            setSkillPage(1);
+                          }}
+                          placeholder={t(
+                            "skills.searchPlaceholder",
+                            "搜索技能...",
+                          )}
+                          className="ppe-skill-search"
+                          autoFocus
+                        />
+                      </div>
+                      {draft.skill_names.length > 0 && (
+                        <button
+                          type="button"
+                          className="ppe-skill-dropdown__clear-all"
+                          onClick={() =>
+                            setDraft((prev) => ({ ...prev, skill_names: [] }))
+                          }
+                        >
+                          {t("common.clearAll", "清除全部")}
+                        </button>
+                      )}
                     </div>
 
-                    {/* secret */}
-                    <div className="ppe-field">
-                      <label className="ppe-label">
-                        {t("personaPresets.wecom.secret", "Bot Secret")}
-                        {wecomConfig?.has_secret && (
-                          <span
-                            className="text-xs ml-1"
-                            style={{
-                              color: "var(--theme-text-secondary)",
-                            }}
-                          >
-                            {t(
-                              "personaPresets.wecom.secretHint",
-                              "Leave empty to keep current value",
-                            )}
+                    {draft.skill_names.length > 0 && (
+                      <div className="ppe-skill-selected-bar">
+                        {draft.skill_names.map((name) => (
+                          <span key={name} className="ppe-skill-chip">
+                            {name}
+                            <X
+                              size={11}
+                              className="ppe-skill-chip-remove"
+                              onClick={() =>
+                                setDraft((prev) => ({
+                                  ...prev,
+                                  skill_names: prev.skill_names.filter(
+                                    (n) => n !== name,
+                                  ),
+                                }))
+                              }
+                            />
                           </span>
-                        )}
-                      </label>
-                      <input
-                        type="password"
-                        value={wecomDraft.secret}
-                        onChange={(e) =>
-                          setWeComDraft((prev) => ({
-                            ...prev,
-                            secret: e.target.value,
-                          }))
-                        }
-                        className="ppe-input"
-                        placeholder={
-                          wecomConfig?.has_secret
-                            ? t(
-                                "personaPresets.wecom.secretMask",
-                                "••••••••",
-                              )
-                            : t(
-                                "personaPresets.wecom.secretPlaceholder",
-                                "Enter bot secret",
-                              )
-                        }
-                      />
-                    </div>
-
-                    {/* stream_reply toggle */}
-                    <div className="ppe-field">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <label className="ppe-label">
-                            {t(
-                              "personaPresets.wecom.streamReply",
-                              "Stream Reply",
-                            )}
-                          </label>
-                          <p
-                            className="text-xs mt-0.5"
-                            style={{
-                              color: "var(--theme-text-secondary)",
-                            }}
-                          >
-                            {t(
-                              "personaPresets.wecom.streamReplyDesc",
-                              "Stream responses via WebSocket",
-                            )}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={wecomDraft.stream_reply}
-                          onClick={() =>
-                            setWeComDraft((prev) => ({
-                              ...prev,
-                              stream_reply: !prev.stream_reply,
-                            }))
-                          }
-                          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 ${
-                            wecomDraft.stream_reply
-                              ? "bg-amber-500 shadow-sm shadow-amber-500/25"
-                              : "bg-stone-200 dark:bg-stone-700"
-                          }`}
-                        >
-                          <span
-                            className={`pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                              wecomDraft.stream_reply
-                                ? "translate-x-[18px]"
-                                : "translate-x-[3px]"
-                            }`}
-                          />
-                        </button>
+                        ))}
                       </div>
-                    </div>
+                    )}
 
-                    {/* send_thinking_message toggle */}
-                    <div className="ppe-field">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <label className="ppe-label">
-                            {t(
-                              "personaPresets.wecom.sendThinkingMessage",
-                              "Send Thinking Placeholder",
-                            )}
-                          </label>
-                          <p
-                            className="text-xs mt-0.5"
-                            style={{
-                              color: "var(--theme-text-secondary)",
-                            }}
-                          >
-                            {t(
-                              "personaPresets.wecom.sendThinkingMessageDesc",
-                              "Send a placeholder message within the 5-second callback window",
-                            )}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={wecomDraft.send_thinking_message}
-                          onClick={() =>
-                            setWeComDraft((prev) => ({
-                              ...prev,
-                              send_thinking_message:
-                                !prev.send_thinking_message,
-                            }))
-                          }
-                          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 ${
-                            wecomDraft.send_thinking_message
-                              ? "bg-amber-500 shadow-sm shadow-amber-500/25"
-                              : "bg-stone-200 dark:bg-stone-700"
-                          }`}
-                        >
-                          <span
-                            className={`pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                              wecomDraft.send_thinking_message
-                                ? "translate-x-[18px]"
-                                : "translate-x-[3px]"
-                            }`}
-                          />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* segmented_reply toggle */}
-                    <div className="ppe-field">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <label className="ppe-label">
-                            {t(
-                              "personaPresets.wecom.segmentedReply",
-                              "Segmented Reply",
-                            )}
-                          </label>
-                          <p
-                            className="text-xs mt-0.5"
-                            style={{
-                              color: "var(--theme-text-secondary)",
-                            }}
-                          >
-                            {t(
-                              "personaPresets.wecom.segmentedReplyDesc",
-                              "Automatically split long replies into segments",
-                            )}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={wecomDraft.segmented_reply}
-                          onClick={() =>
-                            setWeComDraft((prev) => ({
-                              ...prev,
-                              segmented_reply: !prev.segmented_reply,
-                            }))
-                          }
-                          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 ${
-                            wecomDraft.segmented_reply
-                              ? "bg-amber-500 shadow-sm shadow-amber-500/25"
-                              : "bg-stone-200 dark:bg-stone-700"
-                          }`}
-                        >
-                          <span
-                            className={`pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                              wecomDraft.segmented_reply
-                                ? "translate-x-[18px]"
-                                : "translate-x-[3px]"
-                            }`}
-                          />
-                        </button>
-                      </div>
-                      {wecomDraft.segmented_reply && (
-                        <div className="mt-3">
-                          <label
-                            htmlFor="wecom-segment-target-chars"
-                            className="ppe-label"
-                          >
-                            {t(
-                              "personaPresets.wecom.segmentTargetChars",
-                              "Approximate characters per segment",
-                            )}
-                          </label>
-                          <select
-                            id="wecom-segment-target-chars"
-                            className="ppe-input mt-1"
-                            value={wecomDraft.segment_target_chars}
-                            onChange={(e) =>
-                              setWeComDraft((prev) => ({
-                                ...prev,
-                                segment_target_chars: Number(e.target.value),
-                              }))
-                            }
-                          >
-                            {WECOM_SEGMENT_TARGET_CHAR_OPTIONS.map((value) => (
-                              <option key={value} value={value}>
-                                {t(
-                                  "personaPresets.wecom.segmentTargetCharsOption",
-                                  "About {{count}} characters",
-                                  { count: value },
+                    <div
+                      className="ppe-skill-dropdown__list"
+                      onScroll={handleSkillListScroll}
+                    >
+                      {displayedSkills.length > 0 ? (
+                        displayedSkills.map((skill) => {
+                          const isSelected = draft.skill_names.includes(
+                            skill.name,
+                          );
+                          return (
+                            <button
+                              key={skill.name}
+                              type="button"
+                              onClick={() => {
+                                setDraft((prev) => ({
+                                  ...prev,
+                                  skill_names: isSelected
+                                    ? prev.skill_names.filter(
+                                        (n) => n !== skill.name,
+                                      )
+                                    : [...prev.skill_names, skill.name],
+                                }));
+                              }}
+                              className={`ppe-skill-option ${
+                                isSelected ? "ppe-skill-option--selected" : ""
+                              }`}
+                            >
+                              <div className="ppe-skill-option__check-ring">
+                                {isSelected ? (
+                                  <Check
+                                    size={12}
+                                    className="ppe-skill-option__check-icon"
+                                  />
+                                ) : (
+                                  <Plus
+                                    size={12}
+                                    className="ppe-skill-option__plus-icon"
+                                  />
                                 )}
-                              </option>
-                            ))}
-                          </select>
-                          <p
-                            className="text-xs mt-1"
-                            style={{
-                              color: "var(--theme-text-secondary)",
-                            }}
-                          >
-                            {t(
-                              "personaPresets.wecom.segmentTargetCharsDesc",
-                              "Actual segments may be shorter at natural boundaries and always stay within WeCom's byte limit.",
-                            )}
-                          </p>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">
+                                  {skill.name}
+                                </div>
+                                {skill.description && (
+                                  <div className="text-[11px] text-[var(--theme-text-secondary)] truncate mt-0.5">
+                                    {skill.description}
+                                  </div>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <div className="ppe-skill-dropdown__empty">
+                          <Sparkles
+                            size={20}
+                            className="ppe-skill-dropdown__empty-icon"
+                          />
+                          <span>
+                            {t("skills.noMatchingSkills", "没有匹配的技能")}
+                          </span>
+                        </div>
+                      )}
+                      {skillsLoading && displayedSkills.length > 0 && (
+                        <div className="ppe-skill-dropdown__loading">
+                          <Loader2 size={14} className="animate-spin" />
+                          <span>{t("common.loading", "加载中...")}</span>
                         </div>
                       )}
                     </div>
-
-                    {/* session_ttl_hours */}
-                    <div className="ppe-field">
-                      <label className="ppe-label">
-                        {t(
-                          "personaPresets.wecom.sessionTtlHours",
-                          "Session TTL (hours)",
-                        )}
-                      </label>
-                      <p
-                        className="text-xs mt-0.5"
-                        style={{ color: "var(--theme-text-secondary)" }}
-                      >
-                        {t(
-                          "personaPresets.wecom.sessionTtlHoursDesc",
-                          "Session expiration time, 0 means never expire",
-                        )}
-                      </p>
-                      <input
-                        type="number"
-                        min={0}
-                        max={720}
-                        value={wecomDraft.session_ttl_hours}
-                        onChange={(e) =>
-                          setWeComDraft((prev) => ({
-                            ...prev,
-                            session_ttl_hours:
-                              parseInt(e.target.value) || 0,
-                          }))
-                        }
-                        className="ppe-input"
-                      />
-                    </div>
-
-                    {/* Save / Delete buttons */}
-                    <div className="flex gap-2 pt-2">
-                      <button
-                        type="button"
-                        onClick={handleWeComSave}
-                        disabled={
-                          wecomSaving ||
-                          !wecomDraft.aibotid ||
-                          (!wecomConfig?.has_secret && !wecomDraft.secret)
-                        }
-                        className="btn-primary flex-1 disabled:opacity-50"
-                      >
-                        {wecomSaving ? (
-                          <LoadingSpinner size="sm" />
-                        ) : (
-                          <Save size={16} />
-                        )}
-                        {t("common.save", "Save")}
-                      </button>
-                      {wecomConfig && (
-                        <button
-                          type="button"
-                          onClick={handleWeComDelete}
-                          disabled={wecomSaving}
-                          className="btn-secondary hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400 disabled:opacity-50"
-                        >
-                          <Trash2 size={16} />
-                          {t("common.delete", "Delete")}
-                        </button>
-                      )}
-                    </div>
-                  </>
+                  </div>
                 )}
               </div>
-            )}
+            </div>
           </div>
+
+          {/* Dify Knowledge Bases (only when DIFY_KB_ENABLED) */}
+          {difyKbEnabled && (
+            <div className="ppe-field">
+              <label className="ppe-label">
+                <BookOpen size={13} className="ppe-label-icon" />
+                {t("personaPresets.difyKb", "Dify 知识库")}
+              </label>
+              <p
+                className="text-xs mt-0.5 mb-2"
+                style={{ color: "var(--theme-text-secondary)" }}
+              >
+                {t(
+                  "personaPresets.difyKbHint",
+                  "选择该角色可检索的 Dify 知识库；留空则不启用知识库检索。",
+                )}
+              </p>
+              <DifyKbMultiSelect
+                value={draft.dify_kb_dataset_ids}
+                onChange={(ids) =>
+                  setDraft((prev) => ({ ...prev, dify_kb_dataset_ids: ids }))
+                }
+              />
+            </div>
+          )}
+
+          {/* WeCom Entry Config (global scope + channel:manage + editing existing preset only) */}
+          {showWeComSection && (
+            <div className="ppe-section ppe-field-animated">
+              <button
+                type="button"
+                onClick={() => setShowWeCom(!showWeCom)}
+                className="ppe-section-header cursor-pointer w-full flex items-center"
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  font: "inherit",
+                  color: "inherit",
+                }}
+              >
+                <MessageSquare size={13} className="ppe-label-icon" />
+                <span className="text-sm font-medium">
+                  {t("personaPresets.wecom.title", "WeCom Entry")}
+                </span>
+                <ChevronDown
+                  size={14}
+                  className={`ml-auto transition-transform ${
+                    showWeCom ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+              {showWeCom && (
+                <div className="mt-3 space-y-3">
+                  {wecomLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <LoadingSpinner size="sm" />
+                    </div>
+                  ) : (
+                    <>
+                      {/* aibotid */}
+                      <div className="ppe-field">
+                        <label className="ppe-label">
+                          {t(
+                            "personaPresets.wecom.aibotid",
+                            "Bot ID (aibotid)",
+                          )}
+                        </label>
+                        <input
+                          type="text"
+                          value={wecomDraft.aibotid}
+                          onChange={(e) =>
+                            setWeComDraft((prev) => ({
+                              ...prev,
+                              aibotid: e.target.value,
+                            }))
+                          }
+                          className="ppe-input"
+                          placeholder={t(
+                            "personaPresets.wecom.aibotidPlaceholder",
+                            "bot_xxxxxxxxxx",
+                          )}
+                        />
+                      </div>
+
+                      {/* secret */}
+                      <div className="ppe-field">
+                        <label className="ppe-label">
+                          {t("personaPresets.wecom.secret", "Bot Secret")}
+                          {wecomConfig?.has_secret && (
+                            <span
+                              className="text-xs ml-1"
+                              style={{
+                                color: "var(--theme-text-secondary)",
+                              }}
+                            >
+                              {t(
+                                "personaPresets.wecom.secretHint",
+                                "Leave empty to keep current value",
+                              )}
+                            </span>
+                          )}
+                        </label>
+                        <input
+                          type="password"
+                          value={wecomDraft.secret}
+                          onChange={(e) =>
+                            setWeComDraft((prev) => ({
+                              ...prev,
+                              secret: e.target.value,
+                            }))
+                          }
+                          className="ppe-input"
+                          placeholder={
+                            wecomConfig?.has_secret
+                              ? t("personaPresets.wecom.secretMask", "••••••••")
+                              : t(
+                                  "personaPresets.wecom.secretPlaceholder",
+                                  "Enter bot secret",
+                                )
+                          }
+                        />
+                      </div>
+
+                      {/* stream_reply toggle */}
+                      <div className="ppe-field">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <label className="ppe-label">
+                              {t(
+                                "personaPresets.wecom.streamReply",
+                                "Stream Reply",
+                              )}
+                            </label>
+                            <p
+                              className="text-xs mt-0.5"
+                              style={{
+                                color: "var(--theme-text-secondary)",
+                              }}
+                            >
+                              {t(
+                                "personaPresets.wecom.streamReplyDesc",
+                                "Stream responses via WebSocket",
+                              )}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={wecomDraft.stream_reply}
+                            onClick={() =>
+                              setWeComDraft((prev) => ({
+                                ...prev,
+                                stream_reply: !prev.stream_reply,
+                              }))
+                            }
+                            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 ${
+                              wecomDraft.stream_reply
+                                ? "bg-amber-500 shadow-sm shadow-amber-500/25"
+                                : "bg-stone-200 dark:bg-stone-700"
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                                wecomDraft.stream_reply
+                                  ? "translate-x-[18px]"
+                                  : "translate-x-[3px]"
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* send_thinking_message toggle */}
+                      <div className="ppe-field">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <label className="ppe-label">
+                              {t(
+                                "personaPresets.wecom.sendThinkingMessage",
+                                "Send Thinking Placeholder",
+                              )}
+                            </label>
+                            <p
+                              className="text-xs mt-0.5"
+                              style={{
+                                color: "var(--theme-text-secondary)",
+                              }}
+                            >
+                              {t(
+                                "personaPresets.wecom.sendThinkingMessageDesc",
+                                "Send a placeholder message within the 5-second callback window",
+                              )}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={wecomDraft.send_thinking_message}
+                            onClick={() =>
+                              setWeComDraft((prev) => ({
+                                ...prev,
+                                send_thinking_message:
+                                  !prev.send_thinking_message,
+                              }))
+                            }
+                            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 ${
+                              wecomDraft.send_thinking_message
+                                ? "bg-amber-500 shadow-sm shadow-amber-500/25"
+                                : "bg-stone-200 dark:bg-stone-700"
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                                wecomDraft.send_thinking_message
+                                  ? "translate-x-[18px]"
+                                  : "translate-x-[3px]"
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* segmented_reply toggle */}
+                      <div className="ppe-field">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <label className="ppe-label">
+                              {t(
+                                "personaPresets.wecom.segmentedReply",
+                                "Segmented Reply",
+                              )}
+                            </label>
+                            <p
+                              className="text-xs mt-0.5"
+                              style={{
+                                color: "var(--theme-text-secondary)",
+                              }}
+                            >
+                              {t(
+                                "personaPresets.wecom.segmentedReplyDesc",
+                                "Automatically split long replies into segments",
+                              )}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={wecomDraft.segmented_reply}
+                            onClick={() =>
+                              setWeComDraft((prev) => ({
+                                ...prev,
+                                segmented_reply: !prev.segmented_reply,
+                              }))
+                            }
+                            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 ${
+                              wecomDraft.segmented_reply
+                                ? "bg-amber-500 shadow-sm shadow-amber-500/25"
+                                : "bg-stone-200 dark:bg-stone-700"
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                                wecomDraft.segmented_reply
+                                  ? "translate-x-[18px]"
+                                  : "translate-x-[3px]"
+                              }`}
+                            />
+                          </button>
+                        </div>
+                        {wecomDraft.segmented_reply && (
+                          <div className="mt-3">
+                            <label
+                              htmlFor="wecom-segment-target-chars"
+                              className="ppe-label"
+                            >
+                              {t(
+                                "personaPresets.wecom.segmentTargetChars",
+                                "Approximate characters per segment",
+                              )}
+                            </label>
+                            <select
+                              id="wecom-segment-target-chars"
+                              className="ppe-input mt-1"
+                              value={wecomDraft.segment_target_chars}
+                              onChange={(e) =>
+                                setWeComDraft((prev) => ({
+                                  ...prev,
+                                  segment_target_chars: Number(e.target.value),
+                                }))
+                              }
+                            >
+                              {WECOM_SEGMENT_TARGET_CHAR_OPTIONS.map(
+                                (value) => (
+                                  <option key={value} value={value}>
+                                    {t(
+                                      "personaPresets.wecom.segmentTargetCharsOption",
+                                      "About {{count}} characters",
+                                      { count: value },
+                                    )}
+                                  </option>
+                                ),
+                              )}
+                            </select>
+                            <p
+                              className="text-xs mt-1"
+                              style={{
+                                color: "var(--theme-text-secondary)",
+                              }}
+                            >
+                              {t(
+                                "personaPresets.wecom.segmentTargetCharsDesc",
+                                "Actual segments may be shorter at natural boundaries and always stay within WeCom's byte limit.",
+                              )}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* session_ttl_hours */}
+                      <div className="ppe-field">
+                        <label className="ppe-label">
+                          {t(
+                            "personaPresets.wecom.sessionTtlHours",
+                            "Session TTL (hours)",
+                          )}
+                        </label>
+                        <p
+                          className="text-xs mt-0.5"
+                          style={{ color: "var(--theme-text-secondary)" }}
+                        >
+                          {t(
+                            "personaPresets.wecom.sessionTtlHoursDesc",
+                            "Session expiration time, 0 means never expire",
+                          )}
+                        </p>
+                        <input
+                          type="number"
+                          min={0}
+                          max={720}
+                          value={wecomDraft.session_ttl_hours}
+                          onChange={(e) =>
+                            setWeComDraft((prev) => ({
+                              ...prev,
+                              session_ttl_hours: parseInt(e.target.value) || 0,
+                            }))
+                          }
+                          className="ppe-input"
+                        />
+                      </div>
+
+                      {/* Save / Delete buttons */}
+                      <div className="flex gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={handleWeComSave}
+                          disabled={
+                            wecomSaving ||
+                            !wecomDraft.aibotid ||
+                            (!wecomConfig?.has_secret && !wecomDraft.secret)
+                          }
+                          className="btn-primary flex-1 disabled:opacity-50"
+                        >
+                          {wecomSaving ? (
+                            <LoadingSpinner size="sm" />
+                          ) : (
+                            <Save size={16} />
+                          )}
+                          {t("common.save", "Save")}
+                        </button>
+                        {wecomConfig && (
+                          <button
+                            type="button"
+                            onClick={handleWeComDelete}
+                            disabled={wecomSaving}
+                            className="btn-secondary hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400 disabled:opacity-50"
+                          >
+                            <Trash2 size={16} />
+                            {t("common.delete", "Delete")}
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </EditorSidebar>
+      <ConfirmDialog
+        isOpen={publicationPlan !== null}
+        title={t(
+          "personaPresets.publishSkillsTitle",
+          "同步发布 Persona 的个人 Skills",
         )}
-      </div>
-    </EditorSidebar>
+        message={t(
+          "personaPresets.publishSkillsMessage",
+          "以下 Skills 将公开发布到 Marketplace，并允许其他用户单独查看和安装：{{names}}",
+          {
+            names: (publicationPlan?.requires_publish ?? [])
+              .map((item) => item.marketplace_name)
+              .join("、"),
+          },
+        )}
+        confirmText={t("personaPresets.publishSkillsConfirm", "同步发布并保存")}
+        onConfirm={confirmSkillPublication}
+        onCancel={() => setPublicationPlan(null)}
+        variant="warning"
+        loading={publicationSaving}
+      />
+    </>
   );
 }

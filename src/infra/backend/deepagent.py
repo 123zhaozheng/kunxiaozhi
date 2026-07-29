@@ -12,6 +12,7 @@ from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
 from deepagents.backends.protocol import BackendProtocol
 
 from src.infra.logging import get_logger
+from src.kernel.schemas.persona_preset import PersonaMarketplaceSkillRef
 
 logger = get_logger(__name__)
 
@@ -19,11 +20,15 @@ logger = get_logger(__name__)
 def _create_routes(
     assistant_id: str,
     user_id: str,
+    persona_marketplace_skills: Optional[list[PersonaMarketplaceSkillRef]] = None,
 ) -> dict[str, BackendProtocol]:
     """创建通用的 backend 路由（skills + memories）"""
     from src.infra.backend.skills_store import create_skills_backend
 
-    skills_backend = create_skills_backend(user_id=user_id)
+    skills_backend = create_skills_backend(
+        user_id=user_id,
+        persona_marketplace_skills=persona_marketplace_skills,
+    )
 
     return {
         "/skills/": skills_backend,
@@ -34,13 +39,17 @@ def _create_routes(
 def create_memory_backend_factory(
     assistant_id: str,
     user_id: Optional[str] = None,
+    persona_marketplace_skills: Optional[list[PersonaMarketplaceSkillRef]] = None,
 ) -> Callable[[Any], CompositeBackend]:
     """创建基于内存的 Backend 工厂（不使用长期存储）"""
 
     def backend_factory(_rt: Any) -> CompositeBackend:
         from src.infra.backend.skills_store import create_skills_backend
 
-        skills_backend = create_skills_backend(user_id=user_id or "default")
+        skills_backend = create_skills_backend(
+            user_id=user_id or "default",
+            persona_marketplace_skills=persona_marketplace_skills,
+        )
 
         return CompositeBackend(
             default=StateBackend(),
@@ -53,6 +62,7 @@ def create_memory_backend_factory(
 def create_persistent_backend_factory(
     assistant_id: str,
     user_id: Optional[str] = None,
+    persona_marketplace_skills: Optional[list[PersonaMarketplaceSkillRef]] = None,
 ) -> Callable[[Any], CompositeBackend]:
     """创建基于 Store 的 Backend 工厂（PostgreSQL / MongoDB 通用）。
 
@@ -60,7 +70,11 @@ def create_persistent_backend_factory(
     """
 
     def backend_factory(_rt: Any) -> CompositeBackend:
-        routes = _create_routes(assistant_id, user_id or "default")
+        routes = _create_routes(
+            assistant_id,
+            user_id or "default",
+            persona_marketplace_skills,
+        )
 
         return CompositeBackend(
             default=StoreBackend(namespace=lambda _rt: (assistant_id, "filesystem")),
@@ -74,11 +88,16 @@ def create_sandbox_backend_factory(
     sandbox_backend: Any,
     assistant_id: str,
     user_id: Optional[str] = None,
+    persona_marketplace_skills: Optional[list[PersonaMarketplaceSkillRef]] = None,
 ) -> Callable[[Any], CompositeBackend]:
     """创建基于沙箱的 Backend 工厂"""
 
     def backend_factory(_rt: Any) -> CompositeBackend:
-        routes = _create_routes(assistant_id, user_id or "default")
+        routes = _create_routes(
+            assistant_id,
+            user_id or "default",
+            persona_marketplace_skills,
+        )
 
         return CompositeBackend(
             default=sandbox_backend,

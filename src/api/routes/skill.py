@@ -16,12 +16,11 @@ from src.api.routes.upload import _read_upload_file_limited
 from src.infra.async_utils import run_blocking_io
 from src.infra.skill.binary import guess_mime_type, parse_binary_ref_async
 from src.infra.skill.marketplace import MarketplaceStorage
+from src.infra.skill.publication import SkillPublicationError, publish_user_skill
 from src.infra.skill.storage import SkillStorage, normalize_skill_name_list
 from src.infra.skill.types import (
     InstalledFrom,
-    MarketplaceSkillCreate,
     MarketplaceSkillResponse,
-    MarketplaceSkillUpdate,
     PublishToMarketplaceRequest,
     UserSkill,
     UserSkillListResponse,
@@ -779,63 +778,20 @@ async def publish_skill_to_marketplace(
     marketplace: MarketplaceStorage = Depends(get_marketplace_storage),
 ):
     """将用户的 Skill 发布到商店（支持多次发布更新）"""
-    user_files = await storage.get_skill_files(name, user.sub)
-    if not user_files:
-        raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
-
-    from src.infra.skill.parser import parse_skill_md as _parse_md
-    from src.infra.skill.parser import sanitize_skill_name
-
-    _, default_description, default_tags = _parse_md(user_files.get("SKILL.md", ""))
-    target_name = sanitize_skill_name(
-        (data.skill_name if data and data.skill_name else name).strip()
-    )
-    if not target_name:
-        raise HTTPException(status_code=400, detail="Marketplace skill name is required")
-
-    existing = await marketplace.get_marketplace_skill(target_name)
-    if existing:
-        if existing.created_by != user.sub:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Marketplace skill name '{target_name}' is already taken",
-            )
-        update_data = MarketplaceSkillUpdate(
-            description=(
-                data.description if data and data.description is not None else default_description
-            ),
-            tags=data.tags if data and data.tags is not None else existing.tags,
-            version=(data.version if data and data.version is not None else existing.version),
-            is_active=True,
-        )
-        await marketplace.update_marketplace_skill(target_name, update_data)
-    else:
-        create_data = MarketplaceSkillCreate(
-            skill_name=target_name,
-            description=(
-                data.description if data and data.description is not None else default_description
-            ),
-            tags=data.tags if data and data.tags is not None else default_tags,
-            version=data.version if data and data.version is not None else "1.0.0",
-        )
-        await marketplace.create_marketplace_skill(create_data, user_id=user.sub)
-
     try:
-        await marketplace.sync_marketplace_files(target_name, user_files)
-        # Update __meta__ doc with published_marketplace_name
-        meta = await storage.get_skill_meta(name, user.sub)
-        await storage.set_skill_meta(
+        response, _ = await publish_user_skill(
             name,
-            user.sub,
-            installed_from=meta.installed_from if meta else InstalledFrom.MANUAL,
-            published_marketplace_name=target_name,
+            user_id=user.sub,
+            storage=storage,
+            marketplace=marketplace,
+            data=data,
         )
-    except Exception:
-        if not existing:
-            await marketplace.delete_marketplace_skill(target_name)
-        raise HTTPException(status_code=500, detail="Failed to sync files to marketplace")
-
-    response = await marketplace.get_marketplace_skill_response(target_name)
-    if not response:
-        raise HTTPException(status_code=500, detail="Failed to publish skill")
-    return response
+        return response
+    except SkillPublicationError as exc:
+        status_code = 404 if exc.code == "local_skill_not_found" else 409
+        raise HTTPException(status_code=status_code, detail=exc.as_detail()) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to sync files to marketplace",
+        ) from exc

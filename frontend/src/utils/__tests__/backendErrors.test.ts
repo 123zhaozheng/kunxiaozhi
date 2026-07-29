@@ -36,3 +36,23 @@ test("returns unknown backend messages unchanged", () => {
     "unexpected_backend_error",
   );
 });
+
+test("formats structured persona skill conflicts with exact names", () => {
+  assert.equal(
+    translateBackendError(
+      JSON.stringify({
+        code: "persona_skill_name_conflict",
+        items: [
+          { marketplace_name: "planner" },
+          { marketplace_name: "writer" },
+        ],
+      }),
+      ((_key: string, options?: { defaultValue?: string; names?: string }) =>
+        String(options?.defaultValue ?? "").replace(
+          "{{names}}",
+          String(options?.names ?? ""),
+        )) as TFunction,
+    ),
+    "Skill 名称冲突：planner、writer。请验证来源或重命名；Skills 商城不允许同名 Skill。",
+  );
+});

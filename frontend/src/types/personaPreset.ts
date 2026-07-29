@@ -3,12 +3,34 @@ export type PersonaPresetVisibility = "public" | "private";
 export type PersonaPresetStatus = "draft" | "published" | "archived";
 export type PreferredAgentId = "fast" | "search" | "team";
 export const DEFAULT_PREFERRED_AGENT_ID: PreferredAgentId = "fast";
-export const PREFERRED_AGENT_IDS: PreferredAgentId[] = ["fast", "search", "team"];
+export const PREFERRED_AGENT_IDS: PreferredAgentId[] = [
+  "fast",
+  "search",
+  "team",
+];
 export type LocalizedText = string | Record<string, string>;
 
 export interface PersonaStarterPrompt {
   icon?: string | null;
   text: LocalizedText;
+}
+
+export interface PersonaMarketplaceSkillRef {
+  name: string;
+  version?: string | null;
+}
+
+export interface PersonaSkillPublicationItem {
+  local_name: string;
+  marketplace_name: string;
+  version?: string | null;
+  reason?: string | null;
+}
+
+export interface PersonaSkillPublicationPreflightResponse {
+  ready: PersonaSkillPublicationItem[];
+  requires_publish: PersonaSkillPublicationItem[];
+  conflicts: PersonaSkillPublicationItem[];
 }
 
 export interface PersonaPreset {
@@ -22,6 +44,7 @@ export interface PersonaPreset {
   system_prompt: string;
   starter_prompts?: PersonaStarterPrompt[];
   skill_names: string[];
+  marketplace_skills?: PersonaMarketplaceSkillRef[];
   dify_kb_dataset_ids: string[];
   preferred_agent_id?: PreferredAgentId;
   visibility: PersonaPresetVisibility;
@@ -53,6 +76,7 @@ export interface PersonaPresetCreate {
   scope?: PersonaPresetScope;
   visibility?: PersonaPresetVisibility;
   status?: PersonaPresetStatus;
+  publish_personal_skills?: boolean;
 }
 
 export interface PersonaPresetUpdate {
@@ -68,6 +92,7 @@ export interface PersonaPresetUpdate {
   scope?: PersonaPresetScope;
   visibility?: PersonaPresetVisibility;
   status?: PersonaPresetStatus;
+  publish_personal_skills?: boolean;
 }
 
 export interface PersonaPresetPreferenceUpdate {
@@ -81,6 +106,7 @@ export interface PersonaPresetSnapshot {
   system_prompt: string;
   starter_prompts?: PersonaStarterPrompt[];
   skill_names: string[];
+  marketplace_skills?: PersonaMarketplaceSkillRef[];
   dify_kb_dataset_ids: string[];
   preferred_agent_id?: PreferredAgentId;
   missing_skill_names: string[];

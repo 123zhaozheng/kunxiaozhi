@@ -267,7 +267,9 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
 
     if not settings.ENABLE_SANDBOX:
         backend_factory = create_persistent_backend_factory(
-            assistant_id=assistant_id, user_id=context.user_id
+            assistant_id=assistant_id,
+            user_id=context.user_id,
+            persona_marketplace_skills=context.persona_marketplace_skills,
         )
         logger.info(
             f"[TeamAgent] Sandbox disabled, using PersistentBackend for assistant: {assistant_id}"
@@ -300,6 +302,7 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
                 sandbox_backend.default,
                 assistant_id,
                 user_id=context.user_id,
+                persona_marketplace_skills=context.persona_marketplace_skills,
             )
             if team:
                 system_prompt = f"{SEARCH_SANDBOX_SYSTEM_PROMPT}\n\n{system_prompt}"
@@ -561,7 +564,9 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
             "disabled_skills": configurable.get("disabled_skills"),
             "enabled_skills": runtime_enabled_skills,
             "base_url": configurable.get("base_url", ""),
-            "agent_options": configurable.get("agent_options"),  # 传递 agent_options 供 dify_kb 等工具读取
+            "agent_options": configurable.get(
+                "agent_options"
+            ),  # 传递 agent_options 供 dify_kb 等工具读取
             "presenter": presenter,
         },
         "recursion_limit": config.get("recursion_limit", settings.SESSION_MAX_RUNS_PER_SESSION),

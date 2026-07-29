@@ -30,6 +30,7 @@ from src.agents.search_agent.state import SearchAgentState
 # 设置用户上下文，供 backend 使用
 from src.infra.backend.context import set_user_context
 from src.infra.logging import get_logger
+from src.infra.skill.persona_overlay import normalize_persona_marketplace_skill_refs
 from src.infra.task.exceptions import TaskInterruptedError
 from src.infra.writer.present import Presenter, PresenterConfig
 from src.kernel.config import settings
@@ -164,6 +165,10 @@ class SearchAgent(BaseGraphAgent):
         disabled_skills = kwargs.get("disabled_skills")
         enabled_skills = kwargs.get("enabled_skills")
         disabled_mcp_tools = kwargs.get("disabled_mcp_tools")
+        agent_options = kwargs.get("agent_options") or {}
+        persona_marketplace_skills = normalize_persona_marketplace_skill_refs(
+            agent_options.get("persona_marketplace_skills")
+        )
         context = SearchAgentContext(
             session_id=session_id,
             agent_id=self.agent_id,
@@ -172,6 +177,7 @@ class SearchAgent(BaseGraphAgent):
             disabled_skills=disabled_skills,
             enabled_skills=enabled_skills,
             disabled_mcp_tools=disabled_mcp_tools,
+            persona_marketplace_skills=persona_marketplace_skills,
         )
         await context.setup()
 
@@ -179,7 +185,6 @@ class SearchAgent(BaseGraphAgent):
         yield presenter.metadata()
 
         # 构建 config
-        agent_options = kwargs.get("agent_options", {})
         logger.info(f"[SearchAgent] agent_options: {agent_options}")
 
         langsmith_metadata = await presenter.build_langsmith_metadata()

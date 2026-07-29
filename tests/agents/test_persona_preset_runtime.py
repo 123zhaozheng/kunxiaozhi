@@ -9,7 +9,10 @@ from src.agents.core.persona import (
 from src.agents.search_agent.context import SearchAgentContext
 from src.api.routes.chat import build_conversation_config, resolve_persona_request
 from src.kernel.schemas.agent import AgentRequest
-from src.kernel.schemas.persona_preset import PersonaPresetSnapshot
+from src.kernel.schemas.persona_preset import (
+    PersonaMarketplaceSkillRef,
+    PersonaPresetSnapshot,
+)
 from src.kernel.schemas.user import TokenPayload
 
 
@@ -19,6 +22,7 @@ def test_conversation_config_persists_persona_snapshot_and_enabled_skills() -> N
         name="Planner",
         system_prompt="Plan first.",
         skill_names=["planning"],
+        marketplace_skills=[PersonaMarketplaceSkillRef(name="planning", version="2.0.0")],
         missing_skill_names=["unknown"],
         version=4,
     )
@@ -113,6 +117,7 @@ async def test_resolve_persona_request_overwrites_client_persona_fields_from_pre
         name="Planner",
         system_prompt="Plan first.",
         skill_names=["planning"],
+        marketplace_skills=[PersonaMarketplaceSkillRef(name="planning", version="2.0.0")],
         missing_skill_names=["missing"],
         version=2,
     )
@@ -149,6 +154,9 @@ async def test_resolve_persona_request_overwrites_client_persona_fields_from_pre
     assert request.persona_snapshot == snapshot
     assert request.persona_system_prompt == "Plan first."
     assert request.enabled_skills == ["planning"]
+    assert request.agent_options["persona_marketplace_skills"] == [
+        {"name": "planning", "version": "2.0.0"}
+    ]
 
 
 @pytest.mark.asyncio
@@ -207,10 +215,7 @@ async def test_resolve_persona_request_keeps_global_skills_when_configured_skill
 
 def test_persona_prompt_section_is_deterministic() -> None:
     assert build_persona_prompt_section("Plan first.") == "## Persona\n\nPlan first."
-    assert (
-        build_persona_prompt_section("  \n")
-        == "## Persona\n\n你是具备工具和技能的智能助手。"
-    )
+    assert build_persona_prompt_section("  \n") == "## Persona\n\n你是具备工具和技能的智能助手。"
     assert build_persona_prompt_sections("Planner\n\nPlan first.") == [
         "## Persona\n\nPlanner\n\nPlan first."
     ]

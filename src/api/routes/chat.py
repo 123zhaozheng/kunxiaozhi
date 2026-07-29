@@ -26,6 +26,7 @@ from src.infra.goal import GoalSpec, coerce_goal_spec
 from src.infra.logging import get_logger
 from src.infra.persona_preset.manager import PersonaPresetManager
 from src.infra.session.manager import SessionManager
+from src.infra.skill.publication import SkillPublicationError
 from src.infra.task.concurrency import register_executor
 from src.infra.task.manager import get_task_manager
 from src.infra.task.status import TaskStatus
@@ -275,6 +276,11 @@ async def resolve_persona_request(
     request.persona_snapshot = snapshot
     request.enabled_skills = _persona_enabled_skills_from_snapshot(snapshot)
     request.persona_system_prompt = snapshot.system_prompt
+    if snapshot.marketplace_skills:
+        request.agent_options = dict(request.agent_options or {})
+        request.agent_options["persona_marketplace_skills"] = [
+            ref.model_dump(mode="json") for ref in snapshot.marketplace_skills
+        ]
 
 
 async def _execute_agent_stream(
@@ -415,6 +421,8 @@ async def chat_stream(
         raise HTTPException(status_code=404, detail="角色预设不存在")
     except AuthorizationError as e:
         raise HTTPException(status_code=403, detail=str(e))
+    except SkillPublicationError as e:
+        raise HTTPException(status_code=409, detail=e.as_detail())
 
     # Persona sessions lock to preferred/bound agent (authoritative).
     # resolve_persona_agent_id(requested, preferred): preferred wins when valid.

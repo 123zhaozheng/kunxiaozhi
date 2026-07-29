@@ -136,7 +136,9 @@ async def fast_agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict
     # 创建 backend（无沙箱，PostgreSQL 或 MongoDB 由 store 决定）
     backend_start = time.time()
     backend_factory = create_persistent_backend_factory(
-        assistant_id=assistant_id, user_id=context.user_id
+        assistant_id=assistant_id,
+        user_id=context.user_id,
+        persona_marketplace_skills=context.persona_marketplace_skills,
     )
     backend = backend_factory(None) if callable(backend_factory) else backend_factory
     logger.info(f"[FastAgent] Using PersistentBackend for assistant: {assistant_id}")
@@ -266,7 +268,9 @@ async def fast_agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict
             "disabled_skills": configurable.get("disabled_skills"),
             "enabled_skills": configurable.get("enabled_skills"),
             "base_url": configurable.get("base_url", ""),
-            "agent_options": configurable.get("agent_options"),  # 传递 agent_options 供 dify_kb 等工具读取
+            "agent_options": configurable.get(
+                "agent_options"
+            ),  # 传递 agent_options 供 dify_kb 等工具读取
             "presenter": presenter,  # 传递 presenter 给工具调用
         },
         "recursion_limit": config.get("recursion_limit", settings.SESSION_MAX_RUNS_PER_SESSION),

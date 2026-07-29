@@ -141,7 +141,53 @@ const BACKEND_ERROR_PATTERNS: Array<{
   },
 ];
 
+function translatePersonaSkillError(
+  message: string,
+  t: TFunction,
+): string | null {
+  if (!message.startsWith("{")) return null;
+  try {
+    const detail = JSON.parse(message) as {
+      code?: string;
+      items?: Array<{ marketplace_name?: string; local_name?: string }>;
+    };
+    const names = (detail.items ?? [])
+      .map((item) => item.marketplace_name || item.local_name)
+      .filter(Boolean)
+      .join("、");
+    if (!detail.code || !names) return null;
+    if (
+      detail.code === "persona_skill_name_conflict" ||
+      detail.code === "persona_skill_publication_conflict"
+    ) {
+      return t(
+        "personaPresets.skillNameConflict",
+        {
+          defaultValue:
+            "Skill 名称冲突：{{names}}。请验证来源或重命名；Skills 商城不允许同名 Skill。",
+          names,
+        },
+      );
+    }
+    if (detail.code === "persona_skill_dependency_unavailable") {
+      return t(
+        "personaPresets.skillDependencyUnavailable",
+        {
+          defaultValue: "Persona 依赖的 Skills 当前不可用：{{names}}",
+          names,
+        },
+      );
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export function translateBackendError(message: string, t: TFunction): string {
+  const personaSkillError = translatePersonaSkillError(message, t);
+  if (personaSkillError) return personaSkillError;
+
   const key = BACKEND_ERROR_KEYS[message];
   if (key) return t(key, key);
 

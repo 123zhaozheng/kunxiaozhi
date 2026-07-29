@@ -54,8 +54,10 @@ from src.infra.backend.protocol_compat import (
 )
 from src.infra.logging import get_logger
 from src.infra.skill.binary import is_binary_file, parse_binary_ref
+from src.infra.skill.persona_overlay import PersonaSkillStorageOverlay
 from src.infra.skill.storage import SkillStorage
 from src.infra.skill.storage_helpers import SKILL_EFFECTIVE_LOAD_LIMIT
+from src.kernel.schemas.persona_preset import PersonaMarketplaceSkillRef
 
 if TYPE_CHECKING:
     pass
@@ -122,12 +124,14 @@ class SkillsStoreBackend(BackendProtocol):
         runtime: Any = None,
         disabled_skills: Optional[list[str]] = None,
         enabled_skills: Optional[list[str]] = None,
+        persona_marketplace_skills: Optional[list[PersonaMarketplaceSkillRef]] = None,
     ):
         self._user_id = user_id
         self._runtime = runtime
         self._disabled_skills = disabled_skills
         self._enabled_skills = enabled_skills
-        self._storage: Optional[SkillStorage] = None
+        self._persona_marketplace_skills = list(persona_marketplace_skills or [])
+        self._storage: Optional[SkillStorage | PersonaSkillStorageOverlay] = None
 
     def _get_configurable(self) -> dict[str, Any]:
         """Return the active graph configurable values, if available."""
@@ -145,10 +149,18 @@ class SkillsStoreBackend(BackendProtocol):
         configurable = config.get("configurable", {})
         return configurable if isinstance(configurable, dict) else {}
 
-    async def _get_storage(self) -> SkillStorage:
+    async def _get_storage(self) -> SkillStorage | PersonaSkillStorageOverlay:
         """获取 SkillStorage 实例（使用全局缓存）"""
         if self._storage is None:
-            self._storage = await _get_cached_storage(self._user_id)
+            user_storage = await _get_cached_storage(self._user_id)
+            self._storage = (
+                PersonaSkillStorageOverlay(
+                    user_storage,
+                    self._persona_marketplace_skills,
+                )
+                if self._persona_marketplace_skills
+                else user_storage
+            )
         return self._storage
 
     def _get_disabled_skill_names(self) -> set[str]:
@@ -838,6 +850,7 @@ def create_skills_backend(
     runtime: Any = None,
     disabled_skills: Optional[list[str]] = None,
     enabled_skills: Optional[list[str]] = None,
+    persona_marketplace_skills: Optional[list[PersonaMarketplaceSkillRef]] = None,
 ) -> SkillsStoreBackend:
     """
     创建 Skills Store Backend
@@ -856,4 +869,5 @@ def create_skills_backend(
         runtime=runtime,
         disabled_skills=disabled_skills,
         enabled_skills=enabled_skills,
+        persona_marketplace_skills=persona_marketplace_skills,
     )

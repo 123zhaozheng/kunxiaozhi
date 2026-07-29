@@ -318,7 +318,9 @@ async def agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict[str,
             "disabled_skills": configurable.get("disabled_skills"),
             "enabled_skills": configurable.get("enabled_skills"),
             "base_url": configurable.get("base_url", ""),  # 传递 base_url 给工具使用
-            "agent_options": configurable.get("agent_options"),  # 传递 agent_options 供 dify_kb 等工具读取
+            "agent_options": configurable.get(
+                "agent_options"
+            ),  # 传递 agent_options 供 dify_kb 等工具读取
             "presenter": presenter,  # 传递 presenter 给工具调用
         },
         "recursion_limit": config.get("recursion_limit", settings.SESSION_MAX_RUNS_PER_SESSION),
@@ -432,7 +434,11 @@ async def _create_backend_and_prompt(
     if not settings.ENABLE_SANDBOX:
         # 非沙箱模式：使用持久化 backend（PostgreSQL 或 MongoDB，由 store 决定）
         logger.info(f"Sandbox disabled, using PersistentBackend for assistant: {assistant_id}")
-        backend_factory = create_persistent_backend_factory(assistant_id, user_id=user_id)
+        backend_factory = create_persistent_backend_factory(
+            assistant_id,
+            user_id=user_id,
+            persona_marketplace_skills=context.persona_marketplace_skills,
+        )
         prompt = DEFAULT_SYSTEM_PROMPT
         return backend_factory, prompt, store, None, None
 
@@ -469,7 +475,12 @@ async def _create_backend_and_prompt(
         logger.info(f"Sandbox enabled, using sandbox backend for assistant: {assistant_id}")
 
         return (
-            create_sandbox_backend_factory(sandbox_backend.default, assistant_id, user_id=user_id),
+            create_sandbox_backend_factory(
+                sandbox_backend.default,
+                assistant_id,
+                user_id=user_id,
+                persona_marketplace_skills=context.persona_marketplace_skills,
+            ),
             SANDBOX_SYSTEM_PROMPT,
             store,
             sandbox_backend,

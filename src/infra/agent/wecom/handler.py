@@ -703,7 +703,7 @@ def create_wecom_message_handler(
             )
 
             wecom_agent_options = apply_dify_kb_dataset_ids_to_agent_options(
-                {},
+                agent_request.agent_options or {},
                 persona_snapshot=agent_request.persona_snapshot,
             )
 

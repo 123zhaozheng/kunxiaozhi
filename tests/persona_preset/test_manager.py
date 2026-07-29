@@ -5,6 +5,7 @@ from datetime import datetime
 import pytest
 
 from src.infra.persona_preset.manager import PersonaPresetManager
+from src.infra.skill.types import InstalledFrom, MarketplaceSkill, SkillMeta
 from src.kernel.exceptions import AuthorizationError, NotFoundError
 from src.kernel.schemas.persona_preset import (
     PersonaPresetCreate,
@@ -147,6 +148,29 @@ class FakeSkillStorage:
     async def get_all_user_skill_names(self, user_id: str) -> list[str]:
         return sorted(self.names)
 
+    async def get_skill_files(self, skill_name: str, user_id: str) -> dict[str, str]:
+        if skill_name not in self.names:
+            return {}
+        return {"SKILL.md": f"---\nname: {skill_name}\ndescription: Test\n---"}
+
+    async def get_skill_meta(self, skill_name: str, user_id: str) -> SkillMeta | None:
+        if skill_name not in self.names:
+            return None
+        return SkillMeta(
+            installed_from=InstalledFrom.MANUAL,
+            published_marketplace_name=skill_name,
+        )
+
+
+class FakeMarketplaceStorage:
+    async def get_marketplace_skill(self, name: str) -> MarketplaceSkill:
+        return MarketplaceSkill(
+            skill_name=name,
+            description="Test",
+            created_by="admin-1",
+            is_active=True,
+        )
+
 
 class FakeEffectiveSkillStorage(FakeSkillStorage):
     async def get_effective_skills(self, user_id: str) -> dict:
@@ -174,7 +198,11 @@ async def test_non_admin_cannot_create_global_preset() -> None:
 @pytest.mark.asyncio
 async def test_global_published_preset_is_visible_and_copy_is_private() -> None:
     storage = FakePresetStorage()
-    manager = PersonaPresetManager(storage, FakeSkillStorage({"planner"}))
+    manager = PersonaPresetManager(
+        storage,
+        FakeSkillStorage({"planner"}),
+        FakeMarketplaceStorage(),
+    )
     official = await manager.create_preset(
         PersonaPresetCreate(
             name="Official",
