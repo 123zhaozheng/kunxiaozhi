@@ -686,3 +686,36 @@ Made the OA SSO HTTP timeout configurable with a 60-second default, exposed it i
 ### Next Steps
 
 - None - task complete
+
+
+## Session 21: Public Persona Marketplace Skill dependencies
+
+**Date**: 2026-07-29
+**Task**: Public Persona Marketplace Skill dependencies
+**Branch**: `main`
+
+### Summary
+
+Implemented coordinated publication of Persona-bound personal Skills to Marketplace, globally unique same-name verification, session-only read-only /skills overlays for Fast/Search/Team and Web/WeCom runtime propagation, structured frontend confirmation/errors, compensation, compatibility, specs, and regression coverage. Focused backend tests, frontend lint/tests/build, and unchanged temp_skills tests pass.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `74f24044` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
