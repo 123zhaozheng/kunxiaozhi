@@ -52,9 +52,16 @@ class EmbeddedArqRuntime:
         if self._worker is not None:
             close = getattr(self._worker, "close", None)
             if close is not None:
-                result = close()
-                if asyncio.iscoroutine(result):
-                    await result
+                try:
+                    result = close()
+                    if asyncio.iscoroutine(result):
+                        await result
+                except AttributeError as e:
+                    # arq.worker.close() 无条件调用 signal.SIGUSR1，
+                    # Windows 无此信号（handle_signals=False 不影响 close）。
+                    if "SIGUSR1" not in str(e):
+                        raise
+                    logger.warning("Skip arq worker close: Windows lacks SIGUSR1")
 
         if self._task is not None and not self._task.done():
             self._task.cancel()
