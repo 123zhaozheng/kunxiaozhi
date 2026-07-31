@@ -24,9 +24,9 @@ def test_create_without_preferred_defaults_to_fast() -> None:
     assert payload.preferred_agent_id == DEFAULT_PREFERRED_AGENT_ID
 
 
-def test_update_accepts_preferred_team() -> None:
-    payload = PersonaPresetUpdate(preferred_agent_id="team")
-    assert payload.preferred_agent_id == "team"
+def test_update_accepts_preferred_search() -> None:
+    payload = PersonaPresetUpdate(preferred_agent_id="search")
+    assert payload.preferred_agent_id == "search"
 
 
 def test_read_missing_preferred_parses_as_fast_without_required_field() -> None:
@@ -55,7 +55,7 @@ def test_snapshot_defaults_preferred_to_fast() -> None:
 
 def test_resolve_persona_agent_id_prefers_preferred() -> None:
     assert resolve_persona_agent_id("fast", "search") == "search"
-    assert resolve_persona_agent_id("search", "team") == "team"
+    assert resolve_persona_agent_id("search", "team") == "search"
     assert resolve_persona_agent_id(None, "fast") == "fast"
 
 

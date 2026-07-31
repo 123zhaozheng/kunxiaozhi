@@ -269,7 +269,6 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
         backend_factory = create_persistent_backend_factory(
             assistant_id=assistant_id,
             user_id=context.user_id,
-            persona_marketplace_skills=context.persona_marketplace_skills,
         )
         logger.info(
             f"[TeamAgent] Sandbox disabled, using PersistentBackend for assistant: {assistant_id}"
@@ -302,7 +301,6 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
                 sandbox_backend.default,
                 assistant_id,
                 user_id=context.user_id,
-                persona_marketplace_skills=context.persona_marketplace_skills,
             )
             if team:
                 system_prompt = f"{SEARCH_SANDBOX_SYSTEM_PROMPT}\n\n{system_prompt}"

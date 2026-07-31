@@ -5,7 +5,7 @@ from datetime import datetime
 import pytest
 
 from src.infra.persona_preset.manager import PersonaPresetManager
-from src.infra.skill.types import InstalledFrom, MarketplaceSkill, SkillMeta
+from src.infra.skill.types import MarketplaceSkill
 from src.kernel.exceptions import AuthorizationError, NotFoundError
 from src.kernel.schemas.persona_preset import (
     PersonaPresetCreate,
@@ -141,29 +141,12 @@ class FakePresetStorage:
         return dict(current)
 
 
-class FakeSkillStorage:
-    def __init__(self, names: set[str]) -> None:
-        self.names = names
-
-    async def get_all_user_skill_names(self, user_id: str) -> list[str]:
-        return sorted(self.names)
-
-    async def get_skill_files(self, skill_name: str, user_id: str) -> dict[str, str]:
-        if skill_name not in self.names:
-            return {}
-        return {"SKILL.md": f"---\nname: {skill_name}\ndescription: Test\n---"}
-
-    async def get_skill_meta(self, skill_name: str, user_id: str) -> SkillMeta | None:
-        if skill_name not in self.names:
-            return None
-        return SkillMeta(
-            installed_from=InstalledFrom.MANUAL,
-            published_marketplace_name=skill_name,
-        )
-
-
 class FakeMarketplaceStorage:
+    def __init__(self) -> None:
+        self.reads = 0
+
     async def get_marketplace_skill(self, name: str) -> MarketplaceSkill:
+        self.reads += 1
         return MarketplaceSkill(
             skill_name=name,
             description="Test",
@@ -171,15 +154,30 @@ class FakeMarketplaceStorage:
             is_active=True,
         )
 
+    async def get_active_marketplace_skills_by_names(self, names: list[str]) -> dict[str, MarketplaceSkill]:
+        return {name: await self.get_marketplace_skill(name) for name in names}
 
-class FakeEffectiveSkillStorage(FakeSkillStorage):
-    async def get_effective_skills(self, user_id: str) -> dict:
-        return {"skills": {name: {"enabled": True} for name in sorted(self.names)}}
+    async def get_active_skill_md_by_names(self, names: list[str]) -> dict[str, str]:
+        return {
+            name: f"---\nname: {name}\ndescription: Marketplace\n---"
+            for name in names
+        }
+
+    async def list_marketplace_file_paths(self, name: str) -> list[str]:
+        self.reads += 1
+        return ["SKILL.md", "scripts/run.py"]
+
+    async def iter_marketplace_file_batches(self, name: str):
+        self.reads += 1
+        yield {
+            "SKILL.md": f"---\nname: {name}\ndescription: Marketplace\n---",
+            "scripts/run.py": "print('ok')",
+        }
 
 
 @pytest.mark.asyncio
 async def test_non_admin_cannot_create_global_preset() -> None:
-    manager = PersonaPresetManager(FakePresetStorage(), FakeSkillStorage(set()))
+    manager = PersonaPresetManager(FakePresetStorage())
 
     with pytest.raises(AuthorizationError):
         await manager.create_preset(
@@ -200,7 +198,6 @@ async def test_global_published_preset_is_visible_and_copy_is_private() -> None:
     storage = FakePresetStorage()
     manager = PersonaPresetManager(
         storage,
-        FakeSkillStorage({"planner"}),
         FakeMarketplaceStorage(),
     )
     official = await manager.create_preset(
@@ -211,6 +208,7 @@ async def test_global_published_preset_is_visible_and_copy_is_private() -> None:
             status=PersonaPresetStatus.PUBLISHED,
             system_prompt="Official prompt",
             skill_names=["planner"],
+            preferred_agent_id="search",
             tags=["coding"],
         ),
         user_id="admin-1",
@@ -232,7 +230,7 @@ async def test_global_published_preset_is_visible_and_copy_is_private() -> None:
 
 @pytest.mark.asyncio
 async def test_update_increments_version_and_checks_ownership() -> None:
-    manager = PersonaPresetManager(FakePresetStorage(), FakeSkillStorage(set()))
+    manager = PersonaPresetManager(FakePresetStorage())
     preset = await manager.create_preset(
         PersonaPresetCreate(name="Mine", system_prompt="Initial"),
         user_id="user-1",
@@ -260,7 +258,7 @@ async def test_update_increments_version_and_checks_ownership() -> None:
 
 @pytest.mark.asyncio
 async def test_admin_can_change_own_user_preset_to_global_public() -> None:
-    manager = PersonaPresetManager(FakePresetStorage(), FakeSkillStorage(set()))
+    manager = PersonaPresetManager(FakePresetStorage())
     preset = await manager.create_preset(
         PersonaPresetCreate(name="Mine", system_prompt="Initial"),
         user_id="admin-1",
@@ -286,7 +284,7 @@ async def test_admin_can_change_own_user_preset_to_global_public() -> None:
 
 @pytest.mark.asyncio
 async def test_admin_can_change_global_preset_to_private_user_preset() -> None:
-    manager = PersonaPresetManager(FakePresetStorage(), FakeSkillStorage(set()))
+    manager = PersonaPresetManager(FakePresetStorage())
     preset = await manager.create_preset(
         PersonaPresetCreate(
             name="Official",
@@ -319,7 +317,7 @@ async def test_admin_can_change_global_preset_to_private_user_preset() -> None:
 @pytest.mark.asyncio
 async def test_creator_can_edit_legacy_user_preset_without_owner_user_id() -> None:
     storage = FakePresetStorage()
-    manager = PersonaPresetManager(storage, FakeSkillStorage(set()))
+    manager = PersonaPresetManager(storage)
     preset = await manager.create_preset(
         PersonaPresetCreate(name="Mine", system_prompt="Initial"),
         user_id="admin-1",
@@ -340,7 +338,7 @@ async def test_creator_can_edit_legacy_user_preset_without_owner_user_id() -> No
 
 @pytest.mark.asyncio
 async def test_non_admin_cannot_publish_user_preset_as_global() -> None:
-    manager = PersonaPresetManager(FakePresetStorage(), FakeSkillStorage(set()))
+    manager = PersonaPresetManager(FakePresetStorage())
     preset = await manager.create_preset(
         PersonaPresetCreate(name="Mine", system_prompt="Initial"),
         user_id="user-1",
@@ -363,12 +361,16 @@ async def test_non_admin_cannot_publish_user_preset_as_global() -> None:
 @pytest.mark.asyncio
 async def test_use_preset_returns_snapshot_and_filters_missing_skills() -> None:
     storage = FakePresetStorage()
-    manager = PersonaPresetManager(storage, FakeEffectiveSkillStorage({"planner"}))
+    manager = PersonaPresetManager(
+        storage,
+        FakeMarketplaceStorage(),
+    )
     preset = await manager.create_preset(
         PersonaPresetCreate(
             name="Planner",
             system_prompt="Plan carefully.",
-            skill_names=["planner", "missing"],
+            skill_names=["planner"],
+            preferred_agent_id="search",
             starter_prompts=[
                 {"icon": "🧭", "text": {"zh": "帮我拆解这个目标", "en": "Break down this goal"}},
                 {"text": "先列一个执行计划"},
@@ -381,7 +383,7 @@ async def test_use_preset_returns_snapshot_and_filters_missing_skills() -> None:
     snapshot = await manager.use_preset(preset.id, user_id="user-1", is_admin=False)
 
     assert snapshot.skill_names == ["planner"]
-    assert snapshot.missing_skill_names == ["missing"]
+    assert [hint.name for hint in snapshot.skill_hints] == ["planner"]
     assert snapshot.system_prompt == "Plan carefully."
     assert snapshot.model_dump()["starter_prompts"] == [
         {"icon": "🧭", "text": {"zh": "帮我拆解这个目标", "en": "Break down this goal"}},
@@ -393,7 +395,7 @@ async def test_use_preset_returns_snapshot_and_filters_missing_skills() -> None:
 @pytest.mark.asyncio
 async def test_persona_preferences_sort_visible_presets_and_track_last_used() -> None:
     storage = FakePresetStorage()
-    manager = PersonaPresetManager(storage, FakeSkillStorage(set()))
+    manager = PersonaPresetManager(storage)
     normal = await manager.create_preset(
         PersonaPresetCreate(name="Normal", system_prompt="Normal prompt"),
         user_id="user-1",
@@ -434,7 +436,7 @@ async def test_persona_preferences_sort_visible_presets_and_track_last_used() ->
 
 @pytest.mark.asyncio
 async def test_invisible_preset_raises_not_found() -> None:
-    manager = PersonaPresetManager(FakePresetStorage(), FakeSkillStorage(set()))
+    manager = PersonaPresetManager(FakePresetStorage())
     preset = await manager.create_preset(
         PersonaPresetCreate(name="Mine", system_prompt="Private"),
         user_id="user-1",
@@ -447,7 +449,7 @@ async def test_invisible_preset_raises_not_found() -> None:
 
 @pytest.mark.asyncio
 async def test_admin_cannot_view_another_users_private_user_preset() -> None:
-    manager = PersonaPresetManager(FakePresetStorage(), FakeSkillStorage(set()))
+    manager = PersonaPresetManager(FakePresetStorage())
     preset = await manager.create_preset(
         PersonaPresetCreate(name="Private", system_prompt="Private prompt"),
         user_id="user-1",

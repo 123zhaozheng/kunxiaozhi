@@ -60,9 +60,7 @@ export type {
   PersonaStarterPrompt,
   PersonaPresetUpdate,
   PersonaPresetVisibility,
-  PersonaMarketplaceSkillRef,
-  PersonaSkillPublicationItem,
-  PersonaSkillPublicationPreflightResponse,
+  PersonaSkillHint,
   PreferredAgentId,
   LocalizedText,
   PersonaWeComConfig,
@@ -97,6 +95,13 @@ export type {
   MarketplaceUpdateResponse,
   TagsResponse,
   PublishToMarketplaceRequest,
+  BuiltinSkill,
+  BuiltinSkillSource,
+  BuiltinSkillUpdate,
+  BuiltinSkillListParams,
+  BuiltinSkillZipPreviewSkill,
+  BuiltinSkillZipCreated,
+  BuiltinSkillFromMarketplaceRequest,
 } from "./skill";
 
 // ============================================

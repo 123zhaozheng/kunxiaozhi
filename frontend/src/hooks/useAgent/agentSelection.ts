@@ -1,7 +1,7 @@
 import type { AgentInfo } from "../../types";
 import type { PreferredAgentId } from "../../types/personaPreset";
 
-const PREFERRED_AGENT_IDS = new Set<PreferredAgentId>(["fast", "search", "team"]);
+const PREFERRED_AGENT_IDS = new Set<PreferredAgentId>(["fast", "search"]);
 
 export function resolveAvailableAgentId(
   currentAgentId: string,

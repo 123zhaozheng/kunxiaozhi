@@ -816,7 +816,12 @@ class SkillStorage:
     # ==========================================
 
     async def get_effective_skills(
-        self, user_id: str, disabled_skills: Optional[list[str]] = None
+        self,
+        user_id: str,
+        disabled_skills: Optional[list[str]] = None,
+        *,
+        user_roles: Optional[list[str]] = None,
+        is_admin: bool = False,
     ) -> dict[str, dict[str, Any]]:
         """
         获取用户生效的 Skills（已启用 + 有文件）
@@ -824,6 +829,8 @@ class SkillStorage:
         Args:
             user_id: 用户 ID
             disabled_skills: 从用户 metadata 中获取的 disabled_skills 列表
+            user_roles: 用户角色列表；None 时内部解析（供 builtin 角色注入）
+            is_admin: 是否绕过 builtin 角色过滤（如 skill:admin）
 
         Returns:
             {
@@ -834,19 +841,33 @@ class SkillStorage:
                     }
                 }
             }
+
+        Notes:
+            - Builtin skills matched by role are merged after user skills, filling
+              the remaining ``SKILL_EFFECTIVE_LOAD_LIMIT`` quota (user first).
+            - 缓存值携带 builtin 版本号；builtin 写操作 bump 版本即整体失效。
+            - 合并结果向前端/调用方保持与 user skill 相同的结构，不暴露 builtin 标记。
         """
-        from src.infra.skill.constants import SKILLS_CACHE_KEY_PREFIX, SKILLS_CACHE_TTL
+        from src.infra.skill.constants import (
+            BUILTIN_SKILLS_VERSION_KEY,
+            SKILLS_CACHE_KEY_PREFIX,
+            SKILLS_CACHE_TTL,
+        )
 
         cache_key = f"{SKILLS_CACHE_KEY_PREFIX}{user_id}"
 
-        # 尝试从 Redis 缓存获取
+        # 尝试从 Redis 缓存获取（携带 builtin 版本校验）
+        builtin_version = "0"
         try:
             from src.infra.storage.redis import get_redis_client
 
             redis_client = get_redis_client()
             cached = await redis_client.get(cache_key)
+            builtin_version = await redis_client.get(BUILTIN_SKILLS_VERSION_KEY) or "0"
             if cached:
-                return await run_blocking_io(json.loads, cached)
+                parsed = await run_blocking_io(json.loads, cached)
+                if str(parsed.get("_builtin_version", "0")) == str(builtin_version):
+                    return {"skills": parsed.get("skills", {})}
         except Exception as e:
             logger.warning(f"[Skills Cache] Redis get failed: {e}")
 
@@ -854,52 +875,175 @@ class SkillStorage:
             disabled_skills = await self._get_user_disabled_skills(user_id)
         disabled_skills = normalize_skill_name_list(disabled_skills)
 
-        enabled_names = await self.get_all_user_skill_names(
-            user_id,
-            exclude_skill_names=disabled_skills,
-            limit=SKILL_EFFECTIVE_LOAD_LIMIT,
-        )
-
-        if not enabled_names:
-            return {"skills": {}}
-
-        # 批量获取文件
-        skill_keys = [(name, user_id) for name in enabled_names]
-        files_map = await self.batch_get_skill_files(skill_keys)
+        # Keep all user names for shadowing: a disabled user Skill still owns its
+        # name and must prevent a same-name Builtin from leaking through.
+        user_names = await self.get_all_user_skill_names(user_id)
+        enabled_names = [
+            name for name in user_names if name not in set(disabled_skills)
+        ][:SKILL_EFFECTIVE_LOAD_LIMIT]
 
         result: dict[str, Any] = {"skills": {}}
-        for name in enabled_names:
-            files = files_map.get((name, user_id), {})
-            if files:  # 只包含有文件的 skill
-                # 从 SKILL.md frontmatter 解析 description
-                description = ""
-                if "SKILL.md" in files:
-                    try:
-                        _, parsed_desc, _ = await _parse_skill_md_offload(files["SKILL.md"])
-                        if parsed_desc:
-                            description = parsed_desc
-                    except Exception:
-                        pass
 
-                result["skills"][name] = {
-                    "name": name,
-                    "description": description or f"Skill: {name}",
-                    "files": files,
-                    "enabled": True,
-                }
+        if enabled_names:
+            # 批量获取文件
+            skill_keys = [(name, user_id) for name in enabled_names]
+            files_map = await self.batch_get_skill_files(skill_keys)
 
-        # 缓存
+            for name in enabled_names:
+                files = files_map.get((name, user_id), {})
+                if files:  # 只包含有文件的 skill
+                    # 从 SKILL.md frontmatter 解析 description
+                    description = ""
+                    if "SKILL.md" in files:
+                        try:
+                            _, parsed_desc, _ = await _parse_skill_md_offload(
+                                files["SKILL.md"]
+                            )
+                            if parsed_desc:
+                                description = parsed_desc
+                        except Exception:
+                            pass
+
+                    result["skills"][name] = {
+                        "name": name,
+                        "description": description or f"Skill: {name}",
+                        "files": files,
+                        "enabled": True,
+                    }
+
+        # Builtin 注入：角色匹配、排除 disabled、填充剩余配额（user 优先）
+        try:
+            if user_roles is None:
+                user_roles, is_admin = await self._resolve_user_access(user_id)
+            disabled_builtin_skills = await self._get_user_disabled_builtin_skills(user_id)
+            try:
+                builtin_skills = await self._get_builtin_skills_for_user(
+                    user_roles=user_roles or [],
+                    is_admin=bool(is_admin),
+                    disabled_skills=disabled_builtin_skills,
+                    shadowed_names=set(user_names),
+                    remaining_quota=SKILL_EFFECTIVE_LOAD_LIMIT - len(result["skills"]),
+                )
+            except TypeError as exc:
+                # Keep lightweight test doubles and older integrations working
+                # while the effective-source contract rolls out.
+                if "shadowed_names" not in str(exc):
+                    raise
+                builtin_skills = await self._get_builtin_skills_for_user(
+                    user_roles=user_roles or [],
+                    is_admin=bool(is_admin),
+                    disabled_skills=disabled_builtin_skills,
+                    remaining_quota=SKILL_EFFECTIVE_LOAD_LIMIT - len(result["skills"]),
+                )
+            if builtin_skills:
+                result["skills"].update(builtin_skills)
+        except Exception as e:
+            logger.warning(
+                f"[Skills] Failed to merge builtin skills for user {user_id}: {e}"
+            )
+
+        # 缓存（包含 builtin 版本号，便于全局失效）
         try:
             from src.infra.storage.redis import get_redis_client
 
             redis_client = get_redis_client()
 
-            serialized = await run_blocking_io(json.dumps, result)
+            cache_payload = {
+                "skills": result["skills"],
+                "_builtin_version": str(builtin_version),
+            }
+            serialized = await run_blocking_io(json.dumps, cache_payload)
             await redis_client.set(cache_key, serialized, ex=SKILLS_CACHE_TTL)
         except Exception as e:
             logger.warning(f"[Skills Cache] Redis set failed: {e}")
 
         return result
+
+    async def _resolve_user_access(self, user_id: str) -> tuple[list[str], bool]:
+        """解析用户角色与是否拥有 skill:admin 权限（builtin 注入用）。
+
+        失败时返回 ``([], False)``，保证 builtin 注入失败不影响 user skill。
+        """
+        try:
+            from src.infra.role.storage import RoleStorage
+            from src.infra.user.storage import UserStorage
+
+            user = await UserStorage().get_by_id(user_id)
+            if not user or not user.roles:
+                return [], False
+
+            roles = await RoleStorage().get_by_names(user.roles)
+            resolved_roles = [role.name for role in roles]
+            permissions: set[str] = set()
+            for role in roles:
+                for perm in role.permissions:
+                    permissions.add(perm if isinstance(perm, str) else perm.value)
+            return resolved_roles, "skill:admin" in permissions
+        except Exception as e:
+            logger.warning(f"[Skills] Failed to resolve user access for {user_id}: {e}")
+            return [], False
+
+    async def _get_builtin_skills_for_user(
+        self,
+        *,
+        user_roles: list[str],
+        is_admin: bool,
+        disabled_skills: list[str],
+        shadowed_names: set[str] | None = None,
+        remaining_quota: int,
+    ) -> dict[str, dict[str, Any]]:
+        """加载角色匹配的 builtin skills（注入用，可被子类/测试覆写）。
+
+        返回结构与 user skill 一致（``{name: {name, description, files, enabled}}``），
+        不暴露 builtin 标记。
+        """
+        if remaining_quota <= 0:
+            return {}
+
+        builtin_storage = self._get_builtin_storage()
+        builtin_names = await builtin_storage.list_builtin_skill_names_for_roles(
+            user_roles, is_admin
+        )
+        disabled_set = set(disabled_skills or [])
+        shadowed = shadowed_names or set()
+        builtin_names = [
+            n for n in builtin_names if n not in disabled_set and n not in shadowed
+        ]
+        builtin_names = builtin_names[: max(0, remaining_quota)]
+        if not builtin_names:
+            return {}
+
+        builtin_files = await builtin_storage.batch_get_builtin_skill_files(
+            builtin_names
+        )
+        merged: dict[str, dict[str, Any]] = {}
+        for name in builtin_names:
+            files = builtin_files.get(name, {})
+            if not files:
+                continue
+            description = ""
+            if "SKILL.md" in files:
+                try:
+                    _, parsed_desc, _ = await _parse_skill_md_offload(
+                        files["SKILL.md"]
+                    )
+                    if parsed_desc:
+                        description = parsed_desc
+                except Exception:
+                    pass
+            merged[name] = {
+                "name": name,
+                "description": description or f"Skill: {name}",
+                "files": files,
+                "enabled": True,
+            }
+        return merged
+
+    def _get_builtin_storage(self):
+        """Lazy accessor for ``BuiltinSkillStorage``（可被测试覆写）。"""
+        from src.infra.skill.builtin import BuiltinSkillStorage
+
+        return BuiltinSkillStorage()
 
     async def _get_user_disabled_skills(self, user_id: str) -> list[str]:
         """Load disabled skills from user metadata for cache-safe default behavior."""
@@ -912,6 +1056,25 @@ class SkillStorage:
                 return normalize_skill_name_list(user_doc.metadata.get("disabled_skills", []))
         except Exception as e:
             logger.warning(f"Failed to load disabled_skills for user {user_id}: {e}")
+        return []
+
+    async def _get_user_disabled_builtin_skills(self, user_id: str) -> list[str]:
+        """Load Builtin-only preferences without sharing the user Skill key."""
+        try:
+            from src.infra.user.storage import UserStorage
+
+            user_storage = UserStorage()
+            user_doc = await user_storage.get_by_id(user_id)
+            if user_doc and user_doc.metadata:
+                return normalize_skill_name_list(
+                    user_doc.metadata.get("disabled_builtin_skill_names", [])
+                )
+        except Exception as e:
+            logger.warning(
+                "Failed to load disabled_builtin_skill_names for user %s: %s",
+                user_id,
+                e,
+            )
         return []
 
     async def get_all_user_skill_names(

@@ -1,0 +1,29 @@
+{
+  "id": "builtin-role-injection",
+  "name": "builtin-role-injection",
+  "title": "内置工具与技能:角色级自动注入(管理员下发,用户不可见)",
+  "description": "Admin 下发的内置 MCP 工具与内置 Skill,按角色自动注入用户 agent,对终端用户不可见。Parent 任务,含两个 child: builtin-mcp-inject / builtin-skill-inject。",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "zhaozheng",
+  "assignee": "zhaozheng",
+  "createdAt": "2026-07-31",
+  "completedAt": "2026-07-31",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-31-builtin-mcp-inject",
+    "07-31-builtin-skill-inject"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

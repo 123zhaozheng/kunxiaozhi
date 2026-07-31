@@ -39,7 +39,7 @@ def test_validate_team_agent_request_strips_persona_for_explicit_team() -> None:
             name="Solo Writer",
             system_prompt="Write solo.",
             skill_names=["solo-skill"],
-            missing_skill_names=[],
+            skill_hints=[],
         ),
         persona_system_prompt="Write solo.",
         enabled_skills=["solo-skill"],
@@ -77,6 +77,6 @@ def test_validate_team_agent_request_ignores_other_agents() -> None:
 def test_conversation_metadata_scopes_team_id_to_team_agent() -> None:
     from pathlib import Path
 
-    source = Path("src/api/routes/chat.py").read_text()
+    source = Path("src/api/routes/chat.py").read_text(encoding="utf-8")
 
     assert 'if agent_id == "team" and request.team_id:' in source

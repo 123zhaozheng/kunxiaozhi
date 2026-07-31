@@ -37,6 +37,7 @@ export { agentApi } from "./api/agent";
 export { agentConfigApi } from "./api/agent_config";
 export { modelApi } from "./api/model";
 export { skillApi } from "./api/skill";
+export { marketplaceApi } from "./api/marketplace";
 export { personaPresetApi } from "./api/personaPreset";
 export { settingsApi } from "./api/settings";
 export { mcpApi } from "./api/mcp";

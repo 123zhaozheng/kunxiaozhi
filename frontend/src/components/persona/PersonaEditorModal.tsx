@@ -19,10 +19,8 @@ import {
   BookOpen,
 } from "lucide-react";
 import { LoadingSpinner } from "../common/LoadingSpinner";
-import { ConfirmDialog } from "../common/ConfirmDialog";
 import { EditorSidebar } from "../common/EditorSidebar";
 import toast from "react-hot-toast";
-import { useSkills } from "../../hooks/useSkills";
 import { useAuth } from "../../hooks/useAuth";
 import { useSettingsContext } from "../../contexts/SettingsContext";
 import { DifyKbMultiSelect } from "../common/DifyKbMultiSelect";
@@ -31,7 +29,7 @@ import {
   draftRowsToStarterPrompts,
   starterPromptsToDraftRows,
 } from "./personaPresetEditor";
-import { uploadApi, personaPresetApi } from "../../services/api";
+import { marketplaceApi, uploadApi, personaPresetApi } from "../../services/api";
 import { compressImageFile } from "../../utils/imageCompression";
 import {
   isPersonaImageAvatar,
@@ -45,9 +43,9 @@ import type {
   PersonaPresetCreate,
   PersonaPresetStatus,
   PersonaPresetUpdate,
-  PersonaSkillPublicationPreflightResponse,
   PersonaWeComConfig,
   PreferredAgentId,
+  MarketplaceSkillResponse,
 } from "../../types";
 import { DEFAULT_PREFERRED_AGENT_ID, PREFERRED_AGENT_IDS } from "../../types";
 
@@ -106,9 +104,7 @@ export function PersonaEditorModal({
     editingPreset?.status ??
       (initialScope === "global" ? "published" : "draft"),
   );
-  const [publicationPlan, setPublicationPlan] =
-    useState<PersonaSkillPublicationPreflightResponse | null>(null);
-  const [publicationSaving, setPublicationSaving] = useState(false);
+  const initialSkillNames = [...(editingPreset?.skill_names || [])] as string[];
   const [draft, setDraft] = useState({
     name: editingPreset?.name || "",
     description: editingPreset?.description || "",
@@ -116,13 +112,15 @@ export function PersonaEditorModal({
     system_prompt: editingPreset?.system_prompt || "",
     starter_prompts: starterPromptsToDraftRows(editingPreset?.starter_prompts),
     tags: editingPreset?.tags.join(", ") || "",
-    skill_names: [...(editingPreset?.skill_names || [])] as string[],
+    skill_names: initialSkillNames,
     dify_kb_dataset_ids: [
       ...(editingPreset?.dify_kb_dataset_ids || []),
     ] as string[],
     preferred_agent_id:
-      (editingPreset?.preferred_agent_id as PreferredAgentId | undefined) ||
-      DEFAULT_PREFERRED_AGENT_ID,
+      initialSkillNames.length > 0
+        ? "search"
+        : (editingPreset?.preferred_agent_id as PreferredAgentId | undefined) ||
+          DEFAULT_PREFERRED_AGENT_ID,
   });
 
   useEffect(() => {
@@ -132,6 +130,7 @@ export function PersonaEditorModal({
         editingPreset?.status ??
           (initialScope === "global" ? "published" : "draft"),
       );
+      const skillNames = [...(editingPreset?.skill_names || [])] as string[];
       setDraft({
         name: editingPreset?.name || "",
         description: editingPreset?.description || "",
@@ -141,13 +140,15 @@ export function PersonaEditorModal({
           editingPreset?.starter_prompts,
         ),
         tags: editingPreset?.tags.join(", ") || "",
-        skill_names: [...(editingPreset?.skill_names || [])] as string[],
+        skill_names: skillNames,
         dify_kb_dataset_ids: [
           ...(editingPreset?.dify_kb_dataset_ids || []),
         ] as string[],
         preferred_agent_id:
-          (editingPreset?.preferred_agent_id as PreferredAgentId | undefined) ||
-          DEFAULT_PREFERRED_AGENT_ID,
+          skillNames.length > 0
+            ? "search"
+            : (editingPreset?.preferred_agent_id as PreferredAgentId | undefined) ||
+              DEFAULT_PREFERRED_AGENT_ID,
       });
       setSkillSearch("");
       setSkillDropdownOpen(false);
@@ -169,6 +170,9 @@ export function PersonaEditorModal({
   const [skillDropdownOpen, setSkillDropdownOpen] = useState(false);
   const [skillSearch, setSkillSearch] = useState("");
   const [skillPage, setSkillPage] = useState(1);
+  const [allSkills, setAllSkills] = useState<MarketplaceSkillResponse[]>([]);
+  const [skillsLoading, setSkillsLoading] = useState(false);
+  const [hasMoreSkills, setHasMoreSkills] = useState(false);
   const skillDropdownRef = useRef<HTMLDivElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const iconPickerRef = useRef<HTMLDivElement>(null);
@@ -303,26 +307,40 @@ export function PersonaEditorModal({
     }
   }, [editingPreset?.id, wecomConfig, t]);
 
-  const skillListParams = useMemo(
-    () => ({
-      skip: (skillPage - 1) * PERSONA_SKILL_PAGE_SIZE,
-      limit: PERSONA_SKILL_PAGE_SIZE,
-      q: skillSearch.trim() || undefined,
-    }),
-    [skillPage, skillSearch],
-  );
-
-  const {
-    skills: allSkills,
-    total: totalSkills,
-    isLoading: skillsLoading,
-  } = useSkills({
-    enabled: showModal && skillDropdownOpen,
-    listParams: skillListParams,
-    appendPages: true,
-  });
-
-  const hasMoreSkills = allSkills.length < totalSkills;
+  useEffect(() => {
+    if (!showModal || !skillDropdownOpen) return;
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setSkillsLoading(true);
+      try {
+        const page = await marketplaceApi.list({
+          search: skillSearch.trim() || undefined,
+          activeOnly: true,
+          skip: (skillPage - 1) * PERSONA_SKILL_PAGE_SIZE,
+          limit: PERSONA_SKILL_PAGE_SIZE,
+        });
+        if (cancelled) return;
+        setAllSkills((previous) => {
+          if (skillPage === 1) return page;
+          const byName = new Map(previous.map((skill) => [skill.skill_name, skill]));
+          for (const skill of page) byName.set(skill.skill_name, skill);
+          return [...byName.values()];
+        });
+        setHasMoreSkills(page.length === PERSONA_SKILL_PAGE_SIZE);
+      } catch {
+        if (!cancelled) {
+          setAllSkills([]);
+          setHasMoreSkills(false);
+        }
+      } finally {
+        if (!cancelled) setSkillsLoading(false);
+      }
+    }, skillPage === 1 ? 180 : 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [showModal, skillDropdownOpen, skillSearch, skillPage]);
 
   const handleSkillListScroll = useCallback(
     (event: React.UIEvent<HTMLDivElement>) => {
@@ -341,8 +359,8 @@ export function PersonaEditorModal({
 
   const displayedSkills = useMemo(() => {
     return [...allSkills].sort((a, b) => {
-      const aSel = draft.skill_names.includes(a.name) ? 0 : 1;
-      const bSel = draft.skill_names.includes(b.name) ? 0 : 1;
+      const aSel = draft.skill_names.includes(a.skill_name) ? 0 : 1;
+      const bSel = draft.skill_names.includes(b.skill_name) ? 0 : 1;
       return aSel - bSel;
     });
   }, [allSkills, draft.skill_names]);
@@ -370,7 +388,7 @@ export function PersonaEditorModal({
   }, [skillDropdownOpen, iconPickerOpen]);
 
   const savePreset = useCallback(
-    async (publishPersonalSkills: boolean) => {
+    async () => {
       if (!draft.name.trim() || !draft.system_prompt.trim()) return;
       const normalizedDraft = {
         name: draft.name.trim(),
@@ -398,10 +416,6 @@ export function PersonaEditorModal({
             editorOptions,
           )
         : buildPersonaPresetPayload(null, normalizedDraft, editorOptions);
-      if (publishPersonalSkills) {
-        payload.publish_personal_skills = true;
-      }
-
       const saved = editingPreset
         ? await updatePreset(editingPreset.id, payload as PersonaPresetUpdate)
         : await createPreset(payload as PersonaPresetCreate);
@@ -414,7 +428,6 @@ export function PersonaEditorModal({
         return;
       }
 
-      setPublicationPlan(null);
       onClose();
       toast.success(
         editingPreset
@@ -439,54 +452,7 @@ export function PersonaEditorModal({
   );
 
   const handleSave = useCallback(async () => {
-    if (
-      editorScope !== "global" ||
-      editorStatus !== "published" ||
-      draft.skill_names.length === 0
-    ) {
-      await savePreset(false);
-      return;
-    }
-
-    try {
-      const plan = await personaPresetApi.preflightSkillPublication(
-        draft.skill_names,
-      );
-      if (plan.conflicts.length > 0) {
-        const names = plan.conflicts
-          .map((item) => item.marketplace_name)
-          .join("、");
-        toast.error(
-          t(
-            "personaPresets.skillNameConflict",
-            "Skill 名称冲突：{{names}}。请验证来源或重命名；Skills 商城不允许同名 Skill。",
-            { names },
-          ),
-        );
-        return;
-      }
-      if (plan.requires_publish.length > 0) {
-        setPublicationPlan(plan);
-        return;
-      }
-      await savePreset(false);
-    } catch {
-      toast.error(
-        t(
-          "personaPresets.skillPreflightFailed",
-          "无法验证 Persona 绑定的 Skills，请稍后重试",
-        ),
-      );
-    }
-  }, [draft.skill_names, editorScope, editorStatus, savePreset, t]);
-
-  const confirmSkillPublication = useCallback(async () => {
-    setPublicationSaving(true);
-    try {
-      await savePreset(true);
-    } finally {
-      setPublicationSaving(false);
-    }
+    await savePreset();
   }, [savePreset]);
 
   const handleAvatarUpload = useCallback(
@@ -800,6 +766,7 @@ export function PersonaEditorModal({
               options={PREFERRED_AGENT_IDS.map((id) => ({
                 value: id,
                 label: t(`personaPresets.agent.${id}`, id),
+                disabled: id === "fast" && draft.skill_names.length > 0,
               }))}
             />
             <p className="ppe-hint">
@@ -1081,20 +1048,23 @@ export function PersonaEditorModal({
                       {displayedSkills.length > 0 ? (
                         displayedSkills.map((skill) => {
                           const isSelected = draft.skill_names.includes(
-                            skill.name,
+                            skill.skill_name,
                           );
                           return (
                             <button
-                              key={skill.name}
+                              key={skill.skill_name}
                               type="button"
                               onClick={() => {
                                 setDraft((prev) => ({
                                   ...prev,
                                   skill_names: isSelected
                                     ? prev.skill_names.filter(
-                                        (n) => n !== skill.name,
+                                        (n) => n !== skill.skill_name,
                                       )
-                                    : [...prev.skill_names, skill.name],
+                                    : [...prev.skill_names, skill.skill_name],
+                                  preferred_agent_id: isSelected
+                                    ? prev.preferred_agent_id
+                                    : "search",
                                 }));
                               }}
                               className={`ppe-skill-option ${
@@ -1116,7 +1086,7 @@ export function PersonaEditorModal({
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="text-sm font-medium truncate">
-                                  {skill.name}
+                                  {skill.skill_name}
                                 </div>
                                 {skill.description && (
                                   <div className="text-[11px] text-[var(--theme-text-secondary)] truncate mt-0.5">
@@ -1540,27 +1510,6 @@ export function PersonaEditorModal({
           )}
         </div>
       </EditorSidebar>
-      <ConfirmDialog
-        isOpen={publicationPlan !== null}
-        title={t(
-          "personaPresets.publishSkillsTitle",
-          "同步发布 Persona 的个人 Skills",
-        )}
-        message={t(
-          "personaPresets.publishSkillsMessage",
-          "以下 Skills 将公开发布到 Marketplace，并允许其他用户单独查看和安装：{{names}}",
-          {
-            names: (publicationPlan?.requires_publish ?? [])
-              .map((item) => item.marketplace_name)
-              .join("、"),
-          },
-        )}
-        confirmText={t("personaPresets.publishSkillsConfirm", "同步发布并保存")}
-        onConfirm={confirmSkillPublication}
-        onCancel={() => setPublicationPlan(null)}
-        variant="warning"
-        loading={publicationSaving}
-      />
     </>
   );
 }

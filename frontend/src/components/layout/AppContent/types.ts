@@ -3,6 +3,7 @@ export type TabType =
   | "persona"
   | "skills"
   | "marketplace"
+  | "builtin"
   | "users"
   | "roles"
   | "settings"

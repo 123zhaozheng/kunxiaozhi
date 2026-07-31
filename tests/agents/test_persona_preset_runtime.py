@@ -10,7 +10,6 @@ from src.agents.search_agent.context import SearchAgentContext
 from src.api.routes.chat import build_conversation_config, resolve_persona_request
 from src.kernel.schemas.agent import AgentRequest
 from src.kernel.schemas.persona_preset import (
-    PersonaMarketplaceSkillRef,
     PersonaPresetSnapshot,
 )
 from src.kernel.schemas.user import TokenPayload
@@ -22,8 +21,7 @@ def test_conversation_config_persists_persona_snapshot_and_enabled_skills() -> N
         name="Planner",
         system_prompt="Plan first.",
         skill_names=["planning"],
-        marketplace_skills=[PersonaMarketplaceSkillRef(name="planning", version="2.0.0")],
-        missing_skill_names=["unknown"],
+        skill_hints=[{"name": "planning", "description": "Plan work"}],
         version=4,
     )
     request = AgentRequest(
@@ -65,7 +63,7 @@ def test_conversation_config_ignores_persona_snapshot_without_preset_id() -> Non
         name="Planner",
         system_prompt="Plan first.",
         skill_names=["planning"],
-        missing_skill_names=[],
+        skill_hints=[],
         version=4,
     )
     request = AgentRequest(
@@ -96,7 +94,7 @@ async def test_resolve_persona_request_drops_client_persona_fields_without_prese
             name="Planner",
             system_prompt="Plan first.",
             skill_names=["planning"],
-            missing_skill_names=[],
+            skill_hints=[],
             version=1,
         ),
         persona_system_prompt="inject me",
@@ -117,8 +115,7 @@ async def test_resolve_persona_request_overwrites_client_persona_fields_from_pre
         name="Planner",
         system_prompt="Plan first.",
         skill_names=["planning"],
-        marketplace_skills=[PersonaMarketplaceSkillRef(name="planning", version="2.0.0")],
-        missing_skill_names=["missing"],
+        skill_hints=[{"name": "planning", "description": "Plan work"}],
         version=2,
     )
 
@@ -138,7 +135,7 @@ async def test_resolve_persona_request_overwrites_client_persona_fields_from_pre
             name="Evil",
             system_prompt="inject me",
             skill_names=["evil"],
-            missing_skill_names=[],
+            skill_hints=[],
             version=9,
         ),
         persona_system_prompt="inject me",
@@ -153,9 +150,9 @@ async def test_resolve_persona_request_overwrites_client_persona_fields_from_pre
 
     assert request.persona_snapshot == snapshot
     assert request.persona_system_prompt == "Plan first."
-    assert request.enabled_skills == ["planning"]
-    assert request.agent_options["persona_marketplace_skills"] == [
-        {"name": "planning", "version": "2.0.0"}
+    assert request.enabled_skills == ["custom"]
+    assert request.agent_options["_persona_skill_hints"] == [
+        {"name": "planning", "description": "Plan work"}
     ]
 
 
@@ -166,7 +163,7 @@ async def test_resolve_persona_request_keeps_global_skills_when_preset_has_no_sk
         name="Planner",
         system_prompt="Plan first.",
         skill_names=[],
-        missing_skill_names=[],
+        skill_hints=[],
         version=2,
     )
 
@@ -183,7 +180,7 @@ async def test_resolve_persona_request_keeps_global_skills_when_preset_has_no_sk
 
     await resolve_persona_request(request, user, manager=_FakeManager())
 
-    assert request.enabled_skills is None
+    assert request.enabled_skills == ["client-supplied"]
 
 
 @pytest.mark.asyncio
@@ -193,7 +190,7 @@ async def test_resolve_persona_request_keeps_global_skills_when_configured_skill
         name="Planner",
         system_prompt="Plan first.",
         skill_names=[],
-        missing_skill_names=["missing-market-skill"],
+        skill_hints=[],
         version=2,
     )
 
@@ -210,7 +207,7 @@ async def test_resolve_persona_request_keeps_global_skills_when_configured_skill
 
     await resolve_persona_request(request, user, manager=_FakeManager())
 
-    assert request.enabled_skills is None
+    assert request.enabled_skills == ["client-supplied"]
 
 
 def test_persona_prompt_section_is_deterministic() -> None:

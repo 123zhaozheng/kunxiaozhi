@@ -58,6 +58,10 @@ from src.infra.goal import (
 )
 from src.infra.llm.client import LLMClient
 from src.infra.logging import get_logger
+from src.infra.persona_preset.skill_harness import (
+    PERSONA_SKILL_HINTS_OPTION,
+    build_persona_skill_harness_section,
+)
 from src.infra.sandbox.capability_prompt import build_sandbox_capability_section
 from src.infra.sandbox.session_manager import get_session_sandbox_manager
 from src.infra.skill.loader import build_skills_prompt
@@ -180,6 +184,14 @@ async def agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict[str,
     marketplace_skill_prompt = (
         build_marketplace_skill_prompt_section(filtered_tools) if sandbox_backend else ""
     )
+    persona_skill_harness = (
+        build_persona_skill_harness_section(
+            agent_options.get(PERSONA_SKILL_HINTS_OPTION),
+            filtered_tools,
+        )
+        if sandbox_backend
+        else ""
+    )
 
     # 创建内层 graph (deep agent)
     checkpointer_start = time.time()
@@ -205,6 +217,8 @@ async def agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict[str,
         subagent_prompt_sections.append(SANDBOX_RUNTIME_SECTION.format(work_dir=sandbox_work_dir))
     if marketplace_skill_prompt:
         subagent_prompt_sections.append(marketplace_skill_prompt)
+    if persona_skill_harness:
+        subagent_prompt_sections.append(persona_skill_harness)
     subagent_middleware = [
         *create_retry_middleware(fallback_model=fallback_model_id, thinking=thinking_config),
         MCPQuotaMiddleware(user_id=context.user_id),
@@ -259,6 +273,8 @@ async def agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict[str,
         _prompt_sections.append(SANDBOX_RUNTIME_SECTION.format(work_dir=sandbox_work_dir))
     if marketplace_skill_prompt:
         _prompt_sections.append(marketplace_skill_prompt)
+    if persona_skill_harness:
+        _prompt_sections.append(persona_skill_harness)
     active_goal = configurable.get("active_goal")
     goal_section = build_goal_prompt_section(active_goal)
     if goal_section:
@@ -437,7 +453,6 @@ async def _create_backend_and_prompt(
         backend_factory = create_persistent_backend_factory(
             assistant_id,
             user_id=user_id,
-            persona_marketplace_skills=context.persona_marketplace_skills,
         )
         prompt = DEFAULT_SYSTEM_PROMPT
         return backend_factory, prompt, store, None, None
@@ -479,7 +494,6 @@ async def _create_backend_and_prompt(
                 sandbox_backend.default,
                 assistant_id,
                 user_id=user_id,
-                persona_marketplace_skills=context.persona_marketplace_skills,
             ),
             SANDBOX_SYSTEM_PROMPT,
             store,

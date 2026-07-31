@@ -14,7 +14,6 @@ from src.agents.core.tool_filter import (
 )
 from src.infra.logging import get_logger
 from src.infra.skill.manager import SkillManager
-from src.infra.skill.persona_overlay import load_persona_marketplace_skills
 from src.infra.tool.human_tool import get_human_tool
 from src.infra.tool.internal_registry import get_internal_tools_for_user
 from src.infra.tool.mcp_global import get_global_mcp_tools
@@ -22,7 +21,6 @@ from src.infra.tool.reveal_file_tool import get_reveal_file_tool
 from src.infra.tool.reveal_project_tool import get_reveal_project_tool
 from src.infra.tool.transfer_file_tool import get_transfer_file_tool, get_transfer_path_tool
 from src.kernel.config import settings
-from src.kernel.schemas.persona_preset import PersonaMarketplaceSkillRef
 
 if TYPE_CHECKING:
     from src.infra.tool.deferred_manager import DeferredToolManager
@@ -50,7 +48,6 @@ class FastAgentContext:
         disabled_skills: Optional[List[str]] = None,
         enabled_skills: Optional[List[str]] = None,
         disabled_mcp_tools: Optional[List[str]] = None,
-        persona_marketplace_skills: Optional[List[PersonaMarketplaceSkillRef]] = None,
     ):
         self.session_id = session_id
         self.agent_id = agent_id
@@ -59,7 +56,6 @@ class FastAgentContext:
         self.disabled_skills = disabled_skills
         self.enabled_skills = enabled_skills
         self.disabled_mcp_tools = disabled_mcp_tools
-        self.persona_marketplace_skills = persona_marketplace_skills or []
         self.mcp_manager: Optional[MCPClientManager] = None
         self._mcp_loaded: bool = False
         self.tools: List[Any] = []
@@ -230,9 +226,6 @@ class FastAgentContext:
                     skill_dict["is_system"] = skill_dict.get("is_system", True)
                     if skill_dict.get("enabled", True):
                         self.skills.append(skill_dict)
-
-                mounted = await load_persona_marketplace_skills(self.persona_marketplace_skills)
-                self.skills.extend(mounted.values())
 
                 before_count = len(self.skills)
                 self.apply_skill_filters()

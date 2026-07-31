@@ -7,6 +7,7 @@ import pytest
 
 from src.infra.skill import parser as skill_parser
 from src.infra.skill import storage as skill_storage
+from src.infra.skill.constants import BUILTIN_SKILLS_VERSION_KEY
 from src.infra.storage import redis as redis_storage
 
 
@@ -24,10 +25,19 @@ class _RecordingRedis:
         self.set_calls: list[tuple[str, str, int | None]] = []
 
     async def get(self, key: str):
+        # The builtin version counter is independent from per-user cache entries;
+        # tests that don't simulate a builtin change should see no version set.
+        if key == BUILTIN_SKILLS_VERSION_KEY:
+            return None
         return self.cached
 
     async def set(self, key: str, value: str, ex: int | None = None):
         self.set_calls.append((key, value, ex))
+
+
+async def _no_builtin_skills(**_: Any) -> dict[str, dict[str, Any]]:
+    """Default builtin-merge stub for user-skill-only tests (avoids DB access)."""
+    return {}
 
 
 class _EffectiveSkillStorage(skill_storage.SkillStorage):
@@ -57,6 +67,9 @@ class _EffectiveSkillStorage(skill_storage.SkillStorage):
             key: {"SKILL.md": f"---\nname: {key[0]}\ndescription: Demo\n---\n"}
             for key in skill_keys
         }
+
+    async def _get_builtin_skills_for_user(self, **kwargs: Any) -> dict[str, dict[str, Any]]:
+        return {}
 
 
 @pytest.mark.asyncio
@@ -396,6 +409,7 @@ async def test_get_effective_skills_pushes_limit_and_disabled_filter_into_skill_
     collection = _AggregateSkillNameCollection([])
     storage = skill_storage.SkillStorage()
     monkeypatch.setattr(storage, "_get_files_collection", lambda: collection)
+    monkeypatch.setattr(storage, "_get_builtin_skills_for_user", _no_builtin_skills)
 
     result: dict[str, Any] = await storage.get_effective_skills(
         "user-1",
@@ -409,7 +423,6 @@ async def test_get_effective_skills_pushes_limit_and_disabled_filter_into_skill_
                 "$match": {
                     "user_id": "user-1",
                     "file_path": {"$ne": "__meta__"},
-                    "skill_name": {"$nin": ["skill-0", "skill-2"]},
                 }
             },
             {"$group": {"_id": "$skill_name"}},
@@ -444,3 +457,247 @@ async def test_get_all_user_skill_names_defaults_to_bounded_pipeline(
             {"$limit": 3},
         ]
     ]
+
+
+# ==========================================
+# Builtin skill injection
+# ==========================================
+
+
+class _VersionedFakeRedis:
+    """Fake redis that simulates the global builtin-skills version counter."""
+
+    def __init__(self, version: str | None = None) -> None:
+        self.version = version
+        self.store: dict[str, str] = {}
+
+    async def get(self, key: str):
+        if key == BUILTIN_SKILLS_VERSION_KEY:
+            return self.version
+        return self.store.get(key)
+
+    async def set(self, key: str, value: str, ex: int | None = None):
+        self.store[key] = value
+        return None
+
+
+class _BuiltinInjectionStorage(skill_storage.SkillStorage):
+    """Storage whose builtin-merge returns a controlled set of builtin skills."""
+
+    def __init__(self, builtin_skills: dict[str, dict[str, Any]]) -> None:
+        super().__init__()
+        self._builtin_skills = builtin_skills
+        self.merge_calls: list[dict[str, Any]] = []
+
+    async def _get_builtin_skills_for_user(
+        self,
+        *,
+        user_roles: list[str],
+        is_admin: bool,
+        disabled_skills: list[str],
+        remaining_quota: int,
+    ) -> dict[str, dict[str, Any]]:
+        self.merge_calls.append(
+            {
+                "user_roles": list(user_roles),
+                "is_admin": is_admin,
+                "disabled_skills": list(disabled_skills),
+                "remaining_quota": remaining_quota,
+            }
+        )
+        disabled_set = set(disabled_skills or [])
+        result: dict[str, dict[str, Any]] = {}
+        for name, skill in self._builtin_skills.items():
+            if name in disabled_set:
+                continue
+            if remaining_quota <= 0:
+                break
+            result[name] = skill
+            remaining_quota -= 1
+        return result
+
+
+def _builtin_skill(name: str, description: str = "builtin") -> dict[str, Any]:
+    return {
+        "name": name,
+        "description": description,
+        "files": {"SKILL.md": f"---\nname: {name}\ndescription: {description}\n---\n"},
+        "enabled": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_effective_skills_merges_builtin_for_matching_role(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(redis_storage, "get_redis_client", lambda: _VersionedFakeRedis())
+    builtin = _BuiltinInjectionStorage({"builtin-a": _builtin_skill("builtin-a")})
+
+    async def _no_user_skills(*_args: Any, **_kwargs: Any) -> list[str]:
+        return []
+
+    async def _empty_files(_: Any) -> dict[tuple[str, str], dict[str, str]]:
+        return {}
+
+    monkeypatch.setattr(builtin, "get_all_user_skill_names", _no_user_skills)
+    monkeypatch.setattr(builtin, "batch_get_skill_files", _empty_files)
+
+    result = await builtin.get_effective_skills(
+        "user-1", disabled_skills=[], user_roles=["analyst"], is_admin=False
+    )
+
+    assert list(result["skills"]) == ["builtin-a"]
+    assert builtin.merge_calls[0]["user_roles"] == ["analyst"]
+    assert builtin.merge_calls[0]["is_admin"] is False
+
+
+@pytest.mark.asyncio
+async def test_get_effective_skills_user_priority_fills_quota_before_builtin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(skill_storage, "SKILL_EFFECTIVE_LOAD_LIMIT", 2, raising=False)
+    monkeypatch.setattr(redis_storage, "get_redis_client", lambda: _VersionedFakeRedis())
+
+    class _TwoUserSkills(skill_storage.SkillStorage):
+        async def get_all_user_skill_names(self, *_args: Any, **_kwargs: Any) -> list[str]:
+            return ["user-a", "user-b"]
+
+        async def batch_get_skill_files(
+            self, skill_keys: list[tuple[str, str]]
+        ) -> dict[tuple[str, str], dict[str, str]]:
+            return {
+                key: {"SKILL.md": f"---\nname: {key[0]}\ndescription: user\n---\n"}
+                for key in skill_keys
+            }
+
+    storage = _TwoUserSkills()
+    captured: dict[str, Any] = {}
+
+    async def _capture_builtin(**kwargs: Any) -> dict[str, dict[str, Any]]:
+        captured.update(kwargs)
+        if kwargs["remaining_quota"] <= 0:
+            return {}
+        return {"builtin-x": _builtin_skill("builtin-x")}
+
+    monkeypatch.setattr(storage, "_get_builtin_skills_for_user", _capture_builtin)
+
+    result = await storage.get_effective_skills(
+        "user-1", disabled_skills=[], user_roles=["analyst"], is_admin=False
+    )
+
+    # user skills fill the quota first; builtin gets 0 remaining → not added
+    assert list(result["skills"]) == ["user-a", "user-b"]
+    assert captured["remaining_quota"] == 0
+
+
+@pytest.mark.asyncio
+async def test_get_effective_skills_builtin_fills_remaining_quota(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(skill_storage, "SKILL_EFFECTIVE_LOAD_LIMIT", 3, raising=False)
+    monkeypatch.setattr(redis_storage, "get_redis_client", lambda: _VersionedFakeRedis())
+
+    class _OneUserSkill(skill_storage.SkillStorage):
+        async def get_all_user_skill_names(self, *_args: Any, **_kwargs: Any) -> list[str]:
+            return ["user-a"]
+
+        async def batch_get_skill_files(
+            self, skill_keys: list[tuple[str, str]]
+        ) -> dict[tuple[str, str], dict[str, str]]:
+            return {
+                key: {"SKILL.md": f"---\nname: {key[0]}\ndescription: user\n---\n"}
+                for key in skill_keys
+            }
+
+    storage = _OneUserSkill()
+    captured: dict[str, Any] = {}
+
+    async def _capture_builtin(**kwargs: Any) -> dict[str, dict[str, Any]]:
+        captured.update(kwargs)
+        return {"builtin-x": _builtin_skill("builtin-x")}
+
+    monkeypatch.setattr(storage, "_get_builtin_skills_for_user", _capture_builtin)
+
+    result = await storage.get_effective_skills(
+        "user-1", disabled_skills=[], user_roles=["analyst"], is_admin=False
+    )
+
+    assert list(result["skills"]) == ["user-a", "builtin-x"]
+    assert captured["remaining_quota"] == 2  # 3 - 1 user skill
+
+
+@pytest.mark.asyncio
+async def test_get_effective_skills_skips_disabled_builtin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(redis_storage, "get_redis_client", lambda: _VersionedFakeRedis())
+    builtin = _BuiltinInjectionStorage(
+        {"keep": _builtin_skill("keep"), "skip": _builtin_skill("skip")}
+    )
+
+    async def _no_user_skills(*_args: Any, **_kwargs: Any) -> list[str]:
+        return []
+
+    async def _empty_files(_: Any) -> dict[tuple[str, str], dict[str, str]]:
+        return {}
+
+    monkeypatch.setattr(builtin, "get_all_user_skill_names", _no_user_skills)
+    monkeypatch.setattr(builtin, "batch_get_skill_files", _empty_files)
+
+    result = await builtin.get_effective_skills(
+        "user-1",
+        disabled_skills=["skip"],
+        user_roles=["analyst"],
+        is_admin=False,
+    )
+
+    assert list(result["skills"]) == ["keep", "skip"]
+    assert builtin.merge_calls[0]["disabled_skills"] == []
+
+
+@pytest.mark.asyncio
+async def test_get_effective_skills_invalidates_cache_on_builtin_version_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # First call computes & caches with builtin version "1"
+    redis = _VersionedFakeRedis(version="1")
+    monkeypatch.setattr(redis_storage, "get_redis_client", lambda: redis)
+
+    class _Stub(skill_storage.SkillStorage):
+        async def get_all_user_skill_names(self, *_args: Any, **_kwargs: Any) -> list[str]:
+            return ["user-a"]
+
+        async def batch_get_skill_files(
+            self, skill_keys: list[tuple[str, str]]
+        ) -> dict[tuple[str, str], dict[str, str]]:
+            return {
+                key: {"SKILL.md": f"---\nname: {key[0]}\ndescription: u\n---\n"}
+                for key in skill_keys
+            }
+
+    storage = _Stub()
+    monkeypatch.setattr(storage, "_get_builtin_skills_for_user", _no_builtin_skills)
+
+    first = await storage.get_effective_skills(
+        "user-1", disabled_skills=[], user_roles=[], is_admin=False
+    )
+    assert "user-a" in first["skills"]
+    from src.infra.skill.constants import SKILLS_CACHE_KEY_PREFIX
+
+    cached_payload = redis.store[SKILLS_CACHE_KEY_PREFIX + "user-1"]
+    assert json.loads(cached_payload)["_builtin_version"] == "1"
+
+    # Builtin admin bumps the version → next read must recompute (cache treated as miss)
+    redis.version = "2"
+    recomputed_marker = {"user-a": {"name": "user-a", "files": {}, "enabled": True}}
+
+    async def _inject_builtin(**_kwargs: Any) -> dict[str, dict[str, Any]]:
+        return recomputed_marker  # marker proves recompute path ran
+
+    monkeypatch.setattr(storage, "_get_builtin_skills_for_user", _inject_builtin)
+
+    second = await storage.get_effective_skills(
+        "user-1", disabled_skills=[], user_roles=[], is_admin=False
+    )
+
+    assert second["skills"]["user-a"] is recomputed_marker["user-a"]

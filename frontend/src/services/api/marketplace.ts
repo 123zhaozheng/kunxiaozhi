@@ -22,12 +22,15 @@ export const marketplaceApi = {
   async list(params?: {
     tags?: string;
     search?: string;
+    activeOnly?: boolean;
     skip?: number;
     limit?: number;
   }) {
     const searchParams = new URLSearchParams();
     if (params?.tags) searchParams.set("tags", params.tags);
     if (params?.search) searchParams.set("search", params.search);
+    if (params?.activeOnly !== undefined)
+      searchParams.set("active_only", String(params.activeOnly));
     if (params?.skip !== undefined)
       searchParams.set("skip", String(params.skip));
     if (params?.limit !== undefined)

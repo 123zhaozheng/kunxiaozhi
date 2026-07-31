@@ -105,6 +105,7 @@ def _is_body_limit_exempt(scope: Scope) -> bool:
         path in API_MULTIPART_UPLOAD_PATHS
         or path.startswith("/api/skills/upload")
         or (path.startswith("/api/skills/") and "/binary-files/" in path)
+        or path.startswith("/api/admin/builtin-skills/zip")
     )
 
 
@@ -681,6 +682,15 @@ def create_app() -> FastAPI:
     from src.api.routes.marketplace import router as marketplace_router
 
     app.include_router(marketplace_router, prefix="/api/marketplace", tags=["Marketplace"])
+
+    # Admin builtin skill API (role-scoped auto-injection)
+    from src.api.routes.builtin_skill import router as builtin_skill_router
+
+    app.include_router(
+        builtin_skill_router,
+        prefix="/api/admin/builtin-skills",
+        tags=["Builtin Skills"],
+    )
 
     app.include_router(settings_router.router, prefix="/api/settings", tags=["Settings"])
     app.include_router(memory.router, prefix="/api/memory", tags=["Memory"])

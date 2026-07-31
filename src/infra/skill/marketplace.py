@@ -134,6 +134,7 @@ class MarketplaceStorage:
         tags: Optional[list[str]] = None,
         search: Optional[str] = None,
         include_inactive: bool = False,
+        active_only: bool = False,
         viewer_id: Optional[str] = None,
         skip: int = 0,
         limit: int = 50,
@@ -142,7 +143,9 @@ class MarketplaceStorage:
         collection = self._get_meta_collection()
 
         query: dict[str, Any] = {}
-        if not include_inactive:
+        if active_only:
+            query["is_active"] = {"$ne": False}
+        elif not include_inactive:
             # 激活的 skill + 自己发布的 skill（含已停用的）
             if viewer_id:
                 query["$or"] = [
@@ -246,6 +249,61 @@ class MarketplaceStorage:
             created_by=doc.get("created_by"),
             is_active=doc.get("is_active", True),
         )
+
+    async def get_active_marketplace_skills_by_names(
+        self,
+        skill_names: list[str],
+    ) -> dict[str, MarketplaceSkill]:
+        """Batch load active Marketplace metadata by exact skill name."""
+        names = list(dict.fromkeys(name for name in skill_names if name))
+        if not names:
+            return {}
+
+        result: dict[str, MarketplaceSkill] = {}
+        cursor = self._get_meta_collection().find(
+            {
+                "skill_name": {"$in": names},
+                "is_active": {"$ne": False},
+            }
+        )
+        async for doc in cursor:
+            skill = MarketplaceSkill(
+                skill_name=doc["skill_name"],
+                description=doc.get("description", ""),
+                tags=doc.get("tags", []),
+                version=self._normalize_version(
+                    doc.get("version") if isinstance(doc.get("version"), str) else None
+                ),
+                created_at=doc.get("created_at"),
+                updated_at=doc.get("updated_at"),
+                created_by=doc.get("created_by"),
+                is_active=True,
+            )
+            result[skill.skill_name] = skill
+        return result
+
+    async def get_active_skill_md_by_names(
+        self,
+        skill_names: list[str],
+    ) -> dict[str, str]:
+        """Batch load SKILL.md for active Marketplace skills by exact name."""
+        active = await self.get_active_marketplace_skills_by_names(skill_names)
+        if not active:
+            return {}
+
+        result: dict[str, str] = {}
+        cursor = self._get_files_collection().find(
+            {
+                "skill_name": {"$in": list(active)},
+                "file_path": "SKILL.md",
+            },
+            {"_id": 0, "skill_name": 1, "content": 1},
+        )
+        async for doc in cursor:
+            content = doc.get("content")
+            if isinstance(content, str):
+                result[doc["skill_name"]] = content
+        return result
 
     async def get_marketplace_skill_response(
         self,

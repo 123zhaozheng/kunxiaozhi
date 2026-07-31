@@ -112,6 +112,7 @@ async def _copy_marketplace_files_to_user_skill(
 async def list_marketplace_skills(
     tags: Optional[str] = None,
     search: Optional[str] = None,
+    active_only: bool = False,
     skip: int = 0,
     limit: int = Query(50, ge=1, le=100),
     user: TokenPayload = Depends(require_permissions("marketplace:read")),
@@ -123,6 +124,7 @@ async def list_marketplace_skills(
         tags=tag_list,
         search=search,
         include_inactive=False,
+        active_only=active_only,
         viewer_id=user.sub,
         skip=skip,
         limit=limit,

@@ -12,8 +12,6 @@ from src.agents.core.tool_filter import (
 )
 from src.infra.logging import get_logger
 from src.infra.skill import load_skill_files
-from src.infra.skill.binary import parse_binary_ref_async
-from src.infra.skill.persona_overlay import load_persona_marketplace_skills
 from src.infra.tool.human_tool import get_human_tool
 from src.infra.tool.internal_registry import get_internal_tools_for_user
 from src.infra.tool.mcp_global import get_global_mcp_tools
@@ -21,7 +19,6 @@ from src.infra.tool.reveal_file_tool import get_reveal_file_tool
 from src.infra.tool.reveal_project_tool import get_reveal_project_tool
 from src.infra.tool.transfer_file_tool import get_transfer_file_tool, get_transfer_path_tool
 from src.kernel.config import settings
-from src.kernel.schemas.persona_preset import PersonaMarketplaceSkillRef
 
 if TYPE_CHECKING:
     from src.infra.tool.deferred_manager import DeferredToolManager
@@ -48,7 +45,6 @@ class SearchAgentContext:
         disabled_skills: Optional[List[str]] = None,
         enabled_skills: Optional[List[str]] = None,
         disabled_mcp_tools: Optional[List[str]] = None,
-        persona_marketplace_skills: Optional[List[PersonaMarketplaceSkillRef]] = None,
     ):
         self.session_id = session_id
         self.agent_id = agent_id
@@ -57,7 +53,6 @@ class SearchAgentContext:
         self.disabled_skills = disabled_skills
         self.enabled_skills = enabled_skills
         self.disabled_mcp_tools = disabled_mcp_tools
-        self.persona_marketplace_skills = persona_marketplace_skills or []
         self.mcp_manager: Optional[MCPClientManager] = None
         self._mcp_loaded: bool = False
         self.tools: List[Any] = []
@@ -247,19 +242,6 @@ class SearchAgentContext:
                 skill_result = await load_skill_files(self.user_id)
                 self.skill_files = skill_result["files"]
                 self.skills = skill_result["skills"]
-
-                mounted = await load_persona_marketplace_skills(self.persona_marketplace_skills)
-                if mounted:
-                    from deepagents.backends.utils import create_file_data
-
-                    self.skills.extend(mounted.values())
-                    for skill_name, skill_data in mounted.items():
-                        for file_name, file_content in skill_data["files"].items():
-                            if await parse_binary_ref_async(file_content):
-                                continue
-                            self.skill_files[f"/{skill_name}/{file_name}"] = create_file_data(
-                                file_content
-                            )
 
                 before_count = len(self.skills)
                 self.apply_skill_filters()

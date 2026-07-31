@@ -67,6 +67,7 @@ const panelMap: Record<
 > = {
   skills: SkillsHubPanel,
   marketplace: SkillsHubPanel,
+  builtin: SkillsHubPanel,
   users: UsersPanel,
   roles: RolesPanel,
   settings: SettingsPanel,

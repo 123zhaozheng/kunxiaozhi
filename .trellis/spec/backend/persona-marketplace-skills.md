@@ -1,126 +1,78 @@
-# Public Persona Marketplace Skill Dependencies
+# Persona Marketplace Skill Harness
 
-## Scenario: publish personal Skills and mount them read-only for Persona sessions
+## Scope
 
-### 1. Scope / Trigger
+Use this contract when a Persona binds Marketplace Skills, a Persona is
+activated for chat, or the Persona editor lists selectable Skills.
 
-Use this contract whenever a published global Persona selects Skills, a Persona
-snapshot is resolved for chat, or `/skills/` storage routing is changed.
+## Persisted Contract
 
-Public Persona dependencies are public Marketplace artifacts. Runtime mounting is
-session-scoped and read-only. It is independent from the agent-driven
-`install_skill -> sandbox/work_dir/temp_skills` workflow, which must not be reused
-or modified for Persona mounting.
+- `PersonaPreset.skill_names` stores exact Marketplace Skill names only.
+- A selected Skill requires `preferred_agent_id="search"`.
+- `team` is not a valid Persona preferred agent.
+- Persona creation and update validate every selected name against active
+  Marketplace metadata. Invalid or inactive names are rejected.
+- Persona creation does not publish local user Skills, accept publication
+  confirmation fields, or use an idempotency key.
+- Legacy persisted fields are ignored by readers for compatibility; new writes
+  do not emit them.
 
-### 2. Signatures
+## Runtime Harness
+
+When a Persona is activated, the manager reads current active Marketplace
+`SKILL.md` files and parses their descriptions into `PersonaSkillHint` values:
 
 ```text
-POST /api/persona-presets/skill-publication/preflight
-body: {"skill_names": ["planner"]}
-
-POST /api/persona-presets/
-PUT  /api/persona-presets/{preset_id}
-body field after confirmation: "publish_personal_skills": true
+Persona.skill_names
+  -> active Marketplace metadata + SKILL.md
+  -> snapshot.skill_hints
+  -> request.agent_options["_persona_skill_hints"]
+  -> Search Agent prompt
 ```
 
-```python
-class PersonaMarketplaceSkillRef(BaseModel):
-    name: str
-    version: str | None = None
+Hints are runtime-only. The manager never writes the dependency into the user's
+`skill_files`, never mounts a Persona-specific overlay, and never changes the
+user's `enabled_skills` or `disabled_skills` preferences. If a dependency later
+disappears, becomes inactive, lacks `SKILL.md`, or cannot be parsed, its hint is
+omitted and Persona activation continues with the remaining prompt.
 
-class PersonaPresetSnapshot(BaseModel):
-    marketplace_skills: list[PersonaMarketplaceSkillRef] = []
-```
+The Search Agent adds direct `install_skill(<exact-name>)` guidance only when
+that tool is available. Known Persona names do not require a preceding
+`find_skills` call. The normal sandbox installation behavior remains unchanged.
 
-Runtime references travel through trusted server-side
-`agent_options["persona_marketplace_skills"]` and are mounted by
-`PersonaSkillStorageOverlay`.
+## Marketplace Separation
 
-### 3. Contracts
+Ordinary user Marketplace publication and installation remain independent API
+flows. Marketplace installation writes a normal user Skill and metadata; it is
+not triggered by Persona activation. Same-name user Skills are governed by the
+normal user Skill rules and are not compared against Persona metadata.
 
-Preflight response:
+## Validation Matrix
 
-```json
-{
-  "ready": [{"local_name": "planner", "marketplace_name": "planner"}],
-  "requires_publish": [{"local_name": "writer", "marketplace_name": "writer"}],
-  "conflicts": [{
-    "local_name": "reviewer",
-    "marketplace_name": "reviewer",
-    "reason": "same_name_requires_verification"
-  }]
-}
-```
-
-- `marketplace_skills.name` is the stable identity; Marketplace names are globally
-  unique.
-- New public Personas persist resolved Marketplace references only after every
-  required Skill publication succeeds.
-- Historical public Personas with only `skill_names` resolve those names against
-  active Marketplace records; they never fall back to consumer-local names.
-- Prompt descriptions are merged into the existing `context.skills` flow and use
-  the existing `build_skills_prompt()` text.
-- `/skills/{name}/...` reads route to Marketplace for mounted names. The overlay
-  creates no consumer Skill file, metadata, list, or cache entry.
-- `marketplace_skills` and `publish_personal_skills` are server-controlled request
-  fields; clients cannot inject arbitrary persisted dependency references.
-
-### 4. Validation & Error Matrix
-
-| Condition | Result |
+| Condition | Required behavior |
 |---|---|
-| Local Skill missing or lacks `SKILL.md` | Preflight conflict; Persona is not published |
-| Marketplace name absent | `requires_publish`; explicit confirmation required |
-| Same name exists but local metadata does not prove origin | `same_name_requires_verification`; HTTP 409 |
-| Consumer has manual/unknown same-name Skill | `persona_skill_name_conflict`; activation blocked |
-| Consumer copy is `installed_from=marketplace` for the same name | Activation allowed; Marketplace remains authoritative |
-| Marketplace dependency missing, inactive, or incomplete | `persona_skill_dependency_unavailable`; activation blocked |
-| A later coordinated save step fails | Delete newly created Marketplace records and restore/delete local publication metadata |
-| Write/edit/delete targets a mounted Skill | `PermissionError`; no persistent consumer mutation |
+| Persona selects active Marketplace names and Search | Save succeeds; activation emits current hints |
+| Persona selects a missing/inactive name | Create/update returns structured binding error |
+| Persona selects Skills with Fast or Team | Schema validation fails |
+| Bound Marketplace Skill later disappears | Activation succeeds without that hint |
+| Sandbox or `install_skill` unavailable | Persona prompt remains; Skill hint section is omitted |
+| User manually installs a Marketplace Skill | Normal user Skill storage and cache invalidation apply |
 
-### 5. Good / Base / Bad Cases
+## Tests
 
-- Good: an author confirms publication, all personal Skills become normal public
-  Marketplace entries, then the Persona stores name/version references.
-- Base: a Persona selects an already verified Marketplace-installed Skill; no
-  duplicate publication occurs.
-- Bad: matching only by string name and executing a consumer's manual Skill.
-- Bad: copying Marketplace files into the consumer's persistent Skill collection
-  merely because a Persona is selected.
-- Bad: routing Persona dependencies through sandbox `temp_skills`.
+- Schema and manager tests cover exact-name validation and Search-only binding.
+- Activation tests assert hints come from current Marketplace descriptions and
+  do not mutate user Skill storage.
+- Chat tests assert hints use `_persona_skill_hints` and client-supplied persona
+  fields cannot override the resolved snapshot.
+- Agent tests assert known Persona Skills use direct `install_skill` guidance
+  and do not require `find_skills`.
+- Marketplace route tests continue to cover manual install/publication behavior.
 
-### 6. Tests Required
+## Forbidden Patterns
 
-- Publication preflight asserts `ready`, `requires_publish`, and `conflicts`.
-- A same-name manual Skill owned by the same Marketplace creator still requires
-  verification.
-- A verified Marketplace installation with the same name is accepted.
-- Persona activation blocks manual consumer conflicts and unavailable dependencies.
-- Overlay reads Marketplace files, rejects writes, and performs no user-storage
-  mutation.
-- Failed Persona persistence compensates newly created Marketplace publications.
-- Chat request resolution carries references into `agent_options`.
-- Existing `tests/infra/tool/test_skill_marketplace_tool.py` remains unchanged and
-  passing to prove `temp_skills` isolation.
+Do not restore a second Persona-specific runtime Skill source or copy Persona
+dependencies into persistent user Skill storage.
 
-### 7. Wrong vs Correct
-
-#### Wrong
-
-```python
-if dependency_name in consumer_skill_names:
-    enabled_skills.append(dependency_name)
-```
-
-This silently substitutes an unrelated local Skill with the same name.
-
-#### Correct
-
-```python
-refs = resolve_active_marketplace_dependencies(persona)
-validate_consumer_same_name_metadata(refs, user_id)
-agent_options["persona_marketplace_skills"] = [ref.model_dump() for ref in refs]
-```
-
-The Agent receives only verified public references, while the read-only overlay
-serves the authoritative Marketplace files for that session.
+Persona dependencies are descriptive runtime hints. The user's ordinary Skill
+space and the current sandbox are the only executable sources.

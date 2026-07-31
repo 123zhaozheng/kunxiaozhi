@@ -18,6 +18,8 @@ export enum Permission {
   SKILL_WRITE = "skill:write",
   SKILL_DELETE = "skill:delete",
   SKILL_ADMIN = "skill:admin",
+  // Builtin Skill (admin: inject skills into roles)
+  BUILTIN_SKILL_MANAGE = "manage_builtin_skills",
   // User (Admin)
   USER_READ = "user:read",
   USER_WRITE = "user:write",

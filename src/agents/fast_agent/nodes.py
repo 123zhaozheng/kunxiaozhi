@@ -138,7 +138,6 @@ async def fast_agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict
     backend_factory = create_persistent_backend_factory(
         assistant_id=assistant_id,
         user_id=context.user_id,
-        persona_marketplace_skills=context.persona_marketplace_skills,
     )
     backend = backend_factory(None) if callable(backend_factory) else backend_factory
     logger.info(f"[FastAgent] Using PersistentBackend for assistant: {assistant_id}")

@@ -130,3 +130,55 @@ class PublishToMarketplaceRequest(BaseModel):
     description: Optional[str] = None
     tags: Optional[list[str]] = None
     version: Optional[str] = None
+
+
+class BuiltinSkill(BaseModel):
+    """内置 Skill 元数据（admin 管理，按角色自动注入）"""
+
+    skill_name: str = Field(..., description="Skill 名称（全局唯一）")
+    description: str = Field("", description="Skill 描述")
+    allowed_roles: list[str] = Field(
+        default_factory=list,
+        description="允许注入的角色列表；空表示对所有角色生效",
+    )
+    source: str = Field(..., description="创建来源：zip 或 marketplace")
+    source_ref: Optional[str] = Field(
+        None, description="来源引用；marketplace 来源时为商城 skill_name"
+    )
+    is_active: bool = True
+    created_by: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class BuiltinSkillCreate(BaseModel):
+    """创建内置 Skill 请求"""
+
+    skill_name: str
+    description: str = ""
+    allowed_roles: list[str] = Field(default_factory=list)
+    source: str
+    source_ref: Optional[str] = None
+
+
+class BuiltinSkillUpdate(BaseModel):
+    """更新内置 Skill 请求（角色 / 描述 / 启停）"""
+
+    description: Optional[str] = None
+    allowed_roles: Optional[list[str]] = None
+    is_active: Optional[bool] = None
+
+
+class BuiltinSkillResponse(BaseModel):
+    """内置 Skill 响应（admin 视图）"""
+
+    skill_name: str
+    description: str = ""
+    allowed_roles: list[str] = Field(default_factory=list)
+    source: str
+    source_ref: Optional[str] = None
+    is_active: bool = True
+    created_by: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    file_count: int = 0

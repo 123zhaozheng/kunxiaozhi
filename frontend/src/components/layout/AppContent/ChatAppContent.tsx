@@ -232,10 +232,7 @@ export function ChatAppContent({
         // Bypass session lock: attaching a persona must set preferred agent.
         switchAgentRaw(nextAgentId);
       }
-      // Only keep a team selection when the preferred template is team.
-      if (nextAgentId !== "team") {
-        selectTeam(null);
-      }
+      selectTeam(null);
     },
     [currentAgent, selectTeam, switchAgentRaw],
   );

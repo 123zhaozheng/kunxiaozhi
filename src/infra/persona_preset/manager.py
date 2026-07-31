@@ -2,20 +2,13 @@
 
 from typing import Optional
 
+from src.infra.logging import get_logger
 from src.infra.persona_preset.storage import PersonaPresetStorage
 from src.infra.skill.marketplace import MarketplaceStorage
-from src.infra.skill.publication import (
-    CreatedSkillPublication,
-    SkillPublicationError,
-    ensure_public_persona_skill_dependencies,
-    preflight_user_skill_publications,
-    rollback_created_skill_publications,
-)
-from src.infra.skill.storage import SkillStorage
+from src.infra.skill.parser import parse_skill_md
 from src.infra.utils.datetime import utc_now
 from src.kernel.exceptions import AuthorizationError, NotFoundError
 from src.kernel.schemas.persona_preset import (
-    PersonaMarketplaceSkillRef,
     PersonaPreset,
     PersonaPresetCreate,
     PersonaPresetScope,
@@ -23,9 +16,24 @@ from src.kernel.schemas.persona_preset import (
     PersonaPresetStatus,
     PersonaPresetUpdate,
     PersonaPresetVisibility,
-    PersonaSkillPublicationItem,
-    PersonaSkillPublicationPreflightResponse,
+    PersonaSkillHint,
 )
+
+logger = get_logger(__name__)
+
+
+class PersonaSkillBindingError(ValueError):
+    """Selected Persona skills are not active Marketplace skills."""
+
+    def __init__(self, invalid_names: list[str]) -> None:
+        super().__init__("persona_skill_binding_invalid")
+        self.invalid_names = invalid_names
+
+    def as_detail(self) -> dict[str, object]:
+        return {
+            "code": "persona_skill_binding_invalid",
+            "invalid_names": self.invalid_names,
+        }
 
 
 class PersonaPresetManager:
@@ -34,11 +42,9 @@ class PersonaPresetManager:
     def __init__(
         self,
         storage: PersonaPresetStorage | None = None,
-        skill_storage: SkillStorage | None = None,
         marketplace_storage: MarketplaceStorage | None = None,
     ) -> None:
         self.storage = storage or PersonaPresetStorage()
-        self.skill_storage = skill_storage or SkillStorage()
         self.marketplace_storage = marketplace_storage or MarketplaceStorage()
 
     @staticmethod
@@ -49,33 +55,66 @@ class PersonaPresetManager:
             and data.get("status") == PersonaPresetStatus.PUBLISHED.value
         )
 
-    async def preflight_skill_publications(
-        self,
-        skill_names: list[str],
-        *,
-        user_id: str,
-    ) -> PersonaSkillPublicationPreflightResponse:
-        return await preflight_user_skill_publications(
-            skill_names,
-            user_id=user_id,
-            storage=self.skill_storage,
-            marketplace=self.marketplace_storage,
-        )
+    @staticmethod
+    def _validate_agent_contract(data: dict) -> None:
+        skill_names = data.get("skill_names") or []
+        if skill_names and data.get("preferred_agent_id") != "search":
+            raise ValueError("persona_skills_require_search_agent")
 
-    async def _resolve_public_dependencies_for_save(
-        self,
-        skill_names: list[str],
-        *,
-        user_id: str,
-        confirmed: bool,
-    ) -> tuple[list[PersonaMarketplaceSkillRef], list[CreatedSkillPublication]]:
-        return await ensure_public_persona_skill_dependencies(
-            skill_names,
-            user_id=user_id,
-            confirmed=confirmed,
-            storage=self.skill_storage,
-            marketplace=self.marketplace_storage,
+    async def _validate_marketplace_skill_names(self, skill_names: list[str]) -> None:
+        if not skill_names:
+            return
+        active = await self.marketplace_storage.get_active_marketplace_skills_by_names(
+            skill_names
         )
+        invalid = [name for name in skill_names if name not in active]
+        if invalid:
+            raise PersonaSkillBindingError(invalid)
+
+    async def _resolve_skill_hints(
+        self,
+        preset_id: str,
+        skill_names: list[str],
+    ) -> list[PersonaSkillHint]:
+        if not skill_names:
+            return []
+
+        try:
+            skill_md_by_name = await self.marketplace_storage.get_active_skill_md_by_names(
+                skill_names
+            )
+        except Exception as exc:
+            logger.warning(
+                "Unable to resolve Persona skill hints for preset %s: %s",
+                preset_id,
+                exc,
+            )
+            return []
+        hints: list[PersonaSkillHint] = []
+        omitted: list[str] = []
+        for name in skill_names:
+            content = skill_md_by_name.get(name)
+            if not content:
+                omitted.append(name)
+                continue
+            try:
+                _, description, _ = parse_skill_md(content)
+            except Exception:
+                omitted.append(name)
+                continue
+            description = description.strip()
+            if not description:
+                omitted.append(name)
+                continue
+            hints.append(PersonaSkillHint(name=name, description=description))
+
+        if omitted:
+            logger.warning(
+                "Omitted unavailable Persona skill hints for preset %s: %s",
+                preset_id,
+                ", ".join(omitted),
+            )
+        return hints
 
     @staticmethod
     def _can_view(doc: dict, *, user_id: str, is_admin: bool) -> bool:
@@ -113,14 +152,8 @@ class PersonaPresetManager:
 
         now = utc_now()
         data = preset_data.model_dump(mode="json")
-        if self._is_public_global(data):
-            refs, created_publications = await self._resolve_public_dependencies_for_save(
-                list(preset_data.skill_names),
-                user_id=user_id,
-                confirmed=preset_data.publish_personal_skills,
-            )
-            data["marketplace_skills"] = [ref.model_dump(mode="json") for ref in refs]
-            data["skill_names"] = [ref.name for ref in refs]
+        self._validate_agent_contract(data)
+        await self._validate_marketplace_skill_names(list(preset_data.skill_names))
         data.update(
             {
                 "owner_user_id": None
@@ -134,17 +167,7 @@ class PersonaPresetManager:
                 "updated_at": now,
             }
         )
-        try:
-            created = await self.storage.create(data)
-        except Exception:
-            if self._is_public_global(data):
-                await rollback_created_skill_publications(
-                    created_publications,
-                    user_id=user_id,
-                    storage=self.skill_storage,
-                    marketplace=self.marketplace_storage,
-                )
-            raise
+        created = await self.storage.create(data)
         return PersonaPreset(**created)
 
     async def batch_create_presets(
@@ -263,25 +286,10 @@ class PersonaPresetManager:
 
         update = preset_data.model_dump(mode="json", exclude_unset=True)
         merged = {**doc, **update}
-        if self._is_public_global(merged):
-            selected_names = list(update.get("skill_names", doc.get("skill_names", [])) or [])
-            refs, created_publications = await self._resolve_public_dependencies_for_save(
-                selected_names,
-                user_id=user_id,
-                confirmed=bool(preset_data.publish_personal_skills),
-            )
-            update["marketplace_skills"] = [ref.model_dump(mode="json") for ref in refs]
-            update["skill_names"] = [ref.name for ref in refs]
-        else:
-            created_publications = []
-            if doc.get("marketplace_skills") and "skill_names" in update:
-                dependency_names = [
-                    ref.get("name")
-                    for ref in doc.get("marketplace_skills", [])
-                    if isinstance(ref, dict)
-                ]
-                if update["skill_names"] != dependency_names:
-                    update["marketplace_skills"] = []
+        self._validate_agent_contract(merged)
+        await self._validate_marketplace_skill_names(
+            list(merged.get("skill_names") or [])
+        )
         target_scope = update.get("scope")
         if target_scope == PersonaPresetScope.GLOBAL.value:
             if not is_admin:
@@ -292,23 +300,8 @@ class PersonaPresetManager:
 
         update["version"] = int(doc.get("version", 1)) + 1
         update["updated_by"] = user_id
-        try:
-            updated = await self.storage.update(preset_id, update)
-        except Exception:
-            await rollback_created_skill_publications(
-                created_publications,
-                user_id=user_id,
-                storage=self.skill_storage,
-                marketplace=self.marketplace_storage,
-            )
-            raise
+        updated = await self.storage.update(preset_id, update)
         if not updated:
-            await rollback_created_skill_publications(
-                created_publications,
-                user_id=user_id,
-                storage=self.skill_storage,
-                marketplace=self.marketplace_storage,
-            )
             raise NotFoundError("persona_preset_not_found")
         return PersonaPreset(**updated)
 
@@ -341,9 +334,6 @@ class PersonaPresetManager:
                 prompt.model_dump(mode="json") for prompt in source.starter_prompts
             ],
             "skill_names": source.skill_names,
-            "marketplace_skills": [
-                ref.model_dump(mode="json") for ref in source.marketplace_skills
-            ],
             "preferred_agent_id": source.preferred_agent_id,
             "visibility": PersonaPresetVisibility.PRIVATE.value,
             "status": PersonaPresetStatus.DRAFT.value,
@@ -367,28 +357,7 @@ class PersonaPresetManager:
         is_admin: bool,
     ) -> PersonaPresetSnapshot:
         preset = await self.get_preset(preset_id, user_id=user_id, is_admin=is_admin)
-        if self._is_public_global(preset.model_dump(mode="json")) or preset.marketplace_skills:
-            refs = await self._resolve_public_dependencies_for_use(preset)
-            await self._validate_consumer_skill_conflicts(refs, user_id=user_id)
-            await self.storage.increment_usage(preset_id)
-            await self.storage.touch_user_preference(user_id=user_id, preset_id=preset_id)
-            return PersonaPresetSnapshot(
-                preset_id=preset.id,
-                name=preset.name,
-                system_prompt=preset.system_prompt,
-                starter_prompts=preset.starter_prompts,
-                skill_names=[ref.name for ref in refs],
-                marketplace_skills=refs,
-                dify_kb_dataset_ids=list(preset.dify_kb_dataset_ids or []),
-                preferred_agent_id=preset.preferred_agent_id,
-                missing_skill_names=[],
-                version=preset.version,
-                avatar=preset.avatar,
-            )
-
-        available = await self._get_available_skill_names(user_id)
-        skill_names = [name for name in preset.skill_names if name in available]
-        missing = [name for name in preset.skill_names if name not in available]
+        skill_hints = await self._resolve_skill_hints(preset.id, list(preset.skill_names))
 
         await self.storage.increment_usage(preset_id)
         await self.storage.touch_user_preference(user_id=user_id, preset_id=preset_id)
@@ -397,96 +366,13 @@ class PersonaPresetManager:
             name=preset.name,
             system_prompt=preset.system_prompt,
             starter_prompts=preset.starter_prompts,
-            skill_names=skill_names,
-            marketplace_skills=[],
+            skill_names=list(preset.skill_names),
+            skill_hints=skill_hints,
             dify_kb_dataset_ids=list(preset.dify_kb_dataset_ids or []),
             preferred_agent_id=preset.preferred_agent_id,
-            missing_skill_names=missing,
             version=preset.version,
             avatar=preset.avatar,
         )
-
-    async def _get_available_skill_names(self, user_id: str) -> set[str]:
-        """Return skill names that can actually be loaded for this user."""
-        get_effective_skills = getattr(self.skill_storage, "get_effective_skills", None)
-        if get_effective_skills is not None:
-            effective = await get_effective_skills(user_id)
-            if isinstance(effective, dict):
-                skills = effective.get("skills")
-                if isinstance(skills, dict):
-                    return set(skills.keys())
-                return set(effective.keys())
-
-        return set(await self.skill_storage.get_all_user_skill_names(user_id))
-
-    async def _resolve_public_dependencies_for_use(
-        self,
-        preset: PersonaPreset,
-    ) -> list[PersonaMarketplaceSkillRef]:
-        refs = list(preset.marketplace_skills)
-        if not refs:
-            refs = [PersonaMarketplaceSkillRef(name=name) for name in preset.skill_names]
-
-        resolved: list[PersonaMarketplaceSkillRef] = []
-        unavailable: list[PersonaSkillPublicationItem] = []
-        for ref in refs:
-            skill = await self.marketplace_storage.get_marketplace_skill(ref.name)
-            files = (
-                await self.marketplace_storage.list_marketplace_file_paths(ref.name)
-                if skill and skill.is_active
-                else []
-            )
-            if not skill or not skill.is_active or "SKILL.md" not in files:
-                unavailable.append(
-                    PersonaSkillPublicationItem(
-                        local_name=ref.name,
-                        marketplace_name=ref.name,
-                        version=skill.version if skill else ref.version,
-                        reason=(
-                            "marketplace_skill_incomplete"
-                            if skill and skill.is_active
-                            else "marketplace_skill_unavailable"
-                        ),
-                    )
-                )
-                continue
-            resolved.append(
-                PersonaMarketplaceSkillRef(name=skill.skill_name, version=skill.version)
-            )
-        if unavailable:
-            raise SkillPublicationError("persona_skill_dependency_unavailable", unavailable)
-        return resolved
-
-    async def _validate_consumer_skill_conflicts(
-        self,
-        refs: list[PersonaMarketplaceSkillRef],
-        *,
-        user_id: str,
-    ) -> None:
-        conflicts: list[PersonaSkillPublicationItem] = []
-        for ref in refs:
-            paths = await self.skill_storage.list_skill_file_paths(ref.name, user_id)
-            if not paths:
-                continue
-            meta = await self.skill_storage.get_skill_meta(ref.name, user_id)
-            if (
-                not meta
-                or meta.installed_from.value != "marketplace"
-                or (
-                    meta.published_marketplace_name is not None
-                    and meta.published_marketplace_name != ref.name
-                )
-            ):
-                conflicts.append(
-                    PersonaSkillPublicationItem(
-                        local_name=ref.name,
-                        marketplace_name=ref.name,
-                        version=ref.version,
-                        reason="consumer_local_name_conflict",
-                    )
-                )
-        if conflicts:
-            raise SkillPublicationError("persona_skill_name_conflict", conflicts)
 
 
 _persona_preset_manager: Optional[PersonaPresetManager] = None

@@ -7,8 +7,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from src.api.deps import require_permissions
 from src.infra.agent.config_storage import get_agent_config_storage
 from src.infra.logging import get_logger
-from src.infra.persona_preset.manager import PersonaPresetManager
-from src.infra.skill.publication import SkillPublicationError
+from src.infra.persona_preset.manager import PersonaPresetManager, PersonaSkillBindingError
 from src.kernel.exceptions import AuthorizationError, NotFoundError
 from src.kernel.schemas.persona_preset import (
     PersonaPreset,
@@ -18,8 +17,6 @@ from src.kernel.schemas.persona_preset import (
     PersonaPresetScope,
     PersonaPresetSnapshot,
     PersonaPresetUpdate,
-    PersonaSkillPublicationPreflightRequest,
-    PersonaSkillPublicationPreflightResponse,
 )
 from src.kernel.schemas.user import TokenPayload
 from src.kernel.schemas.wecom import PersonaWeComConfig, PersonaWeComConfigCreate
@@ -117,10 +114,6 @@ async def create_persona_preset(
     user: TokenPayload = Depends(require_permissions("persona_preset:write")),
 ):
     """Create a user preset or, for admins, a global preset."""
-    if preset_data.publish_personal_skills and "marketplace:publish" not in (
-        user.permissions or []
-    ):
-        raise HTTPException(status_code=403, detail="marketplace_publish_permission_required")
     try:
         return await _manager().create_preset(
             preset_data,
@@ -129,7 +122,7 @@ async def create_persona_preset(
         )
     except AuthorizationError as e:
         raise HTTPException(status_code=403, detail=str(e))
-    except SkillPublicationError as e:
+    except PersonaSkillBindingError as e:
         raise HTTPException(status_code=409, detail=e.as_detail())
 
 
@@ -139,35 +132,14 @@ async def batch_create_persona_presets(
     user: TokenPayload = Depends(require_permissions("persona_preset:write")),
 ):
     """Batch create persona presets."""
-    if any(item.publish_personal_skills for item in items) and (
-        "marketplace:publish" not in (user.permissions or [])
-    ):
-        raise HTTPException(status_code=403, detail="marketplace_publish_permission_required")
     try:
         return await _manager().batch_create_presets(
             items,
             user_id=user.sub,
             is_admin=_is_admin(user),
         )
-    except SkillPublicationError as e:
+    except PersonaSkillBindingError as e:
         raise HTTPException(status_code=409, detail=e.as_detail())
-
-
-@router.post(
-    "/skill-publication/preflight",
-    response_model=PersonaSkillPublicationPreflightResponse,
-)
-async def preflight_persona_skill_publication(
-    body: PersonaSkillPublicationPreflightRequest,
-    user: TokenPayload = Depends(
-        require_permissions("persona_preset:write", "marketplace:publish")
-    ),
-):
-    """Classify selected local Skills before publishing a public Persona."""
-    return await _manager().preflight_skill_publications(
-        body.skill_names,
-        user_id=user.sub,
-    )
 
 
 @router.post("/wecom/status", response_model=WeComStatusBatchResponse)
@@ -212,10 +184,6 @@ async def update_persona_preset(
     user: TokenPayload = Depends(require_permissions("persona_preset:write")),
 ):
     """Update an editable persona preset."""
-    if preset_data.publish_personal_skills and "marketplace:publish" not in (
-        user.permissions or []
-    ):
-        raise HTTPException(status_code=403, detail="marketplace_publish_permission_required")
     try:
         return await _manager().update_preset(
             preset_id,
@@ -227,7 +195,7 @@ async def update_persona_preset(
         raise HTTPException(status_code=404, detail="persona_preset_not_found")
     except AuthorizationError as e:
         raise HTTPException(status_code=403, detail=str(e))
-    except SkillPublicationError as e:
+    except PersonaSkillBindingError as e:
         raise HTTPException(status_code=409, detail=e.as_detail())
 
 
@@ -280,8 +248,6 @@ async def use_persona_preset(
         )
     except NotFoundError:
         raise HTTPException(status_code=404, detail="persona_preset_not_found")
-    except SkillPublicationError as e:
-        raise HTTPException(status_code=409, detail=e.as_detail())
 
 
 @router.patch("/{preset_id}/preference", response_model=PersonaPreset)

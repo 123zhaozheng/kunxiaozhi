@@ -93,6 +93,9 @@ class Permission(str, Enum):
     MARKETPLACE_PUBLISH = "marketplace:publish"
     MARKETPLACE_ADMIN = "marketplace:admin"
 
+    # Builtin Skill (admin-managed, role-scoped auto-injection)
+    MANAGE_BUILTIN_SKILLS = "manage_builtin_skills"
+
     # Persona Preset
     PERSONA_PRESET_READ = "persona_preset:read"
     PERSONA_PRESET_WRITE = "persona_preset:write"

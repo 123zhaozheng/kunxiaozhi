@@ -224,6 +224,11 @@ PERMISSION_METADATA: dict[str, dict[str, str]] = {
         "label": "管理商店",
         "description": "管理技能商店（激活/停用/删除任意技能）",
     },
+    # Builtin Skill
+    Permission.MANAGE_BUILTIN_SKILLS.value: {
+        "label": "管理内置技能",
+        "description": "创建、编辑、删除内置技能并按角色自动注入（管理员）",
+    },
     # Persona Preset
     Permission.PERSONA_PRESET_READ.value: {
         "label": "浏览角色预设",
@@ -283,6 +288,7 @@ PERMISSION_GROUPS_CONFIG: list[PermissionGroupConfig] = [
             Permission.SKILL_WRITE.value,
             Permission.SKILL_DELETE.value,
             Permission.SKILL_ADMIN.value,
+            Permission.MANAGE_BUILTIN_SKILLS.value,
         ],
     },
     {

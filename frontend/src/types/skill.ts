@@ -185,3 +185,60 @@ export type MarketplaceUpdateResponse = MarketplaceInstallResponse;
 export interface TagsResponse {
   tags: string[];
 }
+
+// ============================================
+// Builtin Skills Types (admin, from /api/admin/builtin-skills/)
+// ============================================
+
+// Builtin skill source
+export type BuiltinSkillSource = "zip" | "marketplace";
+
+// Builtin skill response (admin view)
+export interface BuiltinSkill {
+  skill_name: string;
+  description: string;
+  allowed_roles: string[];
+  source: BuiltinSkillSource;
+  source_ref?: string | null;
+  is_active: boolean;
+  created_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  file_count: number;
+}
+
+// Builtin skill update request (PATCH /{name})
+export interface BuiltinSkillUpdate {
+  description?: string;
+  allowed_roles?: string[];
+  is_active?: boolean;
+}
+
+// Builtin skill list query params
+export interface BuiltinSkillListParams {
+  include_inactive?: boolean;
+  allowed_role?: string;
+  source?: string;
+  skip?: number;
+  limit?: number;
+}
+
+// ZIP preview skill entry (POST /zip/preview)
+export interface BuiltinSkillZipPreviewSkill {
+  name: string;
+  description?: string;
+  file_count?: number;
+  already_exists: boolean;
+}
+
+// ZIP upload created entry (POST /zip)
+export interface BuiltinSkillZipCreated {
+  name: string;
+  file_count?: number;
+}
+
+// From-marketplace request (POST /from-marketplace)
+export interface BuiltinSkillFromMarketplaceRequest {
+  marketplace_name: string;
+  allowed_roles: string[];
+}

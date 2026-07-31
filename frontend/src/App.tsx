@@ -179,6 +179,15 @@ function MarketplacePage() {
   return <AppContent key="marketplace" activeTab="marketplace" />;
 }
 
+function BuiltinSkillsPage() {
+  useSEO({
+    title: "seo.builtinSkills.title",
+    description: "seo.builtinSkills.description",
+    path: "/builtin-skills",
+  });
+  return <AppContent key="builtin" activeTab="builtin" />;
+}
+
 function UsersPage() {
   useSEO({
     title: "seo.users.title",
@@ -440,6 +449,19 @@ function App() {
                   toastMessage={t("errors.noPermission")}
                 >
                   <MarketplacePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/builtin-skills"
+              element={
+                <ProtectedRoute
+                  permissions={[Permission.BUILTIN_SKILL_MANAGE]}
+                  redirectTo="/skills"
+                  showToast
+                  toastMessage={t("errors.noPermission")}
+                >
+                  <BuiltinSkillsPage />
                 </ProtectedRoute>
               }
             />

@@ -9,7 +9,6 @@ import type {
   PersonaPresetPreferenceUpdate,
   PersonaPresetSnapshot,
   PersonaPresetUpdate,
-  PersonaSkillPublicationPreflightResponse,
   PersonaWeComConfig,
   PersonaWeComConfigCreate,
   PersonaWeComStatus,
@@ -99,15 +98,6 @@ export function buildPersonaPresetPreferenceUrl(presetId: string): string {
 }
 
 export const personaPresetApi = {
-  async preflightSkillPublication(
-    skillNames: string[],
-  ): Promise<PersonaSkillPublicationPreflightResponse> {
-    return authFetch(`${PERSONA_PRESETS_API}/skill-publication/preflight`, {
-      method: "POST",
-      body: JSON.stringify({ skill_names: skillNames }),
-    });
-  },
-
   async list(
     params: PersonaPresetListParams = {},
   ): Promise<PersonaPresetListResponse> {

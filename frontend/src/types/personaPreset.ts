@@ -1,13 +1,9 @@
 export type PersonaPresetScope = "global" | "user";
 export type PersonaPresetVisibility = "public" | "private";
 export type PersonaPresetStatus = "draft" | "published" | "archived";
-export type PreferredAgentId = "fast" | "search" | "team";
+export type PreferredAgentId = "fast" | "search";
 export const DEFAULT_PREFERRED_AGENT_ID: PreferredAgentId = "fast";
-export const PREFERRED_AGENT_IDS: PreferredAgentId[] = [
-  "fast",
-  "search",
-  "team",
-];
+export const PREFERRED_AGENT_IDS: PreferredAgentId[] = ["fast", "search"];
 export type LocalizedText = string | Record<string, string>;
 
 export interface PersonaStarterPrompt {
@@ -15,22 +11,9 @@ export interface PersonaStarterPrompt {
   text: LocalizedText;
 }
 
-export interface PersonaMarketplaceSkillRef {
+export interface PersonaSkillHint {
   name: string;
-  version?: string | null;
-}
-
-export interface PersonaSkillPublicationItem {
-  local_name: string;
-  marketplace_name: string;
-  version?: string | null;
-  reason?: string | null;
-}
-
-export interface PersonaSkillPublicationPreflightResponse {
-  ready: PersonaSkillPublicationItem[];
-  requires_publish: PersonaSkillPublicationItem[];
-  conflicts: PersonaSkillPublicationItem[];
+  description: string;
 }
 
 export interface PersonaPreset {
@@ -44,7 +27,6 @@ export interface PersonaPreset {
   system_prompt: string;
   starter_prompts?: PersonaStarterPrompt[];
   skill_names: string[];
-  marketplace_skills?: PersonaMarketplaceSkillRef[];
   dify_kb_dataset_ids: string[];
   preferred_agent_id?: PreferredAgentId;
   visibility: PersonaPresetVisibility;
@@ -76,7 +58,6 @@ export interface PersonaPresetCreate {
   scope?: PersonaPresetScope;
   visibility?: PersonaPresetVisibility;
   status?: PersonaPresetStatus;
-  publish_personal_skills?: boolean;
 }
 
 export interface PersonaPresetUpdate {
@@ -92,7 +73,6 @@ export interface PersonaPresetUpdate {
   scope?: PersonaPresetScope;
   visibility?: PersonaPresetVisibility;
   status?: PersonaPresetStatus;
-  publish_personal_skills?: boolean;
 }
 
 export interface PersonaPresetPreferenceUpdate {
@@ -106,10 +86,9 @@ export interface PersonaPresetSnapshot {
   system_prompt: string;
   starter_prompts?: PersonaStarterPrompt[];
   skill_names: string[];
-  marketplace_skills?: PersonaMarketplaceSkillRef[];
+  skill_hints: PersonaSkillHint[];
   dify_kb_dataset_ids: string[];
   preferred_agent_id?: PreferredAgentId;
-  missing_skill_names: string[];
   version: number;
   avatar?: string | null;
 }
