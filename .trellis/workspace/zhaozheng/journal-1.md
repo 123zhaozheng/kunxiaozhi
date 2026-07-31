@@ -752,3 +752,36 @@ Implemented coordinated publication of Persona-bound personal Skills to Marketpl
 ### Next Steps
 
 - None - task complete
+
+
+## Session 23: Finalize persona harness and builtin skills
+
+**Date**: 2026-07-31
+**Task**: Finalize persona harness and builtin skills
+**Branch**: `main`
+
+### Summary
+
+Removed obsolete Persona Skill materialization and overlay/publication remnants; finalized builtin skill role projection and Search-only persona harness; refreshed backend specs; archived all related tasks; verified lint and targeted tests. Windows-only failures remain in jieba dictionary parsing and /bin/sh sandbox test.
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `198101c6` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
