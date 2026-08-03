@@ -46,20 +46,6 @@ export type {
 } from "./message";
 
 // ============================================
-// TeamAgent planning types
-// ============================================
-export type {
-  TeamPlanStatus,
-  TeamStepStatus,
-  AttachmentMaterializationStatus,
-  TeamPlanAttachment,
-  TeamPlanStep,
-  TeamPlanState,
-  TeamPlanEvent,
-} from "./teamPlan";
-export { normalizeTeamPlanEvent, reduceTeamPlan } from "./teamPlan";
-
-// ============================================
 // Persona Preset Types
 // ============================================
 export type {

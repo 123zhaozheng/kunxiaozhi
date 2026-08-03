@@ -187,9 +187,6 @@ class TeamAgent(BaseGraphAgent):
             "messages": [],
             "output": "",
             "attachments": attachments,
-            "team_run_id": kwargs.get("team_run_id") or f"{session_id}-{presenter.run_id}",
-            "plan_id": kwargs.get("plan_id"),
-            "approval_id": kwargs.get("approval_id"),
         }
         logger.info(
             f"[TeamAgent] initial_state attachments: {len(attachments) if attachments else 0} items"

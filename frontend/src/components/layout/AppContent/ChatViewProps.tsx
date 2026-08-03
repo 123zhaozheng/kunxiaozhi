@@ -17,7 +17,6 @@ import type {
   PersonaPresetSnapshot,
 } from "../../../types";
 import type { ActiveGoalSpec } from "../../../hooks/useAgent/types";
-import type { TeamPlanState } from "../../../types/teamPlan";
 import type { RevealPreviewRequest } from "../../chat/ChatMessage/items/revealPreviewData";
 import type { ExternalNavigationTargetFile } from "./externalNavigationState";
 
@@ -168,7 +167,6 @@ export interface ChatViewProps {
     approved: boolean,
   ) => void;
   approvalLoading: boolean;
-  teamPlan: TeamPlanState | null;
   onSendMessage: (content: string, attachments?: MessageAttachment[]) => void;
   onStopGeneration: () => void;
   activeGoal: ActiveGoalSpec | null;

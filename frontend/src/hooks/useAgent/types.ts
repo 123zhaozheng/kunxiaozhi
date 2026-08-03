@@ -6,7 +6,6 @@ import type {
   MessageAttachment,
   PersonaPresetSnapshot,
 } from "../../types";
-import type { TeamPlanState } from "../../types/teamPlan";
 
 // Event types from backend
 export type EventType =
@@ -24,9 +23,6 @@ export type EventType =
   | "agent:call"
   | "agent:result"
   | "approval_required"
-  | "team:plan"
-  | "team:step"
-  | "team:run"
   | "sandbox:starting"
   | "sandbox:ready"
   | "sandbox:error"
@@ -67,13 +63,6 @@ export interface EventData {
   message?: string;
   choices?: string[];
   default?: string;
-  // TeamAgent planning events
-  approval_type?: "team_plan" | string;
-  approval_id?: string;
-  plan_id?: string;
-  team_run_id?: string;
-  plan?: Record<string, unknown>;
-  step?: Record<string, unknown>;
   // sandbox event fields
   sandbox_id?: string;
   work_dir?: string;
@@ -146,8 +135,6 @@ export interface UseAgentOptions {
     fields?: FormField[];
     expires_at?: string | null;
     timeout?: number;
-    approval_type?: string;
-    plan?: TeamPlanState | null;
   }) => void;
   onClearApprovals?: () => void;
   getEnabledTools?: () => string[];
@@ -223,13 +210,6 @@ export interface HistoryEventData {
     url: string;
   }>;
   message_id?: string;
-  approval_type?: string;
-  approval_id?: string;
-  plan_id?: string;
-  team_run_id?: string;
-  plan?: Record<string, unknown>;
-  step?: Record<string, unknown>;
-  rejection_feedback?: string | null;
 }
 
 // History event from backend
@@ -261,7 +241,6 @@ export interface UseAgentReturn {
   newlyCreatedSession: BackendSession | null;
   activeGoal: ActiveGoalSpec | null;
   goalsByRunId: Record<string, ActiveGoalSpec>;
-  teamPlan: TeamPlanState | null;
   isInitializingSandbox: boolean;
   sandboxError: string | null;
   sendMessage: (

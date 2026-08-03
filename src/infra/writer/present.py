@@ -221,12 +221,6 @@ class Presenter(EventPresenterMixin, StoragePresenterMixin):
         await self.save_event(event)
         return event
 
-    async def emit_team_event(self, event_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Emit and persist a TeamAgent orchestration event."""
-        event = self.present_team_event(event_type, data)
-        await self.save_event(event)
-        return event
-
     async def emit_token_usage(
         self,
         input_tokens: int = 0,

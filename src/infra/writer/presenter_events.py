@@ -417,12 +417,6 @@ class EventPresenterMixin:
             agent_id=agent_id,
         )
 
-    def present_team_event(self, event_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Build a normalized TeamAgent event with correlation metadata."""
-        if event_type not in {"team:plan", "team:step", "team:run", "approval_required"}:
-            raise ValueError(f"unsupported TeamAgent event type: {event_type}")
-        return self._build_event(event_type, data)
-
     def present_user_message(
         self,
         content: str,

@@ -28,11 +28,6 @@ import {
   type ActiveGoalSpec,
 } from "./useAgent/types";
 import {
-  normalizeTeamPlanEvent,
-  reduceTeamPlan,
-  type TeamPlanState,
-} from "../types/teamPlan";
-import {
   reconstructMessagesFromEvents,
   getLastEventTimestamp,
   prepareMessagesForRunningRun,
@@ -84,7 +79,6 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
   const [goalsByRunId, setGoalsByRunId] = useState<
     Record<string, ActiveGoalSpec>
   >({});
-  const [teamPlan, setTeamPlan] = useState<TeamPlanState | null>(null);
   const [goalModeEnabled, setGoalModeEnabled] = useState(false);
 
   // Refs for connection management
@@ -152,7 +146,6 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
       setSandboxError,
       setActiveGoal,
       setGoalsByRunId,
-      setTeamPlan,
     }),
     [options],
   );
@@ -322,7 +315,6 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
 
       // Clear approvals before loading new session
       options?.onClearApprovals?.();
-      setTeamPlan(null);
 
       try {
         await markReadPromise;
@@ -400,8 +392,7 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
           if (statusData) {
             isTaskRunning =
               statusData.status === "pending" ||
-              statusData.status === "running" ||
-              statusData.status === "awaiting_confirmation";
+              statusData.status === "running";
           }
 
           if (eventsData.events && eventsData.events.length > 0) {
@@ -451,39 +442,6 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
             setGoalsByRunId(
               extractGoalsByRunFromEvents(eventsData.events as HistoryEvent[]),
             );
-            const latestPlanEvent = [...(eventsData.events as HistoryEvent[])]
-              .reverse()
-              .find((event) =>
-                event.event_type === "approval_required" ||
-                event.event_type === "team:plan" ||
-                event.event_type === "team:step" ||
-                event.event_type === "team:run",
-              );
-            if (latestPlanEvent) {
-              let restoredPlan: TeamPlanState | null = null;
-              for (const planEvent of (eventsData.events as HistoryEvent[]).filter(
-                (event) =>
-                  event.event_type === "approval_required" ||
-                  event.event_type === "team:plan" ||
-                  event.event_type === "team:step" ||
-                  event.event_type === "team:run",
-              )) {
-                restoredPlan = reduceTeamPlan(
-                  restoredPlan,
-                  normalizeTeamPlanEvent(
-                    planEvent.event_type as
-                      | "approval_required"
-                      | "team:plan"
-                      | "team:step"
-                      | "team:run",
-                    planEvent.data,
-                  ),
-                );
-              }
-              setTeamPlan(restoredPlan);
-            } else {
-              setTeamPlan(null);
-            }
 
             // When the task is still running, target the assistant message for
             // that same run. If history has the user message but no assistant
@@ -521,7 +479,6 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
             setMessages([]);
             setActiveGoal(null);
             setGoalsByRunId({});
-            setTeamPlan(null);
 
             if (isTaskRunning && currentRunId) {
               setCurrentRunId(currentRunId);
@@ -859,7 +816,6 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
 
     // Clear approvals immediately (don't wait for SSE cancel event which may never arrive)
     options?.onClearApprovals?.();
-    setTeamPlan(null);
 
     // Clear loading states on all messages and their parts
     setMessages((prev) =>
@@ -900,7 +856,6 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
     setGoalModeEnabled(false);
     setActiveGoal(null);
     setGoalsByRunId({});
-    setTeamPlan(null);
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
@@ -1004,7 +959,6 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
     newlyCreatedSession,
     activeGoal,
     goalsByRunId,
-    teamPlan,
     isInitializingSandbox,
     sandboxError,
     sendMessage,

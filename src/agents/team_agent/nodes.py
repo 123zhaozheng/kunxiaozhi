@@ -9,6 +9,7 @@ import uuid
 from typing import Any, Dict
 
 from deepagents import create_deep_agent
+from deepagents.middleware.subagents import CompiledSubAgent, SubAgent
 from langchain_core.runnables import RunnableConfig
 
 from src.agents.core.base import get_presenter
@@ -35,18 +36,7 @@ from src.agents.search_agent.prompt import (
 from src.agents.search_agent.prompt import (
     SANDBOX_SYSTEM_PROMPT as SEARCH_SANDBOX_SYSTEM_PROMPT,
 )
-from src.agents.team_agent.attachments import AttachmentManifest, materialize_attachments
 from src.agents.team_agent.context import TeamAgentContext
-from src.agents.team_agent.orchestration import (
-    TeamApprovalState,
-    TeamRunMetadata,
-    TeamRunStatus,
-    TeamRunStore,
-    TeamTaskGuardMiddleware,
-    build_team_plan,
-    emit_team_event,
-    request_team_approval,
-)
 from src.agents.team_agent.prompt import (
     build_team_member_subagent_type,
     build_team_router_system_prompt,
@@ -54,7 +44,6 @@ from src.agents.team_agent.prompt import (
     build_team_subagent_display_names,
     summarize_role_system_prompt,
 )
-from src.agents.team_agent.roster import compile_team_roster
 from src.infra.agent import AgentEventProcessor
 from src.infra.agent.middleware import (
     EnvVarPromptMiddleware,
@@ -159,6 +148,16 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
     attachments = state.get("attachments", [])
 
     # 创建 LLM
+    llm_start = time.time()
+    llm = await LLMClient.get_model(
+        model=selected_model,
+        model_id=model_id,
+        model_config=resolved_model_config,
+        thinking=thinking_config,
+    )
+    llm_init_time = time.time() - llm_start
+    logger.debug(f"[TeamAgent] LLM init: {llm_init_time * 1000:.3f}ms")
+
     # 查询 fallback_model 配置
     fallback_model_id = agent_options.get("_resolved_fallback_model")
     if "_resolved_fallback_model" not in agent_options:
@@ -317,157 +316,6 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
                 logger.warning(f"Failed to emit sandbox:error event: {emit_err}")
             raise
 
-    # Materialize storage-backed files against the concrete provider before any
-    # model or DeepAgents graph is created.
-    attachment_manifest = AttachmentManifest(
-        attachments=[],
-        work_dir=sandbox_work_dir or "/",
-    )
-    if attachments and not (sandbox_backend and sandbox_work_dir):
-        # TeamAgent attachments are storage-backed and must never silently
-        # degrade to URL-only context when no concrete sandbox is available.
-        await emit_team_event(
-            presenter,
-            "team:run",
-            {
-                "team_run_id": state.get("team_run_id", str(uuid.uuid4())),
-                "status": "failed",
-                "reason": "attachment_materialization_unavailable",
-                "errors": [
-                    "A concrete shared sandbox is required to materialize TeamAgent attachments."
-                ],
-            },
-        )
-        raise ValueError("team_attachment_materialization_unavailable")
-    if sandbox_backend and sandbox_work_dir and attachments:
-        attachment_manifest = await materialize_attachments(
-            attachments,
-            backend=sandbox_backend,
-            work_dir=sandbox_work_dir,
-            user_id=context.user_id,
-        )
-        if not attachment_manifest.successful:
-            failures = [
-                f"{item.name}: {item.error.reason if item.error else 'materialization failed'}"
-                for item in attachment_manifest.attachments
-                if item.status != "materialized"
-            ]
-            await emit_team_event(
-                presenter,
-                "team:run",
-                {
-                    "team_run_id": state.get("team_run_id", str(uuid.uuid4())),
-                    "status": "failed",
-                    "reason": "attachment_materialization_failed",
-                    "errors": failures,
-                },
-            )
-            raise ValueError("team_attachment_materialization_failed: " + "; ".join(failures))
-
-    approved_plan = None
-    compiled_roster = None
-    team_run_id = str(
-        state.get("team_run_id") or f"{state.get('session_id', 'session')}-{uuid.uuid4()}"
-    )
-    if team and team.active_members:
-        compiled_roster = compile_team_roster(team)
-        plan = build_team_plan(
-            user_input=user_input,
-            team_run_id=team_run_id,
-            roster=compiled_roster,
-            attachment_manifest=attachment_manifest,
-        )
-        try:
-            await TeamRunStore().save(
-                TeamRunMetadata(
-                    team_run_id=team_run_id,
-                    session_id=state.get("session_id", ""),
-                    plan=plan,
-                    status=TeamRunStatus.AWAITING_CONFIRMATION,
-                    approval_state=plan.approval_state,
-                )
-            )
-        except Exception as exc:
-            logger.warning("[TeamAgent] Failed to persist team plan metadata: %s", exc)
-        # Minimal presenter stubs used by compatibility callers do not expose
-        # orchestration transport. Real Presenter instances do.
-        harness_enabled = configurable.get(
-            "team_harness_enabled", hasattr(presenter, "emit_team_event")
-        )
-        if harness_enabled:
-            try:
-                approved_plan, approval_id = await request_team_approval(
-                    presenter=presenter,
-                    plan=plan,
-                    session_id=state.get("session_id", ""),
-                    user_id=context.user_id,
-                    timeout=float(configurable.get("team_plan_timeout", 300)),
-                    approval_id=state.get("approval_id"),
-                )
-            except PermissionError:
-                try:
-                    await TeamRunStore().save(
-                        TeamRunMetadata(
-                            team_run_id=team_run_id,
-                            session_id=state.get("session_id", ""),
-                            plan=plan,
-                            status=TeamRunStatus.REJECTED,
-                            approval_state=TeamApprovalState.REJECTED,
-                        )
-                    )
-                except Exception as exc:
-                    logger.warning("[TeamAgent] Failed to persist rejected plan: %s", exc)
-                raise
-            except TimeoutError:
-                try:
-                    await TeamRunStore().save(
-                        TeamRunMetadata(
-                            team_run_id=team_run_id,
-                            session_id=state.get("session_id", ""),
-                            plan=plan,
-                            status=TeamRunStatus.FAILED,
-                            approval_state=TeamApprovalState.TIMED_OUT,
-                        )
-                    )
-                except Exception as exc:
-                    logger.warning("[TeamAgent] Failed to persist timed-out plan: %s", exc)
-                raise
-            try:
-                await TeamRunStore().save(
-                    TeamRunMetadata(
-                        team_run_id=team_run_id,
-                        session_id=state.get("session_id", ""),
-                        plan=approved_plan,
-                        status=TeamRunStatus.APPROVED,
-                        approval_id=approval_id,
-                        approval_state=approved_plan.approval_state,
-                    )
-                )
-            except Exception as exc:
-                logger.warning("[TeamAgent] Failed to persist approved team plan: %s", exc)
-            await emit_team_event(
-                presenter,
-                "team:run",
-                {
-                    "team_run_id": team_run_id,
-                    "plan_id": approved_plan.plan_id,
-                    "status": "approved",
-                    "approval_id": approval_id,
-                },
-            )
-
-    # Delay model initialization until attachment and approval preflight has
-    # completed. This keeps planning deterministic and side-effect bounded.
-    llm_start = time.time()
-    llm = await LLMClient.get_model(
-        model=selected_model,
-        model_id=model_id,
-        model_config=resolved_model_config,
-        thinking=thinking_config,
-    )
-    llm_init_time = time.time() - llm_start
-    logger.debug(f"[TeamAgent] LLM init: {llm_init_time * 1000:.3f}ms")
-
     backend = backend_factory(None) if callable(backend_factory) else backend_factory
     backend_init_time = time.time() - backend_start
     logger.debug(f"[TeamAgent] Backend init: {backend_init_time * 1000:.3f}ms")
@@ -489,24 +337,6 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
                 search_limit=settings.DEFERRED_TOOL_SEARCH_LIMIT,
             )
             filtered_tools.append(search_tool)
-
-    # This TeamAgent capability is not an MCP tool, so keep it available even
-    # when MCP loading is disabled and reuse the same schema for subagents.
-    sandbox_upload_tool = next(
-        (
-            tool
-            for tool in getattr(context, "tools", [])
-            if getattr(tool, "name", "") == "upload_url_to_sandbox"
-        ),
-        None,
-    )
-    if sandbox_upload_tool is not None:
-        filtered_tools = list(filtered_tools or [])
-        if not any(
-            getattr(tool, "name", "") == "upload_url_to_sandbox"
-            for tool in filtered_tools
-        ):
-            filtered_tools.append(sandbox_upload_tool)
 
     marketplace_skill_prompt = (
         build_marketplace_skill_prompt_section(filtered_tools) if sandbox_backend else ""
@@ -552,7 +382,7 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
         mw.append(PromptCachingMiddleware())
         return mw
 
-    custom_subagents: list[Any] = []
+    custom_subagents: list[SubAgent | CompiledSubAgent] = []
     subagent_display_names: dict[str, str] = {}
     subagent_avatars: dict[str, str] = {}
     sandbox_capability_section = (
@@ -569,17 +399,11 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
     if team and team.active_members:
         # ── 多角色子代理 ──
         try:
-            if compiled_roster is None:
-                compiled_roster = compile_team_roster(team)
-            members_by_id = {
-                str(member.member_id): member for member in team.active_members
-            }
             subagent_display_names = build_team_subagent_display_names(team)
             subagent_avatars = build_team_subagent_avatars(team)
 
-            for roster_member in compiled_roster.members:
-                member = members_by_id[roster_member.member_id]
-                subagent_type = roster_member.subagent_type
+            for member in team.active_members:
+                subagent_type = build_team_member_subagent_type(member)
                 role_name = member.role_name or subagent_type
                 role_section = build_role_subagent_section(
                     role_name=role_name,
@@ -614,7 +438,8 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
                     any("## Skills System" in s for s in role_prompt_sections),
                 )
 
-                subagent_definition: dict[str, Any] = {
+                custom_subagents.append(
+                    {
                         "name": subagent_type,
                         "description": (
                             f"Team member '{role_name}' "
@@ -628,9 +453,7 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
                             prompt_sections=role_prompt_sections,
                         ),
                     }
-                if sandbox_upload_tool is not None:
-                    subagent_definition["tools"] = [sandbox_upload_tool]
-                custom_subagents.append(subagent_definition)
+                )
 
             logger.info(
                 f"[TeamAgent] Built {len(custom_subagents)} role subagents for team '{team.name}'"
@@ -653,7 +476,8 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
             )
             if s
         ]
-        fallback_subagent: dict[str, Any] = {
+        custom_subagents = [
+            {
                 "name": "general-purpose",
                 "description": "General-purpose agent for researching complex questions, searching for files and content, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries use this agent to perform the search for you. This agent has access to all tools as the main agent.",
                 "system_prompt": SUBAGENT_PROMPT,
@@ -661,17 +485,13 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
                     prompt_sections=subagent_prompt_sections,
                 ),
             }
-        if sandbox_upload_tool is not None:
-            fallback_subagent["tools"] = [sandbox_upload_tool]
-        custom_subagents = [fallback_subagent]
+        ]
 
     # ── 主代理中间件栈 ──
     user_middleware = create_retry_middleware(
         fallback_model=fallback_model_id, thinking=thinking_config
     )
     user_middleware.append(ToolResultBinaryMiddleware(base_url=subagent_base_url))
-    if approved_plan is not None:
-        user_middleware.append(TeamTaskGuardMiddleware(approved_plan, presenter=presenter))
     _prompt_sections = [
         s
         for s in (
@@ -682,28 +502,6 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
         )
         if s
     ]
-    if approved_plan is not None:
-        _prompt_sections.append(
-            "## Approved Team Plan\n"
-            "Only dispatch approved role steps. For every `task` call, put the exact "
-            "validated JSON envelope under `team_handoff` in the description, including "
-            "plan_id, team_run_id, step_id, subagent_type, objective, attachment_paths, "
-            "predecessor_artifacts, expected_artifacts, and attempt. Do not invent roles "
-            "or paths."
-        )
-    if attachment_manifest.attachments:
-        verified_attachment_lines = [
-            f"- {item.attachment_id}: {item.sandbox_path}"
-            for item in attachment_manifest.attachments
-            if item.status == "materialized" and item.sandbox_path
-        ]
-        if verified_attachment_lines:
-            _prompt_sections.append(
-                "## Verified TeamAgent Attachments\n"
-                "Use these exact sandbox paths in every applicable team_handoff; do not "
-                "substitute URLs or guessed locations.\n"
-                + "\n".join(verified_attachment_lines)
-            )
     if sandbox_capability_section:
         _prompt_sections.append(sandbox_capability_section)
     if sandbox_backend and sandbox_work_dir:

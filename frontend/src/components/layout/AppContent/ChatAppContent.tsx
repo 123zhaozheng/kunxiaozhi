@@ -173,7 +173,6 @@ export function ChatAppContent({
     newlyCreatedSession,
     activeGoal,
     goalsByRunId,
-    teamPlan,
     sendMessage,
     clearActiveGoal,
     stopGeneration,
@@ -188,9 +187,6 @@ export function ChatAppContent({
     currentProjectId,
   } = useAgent({
     onApprovalRequired: (approval) => {
-      if (approval.approval_type === "team_plan") {
-        return;
-      }
       void appNotificationService.notify({
         type: "approval",
         title: t("approvals.needsConfirmation"),
@@ -892,7 +888,6 @@ export function ChatAppContent({
           selectedTeamId={selectedTeamId}
           onSelectTeam={selectTeam}
           approvals={approvals}
-          teamPlan={teamPlan}
           onRespondApproval={respondToApproval}
           approvalLoading={approvalLoading}
           onSendMessage={(content, sendAttachments) =>
