@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/builtin-skills.md","reason":"Defines the role-scoped read-only Builtin projection, shadowing order, independent preferences, and failure behavior."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Defines backend API, storage, error handling, typing, and regression-test conventions."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Defines frontend type-safety, i18n, component, and test conventions."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Guides validation of the storage-to-API-to-frontend Builtin Skill data flow."}

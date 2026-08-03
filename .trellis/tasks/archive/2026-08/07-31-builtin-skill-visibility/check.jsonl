@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/builtin-skills.md","reason":"Verify role visibility, read-only enforcement, name shadowing, isolated preferences, and degradation against the executable contract."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Verify backend API/storage patterns, security boundaries, typing, logging, and tests."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Verify frontend type safety, i18n, accessible actions, and regression tests."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Verify the complete storage-to-API-to-frontend data flow and boundary consistency."}
