@@ -23,6 +23,11 @@ import type {
 } from "./types";
 import { clearAllLoadingStates } from "./messageParts";
 import { convertAttachments, processMessageEvent } from "./eventProcessor";
+import {
+  normalizeTeamPlanEvent,
+  reduceTeamPlan,
+  type TeamPlanState,
+} from "../../types/teamPlan";
 
 /**
  * Context passed to event handler
@@ -45,6 +50,7 @@ export interface EventHandlerContext {
   setGoalsByRunId: React.Dispatch<
     React.SetStateAction<Record<string, import("./types").ActiveGoalSpec>>
   >;
+  setTeamPlan?: React.Dispatch<React.SetStateAction<TeamPlanState | null>>;
 }
 
 /**
@@ -248,7 +254,23 @@ export function handleStreamEvent(
     }
 
     case "approval_required": {
+      if (data.approval_type === "team_plan" || data.plan || data.plan_id) {
+        const planEvent = normalizeTeamPlanEvent("approval_required", data);
+        ctx.setTeamPlan?.((prev) => reduceTeamPlan(prev, planEvent));
+        // Team plans have their own structured panel. Keeping the same event
+        // in the generic approval list would render a duplicate form and
+        // obscure the plan-specific attachment/step context.
+        return;
+      }
       handleApprovalRequired(data, ctx);
+      return;
+    }
+
+    case "team:plan":
+    case "team:step":
+    case "team:run": {
+      const planEvent = normalizeTeamPlanEvent(eventType, data);
+      ctx.setTeamPlan?.((prev) => reduceTeamPlan(prev, planEvent));
       return;
     }
 
@@ -528,6 +550,14 @@ async function handleApprovalRequired(
           timeout: (data as Record<string, unknown>).timeout as
             | number
             | undefined,
+          approval_type: data.approval_type,
+          plan:
+            data.approval_type === "team_plan" || data.plan
+              ? reduceTeamPlan(
+                  null,
+                  normalizeTeamPlanEvent("approval_required", data),
+                )
+              : null,
         });
       }
     } catch (err) {

@@ -12,6 +12,7 @@ import { ChatInput } from "../../chat/ChatInput";
 import { WelcomePage } from "../../chat/WelcomePage";
 import { Virtuoso, type ListRange } from "react-virtuoso";
 import { ApprovalPanel } from "../../panels/ApprovalPanel";
+import { TeamPlanPanel } from "../../panels/TeamPlanPanel";
 import {
   ChatSkeleton,
   ChatSkeletonMessagesOnly,
@@ -97,6 +98,7 @@ export function ChatView({
   approvals,
   onRespondApproval,
   approvalLoading,
+  teamPlan,
   onSendMessage,
   onStopGeneration,
   activeGoal,
@@ -485,6 +487,12 @@ export function ChatView({
           />
         )}
       </main>
+
+      <TeamPlanPanel
+        plan={teamPlan}
+        onRespond={onRespondApproval}
+        isLoading={approvalLoading}
+      />
 
       <ApprovalPanel
         approvals={approvals}

@@ -1,0 +1,8 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/08-03-smooth-teamagent-harness/research/attachment-pipeline.md", "reason": "Attachment materialization evidence and provider constraints."}
+{"file": ".trellis/tasks/08-03-smooth-teamagent-harness/research/sop-confirmation.md", "reason": "Approval, events, persistence, frontend and recovery evidence."}
+{"file": ".trellis/tasks/08-03-smooth-teamagent-harness/research/handoff-contract.md", "reason": "DeepAgents task, roster, state and handoff constraints."}
+{"file": ".trellis/spec/backend/agent-harness.md", "reason": "Executable harness and task-schema contracts."}
+{"file": ".trellis/spec/backend/sandbox-providers.md", "reason": "Concrete sandbox backend and work-directory contracts."}
+{"file": ".trellis/spec/backend/marketplace-sandbox-skills.md", "reason": "Validated sandbox materialization conventions."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Cross-layer data-flow and consumer checklist."}

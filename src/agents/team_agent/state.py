@@ -9,3 +9,6 @@ class TeamAgentState(TypedDict):
     messages: List[Any]
     output: str
     attachments: Optional[List[Dict[str, Any]]]
+    team_run_id: str
+    plan_id: Optional[str]
+    approval_id: Optional[str]

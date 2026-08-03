@@ -62,7 +62,10 @@ function canAttachEventTypeToPreviousAssistant(eventType: string): boolean {
     eventType !== "metadata" &&
     eventType !== "done" &&
     eventType !== "goal:updated" &&
-    eventType !== "approval_required"
+    eventType !== "approval_required" &&
+    eventType !== "team:plan" &&
+    eventType !== "team:step" &&
+    eventType !== "team:run"
   );
 }
 
@@ -107,6 +110,9 @@ function processHistoryEvent(
     eventType === "metadata" ||
     eventType === "done" ||
     eventType === "goal:updated"
+    || eventType === "team:plan"
+    || eventType === "team:step"
+    || eventType === "team:run"
   ) {
     return currentAssistantMessage;
   }
@@ -117,8 +123,16 @@ function processHistoryEvent(
       id?: string;
       message?: string;
       type?: string;
+      approval_type?: string;
+      plan?: Record<string, unknown>;
       fields?: FormField[];
     };
+    // Team plans have their own structured panel. Do not rehydrate them into
+    // the generic approval list on history loads, or refreshes render two
+    // response forms for one durable approval.
+    if (approvalData.approval_type === "team_plan" || approvalData.type === "team_plan" || approvalData.plan) {
+      return currentAssistantMessage;
+    }
     if (approvalData.id && opts.options?.onApprovalRequired) {
       authFetch<{
         status: string;

@@ -258,6 +258,19 @@ async def respond_to_approval(
         raise HTTPException(status_code=404, detail="审批请求不存在")
 
     if approval.status != "pending":
+        # Team-plan responses are idempotent across double-clicks and SSE
+        # reconnects. Return the durable decision instead of a transient 400.
+        if approval.type == "team_plan":
+            existing = await _approval_storage.get_response(approval_id)
+            existing_approved = (
+                existing.approved if existing is not None else approval.status == "approved"
+            )
+            return {
+                "status": "success",
+                "approval_id": approval_id,
+                "approved": existing_approved,
+                "idempotent": True,
+            }
         raise HTTPException(status_code=400, detail="审批请求已处理")
 
     # 解析 JSON 响应数据

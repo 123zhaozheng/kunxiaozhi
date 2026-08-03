@@ -23,6 +23,7 @@ This directory contains guidelines for frontend development. Fill in each file w
 | [WeCom Channel Sidebar](./wecom-channel-sidebar.md) | Virtual channel/Persona/session hierarchy and read-only compact navigation | Filled |
 | [OA SSO Portal Entry](./oa-sso-entry.md) | Exact `Accesstoken` deep-link contract, legacy aliases, and token stripping | Filled |
 | [Idle Login Monitor](./auth-idle-monitor.md) | Explicit human-activity reporting, status polling, cross-tab logout, and retryable refresh failures | Filled |
+| [TeamAgent Plan Confirmation UI](./teamagent-plan-ui.md) | Typed TeamPlan events, dedicated approval panel, history/reconnect normalization, partial-failure states | Filled |
 
 ---
 
