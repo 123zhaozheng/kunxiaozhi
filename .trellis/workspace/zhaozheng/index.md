@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 25
+- **Total Sessions**: 26
 - **Last Active**: 2026-08-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~842 | Active |
+| `journal-1.md` | ~863 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 26 | 2026-08-03 | Smooth TeamAgent harness orchestration | `9c99d480` | `main` |
 | 25 | 2026-08-03 | Configurable idle login timeout | `e9d93971` | `main` |
 | 24 | 2026-08-03 | Finish Builtin Skill visibility and Trellis upgrade | `ed9db302`, `e0c5babb` | `main` |
 | 23 | 2026-07-31 | Finalize persona harness and builtin skills | `198101c6` | `main` |

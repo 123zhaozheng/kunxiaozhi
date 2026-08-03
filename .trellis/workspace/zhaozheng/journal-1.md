@@ -840,3 +840,24 @@ Added admin-configurable 3-hour idle sessions with Redis-backed sid state, atomi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 26: Smooth TeamAgent harness orchestration
+
+**Date**: 2026-08-03
+**Task**: Smooth TeamAgent harness orchestration
+**Branch**: `main`
+
+### Summary
+
+Implemented deterministic TeamAgent attachment materialization, roster compilation, structured SOP approval gating, guarded DeepAgents handoffs, durable run and step status, correlated events, TeamPlan frontend UX, recovery semantics, focused regression coverage, and executable backend/frontend specs.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9c99d480` | (see git log) |
+
+### Status
+
+[OK] **Completed**
