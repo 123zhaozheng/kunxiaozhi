@@ -819,3 +819,24 @@ Completed the role-visible read-only Builtin Skill catalog and admin Marketplace
 ### Status
 
 [OK] **Completed**
+
+
+## Session 25: Configurable idle login timeout
+
+**Date**: 2026-08-03
+**Task**: Configurable idle login timeout
+**Branch**: `main`
+
+### Summary
+
+Added admin-configurable 3-hour idle sessions with Redis-backed sid state, atomic activity updates, HTTP/refresh/SSE/WebSocket enforcement, frontend activity and cross-tab handling, settings validation, tests, and executable specs.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e9d93971` | (see git log) |
+
+### Status
+
+[OK] **Completed**
