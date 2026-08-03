@@ -21,8 +21,9 @@ export {
   clearRedirectPath,
 } from "./api/token";
 
-// Auth fetch
+// Auth fetch / refresh errors
 export { authFetch } from "./api/fetch";
+export { TokenRefreshError } from "./api/tokenManager";
 
 // API modules
 export { authApi, buildOAuthLoginUrl } from "./api/auth";

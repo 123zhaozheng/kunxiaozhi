@@ -16,14 +16,13 @@ async def test_login_existing_user_by_workcode():
     mock_user.roles = ["user"]
     mock_user.is_active = True
 
-    with patch("src.infra.auth.oa_login.UserStorage") as Storage:
-        storage = Storage.return_value
+    with patch("src.infra.auth.oa_login.UserStorage") as storage_class:
+        storage = storage_class.return_value
         storage.get_by_username = AsyncMock(return_value=mock_user)
         storage.touch_updated_at = AsyncMock()
 
-        with patch("src.infra.auth.oa_login.create_access_token", return_value="a"):
-            with patch("src.infra.auth.oa_login.create_refresh_token", return_value="r"):
-                token = await login_or_provision_from_workcode("10001")
+        with patch("src.infra.auth.oa_login.create_token_pair", new=AsyncMock(return_value=("a", "r"))):
+            token = await login_or_provision_from_workcode("10001")
 
     assert token.access_token == "a"
     storage.touch_updated_at.assert_awaited_once_with("u1")
@@ -44,16 +43,15 @@ async def test_provision_when_missing_and_auto_provision_enabled():
         mock_settings.DEFAULT_USER_ROLE = "user"
         mock_settings.ACCESS_TOKEN_EXPIRE_HOURS = 24
 
-        with patch("src.infra.auth.oa_login.UserStorage") as Storage:
-            storage = Storage.return_value
+        with patch("src.infra.auth.oa_login.UserStorage") as storage_class:
+            storage = storage_class.return_value
             storage.get_by_username = AsyncMock(side_effect=[None, created])
             storage.list_users = AsyncMock(return_value=[MagicMock()])
             storage.create = AsyncMock(return_value=created)
             storage.touch_updated_at = AsyncMock()
 
-            with patch("src.infra.auth.oa_login.create_access_token", return_value="a"):
-                with patch("src.infra.auth.oa_login.create_refresh_token", return_value="r"):
-                    token = await login_or_provision_from_workcode("20002")
+            with patch("src.infra.auth.oa_login.create_token_pair", new=AsyncMock(return_value=("a", "r"))):
+                token = await login_or_provision_from_workcode("20002")
 
     assert token.refresh_token == "r"
     storage.create.assert_awaited_once()
@@ -64,8 +62,8 @@ async def test_reject_when_no_user_and_auto_provision_disabled():
     with patch("src.infra.auth.oa_login.settings") as mock_settings:
         mock_settings.OA_SSO_AUTO_PROVISION = False
 
-        with patch("src.infra.auth.oa_login.UserStorage") as Storage:
-            storage = Storage.return_value
+        with patch("src.infra.auth.oa_login.UserStorage") as storage_class:
+            storage = storage_class.return_value
             storage.get_by_username = AsyncMock(return_value=None)
 
             with pytest.raises(OaLoginNotProvisionedError):

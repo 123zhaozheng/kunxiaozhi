@@ -968,6 +968,9 @@ export function SettingsPanel() {
                                       : "text"
                                   }
                                   value={getDisplayValue(setting)}
+                                  min={setting.type === "number" ? setting.minimum : undefined}
+                                  max={setting.type === "number" ? setting.maximum : undefined}
+                                  step={setting.type === "number" ? setting.step : undefined}
                                   onChange={(e) =>
                                     handleValueChange(
                                       setting.key,

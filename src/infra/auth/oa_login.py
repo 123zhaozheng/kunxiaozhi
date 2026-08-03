@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import secrets
 
-from src.infra.auth.jwt import create_access_token, create_refresh_token
+from src.infra.auth.jwt import create_token_pair
 from src.infra.logging import get_logger
 from src.infra.user.storage import UserStorage
 from src.kernel.config import settings
@@ -67,8 +67,7 @@ async def login_or_provision_from_workcode(workcode: str) -> Token:
 
     await storage.touch_updated_at(user.id)
 
-    access_token = create_access_token(user_id=user.id)
-    refresh_token = create_refresh_token(user_id=user.id, username=user.username)
+    access_token, refresh_token = await create_token_pair(user.id, user.username)
 
     return Token(
         access_token=access_token,

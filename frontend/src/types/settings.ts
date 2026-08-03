@@ -80,6 +80,9 @@ export interface SettingItem {
   depends_on?: string | SettingDependsOn; // Key of parent setting or condition object
   options?: string[]; // Available options for SELECT type
   json_schema?: JsonSchema; // Schema for JSON-type settings
+  minimum?: number;
+  maximum?: number;
+  step?: number;
   updated_at?: string;
   updated_by?: string;
 }

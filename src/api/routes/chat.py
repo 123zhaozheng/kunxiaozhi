@@ -643,16 +643,45 @@ async def session_stream(
     dual_writer = get_dual_writer()
 
     async def event_generator():
+        import asyncio
+
+        from src.infra.auth.session import (
+            SessionInactiveError,
+            SessionStoreError,
+            assert_active,
+        )
         logger.info(f"[SSE] Generator started for session={session_id}, run_id={run_id}")
         try:
             # 使用 run_id 读取特定轮次的事件
             event_count = 0
-            async for event in dual_writer.read_from_redis(
-                session_id,
-                run_id=run_id,
-            ):
+            last_session_check = asyncio.get_running_loop().time()
+            event_iterator = dual_writer.read_from_redis(session_id, run_id=run_id).__aiter__()
+            while True:
+                try:
+                    event = await asyncio.wait_for(event_iterator.__anext__(), timeout=60.0)
+                except StopAsyncIteration:
+                    break
+                except asyncio.TimeoutError:
+                    try:
+                        await assert_active(user.sid, user.sub)
+                    except SessionInactiveError:
+                        logger.info("[SSE] Idle session expired: user=%s", user.sub)
+                        break
+                    except SessionStoreError:
+                        continue
+                    continue
                 # 心跳事件：发送 SSE 注释（: 开头的行被 EventSource 忽略）
                 # 这样能检测到客户端断开，同时不干扰前端逻辑
+                now_monotonic = asyncio.get_running_loop().time()
+                if now_monotonic - last_session_check >= 60.0:
+                    try:
+                        await assert_active(user.sid, user.sub)
+                    except SessionInactiveError:
+                        logger.info("[SSE] Idle session expired: user=%s", user.sub)
+                        break
+                    except SessionStoreError:
+                        continue
+                    last_session_check = now_monotonic
                 if event["event_type"] == "heartbeat":
                     yield ": heartbeat\n\n"
                     continue

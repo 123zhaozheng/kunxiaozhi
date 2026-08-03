@@ -99,6 +99,9 @@ class SettingItem(BaseModel):
     )
     options: Optional[list[str]] = None  # Available options for SELECT type
     json_schema: Optional[JsonSchema] = None  # Schema for JSON-type settings
+    minimum: Optional[float] = None
+    maximum: Optional[float] = None
+    step: Optional[float] = None
     updated_at: Optional[str] = None
     updated_by: Optional[str] = None
 

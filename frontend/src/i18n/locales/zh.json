@@ -1980,6 +1980,7 @@
   },
   "settingDesc": {
     "ACCESS_TOKEN_EXPIRE_HOURS": "访问令牌过期时间（小时）",
+    "LOGIN_IDLE_TIMEOUT_HOURS": "最后一次真实用户操作后的登录空闲超时（小时）",
     "ADMIN_CONTACT_EMAIL": "在关于对话框中显示给用户的管理员联系邮箱",
     "ADMIN_CONTACT_URL": "管理员联系/支持 URL（如帮助台、反馈表单），显示在关于对话框中",
     "APP_BASE_URL": "文件下载/上传的公共基础 URL（如 https://kunxiaozhi.com）。在反向代理导致 request.base_url 不正确时需要配置。",

@@ -1926,6 +1926,7 @@
   },
   "settingDesc": {
     "ACCESS_TOKEN_EXPIRE_HOURS": "アクセストークン有効期限（時間）",
+    "LOGIN_IDLE_TIMEOUT_HOURS": "最後の実ユーザー操作からのアイドルタイムアウト（時間）",
     "ADMIN_CONTACT_EMAIL": "Aboutダイアログに表示される管理者の連絡先メール",
     "ADMIN_CONTACT_URL": "管理者の連絡先/サポートURL（ヘルプデスク、フィードバックフォーム等）、Aboutダイアログに表示",
     "APP_BASE_URL": "ファイルダウンロード/アップロードの公開ベースURL（例：https://kunxiaozhi.com）。リバースプロキシ環境でrequest.base_urlが不正確な場合に必要。",

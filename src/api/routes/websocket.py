@@ -4,12 +4,14 @@ WebSocket 路由
 提供 WebSocket 连接用于实时任务通知。
 """
 
+import asyncio
 import json
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from src.api.deps import get_current_user_from_websocket
 from src.infra.async_utils import run_blocking_io
+from src.infra.auth.session import SessionInactiveError, SessionStoreError, assert_active
 from src.infra.logging import get_logger
 from src.infra.websocket import get_connection_manager
 from src.infra.websocket_rate_limiter import get_ws_rate_limiter
@@ -123,10 +125,32 @@ async def websocket_endpoint(
 
     try:
         # 保持连接，持续接收消息（目前主要是心跳）
+        last_session_check = asyncio.get_running_loop().time()
         while True:
             # 等待客户端消息，可以用于心跳检测
-            data = await websocket.receive_text()
+            try:
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=60.0)
+            except asyncio.TimeoutError:
+                try:
+                    await assert_active(user.sid, user.sub)
+                except SessionInactiveError:
+                    await websocket.close(code=4001, reason="Login session expired")
+                    break
+                except SessionStoreError:
+                    # Redis outages are transient; keep the connection and retry.
+                    continue
+                continue
             # 可以在这里处理客户端的心跳消息
+            now_monotonic = asyncio.get_running_loop().time()
+            if now_monotonic - last_session_check >= 60.0:
+                try:
+                    await assert_active(user.sid, user.sub)
+                except SessionInactiveError:
+                    await websocket.close(code=4001, reason="Login session expired")
+                    break
+                except SessionStoreError:
+                    continue
+                last_session_check = now_monotonic
             logger.debug(f"[WebSocket] Received from client: {data}")
 
     except WebSocketDisconnect:

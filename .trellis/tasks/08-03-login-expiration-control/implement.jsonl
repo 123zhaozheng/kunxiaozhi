@@ -1,0 +1,11 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Defines typed API schemas, async storage boundaries, authenticated dependency patterns, configuration usage, and backend test expectations."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Defines domain-to-HTTP mapping and the existing 401 dependency error contract needed to distinguish idle expiry from retryable storage failures."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Defines auth logging conventions and prohibits logging JWT/session secrets."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Defines frontend testing, Chrome 109 compatibility, i18n, cleanup, and strict UI quality requirements."}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"Defines lifecycle and cleanup conventions for the new global idle-session hook."}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Defines AuthContext/global-state boundaries and subscription cleanup patterns for cross-tab auth synchronization."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Defines typed snake_case API response mirrors for the activity status contract."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Guides the settings-to-session-store-to-auth-dependency-to-frontend data flow and boundary verification."}
+{"file":".trellis/tasks/08-03-login-expiration-control/research/backend-idle-session.md","reason":"Line-anchored backend research on JWT issuers, refresh escape paths, auth-cache ordering, Redis state, WebSocket, settings, and tests."}
+{"file":".trellis/tasks/08-03-login-expiration-control/research/frontend-idle-monitor.md","reason":"Line-anchored frontend research on auth lifecycle, real DOM activity, cross-tab behavior, settings input gaps, and tests."}
+{"file":".trellis/tasks/08-03-login-expiration-control/research/idle-timeout-risks.md","reason":"Opposition review covering refresh races, long-lived streams, config changes, legacy tokens, Redis failures, and release-blocking tests."}

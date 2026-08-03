@@ -107,6 +107,7 @@ class TokenPayload(BaseModel):
     permissions: List[str] = Field(default_factory=list)
     exp: Optional[datetime] = None
     iat: Optional[datetime] = None
+    sid: Optional[str] = None
 
 
 class Token(BaseModel):
@@ -116,6 +117,14 @@ class Token(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     expires_in: int
+
+
+class LoginActivityResponse(BaseModel):
+    """Authoritative idle-session status."""
+
+    idle_timeout_seconds: int
+    last_activity_at: datetime
+    idle_expires_at: datetime
 
 
 class LoginRequest(BaseModel):

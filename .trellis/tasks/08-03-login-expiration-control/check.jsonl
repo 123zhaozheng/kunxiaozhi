@@ -1,0 +1,11 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Check backend typing, Pydantic schemas, async boundaries, auth dependency placement, configuration, and test coverage."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Check correct 401 versus 503 semantics and route/dependency exception mapping."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Check that auth/session logs follow project conventions without leaking token or session secrets."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Check frontend tests, i18n coverage, browser compatibility, accessibility, and cleanup."}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"Check the global idle hook is mounted once and cleans listeners/timers correctly."}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Check AuthContext and cross-tab synchronization follow existing state boundaries."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Check activity API contracts are strictly typed and mirror backend snake_case schemas."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Check complete settings, Redis session, HTTP/refresh/stream enforcement, and frontend logout data flow."}
+{"file":".trellis/tasks/08-03-login-expiration-control/research/backend-idle-session.md","reason":"Use backend anchors and identified bypass risks as review evidence."}
+{"file":".trellis/tasks/08-03-login-expiration-control/research/frontend-idle-monitor.md","reason":"Use frontend lifecycle, cross-tab, and settings validation findings as review evidence."}
+{"file":".trellis/tasks/08-03-login-expiration-control/research/idle-timeout-risks.md","reason":"Use the release-blocking risk matrix for adversarial validation."}

@@ -7,6 +7,7 @@
 from src.infra.auth.jwt import (
     create_access_token,
     create_refresh_token,
+    create_token_pair,
     decode_token,
     verify_token,
 )
@@ -24,6 +25,7 @@ __all__ = [
     # JWT
     "create_access_token",
     "create_refresh_token",
+    "create_token_pair",
     "decode_token",
     "verify_token",
     # Password

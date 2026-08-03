@@ -20,11 +20,13 @@ import {
   isTokenExpired,
   getRedirectPath,
   clearRedirectPath,
+  TokenRefreshError,
 } from "../services/api";
 import { DEFAULT_THINKING_LEVEL_STORAGE_KEY } from "../components/layout/AppContent/useAgentOptions";
 import { Permission } from "../types";
 import type { User, UserCreate, LoginRequest, AuthState } from "../types";
 import i18n from "../i18n";
+import { useLoginIdleSession } from "./useLoginIdleSession";
 
 export const SIDEBAR_COLLAPSED_STORAGE_KEY = "lamb-sidebar-collapsed";
 
@@ -114,6 +116,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // 权限列表：从 API 动态获取
   const permissions = dynamicPermissions;
 
+  useLoginIdleSession(!!token && !!user);
+
   // 初始化：检查现有 token 并获取用户信息
   useEffect(() => {
     const initAuth = async () => {
@@ -133,13 +137,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const tokenResponse = await authApi.refreshToken();
             validToken = tokenResponse.access_token;
-          } catch {
-            // 刷新失败，需要重新登录
-            authApi.logout();
-            setToken(null);
-            setUser(null);
-            setIsLoading(false);
-            return;
+          } catch (error) {
+            // Only an explicit 401 means the session is invalid.  Redis
+            // outages, 503s, and network failures must preserve tokens.
+            if (error instanceof TokenRefreshError && error.status === 401) {
+              authApi.logout();
+              setToken(null);
+              setUser(null);
+              setIsLoading(false);
+              return;
+            }
+            validToken = accessToken;
           }
         } else {
           // refresh token 也不存在或已过期，需要重新登录
@@ -187,8 +195,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
     };
 
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== "access_token") return;
+      const nextToken = event.newValue;
+      if (!nextToken) {
+        handleLogout();
+        return;
+      }
+      setToken(nextToken);
+      void authApi.getCurrentUser().then((currentUser) => {
+        setUser(currentUser);
+        applyUserMetadata(currentUser.metadata);
+        if (currentUser.permissions) {
+          setDynamicPermissions(
+            currentUser.permissions.filter((p): p is Permission =>
+              Object.values(Permission).includes(p as Permission),
+            ),
+          );
+        }
+      }).catch(() => {
+        // authFetch handles 401; transient failures leave the token intact.
+      });
+    };
+
     window.addEventListener("auth:logout", handleLogout);
-    return () => window.removeEventListener("auth:logout", handleLogout);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("auth:logout", handleLogout);
+      window.removeEventListener("storage", handleStorage);
+    };
   }, []);
 
   // 登录
@@ -213,11 +248,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               ),
             );
           }
-        } catch {
-          // 获取用户信息失败，清除登录状态
-          authApi.logout();
-          setToken(null);
-          setIsLoading(false);
+        } catch (error) {
+          // Keep a freshly issued token during transient backend failures.
+          if (error instanceof TokenRefreshError && error.status === 401) {
+            authApi.logout();
+            setToken(null);
+            setUser(null);
+          }
           return null;
         }
 

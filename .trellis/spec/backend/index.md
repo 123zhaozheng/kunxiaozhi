@@ -32,6 +32,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Tracing Provider Integration](./tracing-providers.md) | Mutually exclusive LangSmith/Phoenix selector, derived SDK env, Phoenix lifecycle, and admin settings contract | Filled |
 | [Agent Harness Mode & Localization](./agent-harness.md) | Reversible harness modes, model-view schema localization, dynamic task/todo contracts, import boundary | Filled |
 | [read_document Dispatch](./read-document-dispatch.md) | File-type dispatch (MinerU / plain-text / sandbox-guidance), charset-normalizer short-CJK gotcha | Filled |
+| [Idle Login Sessions](./auth-idle-sessions.md) | Redis-backed per-login idle timeout, JWT `sid`, atomic activity, refresh/HTTP/SSE/WebSocket enforcement | Filled |
 
 ---
 

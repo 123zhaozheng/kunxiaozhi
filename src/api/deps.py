@@ -10,6 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.infra.async_utils import run_blocking_io
 from src.infra.auth.jwt import verify_token
+from src.infra.auth.session import SessionInactiveError, SessionStoreError, assert_active
 from src.infra.logging import get_logger
 from src.infra.role.storage import RoleStorage
 from src.infra.user.manager import UserManager
@@ -99,6 +100,7 @@ async def get_current_user(
     try:
         cached = getattr(request.state, "current_user", None)
         if isinstance(cached, TokenPayload):
+            await assert_active(cached.sid, cached.sub)
             return cached.model_copy(deep=True)
 
         token = credentials.credentials
@@ -108,7 +110,15 @@ async def get_current_user(
             if isinstance(parsed, TokenPayload)
             else await _verify_token_async(token)
         )
+        try:
+            await assert_active(payload.sid, payload.sub)
+        except SessionStoreError:
+            raise HTTPException(status_code=503, detail="会话存储暂时不可用")
+        except SessionInactiveError as exc:
+            raise HTTPException(status_code=401, detail=str(exc))
         return payload
+    except HTTPException:
+        raise
     except Exception:
         return None
 
@@ -137,10 +147,22 @@ async def get_current_user_required(
         token = credentials.credentials
         cached_user = getattr(request.state, "current_user", None)
         if isinstance(cached_user, TokenPayload):
+            try:
+                await assert_active(cached_user.sid, cached_user.sub)
+            except SessionStoreError as exc:
+                raise HTTPException(status_code=503, detail=str(exc)) from exc
+            except SessionInactiveError as exc:
+                raise HTTPException(status_code=401, detail=str(exc)) from exc
             return cached_user.model_copy(deep=True)
 
         cached = _get_cached_user(token)
         if cached is not None:
+            try:
+                await assert_active(cached.sid, cached.sub)
+            except SessionStoreError as exc:
+                raise HTTPException(status_code=503, detail=str(exc)) from exc
+            except SessionInactiveError as exc:
+                raise HTTPException(status_code=401, detail=str(exc)) from exc
             request.state.current_user = cached.model_copy(deep=True)
             return cached
 
@@ -151,6 +173,13 @@ async def get_current_user_required(
             else await _verify_token_async(token)
         )
         user_id = payload.sub
+
+        try:
+            await assert_active(payload.sid, user_id)
+        except SessionStoreError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except SessionInactiveError as exc:
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
 
         if not user_id:
             raise HTTPException(
@@ -219,6 +248,13 @@ async def get_current_user_from_websocket(
                 detail="无效的 Token",
             )
 
+        try:
+            await assert_active(payload.sid, user_id)
+        except SessionStoreError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except SessionInactiveError as exc:
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
+
         # 从数据库获取用户信息
         user_storage = UserStorage()
         user = await user_storage.get_by_id(user_id)
@@ -241,6 +277,7 @@ async def get_current_user_from_websocket(
             permissions=permissions,
             exp=payload.exp,
             iat=payload.iat,
+            sid=payload.sid,
         )
 
     except HTTPException:

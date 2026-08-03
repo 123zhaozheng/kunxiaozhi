@@ -2,10 +2,13 @@
 Core authentication routes (register, login, refresh, me, permissions)
 """
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from src.api.deps import get_current_user_required
 from src.infra.auth.jwt import create_access_token, create_refresh_token, decode_token
+from src.infra.auth.session import SessionInactiveError, SessionStoreError, assert_active, touch
 from src.infra.auth.turnstile import get_turnstile_service
 from src.infra.logging import get_logger
 from src.infra.user.manager import UserManager
@@ -13,6 +16,7 @@ from src.kernel.config import settings
 from src.kernel.exceptions import ValidationError
 from src.kernel.schemas.permission import PermissionsResponse, get_permissions_response
 from src.kernel.schemas.user import (
+    LoginActivityResponse,
     LoginRequest,
     RegisterResponse,
     Token,
@@ -26,6 +30,18 @@ from .utils import _get_client_ip, _get_frontend_url, _get_language
 
 router = APIRouter()
 logger = get_logger(__name__)
+
+
+def _activity_response(state: dict) -> LoginActivityResponse:
+    last = datetime.fromisoformat(str(state["last_activity_at"]))
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    timeout = int(settings.LOGIN_IDLE_TIMEOUT_HOURS * 3600)
+    return LoginActivityResponse(
+        idle_timeout_seconds=timeout,
+        last_activity_at=last,
+        idle_expires_at=last + timedelta(seconds=timeout),
+    )
 
 
 @router.post("/register", response_model=RegisterResponse)
@@ -126,6 +142,8 @@ async def login(credentials: LoginRequest, request: Request):
             )
         return token
     except Exception as e:
+        if isinstance(e, SessionStoreError):
+            raise HTTPException(status_code=503, detail=str(e)) from e
         # 处理邮箱未验证错误
         if "EmailNotVerifiedError" in type(e).__name__ or "请先验证邮箱" in str(e):
             raise HTTPException(
@@ -181,11 +199,15 @@ async def refresh_token(request: Request):
             )
 
         # 生成新的 access token 和 refresh token（轮换 refresh token）
-        access_token = create_access_token(user_id=user_id)
-        new_refresh_token = create_refresh_token(
-            user_id=user_id,
-            username=username or user.username,
-        )
+        sid = payload.get("sid")
+        try:
+            await assert_active(sid, user_id)
+        except SessionStoreError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except SessionInactiveError as exc:
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
+        access_token = create_access_token(user_id=user_id, sid=sid)
+        new_refresh_token = create_refresh_token(user_id=user_id, username=username or user.username, sid=sid)
 
         return Token(
             access_token=access_token,
@@ -216,6 +238,30 @@ async def get_current_user_info(
     # 使用 TokenPayload 中已经动态获取的权限
     user.permissions = current_user.permissions
     return user
+
+
+@router.get("/activity", response_model=LoginActivityResponse)
+async def get_activity(current_user: TokenPayload = Depends(get_current_user_required)):
+    """Check idle-session status without extending it."""
+    try:
+        state = await assert_active(current_user.sid, current_user.sub)
+    except SessionStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except SessionInactiveError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    return _activity_response(state)
+
+
+@router.post("/activity", response_model=LoginActivityResponse)
+async def post_activity(current_user: TokenPayload = Depends(get_current_user_required)):
+    """Record explicit browser activity and extend the idle deadline."""
+    try:
+        state = await touch(current_user.sid, current_user.sub)
+    except SessionStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except SessionInactiveError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    return _activity_response(state)
 
 
 @router.get("/permissions", response_model=PermissionsResponse)

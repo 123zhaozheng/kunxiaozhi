@@ -7,7 +7,7 @@
 from typing import Optional
 
 from src.infra.async_utils.background_tasks import BestEffortTaskLimiter
-from src.infra.auth.jwt import create_access_token, create_refresh_token
+from src.infra.auth.jwt import create_token_pair
 from src.infra.role.storage import RoleStorage
 from src.infra.storage.s3.service import get_or_init_storage, get_s3_enabled
 from src.infra.user.storage import UserStorage
@@ -109,12 +109,7 @@ class UserManager:
                         permissions.add(perm.value)
 
         # 创建 token（用户信息从 API 动态获取）
-        access_token = create_access_token(user_id=user.id)
-
-        refresh_token = create_refresh_token(
-            user_id=user.id,
-            username=user.username,
-        )
+        access_token, refresh_token = await create_token_pair(user.id, user.username)
 
         return Token(
             access_token=access_token,

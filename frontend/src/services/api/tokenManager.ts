@@ -11,6 +11,12 @@ import i18n from "../../i18n";
 
 let refreshPromise: Promise<string> | null = null;
 
+export class TokenRefreshError extends Error {
+  constructor(public readonly status: number) {
+    super("Token refresh failed");
+  }
+}
+
 export interface RefreshedTokens {
   access_token: string;
   refresh_token?: string;
@@ -58,7 +64,8 @@ export async function getValidAccessToken(): Promise<string | null> {
 
   try {
     return await refreshAccessToken();
-  } catch {
+  } catch (error) {
+    if (error instanceof TokenRefreshError && error.status !== 401) throw error;
     return null;
   }
 }
@@ -97,7 +104,7 @@ export async function refreshTokens(): Promise<RefreshedTokens> {
     });
 
     if (!response.ok) {
-      throw new Error("Token refresh failed");
+      throw new TokenRefreshError(response.status);
     }
 
     const tokenResponse = (await response.json()) as RefreshedTokens;

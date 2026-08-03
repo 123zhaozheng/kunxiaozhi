@@ -2,6 +2,7 @@
 Settings storage using MongoDB
 """
 
+import math
 from typing import Any, Optional
 
 from src.infra.utils.datetime import utc_now_iso
@@ -93,6 +94,9 @@ class SettingsStorage:
                 depends_on=definition.get("depends_on"),
                 options=definition.get("options"),
                 json_schema=definition.get("json_schema"),
+                minimum=definition.get("minimum"),
+                maximum=definition.get("maximum"),
+                step=definition.get("step"),
                 updated_at=db_doc.get("updated_at") if db_doc else None,
                 updated_by=db_doc.get("updated_by") if db_doc else None,
             )
@@ -142,6 +146,9 @@ class SettingsStorage:
             depends_on=definition.get("depends_on"),
             options=definition.get("options"),
             json_schema=definition.get("json_schema"),
+            minimum=definition.get("minimum"),
+            maximum=definition.get("maximum"),
+            step=definition.get("step"),
             updated_at=doc.get("updated_at") if doc else None,
             updated_by=doc.get("updated_by") if doc else None,
         )
@@ -159,8 +166,16 @@ class SettingsStorage:
         # Type validation
         expected_type = definition["type"]
         if expected_type.value == "number":
-            if not isinstance(value, (int, float)):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
                 raise ValueError(f"Setting {key} expects a number")
+            if not math.isfinite(float(value)):
+                raise ValueError(f"Setting {key} expects a finite number")
+            minimum = definition.get("minimum")
+            maximum = definition.get("maximum")
+            if minimum is not None and value < minimum:
+                raise ValueError(f"Setting {key} must be at least {minimum}")
+            if maximum is not None and value > maximum:
+                raise ValueError(f"Setting {key} must be at most {maximum}")
         elif expected_type.value == "boolean":
             if not isinstance(value, bool):
                 raise ValueError(f"Setting {key} expects a boolean")

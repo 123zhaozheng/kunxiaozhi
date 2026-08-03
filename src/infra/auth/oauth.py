@@ -264,10 +264,9 @@ class OAuthService:
             await self.storage.touch_updated_at(user.id)
 
             # 生成 JWT token
-            from src.infra.auth.jwt import create_access_token, create_refresh_token
+            from src.infra.auth.jwt import create_token_pair
 
-            access_token = create_access_token(user_id=user.id)
-            refresh_token = create_refresh_token(user_id=user.id, username=user.username)
+            access_token, refresh_token = await create_token_pair(user.id, user.username)
 
             return Token(
                 access_token=access_token,
@@ -275,6 +274,10 @@ class OAuthService:
                 expires_in=settings.ACCESS_TOKEN_EXPIRE_HOURS * 3600,
             )
         except Exception as e:
+            from src.infra.auth.session import SessionStoreError
+
+            if isinstance(e, SessionStoreError):
+                raise
             logger.error(f"Failed to handle OAuth callback for {provider.value}: {e}")
             return None
 

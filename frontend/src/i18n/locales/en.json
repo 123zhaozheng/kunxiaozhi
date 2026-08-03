@@ -1980,6 +1980,7 @@
   },
   "settingDesc": {
     "ACCESS_TOKEN_EXPIRE_HOURS": "Access token expiration in hours",
+    "LOGIN_IDLE_TIMEOUT_HOURS": "Idle session timeout after last real user activity (hours)",
     "ADMIN_CONTACT_EMAIL": "Administrator contact email displayed to users in the About dialog",
     "ADMIN_CONTACT_URL": "Administrator contact/support URL (e.g. help desk, feedback form) displayed to users in the About dialog",
     "APP_BASE_URL": "Public base URL for file download/upload URLs (e.g. https://kunxiaozhi.com). Required when behind a reverse proxy where request.base_url is incorrect.",

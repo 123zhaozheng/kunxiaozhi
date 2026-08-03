@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from src.infra.auth.oa_login import OaLoginNotProvisionedError, login_or_provision_from_workcode
 from src.infra.auth.oa_sso import OASsoError, OASsoService
+from src.infra.auth.session import SessionStoreError
 from src.infra.logging import get_logger
 from src.kernel.config import settings
 from src.kernel.exceptions import AccountNotActiveError
@@ -60,3 +61,5 @@ async def oa_sso_login(request: Request, body: OaSsoLoginRequest) -> Token:
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(exc),
         ) from exc
+    except SessionStoreError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc

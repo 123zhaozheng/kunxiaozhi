@@ -245,6 +245,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_HOURS: int = 24
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    LOGIN_IDLE_TIMEOUT_HOURS: float = 3.0
 
     # S3 Storage Settings
     S3_ENABLED: bool = False

@@ -160,7 +160,14 @@ async def _exchange_oauth_token(
 
     frontend_url = _get_frontend_url(request)
     redirect_uri = _oauth_redirect_uri(frontend_url, provider)
-    token = await oauth_service.handle_callback(oauth_provider, code, state, redirect_uri)
+    try:
+        token = await oauth_service.handle_callback(oauth_provider, code, state, redirect_uri)
+    except Exception as exc:
+        from src.infra.auth.session import SessionStoreError
+
+        if isinstance(exc, SessionStoreError):
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise
     return frontend_url, token
 
 

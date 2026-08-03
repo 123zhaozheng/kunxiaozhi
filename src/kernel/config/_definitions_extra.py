@@ -29,6 +29,17 @@ EXTRA_SETTING_DEFINITIONS: dict[str, dict] = {
         "description": "settingDesc.REFRESH_TOKEN_EXPIRE_DAYS",
         "default": 7,
     },
+    "LOGIN_IDLE_TIMEOUT_HOURS": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.SECURITY,
+        "subcategory": "jwt",
+        "description": "settingDesc.LOGIN_IDLE_TIMEOUT_HOURS",
+        "default": 3,
+        "minimum": 0.25,
+        "maximum": 168,
+        "step": 0.25,
+        "frontend_visible": True,
+    },
     # ============================================
     # Email Settings (Resend)
     # ============================================

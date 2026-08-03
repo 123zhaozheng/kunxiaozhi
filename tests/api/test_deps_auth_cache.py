@@ -28,6 +28,10 @@ async def _fake_roles(_roles: list[str]) -> tuple[list[str], list[str]]:
     return ["user"], ["chat:write"]
 
 
+async def _noop_async(*_args: Any) -> None:
+    return None
+
+
 @pytest.mark.asyncio
 async def test_get_current_user_required_reuses_request_state_payload(
     monkeypatch: pytest.MonkeyPatch,
@@ -41,10 +45,11 @@ async def test_get_current_user_required_reuses_request_state_payload(
     monkeypatch.setattr(deps, "verify_token", fail_verify)
     monkeypatch.setattr(deps, "UserStorage", lambda: _UserStorage())
     monkeypatch.setattr(deps, "_get_user_roles_and_permissions", _fake_roles)
+    monkeypatch.setattr(deps, "assert_active", _noop_async)
 
     request = SimpleNamespace(
         state=SimpleNamespace(
-            auth_payload=TokenPayload(sub="user-1", username="from-token"),
+                auth_payload=TokenPayload(sub="user-1", username="from-token", sid="sid"),
         )
     )
     credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="token")
@@ -82,6 +87,7 @@ async def test_get_current_user_required_offloads_token_verification(
     monkeypatch.setattr(deps, "verify_token", fake_verify_token)
     monkeypatch.setattr(deps, "UserStorage", lambda: _UserStorage())
     monkeypatch.setattr(deps, "_get_user_roles_and_permissions", _fake_roles)
+    monkeypatch.setattr(deps, "assert_active", _noop_async)
 
     request = SimpleNamespace(state=SimpleNamespace())
     credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="token-1")
@@ -116,6 +122,7 @@ async def test_get_current_user_from_websocket_offloads_token_verification(
     monkeypatch.setattr(deps, "verify_token", fake_verify_token)
     monkeypatch.setattr(deps, "UserStorage", lambda: _UserStorage())
     monkeypatch.setattr(deps, "_get_user_roles_and_permissions", _fake_roles)
+    monkeypatch.setattr(deps, "assert_active", _noop_async)
 
     user = await deps.get_current_user_from_websocket("token-1")
 
