@@ -74,3 +74,28 @@ async def test_create_marketplace_skill_rejects_total_file_content_before_sync(
 
     assert exc.value.status_code == 413
     assert "too large" in exc.value.detail
+
+
+@pytest.mark.asyncio
+async def test_install_marketplace_skill_rejects_builtin_name() -> None:
+    class _Marketplace:
+        async def get_marketplace_skill(self, name: str):
+            return SimpleNamespace(is_active=True, created_by="other")
+
+    class _Storage:
+        async def list_skill_file_paths(self, name: str, user_id: str):
+            return []
+
+        async def get_builtin_skill_for_user(self, name: str, user_id: str):
+            return {"name": name, "files": {"SKILL.md": "builtin"}}
+
+    with pytest.raises(HTTPException) as exc:
+        await marketplace_routes.install_marketplace_skill(
+            "builtin-planner",
+            user=_publisher(),
+            marketplace=_Marketplace(),
+            storage=_Storage(),
+        )
+
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "Builtin skill is read-only"

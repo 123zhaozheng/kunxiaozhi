@@ -21,6 +21,7 @@ export interface SkillFormProps {
   onSave: (data: SkillCreate) => Promise<boolean>;
   onCancel: () => void;
   isLoading?: boolean;
+  readOnly?: boolean;
   onFullscreenChange?: (fullscreen: boolean) => void;
 }
 
@@ -31,6 +32,7 @@ export interface SkillFormActions {
   enabled: boolean;
   errors: Record<string, string>;
   isEditing: boolean;
+  readOnly: boolean;
   isLoading: boolean;
   files: FileEntry[];
   activeFileIndex: number;

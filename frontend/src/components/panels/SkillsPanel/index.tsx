@@ -104,6 +104,7 @@ export function SkillsPanel({ embedded = false }: SkillsPanelProps) {
         isLoading={actions.isLoading}
         onSave={actions.handleSave}
         onCancel={actions.handleCancel}
+        readOnly={Boolean(actions.editingSkill?.is_builtin)}
       />
 
       <ZipUploadModal

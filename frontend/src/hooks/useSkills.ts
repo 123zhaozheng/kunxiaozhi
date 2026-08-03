@@ -56,6 +56,8 @@ function mapInstalledToSource(installed_from: string): SkillSource {
   switch (installed_from) {
     case "marketplace":
       return "marketplace";
+    case "builtin":
+      return "builtin";
     case "manual":
     default:
       return "manual";
@@ -95,6 +97,7 @@ function composeSkillResponse(
     updated_at: userSkill.updated_at,
     is_published: userSkill.is_published,
     marketplace_is_active: userSkill.marketplace_is_active,
+    is_builtin: userSkill.is_builtin ?? false,
     is_favorite: userSkill.is_favorite ?? false,
     is_pinned: userSkill.is_pinned ?? false,
   };
@@ -208,6 +211,7 @@ export function useSkills(options?: {
             updated_at: cached.updated_at,
             is_published: cached.is_published,
             marketplace_is_active: cached.marketplace_is_active,
+            is_builtin: cached.is_builtin,
             is_favorite: cached.is_favorite,
             is_pinned: cached.is_pinned,
           };
@@ -219,11 +223,12 @@ export function useSkills(options?: {
             files: detail.files || [],
             enabled: detail.enabled ?? true,
             file_count: detail.files?.length || 0,
-            installed_from: "manual",
+            installed_from: detail.is_builtin ? "builtin" : "manual",
             created_at: undefined,
             updated_at: undefined,
             is_published: detail.is_published || false,
             marketplace_is_active: detail.marketplace_is_active ?? true,
+            is_builtin: detail.is_builtin ?? false,
             is_favorite: detail.is_favorite ?? false,
             is_pinned: detail.is_pinned ?? false,
           };
@@ -267,6 +272,7 @@ export function useSkills(options?: {
             updated_at: cached.updated_at,
             is_published: cached.is_published,
             marketplace_is_active: cached.marketplace_is_active,
+            is_builtin: cached.is_builtin,
             is_favorite: cached.is_favorite,
             is_pinned: cached.is_pinned,
           };
@@ -278,11 +284,12 @@ export function useSkills(options?: {
             files: detail.files || [],
             enabled: detail.enabled ?? true,
             file_count: detail.files?.length || 0,
-            installed_from: "manual",
+            installed_from: detail.is_builtin ? "builtin" : "manual",
             created_at: undefined,
             updated_at: undefined,
             is_published: detail.is_published || false,
             marketplace_is_active: detail.marketplace_is_active ?? true,
+            is_builtin: detail.is_builtin ?? false,
             is_favorite: detail.is_favorite ?? false,
             is_pinned: detail.is_pinned ?? false,
           };
@@ -599,6 +606,7 @@ export function useSkills(options?: {
     const stats: Record<SkillSource, { enabled: number; total: number }> = {
       marketplace: { enabled: 0, total: 0 },
       manual: { enabled: 0, total: 0 },
+      builtin: { enabled: 0, total: 0 },
     };
 
     skills.forEach((skill) => {

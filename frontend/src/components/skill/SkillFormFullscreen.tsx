@@ -41,19 +41,19 @@ export function SkillFormFullscreen(a: SkillFormActions) {
                   activeFileIndex={a.activeFileIndex}
                   onSelect={a.setActiveFileIndex}
                   onRemove={a.removeFile}
-                  canRemove={a.files.length > 1}
+                  canRemove={!a.readOnly && a.files.length > 1}
                 />
               ))}
             </div>
             <div className="shrink-0 px-2 py-1.5">
-              <button
+              {!a.readOnly && <button
                 type="button"
                 onClick={a.addFile}
                 className="w-full flex items-center gap-1.5 rounded-xl px-2 py-1.5 text-sm text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-white/5 transition-colors"
               >
                 <Plus size={13} />
                 {t("skills.form.addFile")}
-              </button>
+              </button>}
             </div>
           </div>
 
@@ -70,14 +70,14 @@ export function SkillFormFullscreen(a: SkillFormActions) {
                   untitledLabel={t("skills.form.untitled")}
                 />
               </div>
-              <button
+              {!a.readOnly && <button
                 type="button"
                 onClick={a.addFile}
                 className="shrink-0 flex items-center justify-center h-9 w-9 rounded-xl text-stone-400 transition-colors duration-150 hover:bg-[var(--theme-bg-card)] hover:text-[var(--theme-text)]"
                 title={t("skills.form.addFile", "Add file")}
               >
                 <Plus size={15} />
-              </button>
+              </button>}
             </div>
 
             {/* Editor / Binary Preview */}
@@ -141,6 +141,7 @@ export function SkillFormFullscreen(a: SkillFormActions) {
                       onChange={(val) =>
                         a.updateFileContent(a.activeFileIndex, val)
                       }
+                      readOnly={a.readOnly}
                       className="flex-1 min-h-0"
                       filePath={a.files[a.activeFileIndex]?.path}
                     />

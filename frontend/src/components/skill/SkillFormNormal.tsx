@@ -29,7 +29,7 @@ export function SkillFormNormal(a: SkillFormActions) {
                 <input
                   type="text"
                   value={a.name}
-                  disabled={a.isEditing}
+                  disabled={a.isEditing || a.readOnly}
                   onChange={(e) => a.setName(e.target.value)}
                   placeholder={t("skills.form.namePlaceholder")}
                   className="w-full rounded-xl border border-[var(--theme-border)] px-3 py-2 font-mono text-sm text-[var(--theme-text)] placeholder:text-stone-400 dark:placeholder:text-stone-500 transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50 bg-[var(--theme-bg)] hover:border-[var(--skill-border-strong)]"
@@ -77,6 +77,7 @@ export function SkillFormNormal(a: SkillFormActions) {
               </label>
               <textarea
                 value={a.description}
+                disabled={a.readOnly}
                 onChange={(e) => a.setDescription(e.target.value)}
                 placeholder={t("skills.form.descriptionPlaceholder")}
                 rows={5}
@@ -103,6 +104,7 @@ export function SkillFormNormal(a: SkillFormActions) {
                 <input
                   type="text"
                   value={a.tagsInput}
+                  disabled={a.readOnly}
                   onChange={(e) => a.setTagsInput(e.target.value)}
                   placeholder={t("adminMarketplace.tagsPlaceholder")}
                   className="mt-3 w-full rounded-xl border border-[var(--theme-border)] px-3 py-2 text-sm text-[var(--theme-text)] placeholder:text-stone-400 dark:placeholder:text-stone-500 transition-all duration-150 bg-[var(--theme-bg-card)] hover:border-[var(--skill-border-strong)]"
@@ -114,14 +116,14 @@ export function SkillFormNormal(a: SkillFormActions) {
                       className="skill-tag-chip skill-tag-chip--active"
                     >
                       {tag}
-                      <button
+                      {!a.readOnly && <button
                         type="button"
                         onClick={() => a.removeTag(tag)}
                         className="skill-tag-chip-remove"
                         aria-label={`Remove tag ${tag}`}
                       >
                         <X size={11} />
-                      </button>
+                      </button>}
                     </span>
                   ))}
                   {normalizeTags(a.tagsInput).length === 0 && (
@@ -152,6 +154,7 @@ export function SkillFormNormal(a: SkillFormActions) {
                 <Toggle
                   checked={a.enabled}
                   onChange={a.setEnabled}
+                  disabled={a.readOnly}
                   label={t("skills.form.enabled")}
                 />
               </div>
@@ -168,14 +171,14 @@ export function SkillFormNormal(a: SkillFormActions) {
                   {t("skills.form.files", "Files")}
                 </p>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button
+                  {!a.readOnly && <button
                     type="button"
                     onClick={a.addFile}
                     className="flex h-9 w-9 items-center justify-center rounded-xl text-stone-400 transition-colors duration-150 hover:bg-[var(--theme-bg-card)] hover:text-[var(--theme-text)]"
                     title={t("skills.form.addFile", "Add file")}
                   >
                     <Plus size={15} />
-                  </button>
+                  </button>}
                   <button
                     type="button"
                     onClick={() => a.toggleFullscreen(true)}
@@ -204,6 +207,7 @@ export function SkillFormNormal(a: SkillFormActions) {
                 <input
                   type="text"
                   value={a.files[a.activeFileIndex]?.path || ""}
+                  disabled={a.readOnly}
                   onChange={(e) =>
                     a.updateFilePath(a.activeFileIndex, e.target.value)
                   }
@@ -281,14 +285,14 @@ export function SkillFormNormal(a: SkillFormActions) {
                     readOnly
                   />
                   <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-[var(--theme-bg)] to-transparent" />
-                  <button
+                  {!a.readOnly && <button
                     type="button"
                     onClick={() => a.toggleFullscreen(true)}
                     className="absolute right-3 bottom-3 flex items-center gap-1.5 rounded-lg bg-[var(--theme-primary)] px-2.5 py-1.5 text-xs font-medium text-white shadow-md transition-all duration-150 hover:scale-105 active:scale-95"
                   >
                     <Pencil size={12} />
                     {t("skills.form.editFullscreen", "Edit")}
-                  </button>
+                  </button>}
                 </div>
               );
             })()}
@@ -311,7 +315,7 @@ export function SkillFormNormal(a: SkillFormActions) {
         >
           {t("common.cancel")}
         </button>
-        <button
+        {!a.readOnly && <button
           type="submit"
           disabled={a.isLoading}
           className="rounded-xl bg-[var(--theme-primary)] px-5 py-2 text-sm font-medium text-white hover:bg-[var(--theme-primary-hover)] disabled:opacity-50 transition-colors duration-150 dark:text-stone-950 inline-flex items-center gap-2"
@@ -322,7 +326,7 @@ export function SkillFormNormal(a: SkillFormActions) {
           <span className={a.isLoading ? "loading-text" : ""}>
             {submitLabel}
           </span>
-        </button>
+        </button>}
       </div>
     </>
   );

@@ -990,6 +990,7 @@ class SkillStorage:
         is_admin: bool,
         disabled_skills: list[str],
         shadowed_names: set[str] | None = None,
+        include_disabled: bool = False,
         remaining_quota: int,
     ) -> dict[str, dict[str, Any]]:
         """加载角色匹配的 builtin skills（注入用，可被子类/测试覆写）。
@@ -1006,9 +1007,9 @@ class SkillStorage:
         )
         disabled_set = set(disabled_skills or [])
         shadowed = shadowed_names or set()
-        builtin_names = [
-            n for n in builtin_names if n not in disabled_set and n not in shadowed
-        ]
+        builtin_names = [n for n in builtin_names if n not in shadowed]
+        if not include_disabled:
+            builtin_names = [n for n in builtin_names if n not in disabled_set]
         builtin_names = builtin_names[: max(0, remaining_quota)]
         if not builtin_names:
             return {}
@@ -1035,9 +1036,44 @@ class SkillStorage:
                 "name": name,
                 "description": description or f"Skill: {name}",
                 "files": files,
-                "enabled": True,
+                "enabled": name not in disabled_set,
+                "is_builtin": True,
             }
         return merged
+
+    async def list_builtin_skills_for_user(
+        self,
+        user_id: str,
+        *,
+        shadowed_names: set[str] | None = None,
+        disabled_skills: Optional[list[str]] = None,
+        remaining_quota: int = SKILL_EFFECTIVE_LOAD_LIMIT,
+    ) -> dict[str, dict[str, Any]]:
+        """Return role-visible Builtin Skills for the user's read-only catalog."""
+        if disabled_skills is None:
+            disabled_skills = await self._get_user_disabled_builtin_skills(user_id)
+        user_roles, is_admin = await self._resolve_user_access(user_id)
+        return await self._get_builtin_skills_for_user(
+            user_roles=user_roles,
+            is_admin=is_admin,
+            disabled_skills=normalize_skill_name_list(disabled_skills),
+            shadowed_names=shadowed_names,
+            include_disabled=True,
+            remaining_quota=remaining_quota,
+        )
+
+    async def get_builtin_skill_for_user(
+        self,
+        skill_name: str,
+        user_id: str,
+    ) -> Optional[dict[str, Any]]:
+        """Read one role-visible Builtin Skill without copying it to user storage."""
+        visible = await self.list_builtin_skills_for_user(
+            user_id,
+            shadowed_names=set(),
+            remaining_quota=SKILL_EFFECTIVE_LOAD_LIMIT,
+        )
+        return visible.get(skill_name)
 
     def _get_builtin_storage(self):
         """Lazy accessor for ``BuiltinSkillStorage``（可被测试覆写）。"""

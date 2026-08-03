@@ -17,3 +17,16 @@ test("skill cards expose pin and favorite banner actions", () => {
   assert.match(componentSource, /t\("personaPresets\.pin", "置顶"\)/);
   assert.match(componentSource, /t\("personaPresets\.favorite", "收藏"\)/);
 });
+
+test("builtin skill cards are marked read-only and excluded from write actions", () => {
+  assert.match(componentSource, /builtin: <ShieldCheck/);
+  assert.match(componentSource, /onTogglePreference && !skill\.is_builtin/);
+  assert.match(componentSource, /!skill\.is_builtin && \(/);
+  assert.match(componentSource, /onSelect && !skill\.is_builtin/);
+});
+
+test("builtin skill cards keep a read-only file viewer entry point", () => {
+  assert.match(componentSource, /skill\.is_builtin \? \(/);
+  assert.match(componentSource, /onEdit\(skill\)/);
+  assert.match(componentSource, /aria-label=.*View files/);
+});

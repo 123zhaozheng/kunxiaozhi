@@ -3,7 +3,7 @@
 // ============================================
 
 // Skill Source Type (based on installed_from)
-export type SkillSource = "marketplace" | "manual";
+export type SkillSource = "marketplace" | "manual" | "builtin";
 
 // ============================================
 // User Skills Types (from /api/skills/)
@@ -17,12 +17,13 @@ export interface UserSkill {
   files: string[];
   enabled: boolean;
   file_count: number;
-  installed_from: "manual" | "marketplace";
+  installed_from: "manual" | "marketplace" | "builtin";
   published_marketplace_name?: string;
   created_at?: string;
   updated_at?: string;
   is_published: boolean;
   marketplace_is_active: boolean;
+  is_builtin?: boolean;
   is_favorite?: boolean;
   is_pinned?: boolean;
 }
@@ -36,6 +37,7 @@ export interface UserSkillDetail {
   tags?: string[];
   is_published?: boolean;
   marketplace_is_active?: boolean;
+  is_builtin?: boolean;
   is_favorite?: boolean;
   is_pinned?: boolean;
 }
@@ -87,12 +89,13 @@ export interface SkillResponse {
   filePaths?: string[]; // file path list without content (for lazy loading)
   binaryFiles?: Record<string, BinaryFileInfo>; // binary file path -> metadata
   file_count: number;
-  installed_from: "manual" | "marketplace";
+  installed_from: "manual" | "marketplace" | "builtin";
   published_marketplace_name?: string;
   created_at?: string;
   updated_at?: string;
   is_published: boolean;
   marketplace_is_active: boolean;
+  is_builtin?: boolean;
   is_favorite?: boolean;
   is_pinned?: boolean;
 }

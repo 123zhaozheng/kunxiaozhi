@@ -39,6 +39,7 @@ export function useSkillsActions() {
       limit: pageSize,
       q: searchQuery.trim() || undefined,
       tags: selectedTags.length > 0 ? selectedTags : undefined,
+      includeBuiltin: true,
     }),
     [page, pageSize, searchQuery, selectedTags],
   );
@@ -251,10 +252,11 @@ export function useSkillsActions() {
   };
 
   const handleSelectAll = () => {
-    if (selectedNames.size === filteredSkills.length) {
+    const selectableSkills = filteredSkills.filter((skill) => !skill.is_builtin);
+    if (selectedNames.size === selectableSkills.length) {
       setSelectedNames(new Set());
     } else {
-      setSelectedNames(new Set(filteredSkills.map((s) => s.name)));
+      setSelectedNames(new Set(selectableSkills.map((s) => s.name)));
     }
   };
 

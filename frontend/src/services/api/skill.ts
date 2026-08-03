@@ -29,6 +29,7 @@ export interface SkillListParams {
   limit?: number;
   q?: string;
   tags?: string[];
+  includeBuiltin?: boolean;
 }
 
 export function buildSkillListUrl(params: SkillListParams = {}): string {
@@ -38,6 +39,8 @@ export function buildSkillListUrl(params: SkillListParams = {}): string {
     searchParams.set("limit", String(params.limit));
   if (params.q) searchParams.set("q", params.q);
   params.tags?.forEach((tag) => searchParams.append("tags", tag));
+  if (params.includeBuiltin !== undefined)
+    searchParams.set("include_builtin", String(params.includeBuiltin));
   const query = searchParams.toString();
   return `${SKILLS_API}/${query ? `?${query}` : ""}`;
 }

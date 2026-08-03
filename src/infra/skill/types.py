@@ -77,6 +77,7 @@ class UserSkill(BaseModel):
     updated_at: Optional[str] = None
     is_published: bool = False
     marketplace_is_active: bool = True
+    is_builtin: bool = False
     is_favorite: bool = False
     is_pinned: bool = False
 

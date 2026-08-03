@@ -11,6 +11,7 @@ interface SkillFormSidebarProps {
   isLoading: boolean;
   onSave: (data: SkillCreate) => Promise<boolean>;
   onCancel: () => void;
+  readOnly?: boolean;
   createTitle?: string;
   subtitle?: string;
 }
@@ -22,6 +23,7 @@ export function SkillFormSidebar({
   isLoading,
   onSave,
   onCancel,
+  readOnly = false,
   createTitle,
   subtitle,
 }: SkillFormSidebarProps) {
@@ -44,6 +46,7 @@ export function SkillFormSidebar({
         onSave={onSave}
         onCancel={onCancel}
         isLoading={isLoading}
+        readOnly={readOnly}
       />
     </EditorSidebar>
   );

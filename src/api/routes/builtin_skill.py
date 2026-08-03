@@ -25,10 +25,12 @@ from src.api.routes.skill import (
 from src.api.routes.upload import _read_upload_file_limited
 from src.infra.async_utils import run_blocking_io
 from src.infra.skill.builtin import BuiltinSkillStorage
+from src.infra.skill.marketplace import MarketplaceStorage
 from src.infra.skill.types import (
     BuiltinSkill,
     BuiltinSkillResponse,
     BuiltinSkillUpdate,
+    MarketplaceSkillResponse,
 )
 from src.kernel.schemas.user import TokenPayload
 
@@ -37,6 +39,10 @@ router = APIRouter()
 
 def get_builtin_storage() -> BuiltinSkillStorage:
     return BuiltinSkillStorage()
+
+
+def get_marketplace_storage() -> MarketplaceStorage:
+    return MarketplaceStorage()
 
 
 class FromMarketplaceRequest(BaseModel):
@@ -71,6 +77,22 @@ async def list_builtin_skills(
         include_inactive=include_inactive,
         allowed_role=allowed_role,
         source=source,
+        skip=skip,
+        limit=limit,
+    )
+
+
+@router.get("/marketplace", response_model=list[MarketplaceSkillResponse])
+async def list_marketplace_sources_for_builtin(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    user: TokenPayload = Depends(require_permissions("manage_builtin_skills")),
+    marketplace: MarketplaceStorage = Depends(get_marketplace_storage),
+):
+    """List active Marketplace Skills available to Builtin administrators."""
+    return await marketplace.list_marketplace_skills(
+        active_only=True,
+        viewer_id=user.sub,
         skip=skip,
         limit=limit,
     )

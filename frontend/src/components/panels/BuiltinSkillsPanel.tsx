@@ -14,7 +14,6 @@ import {
   Package,
 } from "lucide-react";
 import { builtinSkillApi } from "../../services/api/builtinSkill";
-import { marketplaceApi } from "../../services/api/marketplace";
 import { LoadingSpinner } from "../common/LoadingSpinner";
 import { EditorSidebar } from "../common/EditorSidebar";
 import { ConfirmDialog } from "../common/ConfirmDialog";
@@ -60,6 +59,7 @@ export function BuiltinSkillsPanel({ embedded = false }: BuiltinSkillsPanelProps
     MarketplaceSkillResponse[]
   >([]);
   const [marketplaceLoading, setMarketplaceLoading] = useState(false);
+  const [marketplaceError, setMarketplaceError] = useState<string | null>(null);
   const [marketplaceName, setMarketplaceName] = useState("");
 
   // Edit modal state
@@ -115,15 +115,19 @@ export function BuiltinSkillsPanel({ embedded = false }: BuiltinSkillsPanelProps
 
   const loadMarketplaceSkills = useCallback(async () => {
     setMarketplaceLoading(true);
+    setMarketplaceError(null);
     try {
-      const list = await marketplaceApi.list({ limit: 500 });
+      const list = await builtinSkillApi.listMarketplace({ limit: 500 });
       setMarketplaceSkills(list);
-    } catch {
+    } catch (err) {
       setMarketplaceSkills([]);
+      setMarketplaceError(
+        err instanceof Error ? err.message : t("builtinSkills.marketplaceLoadFailed"),
+      );
     } finally {
       setMarketplaceLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const handleZipFileChange = useCallback(
     async (file: File | null) => {
@@ -541,6 +545,8 @@ export function BuiltinSkillsPanel({ embedded = false }: BuiltinSkillsPanelProps
                   <LoadingSpinner size="sm" />
                   {t("builtinSkills.loadingMarketplace")}
                 </div>
+              ) : marketplaceError ? (
+                <p className="py-2 text-xs text-red-500">{marketplaceError}</p>
               ) : marketplaceSkills.length === 0 ? (
                 <p className="py-2 text-xs text-[var(--theme-text-secondary)]">
                   {t("builtinSkills.noMarketplaceSkills")}

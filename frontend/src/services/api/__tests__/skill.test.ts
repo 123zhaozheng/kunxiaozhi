@@ -9,3 +9,10 @@ test("buildSkillListUrl includes pagination and search params", () => {
     "/api/skills/?skip=20&limit=10&q=planner&tags=coding",
   );
 });
+
+test("buildSkillListUrl requests the effective Builtin projection when enabled", () => {
+  assert.equal(
+    buildSkillListUrl({ includeBuiltin: true }),
+    "/api/skills/?include_builtin=true",
+  );
+});

@@ -24,6 +24,7 @@ def _fake_user() -> TokenPayload:
 class _FakeUserDoc:
     metadata = {
         "disabled_skills": ["archived"],
+        "disabled_builtin_skill_names": [],
         "pinned_skill_names": ["planner"],
         "favorite_skill_names": ["writer"],
     }
@@ -33,6 +34,156 @@ class _FakeUserStorage:
     async def get_by_id(self, user_id: str):
         assert user_id == "user-1"
         return _FakeUserDoc()
+
+
+class _EffectiveListStorage:
+    async def list_user_skill_tags(self, user_id: str):
+        return ["planning"]
+
+    async def list_user_skills(self, user_id: str, **kwargs):
+        assert kwargs["skip"] == 0
+        assert kwargs["limit"] == 100
+        return [
+            {
+                "skill_name": "planner",
+                "enabled": True,
+                "file_count": 1,
+                "file_paths": ["SKILL.md"],
+                "installed_from": "manual",
+                "published_marketplace_name": None,
+                "is_pinned": False,
+                "is_favorite": False,
+            }
+        ]
+
+    async def count_user_skills(self, user_id: str, **kwargs):
+        return 1
+
+    async def count_disabled_user_skills(self, user_id: str, **kwargs):
+        return 0
+
+    async def get_all_user_skill_names(self, user_id: str):
+        return ["planner", "hidden-personal"]
+
+    async def list_builtin_skills_for_user(self, user_id: str, **kwargs):
+        assert kwargs["shadowed_names"] == {"planner", "hidden-personal"}
+        return {
+            "builtin-planner": {
+                "name": "builtin-planner",
+                "description": "Builtin plan",
+                "files": {
+                    "SKILL.md": "---\nname: builtin-planner\ndescription: Builtin plan\n---"
+                },
+                "enabled": True,
+                "is_builtin": True,
+            }
+        }
+
+    async def batch_get_skill_md_contents(self, skill_names, user_id: str):
+        return {"planner": "---\nname: planner\ndescription: Plan work\n---"}
+
+
+class _EffectiveListMarketplace:
+    async def get_user_published_skills(self, user_id: str, *, skill_names=None):
+        return {}
+
+
+class _BuiltinOnlyStorage:
+    async def list_skill_file_paths(self, name: str, user_id: str):
+        return []
+
+    async def get_builtin_skill_for_user(self, name: str, user_id: str):
+        return {
+            "name": name,
+            "description": "Builtin plan",
+            "files": {"SKILL.md": "builtin content", "notes.md": "notes"},
+            "enabled": True,
+            "is_builtin": True,
+        }
+
+    async def invalidate_user_cache(self, user_id: str):
+        return None
+
+
+@pytest.mark.asyncio
+async def test_get_user_skill_reads_builtin_projection(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(skill_route, "UserStorage", lambda: _FakeUserStorage())
+    result = await skill_route.get_user_skill("builtin-planner", user=_fake_user(), storage=_BuiltinOnlyStorage(), marketplace=_EffectiveListMarketplace())
+    assert result.is_builtin is True
+
+
+@pytest.mark.asyncio
+async def test_get_skill_file_does_not_fallback_to_builtin_for_shadowed_personal_skill() -> None:
+    class _ShadowedPersonalStorage:
+        async def get_skill_file(self, name: str, path: str, user_id: str):
+            return None
+
+        async def list_skill_file_paths(self, name: str, user_id: str):
+            return ["SKILL.md"]
+
+        async def get_builtin_skill_for_user(self, name: str, user_id: str):
+            raise AssertionError("shadowed personal skill must not read Builtin files")
+
+    with pytest.raises(HTTPException) as exc:
+        await skill_route.get_skill_file(
+            "planner",
+            "notes.md",
+            user=_fake_user(),
+            storage=_ShadowedPersonalStorage(),
+        )
+
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_toggle_builtin_skill_uses_builtin_preferences(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _UserStorage:
+        def __init__(self):
+            self.updated = None
+
+        async def get_by_id(self, user_id: str):
+            return _FakeUserDoc()
+
+        async def update_metadata(self, user_id: str, metadata):
+            self.updated = metadata
+
+    user_storage = _UserStorage()
+    monkeypatch.setattr(skill_route, "UserStorage", lambda: user_storage)
+    result = await skill_route.toggle_user_skill(
+        "builtin-planner",
+        body=skill_route.ToggleRequest(enabled=False),
+        user=_fake_user(),
+        storage=_BuiltinOnlyStorage(),
+    )
+    assert result["enabled"] is False
+    assert user_storage.updated == {"disabled_builtin_skill_names": ["builtin-planner"]}
+
+
+@pytest.mark.asyncio
+async def test_upload_rejects_role_visible_builtin_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Storage:
+        async def list_user_skills(self, user_id: str):
+            return []
+
+        async def get_builtin_skill_for_user(self, name: str, user_id: str):
+            return {"name": name, "files": {"SKILL.md": "builtin"}}
+
+    monkeypatch.setattr(skill_route, "_parse_zip_skills", lambda _content: [
+        ("builtin-planner", {"SKILL.md": "personal"}, {}),
+    ])
+
+    with pytest.raises(HTTPException) as exc:
+        await skill_route.upload_skill_from_zip(
+            file=_ChunkedUpload(filename="skills.zip", data=b"zip"),
+            skill_names=None,
+            user=_fake_user(),
+            storage=_Storage(),
+        )
+
+    assert exc.value.status_code == 400
+    assert "Builtin skill is read-only" in str(exc.value.detail)
 
 
 class _ChunkedUpload:
@@ -156,6 +307,29 @@ async def test_list_user_skills_returns_paginated_response(
     assert [skill["skill_name"] for skill in payload["skills"]] == ["planner"]
     assert payload["skills"][0]["is_pinned"] is True
     assert payload["skills"][0]["is_favorite"] is False
+
+
+@pytest.mark.asyncio
+async def test_list_user_skills_can_include_builtin_projection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(skill_route, "UserStorage", lambda: _FakeUserStorage())
+
+    result = await skill_route.list_user_skills(
+        skip=0,
+        limit=20,
+        q=None,
+        tags=None,
+        include_builtin=True,
+        user=_fake_user(),
+        storage=_EffectiveListStorage(),
+        marketplace=_EffectiveListMarketplace(),
+    )
+
+    assert result.total == 2
+    assert [skill.skill_name for skill in result.skills] == ["planner", "builtin-planner"]
+    assert result.skills[1].is_builtin is True
+    assert result.skills[1].installed_from == "builtin"
 
 
 @pytest.mark.asyncio

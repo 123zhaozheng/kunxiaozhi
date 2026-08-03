@@ -219,3 +219,36 @@ async def test_install_github_skills_rejects_too_many_requested_names(
 
     assert exc.value.status_code == 400
     assert "Cannot install more than 2 skills" in exc.value.detail
+
+
+@pytest.mark.asyncio
+async def test_install_github_skills_rejects_builtin_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _scan(*args, **kwargs):
+        return [{"name": "builtin-planner", "path": "skills/planner"}]
+
+    async def _files(*args, **kwargs):
+        return {"SKILL.md": "personal"}
+
+    class _Storage:
+        async def get_skill_files(self, name: str, user_id: str):
+            return {}
+
+        async def get_builtin_skill_for_user(self, name: str, user_id: str):
+            return {"name": name, "files": {"SKILL.md": "builtin"}}
+
+    monkeypatch.setattr(github, "scan_for_skills", _scan)
+    monkeypatch.setattr(github, "fetch_all_files_recursive", _files)
+    monkeypatch.setattr(github, "SkillStorage", _Storage)
+
+    result = await github.install_github_skills(
+        github.GitHubInstallRequest(
+            repo_url="owner/repo",
+            skill_names=["builtin-planner"],
+        ),
+        user=type("User", (), {"sub": "user-1"})(),
+    )
+
+    assert result.installed == []
+    assert result.errors == ["Builtin skill 'builtin-planner' is read-only"]

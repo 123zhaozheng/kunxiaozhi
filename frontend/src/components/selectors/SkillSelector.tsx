@@ -12,6 +12,7 @@ import {
   Store,
   Search,
   Tag,
+  ShieldCheck,
 } from "lucide-react";
 import { Checkbox } from "../common/Checkbox";
 
@@ -42,11 +43,13 @@ interface SkillSelectorProps {
 const sourceIcons: Record<SkillSource, typeof FileCode> = {
   marketplace: Store,
   manual: FileCode,
+  builtin: ShieldCheck,
 };
 
 const sourceColors: Record<SkillSource, string> = {
   marketplace: "text-[var(--theme-primary)]",
   manual: "text-[var(--theme-text)]",
+  builtin: "text-[var(--theme-text-secondary)]",
 };
 
 export function SkillSelector({

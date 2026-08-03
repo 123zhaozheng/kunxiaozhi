@@ -2368,7 +2368,8 @@
       "${cat}": "{{cat}}",
       "github": "GitHub",
       "manual": "手动创建",
-      "marketplace": "技能商店安装"
+      "marketplace": "技能商店安装",
+      "builtin": "内置只读"
     },
     "system": "系统",
     "title": "技能"
@@ -2543,6 +2544,7 @@
     "invalidZip": "请选择 .zip 文件",
     "loading": "加载内置技能中...",
     "loadingMarketplace": "加载技能商店中...",
+    "marketplaceLoadFailed": "加载技能商店中的技能失败",
     "marketplaceName": "技能商店技能",
     "marketplaceNameRequired": "请选择一个技能商店技能",
     "marketplaceSelectPlaceholder": "选择一个技能商店技能",

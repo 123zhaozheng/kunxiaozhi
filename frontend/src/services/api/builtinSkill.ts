@@ -15,6 +15,7 @@ import type {
   BuiltinSkillZipCreated,
   BuiltinSkillZipPreviewSkill,
   BuiltinSkillFromMarketplaceRequest,
+  MarketplaceSkillResponse,
 } from "../../types";
 
 const BUILTIN_SKILLS_API = `${API_BASE}/api/admin/builtin-skills`;
@@ -34,10 +35,31 @@ export function buildBuiltinSkillListUrl(
   return `${BUILTIN_SKILLS_API}/${query ? `?${query}` : ""}`;
 }
 
+export function buildBuiltinMarketplaceListUrl(params?: {
+  skip?: number;
+  limit?: number;
+}): string {
+  const searchParams = new URLSearchParams();
+  if (params?.skip !== undefined) searchParams.set("skip", String(params.skip));
+  if (params?.limit !== undefined) searchParams.set("limit", String(params.limit));
+  const query = searchParams.toString();
+  return `${BUILTIN_SKILLS_API}/marketplace${query ? `?${query}` : ""}`;
+}
+
 export const builtinSkillApi = {
   /** List builtin skills (admin view, includes file_count). */
   async list(params: BuiltinSkillListParams = {}): Promise<BuiltinSkill[]> {
     return authFetch<BuiltinSkill[]>(buildBuiltinSkillListUrl(params));
+  },
+
+  /** List active Marketplace Skills for the Builtin admin source selector. */
+  async listMarketplace(params?: {
+    skip?: number;
+    limit?: number;
+  }): Promise<MarketplaceSkillResponse[]> {
+    return authFetch<MarketplaceSkillResponse[]>(
+      buildBuiltinMarketplaceListUrl(params),
+    );
   },
 
   /** Preview skills in a ZIP file and mark already-existing builtin skills. */

@@ -14,10 +14,12 @@ from src.api.deps import require_permissions
 from src.api.routes import skill_uploads
 from src.api.routes.upload import _read_upload_file_limited
 from src.infra.async_utils import run_blocking_io
+from src.infra.logging import get_logger
 from src.infra.skill.binary import guess_mime_type, parse_binary_ref_async
 from src.infra.skill.marketplace import MarketplaceStorage
 from src.infra.skill.publication import SkillPublicationError, publish_user_skill
 from src.infra.skill.storage import SkillStorage, normalize_skill_name_list
+from src.infra.skill.storage_helpers import SKILL_EFFECTIVE_LOAD_LIMIT
 from src.infra.skill.types import (
     InstalledFrom,
     MarketplaceSkillResponse,
@@ -32,6 +34,7 @@ from src.kernel.config import settings  # noqa: F401 - compatibility for route t
 from src.kernel.schemas.user import TokenPayload
 
 router = APIRouter()
+logger = get_logger(__name__)
 _ZIP_MEMBER_MAX_BYTES: int | None = None
 _ZIP_MAX_MEMBERS = 500
 SKILL_BATCH_OPERATION_MAX_NAMES = 100
@@ -72,6 +75,28 @@ def sanitize_file_path(path: str) -> str:
     """Sanitize file path to prevent path traversal."""
     parts = [p for p in path.replace("\\", "/").split("/") if p and p != ".."]
     return "/".join(parts)
+
+
+async def _ensure_user_skill_writable(
+    storage: SkillStorage,
+    skill_name: str,
+    user_id: str,
+    *,
+    allow_missing: bool = False,
+) -> list[str]:
+    """Resolve user storage first and reject role-visible Builtin-only writes."""
+    paths = await storage.list_skill_file_paths(skill_name, user_id)
+    if paths:
+        return paths
+    builtin = await storage.get_builtin_skill_for_user(skill_name, user_id)
+    if builtin:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Builtin skill '{skill_name}' is read-only",
+        )
+    if allow_missing:
+        return []
+    raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
 
 
 def _count_unique_skill_names(values: list[str]) -> int:
@@ -155,7 +180,14 @@ async def preview_zip_skills(
     existing_names = {s["skill_name"] for s in user_skills}
 
     for skill in skill_list:
-        skill["already_exists"] = skill["name"] in existing_names
+        if skill["name"] in existing_names:
+            skill["already_exists"] = True
+            continue
+        # A role-visible Builtin is a read-only source and cannot be replaced
+        # by creating a new personal Skill through this upload flow.
+        skill["already_exists"] = bool(
+            await storage.get_builtin_skill_for_user(skill["name"], user.sub)
+        )
 
     return {
         "skill_count": len(skill_list),
@@ -207,6 +239,15 @@ async def upload_skill_from_zip(
             errors.append({"name": skill_name, "reason": "already exists"})
             continue
 
+        if await storage.get_builtin_skill_for_user(skill_name, user.sub):
+            errors.append(
+                {
+                    "name": skill_name,
+                    "reason": "Builtin skill is read-only; choose a different name",
+                }
+            )
+            continue
+
         try:
             await storage.create_user_skill(
                 skill_name,
@@ -242,6 +283,7 @@ async def list_user_skills(
     limit: int = Query(20, ge=1, le=100),
     q: str | None = None,
     tags: list[str] | None = Query(None),
+    include_builtin: bool = Query(False),
     user: TokenPayload = Depends(require_permissions("skill:read")),
     storage: SkillStorage = Depends(get_storage),
     marketplace: MarketplaceStorage = Depends(get_marketplace_storage),
@@ -263,10 +305,13 @@ async def list_user_skills(
         )
     available_tags = await storage.list_user_skill_tags(user.sub)
 
+    list_skip = 0 if include_builtin else skip
+    list_limit = SKILL_EFFECTIVE_LOAD_LIMIT if include_builtin else limit
+
     skills = await storage.list_user_skills(
         user.sub,
-        skip=skip,
-        limit=limit,
+        skip=list_skip,
+        limit=list_limit,
         disabled_skills=disabled_skills,
         pinned_skill_names=pinned_skill_names,
         favorite_skill_names=favorite_skill_names,
@@ -281,7 +326,62 @@ async def list_user_skills(
         tags=tags,
     )
     enabled_count = total - disabled_count
-    if not skills:
+
+    builtin_items: list[dict] = []
+    if include_builtin:
+        try:
+            personal_names = set(await storage.get_all_user_skill_names(user.sub))
+            personal_enabled_count = len(personal_names.difference(disabled_skills))
+            user_metadata = (user_doc.metadata if user_doc else {}) or {}
+            builtin_disabled = normalize_skill_name_list(
+                user_metadata.get("disabled_builtin_skill_names", [])
+            )
+            builtin_map = await storage.list_builtin_skills_for_user(
+                user.sub,
+                shadowed_names=personal_names,
+                disabled_skills=builtin_disabled,
+                remaining_quota=max(0, SKILL_EFFECTIVE_LOAD_LIMIT - personal_enabled_count),
+            )
+            query_lower = q.lower() if q else None
+            selected_tags = set(tags or [])
+            for name, builtin in builtin_map.items():
+                files = builtin.get("files", {})
+                skill_md = files.get("SKILL.md", "")
+                _, description, parsed_tags = await _parse_skill_md_offload(skill_md)
+                description = description or builtin.get("description", "")
+                if query_lower and not (
+                    query_lower in name.lower()
+                    or query_lower in description.lower()
+                    or any(query_lower in tag.lower() for tag in parsed_tags)
+                ):
+                    continue
+                if selected_tags and not selected_tags.issubset(set(parsed_tags)):
+                    continue
+                available_tags = sorted(set(available_tags).union(parsed_tags))
+                builtin_items.append(
+                    {
+                        "skill_name": name,
+                        "description": description,
+                        "tags": parsed_tags,
+                        "file_paths": list(files),
+                        "file_count": len(files),
+                        "enabled": bool(builtin.get("enabled", True)),
+                        "is_builtin": True,
+                        "installed_from": "builtin",
+                    }
+                )
+        except Exception as exc:
+            # Builtin projection is best-effort; personal Skills remain usable.
+            logger.warning("Failed to project Builtin Skills for user %s: %s", user.sub, exc)
+            builtin_items = []
+
+    all_skills = skills + builtin_items
+    if include_builtin:
+        total = len(all_skills)
+        enabled_count = sum(1 for s in all_skills if s.get("enabled", True))
+        all_skills = all_skills[skip : skip + limit]
+
+    if not all_skills:
         return UserSkillListResponse(
             skills=[],
             total=total,
@@ -291,11 +391,12 @@ async def list_user_skills(
             available_tags=available_tags,
         )
 
-    skill_names = [s["skill_name"] for s in skills]
+    skill_names = [s["skill_name"] for s in all_skills if not s.get("is_builtin")]
     # 批量查询当前页发布状态，避免按用户拉取全部发布记录
-    published_map = await marketplace.get_user_published_skills(
-        user.sub,
-        skill_names=skill_names,
+    published_map = (
+        await marketplace.get_user_published_skills(user.sub, skill_names=skill_names)
+        if skill_names
+        else {}
     )
 
     # 批量获取所有 SKILL.md 用于提取 description
@@ -310,27 +411,42 @@ async def list_user_skills(
             if parsed_tags:
                 tags_map[name] = parsed_tags
 
-    items = [
-        UserSkill(
-            skill_name=s["skill_name"],
-            description=description_map.get(s["skill_name"], ""),
-            tags=tags_map.get(s["skill_name"], []),
-            files=s.get("file_paths", []),
-            enabled=s["enabled"],
-            file_count=s["file_count"],
-            installed_from=s.get("installed_from"),
-            published_marketplace_name=s.get("published_marketplace_name"),
-            created_at=s.get("created_at"),
-            updated_at=s.get("updated_at"),
-            is_published=bool(s.get("published_marketplace_name")),
-            marketplace_is_active=published_map.get(
-                s.get("published_marketplace_name") or s["skill_name"], {}
-            ).get("is_active", True),
-            is_pinned=bool(s.get("is_pinned")),
-            is_favorite=bool(s.get("is_favorite")),
+    items = []
+    for s in all_skills:
+        if s.get("is_builtin"):
+            items.append(
+                UserSkill(
+                    skill_name=s["skill_name"],
+                    description=s.get("description", ""),
+                    tags=s.get("tags", []),
+                    files=s.get("file_paths", []),
+                    enabled=s.get("enabled", True),
+                    file_count=s.get("file_count", 0),
+                    installed_from="builtin",
+                    is_builtin=True,
+                )
+            )
+            continue
+        items.append(
+            UserSkill(
+                skill_name=s["skill_name"],
+                description=description_map.get(s["skill_name"], ""),
+                tags=tags_map.get(s["skill_name"], []),
+                files=s.get("file_paths", []),
+                enabled=s["enabled"],
+                file_count=s["file_count"],
+                installed_from=s.get("installed_from"),
+                published_marketplace_name=s.get("published_marketplace_name"),
+                created_at=s.get("created_at"),
+                updated_at=s.get("updated_at"),
+                is_published=bool(s.get("published_marketplace_name")),
+                marketplace_is_active=published_map.get(
+                    s.get("published_marketplace_name") or s["skill_name"], {}
+                ).get("is_active", True),
+                is_pinned=bool(s.get("is_pinned")),
+                is_favorite=bool(s.get("is_favorite")),
+            )
         )
-        for s in skills
-    ]
     return UserSkillListResponse(
         skills=items,
         total=total,
@@ -351,7 +467,21 @@ async def get_user_skill(
     """获取用户某个 Skill 的详细信息"""
     file_paths = await storage.list_skill_file_paths(name, user.sub)
     if not file_paths:
-        raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
+        builtin = await storage.get_builtin_skill_for_user(name, user.sub)
+        if not builtin:
+            raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
+        files = builtin.get("files", {})
+        _, description, tags = await _parse_skill_md_offload(files.get("SKILL.md", ""))
+        return UserSkill(
+            skill_name=name,
+            description=description or builtin.get("description", ""),
+            tags=tags,
+            enabled=bool(builtin.get("enabled", True)),
+            files=list(files),
+            file_count=len(files),
+            installed_from="builtin",
+            is_builtin=True,
+        )
 
     # Get disabled_skills from user metadata
     user_storage = UserStorage()
@@ -423,7 +553,14 @@ async def get_skill_file(
         raise HTTPException(status_code=400, detail="Invalid file path")
     content = await storage.get_skill_file(name, safe_path, user.sub)
     if content is None:
-        raise HTTPException(status_code=404, detail="File not found")
+        # A same-name personal Skill always owns reads, even when the
+        # requested path is missing; never fall through to Builtin content.
+        personal_paths = await storage.list_skill_file_paths(name, user.sub)
+        if not personal_paths:
+            builtin = await storage.get_builtin_skill_for_user(name, user.sub)
+            content = (builtin or {}).get("files", {}).get(safe_path)
+        if content is None:
+            raise HTTPException(status_code=404, detail="File not found")
 
     # 检查是否为二进制文件引用
     binary_ref = await parse_binary_ref_async(content)
@@ -452,6 +589,7 @@ async def update_skill_file(
     safe_path = sanitize_file_path(path)
     if safe_path != path:
         raise HTTPException(status_code=400, detail="Invalid file path")
+    await _ensure_user_skill_writable(storage, name, user.sub, allow_missing=True)
     content = body.content
 
     # 检查 __meta__ 是否已存在，以决定是否是新 skill
@@ -482,6 +620,7 @@ async def upload_skill_binary_file(
     safe_path = sanitize_file_path(path)
     if safe_path != path:
         raise HTTPException(status_code=400, detail="Invalid file path")
+    await _ensure_user_skill_writable(storage, name, user.sub, allow_missing=True)
 
     max_file_size, max_file_size_mb = _get_skill_upload_max_size()
     data = await _read_upload_file_limited(
@@ -536,9 +675,7 @@ async def delete_skill_file(
     if safe_path != path:
         raise HTTPException(status_code=400, detail="Invalid file path")
     # 检查 skill 和文件是否存在
-    existing_paths = await storage.list_skill_file_paths(name, user.sub)
-    if not existing_paths:
-        raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
+    existing_paths = await _ensure_user_skill_writable(storage, name, user.sub)
     if safe_path not in existing_paths:
         raise HTTPException(status_code=404, detail=f"File '{path}' not found in skill '{name}'")
 
@@ -562,6 +699,7 @@ async def delete_user_skill(
     storage: SkillStorage = Depends(get_storage),
 ):
     """删除（卸载）用户的 Skill（不影响商店发布状态）"""
+    await _ensure_user_skill_writable(storage, name, user.sub)
     await storage.delete_skill_and_meta(name, user.sub)
 
     # 清理 disabled_skills 中的条目（如果有）
@@ -616,7 +754,7 @@ async def update_skill_preference(
     storage: SkillStorage = Depends(get_storage),
 ):
     """更新当前用户对 Skill 的置顶/收藏偏好。"""
-    await _ensure_skill_exists(storage, name, user.sub)
+    await _ensure_user_skill_writable(storage, name, user.sub)
     updated = await storage.update_user_preference(
         user_id=user.sub,
         skill_name=name,
@@ -644,8 +782,11 @@ async def batch_delete_skills(
 
     for name in names:
         try:
+            await _ensure_user_skill_writable(storage, name, user.sub)
             await storage.delete_skill_and_meta(name, user.sub)
             deleted.append(name)
+        except HTTPException as exc:
+            errors.append({"name": name, "reason": str(exc.detail)})
         except Exception as e:
             errors.append({"name": name, "reason": str(e)})
 
@@ -722,15 +863,22 @@ async def toggle_user_skill(
     storage: SkillStorage = Depends(get_storage),
 ):
     """切换或设置 Skill 的启用状态"""
-    await _ensure_skill_exists(storage, name, user.sub)
+    user_paths = await storage.list_skill_file_paths(name, user.sub)
+    is_builtin = False
+    if not user_paths:
+        builtin = await storage.get_builtin_skill_for_user(name, user.sub)
+        if not builtin:
+            raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
+        is_builtin = True
 
-    # Get current disabled_skills from user metadata
+    # Builtin and personal Skill preferences are intentionally independent.
     user_storage = UserStorage()
     user_doc = await user_storage.get_by_id(user.sub)
     if user_doc is None:
         raise HTTPException(status_code=404, detail="User not found")
+    disabled_key = "disabled_builtin_skill_names" if is_builtin else "disabled_skills"
     current_disabled = normalize_skill_name_list(
-        (user_doc.metadata or {}).get("disabled_skills", [])
+        (user_doc.metadata or {}).get(disabled_key, [])
     )
 
     target_enabled = body.enabled if body else None
@@ -752,7 +900,7 @@ async def toggle_user_skill(
     await storage.invalidate_user_cache(user.sub)
     await user_storage.update_metadata(
         user.sub,
-        {"disabled_skills": disabled},
+        {disabled_key: disabled},
     )
 
     is_enabled = name not in disabled
@@ -778,6 +926,7 @@ async def publish_skill_to_marketplace(
     marketplace: MarketplaceStorage = Depends(get_marketplace_storage),
 ):
     """将用户的 Skill 发布到商店（支持多次发布更新）"""
+    await _ensure_user_skill_writable(storage, name, user.sub)
     try:
         response, _ = await publish_user_skill(
             name,

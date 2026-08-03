@@ -62,9 +62,13 @@ class _FakeStorage:
         self.invalidated: int = 0
         self.updated_args: tuple | None = None
         self.deleted_name: str | None = None
+        self.marketplace_list_result: list[Any] = []
 
     async def list_builtin_skills(self, **_kwargs):
         return self.list_result
+
+    async def list_marketplace_skills(self, **_kwargs):
+        return self.marketplace_list_result
 
     async def get_builtin_skill(self, name: str):
         if isinstance(self.get_result, dict):
@@ -113,6 +117,19 @@ async def test_list_passthrough() -> None:
         builtin_storage=storage,
     )
     assert res == storage.list_result
+
+
+@pytest.mark.asyncio
+async def test_list_marketplace_sources_uses_admin_permission() -> None:
+    storage = _FakeStorage()
+    storage.marketplace_list_result = [_skill("a", source="marketplace")]
+    result = await builtin_routes.list_marketplace_sources_for_builtin(
+        skip=0,
+        limit=10,
+        user=_admin(),
+        marketplace=storage,
+    )
+    assert result == storage.marketplace_list_result
 
 
 # ==========================================

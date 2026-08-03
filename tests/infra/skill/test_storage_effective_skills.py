@@ -527,6 +527,34 @@ def _builtin_skill(name: str, description: str = "builtin") -> dict[str, Any]:
 
 
 @pytest.mark.asyncio
+async def test_list_builtin_skills_for_user_keeps_disabled_preference_separate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage = skill_storage.SkillStorage()
+
+    async def _resolve(_user_id: str):
+        return ["analyst"], False
+
+    async def _load(**kwargs: Any):
+        assert kwargs["user_roles"] == ["analyst"]
+        assert kwargs["disabled_skills"] == ["builtin-old"]
+        assert kwargs["include_disabled"] is True
+        assert kwargs["shadowed_names"] == {"personal"}
+        return {"builtin-old": {"name": "builtin-old", "enabled": False}}
+
+    monkeypatch.setattr(storage, "_resolve_user_access", _resolve)
+    monkeypatch.setattr(storage, "_get_builtin_skills_for_user", _load)
+
+    result = await storage.list_builtin_skills_for_user(
+        "user-1",
+        shadowed_names={"personal"},
+        disabled_skills=["builtin-old"],
+    )
+
+    assert result["builtin-old"]["enabled"] is False
+
+
+@pytest.mark.asyncio
 async def test_get_effective_skills_merges_builtin_for_matching_role(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

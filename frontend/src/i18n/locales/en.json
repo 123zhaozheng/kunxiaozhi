@@ -2368,7 +2368,8 @@
       "${cat}": "{{cat}}",
       "github": "GitHub",
       "manual": "Manual",
-      "marketplace": "Marketplace"
+      "marketplace": "Marketplace",
+      "builtin": "Built-in"
     },
     "system": "System",
     "title": "Skills"
@@ -2543,6 +2544,7 @@
     "invalidZip": "Please select a .zip file",
     "loading": "Loading built-in skills...",
     "loadingMarketplace": "Loading marketplace skills...",
+    "marketplaceLoadFailed": "Failed to load marketplace skills",
     "marketplaceName": "Marketplace Skill",
     "marketplaceNameRequired": "Please select a marketplace skill",
     "marketplaceSelectPlaceholder": "Select a marketplace skill",

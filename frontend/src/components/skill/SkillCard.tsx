@@ -12,6 +12,8 @@ import {
   Upload,
   Pin,
   Star,
+  ShieldCheck,
+  Eye,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { SkillBaseCard } from "../common/SkillBaseCard";
@@ -40,6 +42,7 @@ interface SkillCardProps {
 const SOURCE_ICONS: Record<string, React.ReactNode> = {
   marketplace: <ShoppingBag size={10} />,
   manual: <User size={10} />,
+  builtin: <ShieldCheck size={10} />,
 };
 
 export function SkillCard({
@@ -70,12 +73,12 @@ export function SkillCard({
       icon={<CategoryIcon size={20} className="text-[var(--theme-primary)]" />}
       muted={!skill.enabled}
       selected={selected}
-      selectionMode={selectionMode}
-      onSelect={onSelect ? () => onSelect(skill.name) : undefined}
+      selectionMode={selectionMode && !skill.is_builtin}
+      onSelect={onSelect && !skill.is_builtin ? () => onSelect(skill.name) : undefined}
       animated
       animationDelay={0}
       bannerLeadingOverlay={
-        onTogglePreference ? (
+        onTogglePreference && !skill.is_builtin ? (
           <>
             <Tooltip content={t("personaPresets.pin", "置顶")}>
               <button
@@ -195,19 +198,35 @@ export function SkillCard({
             </button>
           </Tooltip>
 
-          <Tooltip content={t("skills.card.edit")}>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit(skill);
-              }}
-              className="scb__action-btn scb__action-btn--ghost"
-            >
-              <Edit3 size={13} />
-            </button>
-          </Tooltip>
+          {skill.is_builtin ? (
+            <Tooltip content={t("skills.card.view", "View files")}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(skill);
+                }}
+                className="scb__action-btn scb__action-btn--ghost"
+                aria-label={t("skills.card.view", "View files")}
+              >
+                <Eye size={13} />
+              </button>
+            </Tooltip>
+          ) : (
+            <Tooltip content={t("skills.card.edit")}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(skill);
+                }}
+                className="scb__action-btn scb__action-btn--ghost"
+              >
+                <Edit3 size={13} />
+              </button>
+            </Tooltip>
+          )}
 
-          {skill.source === "manual" &&
+          {!skill.is_builtin &&
+            skill.source === "manual" &&
             isPublished !== undefined &&
             onPublish && (
               <Tooltip
@@ -252,17 +271,19 @@ export function SkillCard({
 
           <div className="ml-auto" />
 
-          <Tooltip content={t("skills.card.delete")}>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(skill.name);
-              }}
-              className="scb__action-btn text-[var(--theme-text-secondary)] transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400"
-            >
-              <Trash2 size={14} />
-            </button>
-          </Tooltip>
+          {!skill.is_builtin && (
+            <Tooltip content={t("skills.card.delete")}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(skill.name);
+                }}
+                className="scb__action-btn text-[var(--theme-text-secondary)] transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400"
+              >
+                <Trash2 size={14} />
+              </button>
+            </Tooltip>
+          )}
         </div>
       }
     />

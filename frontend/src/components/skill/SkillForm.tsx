@@ -16,6 +16,7 @@ export function SkillForm({
   onSave,
   onCancel,
   isLoading = false,
+  readOnly = false,
   onFullscreenChange,
 }: SkillFormProps) {
   const { t } = useTranslation();
@@ -318,6 +319,7 @@ export function SkillForm({
     enabled,
     errors,
     isEditing,
+    readOnly,
     isLoading,
     files,
     activeFileIndex,
