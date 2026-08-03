@@ -785,3 +785,37 @@ Removed obsolete Persona Skill materialization and overlay/publication remnants;
 ### Next Steps
 
 - None - task complete
+
+
+## Session 24: Finish Builtin Skill visibility and Trellis upgrade
+
+**Date**: 2026-08-03
+**Task**: Finish Builtin Skill visibility and Trellis upgrade
+**Branch**: `main`
+
+### Summary
+
+Completed the role-visible read-only Builtin Skill catalog and admin Marketplace source flow, closed write/install bypasses, added read-only file viewing and regression coverage, upgraded project Trellis files from 0.6.7 to 0.6.12, and archived the task.
+
+### Main Changes
+
+- Expose role-eligible Builtin Skills in the user catalog with independent preferences and personal-name shadowing.
+- Enforce read-only behavior across file writes, publishing, ZIP, GitHub, and Marketplace installation paths.
+- Upgrade generated Trellis runtime and Claude/Codex/Pi integrations to 0.6.12.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ed9db302` | (see git log) |
+| `e0c5babb` | (see git log) |
+
+### Testing
+
+- [OK] Backend focused tests: 62 passed; extra API guard tests: 32 passed.
+- [OK] Frontend targeted tests: 8 passed; ESLint, TypeScript, and production build passed.
+- [OK] Trellis Python compile, configuration parsing, CLI smoke tests, context validation, and git diff check passed.
+
+### Status
+
+[OK] **Completed**
