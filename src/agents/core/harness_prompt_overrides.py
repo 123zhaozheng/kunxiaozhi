@@ -1,4 +1,4 @@
-"""Reversible, provider-neutral harness compression."""
+"""Provider-neutral harness compression (compact_zh)."""
 
 from __future__ import annotations
 
@@ -16,28 +16,8 @@ from langchain.agents.middleware.types import (
 )
 from langchain_core.tools import BaseTool
 
-from src.kernel.config import (
-    HarnessMode,
-    get_active_harness_mode,
-)
-
 VENDOR_AVAILABLE_AGENTS_HEADING = "Available subagent types:"
 
-
-def select_harness_text(*, legacy: str, compact_en: str, compact_zh: str) -> str:
-    mode = get_active_harness_mode()
-    return legacy if mode == "legacy" else compact_en if mode == "compact_en" else compact_zh
-
-
-COMPACT_EN_BEHAVIOR_GUIDE = """You can use tools; the user sees messages and tool activity.
-
-## Behavior
-- Be concise; skip preambles and empty praise. Act directly.
-- Accuracy first. Disagree respectfully when evidence conflicts.
-- Ask only for missing information that blocks the next useful step; otherwise use safe defaults.
-- Work: inspect enough context, act, then verify against the request. Iterate until done.
-- Do not stop at a plan. On repeated failure, diagnose and change approach.
-- State blockers plainly. Give brief progress updates only for longer work."""
 
 COMPACT_ZH_BEHAVIOR_GUIDE = """你可调用工具；用户能看到消息与工具活动。
 
@@ -63,27 +43,10 @@ class HarnessCatalog:
     available_agents_heading: str
 
 
-_EN_WRITE_TODOS_TOOL = (
-    "Only for complex multi-step work. Keep exactly one item in_progress; "
-    "complete promptly; never call in parallel. Deliver the answer after the final update."
-)
 _ZH_WRITE_TODOS_TOOL = (
     "仅复杂多步工作使用。保持恰好一项 in_progress，完成即标 completed；"
     "禁止并行调用。最后一次更新后另行交付答案。"
 )
-
-_EN_TOOLS = {
-    "task": "Run one isolated complex assignment.\n\nAvailable agents:\n{available_agents}\n\nInclude context, expected output, and `Current task start time: YYYY-MM-DD HH:mm:ss ±HH:MM Timezone`. Parallelize independent calls; verify and synthesize results.",
-    "ls": "List an absolute directory path.",
-    "read_file": "Read a file; defaults to 100 lines. Paginate with offset/limit. Media/PDF returns multimodal content.",
-    "write_file": "Create a file. Prefer edit_file for an existing file.",
-    "edit_file": "Exact text replacement. Read first; old_string must be unique unless replace_all=true.",
-    "glob": "Find paths by glob (`*`, `**`, `?`).",
-    "grep": "Literal text search; filter by glob and choose output_mode.",
-    "execute": "Run a sandbox shell command; returns output and exit code. timeout is seconds.",
-    "search_tools": "Load full schemas for deferred MCP tools by exact name or capability keywords. It does not search sandbox tools; use execute with mcporter for those.",
-    "write_todos": _EN_WRITE_TODOS_TOOL,
-}
 
 _ZH_TOOLS = {
     "task": "执行一个隔离的复杂任务。\n\n可用代理：\n{available_agents}\n\n提供完整上下文、期望输出及 `Current task start time: YYYY-MM-DD HH:mm:ss ±HH:MM Timezone`。独立任务并行调用；结果由主代理核验整合。",
@@ -96,19 +59,27 @@ _ZH_TOOLS = {
     "execute": "在沙箱运行 shell 命令；返回输出与退出码，timeout 单位秒。",
     "search_tools": "按完整名称或能力关键词加载延迟 MCP 工具的完整 schema。不搜索沙箱工具；沙箱工具用 execute + mcporter。",
     "write_todos": _ZH_WRITE_TODOS_TOOL,
-}
-
-_EN_FIELDS = {
-    "ls": {"path": "Absolute directory path."},
-    "read_file": {"file_path": "Absolute file path.", "offset": "First line, zero-based.", "limit": "Maximum lines."},
-    "write_file": {"file_path": "Absolute destination path.", "content": "Text to write."},
-    "edit_file": {"file_path": "Absolute file path.", "old_string": "Exact text to replace.", "new_string": "Replacement text.", "replace_all": "Replace every match."},
-    "glob": {"pattern": "Glob pattern.", "path": "Search root."},
-    "grep": {"pattern": "Literal text.", "path": "Search directory.", "glob": "File filter.", "output_mode": "files_with_matches, content, or count."},
-    "execute": {"command": "Shell command.", "timeout": "Timeout seconds; 0 may disable it."},
-    "search_tools": {"query": "Exact deferred tool name or capability keywords."},
-    "task": {"description": "Complete autonomous assignment.", "subagent_type": "Available agent type."},
-    "write_todos": {"todos": "Complete task list.", "content": "Actionable item.", "status": "pending, in_progress, or completed."},
+    "memory_retain": "存储跨会话记忆。仅收高价值非临时信息；过短、似提问、像代码或重复近期记忆会被拒。优先存用户偏好、项目约束、反馈、外部链接，用 user_identity/project_constraint/feedback_rule/reference_link 等显式标签。",
+    "memory_recall": "按语义检索跨会话记忆；返回与查询概念相关的历史记录。",
+    "memory_delete": "按 ID 删除记忆；ID 取 memory_recall 输出。",
+    "read_document": "下载附件文档并返回文本：pdf/docx/pptx 走 MinerU 转 Markdown；txt/md/log/json/py 直接解码；xlsx/csv 不转文本，返回沙箱处理指引。",
+    "dify_kb_retrieve": "从当前 persona 绑定的 Dify 知识库检索片段：LLM 改写查询并判定是否检索，并行搜索、去重、重排后返回 top 片段。",
+    "audio_transcribe": "按 URL 下载音频并转写为文本。",
+    "upload_url_to_sandbox": "从 URL 下载文件到沙箱文件系统，供 shell/脚本访问。",
+    "find_skills": "当前工具无法完成任务时，搜索技能市场（按名称/描述/标签关键词）。",
+    "install_skill": "将技能市场技能临时装入当前沙箱工作区；返回路径，读 SKILL.md 后按其脚本执行。",
+    "env_var_list": "列出当前用户已保存的环境变量名（值恒为掩码，绝不回显明文）。",
+    "env_var_set": "保存环境变量（密文存储，不回读明文）。",
+    "env_var_delete": "删除指定环境变量。",
+    "env_var_delete_all": "删除全部环境变量。",
+    "sandbox_mcp_add": "注册沙箱 MCP 服务器并持久化；env_keys 为注入的环境变量 KEY 名列表。",
+    "sandbox_mcp_update": "更新沙箱 MCP 服务器的命令或环境变量注入。",
+    "sandbox_mcp_remove": "移除沙箱 MCP 服务器并删除数据库记录。",
+    "image_generate": "生成或编辑图片；给 input_images 即图生图模式。",
+    "create_persona_preset": "创建 persona 预设：system_prompt 需覆盖角色身份、行为准则、输出格式、约束四部分。",
+    "update_persona_preset": "按 preset_id 或名称更新 persona 预设。",
+    "search_persona_presets": "建团队前先按任务角色词检索 persona 预设；空串列出近期可见预设。",
+    "create_agent_team": "按 search_persona_presets 结果组建团队；members 每项含 persona_preset_id 等字段。",
 }
 
 _ZH_FIELDS = {
@@ -122,57 +93,56 @@ _ZH_FIELDS = {
     "search_tools": {"query": "延迟工具完整名称或能力关键词。"},
     "task": {"description": "可独立完成的任务。", "subagent_type": "可用代理类型。"},
     "write_todos": {"todos": "完整任务列表。", "content": "可执行事项。", "status": "pending、in_progress 或 completed。"},
+    "memory_retain": {"content": "要存储的记忆内容（事实、观察、经验）。", "title": "短标题（≤25 字符）。", "summary": "简述（≤80 字符）。", "context": "可选上下文/分类（如 user_identity、project_constraint、feedback_rule、reference_link）。", "tags": "关键词标签（最多 5 个）。", "existing_memory_id": "更新指定记忆 ID，避免模糊去重。"},
+    "memory_recall": {"query": "搜索查询。", "max_results": "返回条数上限（默认 5）。", "memory_types": "按记忆类型过滤；不传返回全部。"},
+    "memory_delete": {"memory_id": "要删除的记忆 ID。"},
+    "read_document": {"url": "文档附件 URL（绝对 URL 或 /api/upload/file/<key> 路径）。"},
+    "dify_kb_retrieve": {"query": "用户问题或检索查询。", "top_k": "重排后返回片段数上限（默认取系统设置）。", "score_threshold": "最低相关度阈值 0.0-1.0（默认取系统设置）。"},
+    "audio_transcribe": {"url": "音频文件 URL（支持绝对 URL 和 /api 路径）。", "model": "转写模型覆盖，如 gpt-4o-mini-transcribe。", "language": "语言提示，如 en 或 zh。", "prompt": "转写提示词，改善识别。"},
+    "upload_url_to_sandbox": {"url": "要下载的文件 URL", "file_path": "沙箱内的目标文件路径（绝对路径）"},
+    "find_skills": {"query": "技能市场搜索关键词（名称/描述/标签）。", "tags": "每个结果必须包含的标签。"},
+    "install_skill": {"name": "find_skills 返回的精确技能名。"},
+    "env_var_list": {},
+    "env_var_set": {"key": "环境变量名（须匹配 ^[A-Za-z_][A-Za-z0-9_]*$）。", "value": "要加密存储的环境变量值。"},
+    "env_var_delete": {"key": "要删除的环境变量名。"},
+    "env_var_delete_all": {},
+    "sandbox_mcp_add": {"server_name": "要注册的 MCP 服务器名。", "command": "stdio 命令，如 'npx @anthropic/mcp-server-fetch'。", "env_keys": "逗号分隔的环境变量 KEY 名列表（须已定义）。"},
+    "sandbox_mcp_update": {"server_name": "要更新的 MCP 服务器名。", "command": "新的 stdio 命令（省略则不修改）。", "env_keys": "逗号分隔的环境变量 KEY 名列表（省略则不修改）。"},
+    "sandbox_mcp_remove": {"server_name": "要移除的 MCP 服务器名。"},
+    "image_generate": {"prompt": "描述要生成或编辑的图片。", "input_images": "源图片 URL；提供后进入图生图模式。", "background": "背景处理：auto、opaque 或 transparent。"},
+    "create_persona_preset": {"name": "Persona 预设名。", "system_prompt": "定义角色身份、行为准则、输出格式与约束的系统提示词。", "description": "一行简介。", "avatar": "emoji 或头像图 URL。", "tags": "分类标签。"},
+    "update_persona_preset": {"preset_id": "已知的精确预设 ID。", "current_name": "未知 preset_id 时用现有名称定位。", "name": "新的预设名。", "description": "新的一行简介。"},
+    "search_persona_presets": {"query": "搜索文本；用任务角色/能力词。", "tag": "精确标签过滤。", "limit": "返回数量上限（1-50）。"},
+    "create_agent_team": {"name": "团队名（≤80 字符）。", "members": "成员列表，每项含 persona_preset_id 等字段。", "team_id": "已有团队 ID；更新时传入。", "description": "团队用途简述。", "avatar": "emoji 或头像图 URL。", "tags": "可搜索标签。"},
 }
 
-
-def catalog_for_mode(mode: HarnessMode) -> HarnessCatalog:
-    if mode == "legacy":
-        raise ValueError("legacy uses native vendor middleware")
-    zh = mode == "compact_zh"
-    return HarnessCatalog(
-        behavior_guide=COMPACT_ZH_BEHAVIOR_GUIDE if zh else COMPACT_EN_BEHAVIOR_GUIDE,
-        write_todos_system=(
-            "## `write_todos`\n仅复杂多步工作使用；保持恰好一项 in_progress，完成即更新，"
-            "禁止并行调用；简单任务跳过，最后一次调用后再交付答案。"
-            if zh
-            else "## `write_todos`\nOnly for complex multi-step work. Keep exactly one item "
-            "in_progress and update it promptly; never call in parallel. Skip simple work "
-            "and answer after the last call."
-        ),
-        memory_guide=(
-            """## 跨会话记忆
+ZH_CATALOG = HarnessCatalog(
+    behavior_guide=COMPACT_ZH_BEHAVIOR_GUIDE,
+    write_todos_system=(
+        "## `write_todos`\n仅复杂多步工作使用；保持恰好一项 in_progress，完成即更新，"
+        "禁止并行调用；简单任务跳过，最后一次调用后再交付答案。"
+    ),
+    memory_guide=(
+        """## 跨会话记忆
 `<memory_index>` 仅是线索；相关时用 `memory_recall` 取详情，不得视为事实。
 
 `memory_retain` 仅保存长期用户事实、偏好、项目约束、非显然决策、外部链接及明确反馈；不存代码、Git 历史、临时状态或活动日志。优先更新而非重复。相对日期转为绝对日期。
 
 `memory_delete` 删除错误或过时记忆。超过 30 天、路径、函数及开关均须重新核验；当前证据优先。用户要求忽略/忘记时不得再引用。仅用上述记忆工具，不使用 `/memories/` 路径。"""
-            if zh
-            else """## Cross-session memory
-`<memory_index>` is a hint only. Use `memory_recall` for relevant details; never treat it as ground truth.
-
-Use `memory_retain` only for durable user facts, preferences, project constraints, non-obvious decisions, external links, and explicit feedback. Skip code, Git history, temporary state, and activity logs; update instead of duplicating. Convert relative dates to absolute dates.
-
-Use `memory_delete` for inaccurate or stale entries. Recheck memories older than 30 days and verify paths, functions, and flags; current evidence wins. Do not reference memories the user asked to forget. Use these tools, not `/memories/` paths."""
-        ),
-        tool_descriptions=_ZH_TOOLS if zh else _EN_TOOLS,
-        schema_fields=_ZH_FIELDS if zh else _EN_FIELDS,
-        filesystem_system=(
-            "## 文件规则\n编辑前先读，遵循现有风格；路径必须为绝对路径，大文件分页读取。超大结果存于 `/large_tool_results/<tool_call_id>`，用 `read_file` 或 `grep` 查看。"
-            if zh
-            else "## File rules\nRead before editing; follow existing style. Use absolute paths and paginate large reads. Oversized results are under `/large_tool_results/<tool_call_id>`; inspect with `read_file` or `grep`."
-        ),
-        execute_system=(
-            "## `execute`\n在沙箱运行命令、脚本、测试和构建，返回输出与退出码。"
-            if zh
-            else "## `execute`\nRuns sandbox commands, scripts, tests, and builds; returns output and exit code."
-        ),
-        task_system=(
-            "## `task`\n仅委派隔离且复杂的工作；提供完整上下文与期望输出。独立任务可并行，简单任务勿委派。返回内容由调用者核验整合。"
-            if zh
-            else "## `task`\nDelegate only isolated complex work with complete context and expected output. Parallelize independent assignments; verify and synthesize returned evidence."
-        ),
-        available_agents_heading="可用代理类型：" if zh else "Available subagent types:",
-    )
+    ),
+    tool_descriptions=_ZH_TOOLS,
+    schema_fields=_ZH_FIELDS,
+    filesystem_system=(
+        "## 文件规则\n编辑前先读，遵循现有风格；路径必须为绝对路径，大文件分页读取。超大结果存于 `/large_tool_results/<tool_call_id>`，用 `read_file` 或 `grep` 查看。"
+    ),
+    execute_system=(
+        "## `execute`\n在沙箱运行命令、脚本、测试和构建，返回输出与退出码。"
+    ),
+    task_system=(
+        "## `task`\n仅委派隔离且复杂的工作；提供完整上下文与期望输出。独立任务可并行，简单任务勿委派。返回内容由调用者核验整合。"
+    ),
+    available_agents_heading="可用代理类型：",
+)
 
 
 _ShortTodoListMiddleware: type[Any] | None = None
@@ -194,15 +164,13 @@ def _short_todo_class() -> type[Any] | None:
     return _ShortTodoListMiddleware
 
 
-def build_short_todo_middleware(mode: HarnessMode | None = None) -> list[Any]:
-    selected = mode or get_active_harness_mode()
-    if selected == "legacy" or (cls := _short_todo_class()) is None:
+def build_short_todo_middleware() -> list[Any]:
+    if (cls := _short_todo_class()) is None:
         return []
-    catalog = catalog_for_mode(selected)
     return [
         cls(
-            system_prompt=catalog.write_todos_system,
-            tool_description=catalog.tool_descriptions["write_todos"],
+            system_prompt=ZH_CATALOG.write_todos_system,
+            tool_description=ZH_CATALOG.tool_descriptions["write_todos"],
         )
     ]
 
@@ -228,7 +196,10 @@ def localize_tool_for_model(tool: Any, catalog: HarnessCatalog) -> Any:
     """Copy only known BaseTools; originals remain execution/validation truth."""
     if not isinstance(tool, BaseTool) or tool.name not in catalog.schema_fields:
         return tool
-    source = deepcopy(tool.args_schema) if isinstance(tool.args_schema, dict) else tool.get_input_schema().model_json_schema()
+    try:
+        source = deepcopy(tool.args_schema) if isinstance(tool.args_schema, dict) else tool.get_input_schema().model_json_schema()
+    except Exception:
+        return tool
     # SubAgentMiddleware has already expanded task's {available_agents}; never
     # replace that rendered description with the catalog template. Other known
     # descriptions are safe to normalize here, including middleware-injected
@@ -319,26 +290,5 @@ class HarnessLocalizationMiddleware(AgentMiddleware):
         return await handler(self._override(request))
 
 
-def build_harness_extra_middleware(mode: HarnessMode | None = None) -> Sequence[AgentMiddleware]:
-    selected = mode or get_active_harness_mode()
-    if selected == "legacy":
-        return ()
-    catalog = catalog_for_mode(selected)
-    return (*build_short_todo_middleware(selected), HarnessLocalizationMiddleware(catalog))
-
-
-_mode = get_active_harness_mode()
-if _mode == "legacy":
-    TOOL_DESCRIPTION_OVERRIDES: Mapping[str, str] = {}
-    SHORT_WRITE_TODOS_TOOL = ""
-    SHORT_WRITE_TODOS_SYSTEM = ""
-else:
-    _catalog = catalog_for_mode(_mode)
-    TOOL_DESCRIPTION_OVERRIDES = _catalog.tool_descriptions
-    SHORT_WRITE_TODOS_TOOL = _catalog.tool_descriptions["write_todos"]
-    SHORT_WRITE_TODOS_SYSTEM = _catalog.write_todos_system
-
-SHORT_TASK_TOOL = TOOL_DESCRIPTION_OVERRIDES.get("task", "")
-SHORT_READ_FILE = TOOL_DESCRIPTION_OVERRIDES.get("read_file", "")
-SHORT_EXECUTE = TOOL_DESCRIPTION_OVERRIDES.get("execute", "")
-build_todo_middleware: Callable[[], Sequence[Any]] = build_short_todo_middleware
+def build_harness_extra_middleware() -> Sequence[AgentMiddleware]:
+    return (*build_short_todo_middleware(), HarnessLocalizationMiddleware(ZH_CATALOG))

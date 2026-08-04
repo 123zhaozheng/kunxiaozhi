@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import secrets
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Literal, Optional, cast
+from typing import TYPE_CHECKING, Any, Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
@@ -26,18 +26,6 @@ if TYPE_CHECKING:
     from src.infra.storage.s3 import S3Config
 
 logger = get_logger(__name__)
-
-HarnessMode = Literal["legacy", "compact_en", "compact_zh"]
-VALID_HARNESS_MODES = frozenset({"legacy", "compact_en", "compact_zh"})
-
-
-def normalize_harness_mode(value: str) -> HarnessMode:
-    normalized = value.strip().lower()
-    if normalized not in VALID_HARNESS_MODES:
-        choices = ", ".join(sorted(VALID_HARNESS_MODES))
-        raise ValueError(f"Invalid AGENT_HARNESS_MODE {value!r}; expected: {choices}")
-    return cast(HarnessMode, normalized)
-
 
 class Settings(BaseSettings):
     """
@@ -89,7 +77,6 @@ class Settings(BaseSettings):
     LLM_MAX_RETRIES: int = 3
     LLM_RETRY_DELAY: float = 1.0
     LLM_MODEL_CACHE_SIZE: int = 50  # 模型实例缓存大小，防止内存泄漏
-    AGENT_HARNESS_MODE: HarnessMode = "compact_zh"
     PROMPT_CACHE_MAX_SYSTEM_BLOCKS: int = 4
     PROMPT_CACHE_MAX_TOOLS: int = 1
 
@@ -123,6 +110,11 @@ class Settings(BaseSettings):
     SESSION_TITLE_PROMPT: str = "请根据用户消息生成一个简洁、准确的会话标题。\n\n# 要求\n\n1. 请务必使用{lang}回复\n2. 标题长度控制在5-8个字\n3. 只返回标题文本，不要添加Emoji、表情符号、引号或其他特殊格式\n\n用户消息：{message}"
     ENABLE_RECOMMEND_QUESTIONS: bool = True
     RECOMMEND_QUESTIONS_MAX_BACKGROUND_TASKS: int = 8
+
+    # Team Agent SOP Settings
+    TEAM_SOP_MODE: bool = True  # 团队模式 SOP DAG 总开关（默认开：团队模式即用 SOP；false = 旧路由，不暴露 update_sop）
+    TEAM_SOP_MAX_STEPS: int = 8  # SOP 计划步骤数上限，超限工具拒绝并提示合并
+    TEAM_SOP_MIN_STEPS: int = 2  # 步骤数下限，低于提示直接回答
 
     # Redis Settings
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -458,11 +450,6 @@ class Settings(BaseSettings):
             return True
         return value
 
-    @field_validator("AGENT_HARNESS_MODE", mode="before")
-    @classmethod
-    def _normalize_agent_harness_mode(cls, value: Any) -> Any:
-        return normalize_harness_mode(value) if isinstance(value, str) else value
-
     def get_s3_config(self) -> "S3Config":
         """Get S3 storage configuration."""
         from src.infra.storage.s3 import S3Config, S3Provider
@@ -516,7 +503,3 @@ def get_settings() -> Settings:
 
 # Global settings instance
 settings = get_settings()
-
-
-def get_active_harness_mode() -> HarnessMode:
-    return normalize_harness_mode(settings.AGENT_HARNESS_MODE)

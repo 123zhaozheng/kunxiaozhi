@@ -11,41 +11,19 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
 from src.infra.logging import get_logger
-from src.kernel.config import get_active_harness_mode, settings
+from src.kernel.config import settings
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
 
 logger = get_logger(__name__)
-_HARNESS_MODE = get_active_harness_mode()
 
-
-if _HARNESS_MODE == "legacy":
-    DEFERRED_TOOL_SEARCH_GUIDE = (
-        "## MCP Tool Search Guide\n\n"
-        "Deferred MCP tools are available but not yet loaded. "
-        "If one of these tools would help with the current request, call `search_tools` "
-        "first to load its full parameter schema, then use that tool normally. "
-        "`search_tools` only searches deferred MCP tools listed in the dynamic "
-        "`## MCP Tools (Deferred)` section; it does NOT search sandbox tools. "
-        "Sandbox tools are NOT MCP tools — use `execute` with `mcporter` commands "
-        "to discover and call them."
-    )
-elif _HARNESS_MODE == "compact_zh":
-    DEFERRED_TOOL_SEARCH_GUIDE = (
-        "## MCP 工具搜索\n\n"
-        "延迟 MCP 工具尚未加载；需要时先以 `search_tools` 加载完整 schema，再调用。"
-        "`search_tools` 仅搜索 `## MCP Tools (Deferred)` 中的工具；沙箱工具须用 "
-        "`execute` 运行 `mcporter` 发现和调用。"
-    )
-else:
-    DEFERRED_TOOL_SEARCH_GUIDE = (
-        "## MCP Tool Search Guide\n\n"
-        "Deferred MCP tools are available but not yet loaded. "
-        "If one would help, call `search_tools` to load its full schema, then use it. "
-        "`search_tools` only searches `## MCP Tools (Deferred)`; discover sandbox "
-        "tools with `execute` and `mcporter`."
-    )
+DEFERRED_TOOL_SEARCH_GUIDE = (
+    "## MCP 工具搜索\n\n"
+    "延迟 MCP 工具尚未加载；需要时先以 `search_tools` 加载完整 schema，再调用。"
+    "`search_tools` 仅搜索 `## MCP Tools (Deferred)` 中的工具；沙箱工具须用 "
+    "`execute` 运行 `mcporter` 发现和调用。"
+)
 
 
 def _tool_sort_key(tool: "BaseTool") -> tuple[str, str]:
@@ -232,24 +210,10 @@ class DeferredToolManager:
                 "## MCP Tools (Deferred)\n\n" + lines,
             ]
             if hidden_count:
-                if _HARNESS_MODE == "legacy":
-                    noun = "tool" if hidden_count == 1 else "tools"
-                    parts.append(
-                        f"\n\nNote: {hidden_count} more deferred MCP {noun} not shown here to save "
-                        "context. Use `search_tools` with capability keywords, or "
-                        "`select:server:tool` when you know the exact name."
-                    )
-                elif _HARNESS_MODE == "compact_zh":
-                    parts.append(
-                        f"\n\n另有 {hidden_count} 个延迟 MCP 工具未显示；用 `search_tools` "
-                        "按能力词搜索，已知全名时用 `select:server:tool`。"
-                    )
-                else:
-                    noun = "tool" if hidden_count == 1 else "tools"
-                    parts.append(
-                        f"\n\nNote: {hidden_count} more deferred MCP {noun} hidden; use "
-                        "`search_tools` with keywords or `select:server:tool` for an exact name."
-                    )
+                parts.append(
+                    f"\n\n另有 {hidden_count} 个延迟 MCP 工具未显示；用 `search_tools` "
+                    "按能力词搜索，已知全名时用 `select:server:tool`。"
+                )
             result = tuple(parts)
         else:
             result = ()

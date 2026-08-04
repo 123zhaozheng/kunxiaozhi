@@ -17,11 +17,11 @@ import importlib
 from typing import Any
 
 from src.agents.core.harness_prompt_overrides import (
+    COMPACT_ZH_BEHAVIOR_GUIDE,
+    ZH_CATALOG,
     build_harness_extra_middleware,
-    catalog_for_mode,
 )
 from src.infra.logging import get_logger
-from src.kernel.config import get_active_harness_mode
 from src.kernel.schemas.persona_preset import (
     DEFAULT_PREFERRED_AGENT_ID,
     PREFERRED_AGENT_IDS,
@@ -29,7 +29,6 @@ from src.kernel.schemas.persona_preset import (
 )
 
 logger = get_logger(__name__)
-_HARNESS_MODE = get_active_harness_mode()
 
 _deepagents: Any = None
 try:
@@ -43,11 +42,7 @@ _register_harness_profile = (
 )
 
 
-DEFAULT_ROLE = (
-    "你是具备工具和技能的智能助手。"
-    if _HARNESS_MODE == "compact_zh"
-    else "You are an intelligent assistant with tools and skills."
-)
+DEFAULT_ROLE = "你是具备工具和技能的智能助手。"
 
 
 def resolve_persona_agent_id(
@@ -84,25 +79,8 @@ _PERSONA_HEADING = "## Persona"
 # Google models. Model-specific deepagents profiles still merge their suffixes
 # on top of this shared base.
 # ---------------------------------------------------------------------------
-def _legacy_behavior_guide() -> str:
-    """Restore the pre-compression vendor behavior while keeping persona authority."""
-    try:
-        from deepagents.graph import BASE_AGENT_PROMPT
-    except ImportError:  # pragma: no cover
-        return "You have access to tools. Be accurate, complete the task, and verify your work."
-    _, separator, body = BASE_AGENT_PROMPT.partition("\n\n")
-    return (
-        "You have access to tools and can respond with text and tool calls. "
-        "The user can see your responses and tool outputs in real time."
-        + (separator + body if separator else "")
-    )
 
-
-_BEHAVIOR_GUIDE = (
-    _legacy_behavior_guide()
-    if _HARNESS_MODE == "legacy"
-    else catalog_for_mode(_HARNESS_MODE).behavior_guide
-)
+_BEHAVIOR_GUIDE = COMPACT_ZH_BEHAVIOR_GUIDE
 
 if _HarnessProfile is not None and _register_harness_profile is not None:
     # Register on import — this is idempotent (additive merge).
@@ -111,20 +89,18 @@ if _HarnessProfile is not None and _register_harness_profile is not None:
     except ImportError:  # pragma: no cover - older langchain
         _TodoListMiddleware = None  # type: ignore[misc, assignment]
 
-    _profile_kwargs: dict[str, Any] = {"base_system_prompt": _BEHAVIOR_GUIDE}
-    if _HARNESS_MODE != "legacy":
-        _catalog = catalog_for_mode(_HARNESS_MODE)
-        _profile_kwargs["tool_description_overrides"] = _catalog.tool_descriptions
-        _profile_kwargs["extra_middleware"] = lambda: build_harness_extra_middleware(
-            _HARNESS_MODE
-        )
-    if _HARNESS_MODE != "legacy" and _TodoListMiddleware is not None:
+    _profile_kwargs: dict[str, Any] = {
+        "base_system_prompt": _BEHAVIOR_GUIDE,
+        "tool_description_overrides": ZH_CATALOG.tool_descriptions,
+        "extra_middleware": lambda: build_harness_extra_middleware(),
+    }
+    if _TodoListMiddleware is not None:
         _profile_kwargs["excluded_middleware"] = frozenset({_TodoListMiddleware})
 
     _shared_profile = _HarnessProfile(**_profile_kwargs)
     for _provider_key in ("anthropic", "openai", "google_genai"):
         _register_harness_profile(_provider_key, _shared_profile)
-    logger.info("[Harness] mode=%s", _HARNESS_MODE)
+    logger.info("[Harness] compact_zh harness profile registered")
 
 
 def split_persona_prompt(system_prompt: str) -> tuple[str, str]:

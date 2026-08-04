@@ -205,14 +205,6 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "description": "settingDesc.LLM_MODEL_CACHE_SIZE",
         "default": 50,
     },
-    "AGENT_HARNESS_MODE": {
-        "type": SettingType.SELECT,
-        "category": SettingCategory.AGENT,
-        "subcategory": "harness",
-        "description": "settingDesc.AGENT_HARNESS_MODE",
-        "default": "compact_zh",
-        "options": ["legacy", "compact_en", "compact_zh"],
-    },
     "PROMPT_CACHE_MAX_SYSTEM_BLOCKS": {
         "type": SettingType.NUMBER,
         "category": SettingCategory.LLM,
@@ -314,6 +306,33 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "subcategory": "recommendations",
         "description": "settingDesc.RECOMMEND_QUESTIONS_MAX_BACKGROUND_TASKS",
         "default": 8,
+    },
+    # ============================================
+    # Team Agent SOP Settings
+    # ============================================
+    "TEAM_SOP_MODE": {
+        "type": SettingType.BOOLEAN,
+        "category": SettingCategory.AGENT,
+        "subcategory": "team",
+        "description": "settingDesc.TEAM_SOP_MODE",
+        "default": True,
+        "frontend_visible": True,
+    },
+    "TEAM_SOP_MAX_STEPS": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.AGENT,
+        "subcategory": "team",
+        "description": "settingDesc.TEAM_SOP_MAX_STEPS",
+        "default": 8,
+        "depends_on": "TEAM_SOP_MODE",
+    },
+    "TEAM_SOP_MIN_STEPS": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.AGENT,
+        "subcategory": "team",
+        "description": "settingDesc.TEAM_SOP_MIN_STEPS",
+        "default": 2,
+        "depends_on": "TEAM_SOP_MODE",
     },
     # ============================================
     # Event Merger Settings

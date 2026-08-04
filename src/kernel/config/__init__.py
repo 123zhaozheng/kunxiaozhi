@@ -4,11 +4,8 @@ This module provides centralized configuration management for the application.
 """
 
 from .base import (
-    HarnessMode,
     Settings,
-    get_active_harness_mode,
     get_settings,
-    normalize_harness_mode,
     settings,
 )
 from .constants import (
@@ -28,9 +25,6 @@ __all__ = [
     "Settings",
     "get_settings",
     "settings",
-    "HarnessMode",
-    "get_active_harness_mode",
-    "normalize_harness_mode",
     # Definitions
     "SETTING_DEFINITIONS",
     # Constants
