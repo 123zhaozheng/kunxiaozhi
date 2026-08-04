@@ -772,6 +772,35 @@
     "todo": {
       "progress": "{{completed}}/{{total}} 已完成"
     },
+    "sop": {
+      "title": "SOP 执行计划",
+      "team": "团队",
+      "progress": "{{completed}}/{{total}}",
+      "confirm": "确认执行",
+      "replan": "重新规划",
+      "feedbackLabel": "反馈（可选）",
+      "feedbackPlaceholder": "告诉主代理需要调整什么",
+      "collapse": "收起",
+      "expand": "展开",
+      "expectedOutput": "预期产出：{{text}}",
+      "error": "错误：{{text}}",
+      "status": {
+        "draft": "草稿",
+        "awaiting_confirmation": "待确认",
+        "running": "执行中",
+        "completed": "已完成",
+        "failed": "失败",
+        "cancelled": "已取消",
+        "rejected": "已拒绝"
+      },
+      "legend": {
+        "pending": "待执行",
+        "running": "运行中",
+        "succeeded": "成功",
+        "failed": "失败",
+        "cancelled": "已取消"
+      }
+    },
     "unknownAgent": "未知助手",
     "unknownError": "未知错误",
     "user": "用户",
@@ -2137,7 +2166,6 @@
     "POSTGRES_POOL_MIN_SIZE": "PostgreSQL 连接池最小大小",
     "POSTGRES_PORT": "PostgreSQL 端口",
     "POSTGRES_USER": "PostgreSQL 用户名",
-    "AGENT_HARNESS_MODE": "代理设置中的 Harness 语言/压缩模式（需重启）",
     "PROMPT_CACHE_MAX_SYSTEM_BLOCKS": "最大缓存系统提示块数",
     "PROMPT_CACHE_MAX_TOOLS": "最大缓存工具定义数",
     "REDIS_PASSWORD": "Redis 密码",
@@ -2583,7 +2611,6 @@
     "opensandbox": "OpenSandbox",
     "events": "事件合并",
     "general": "通用",
-    "harness": "Harness",
     "github": "GitHub",
     "google": "Google",
     "index": "索引",

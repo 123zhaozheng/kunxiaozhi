@@ -772,6 +772,35 @@
     "todo": {
       "progress": "{{completed}}/{{total}} completed"
     },
+    "sop": {
+      "title": "SOP plan",
+      "team": "Team",
+      "progress": "{{completed}}/{{total}}",
+      "confirm": "Confirm and run",
+      "replan": "Replan",
+      "feedbackLabel": "Feedback (optional)",
+      "feedbackPlaceholder": "Tell the agent what to adjust if replanning",
+      "collapse": "Collapse",
+      "expand": "Expand",
+      "expectedOutput": "Expected output: {{text}}",
+      "error": "Error: {{text}}",
+      "status": {
+        "draft": "Draft",
+        "awaiting_confirmation": "Awaiting confirmation",
+        "running": "Running",
+        "completed": "Completed",
+        "failed": "Failed",
+        "cancelled": "Cancelled",
+        "rejected": "Rejected"
+      },
+      "legend": {
+        "pending": "Pending",
+        "running": "Running",
+        "succeeded": "Done",
+        "failed": "Failed",
+        "cancelled": "Cancelled"
+      }
+    },
     "unknownAgent": "Unknown Agent",
     "unknownError": "Unknown error",
     "user": "User",
@@ -2137,7 +2166,6 @@
     "POSTGRES_POOL_MIN_SIZE": "PostgreSQL connection pool minimum size",
     "POSTGRES_PORT": "PostgreSQL port",
     "POSTGRES_USER": "PostgreSQL username",
-    "AGENT_HARNESS_MODE": "Agent harness language/compression mode under Agent settings (restart required)",
     "PROMPT_CACHE_MAX_SYSTEM_BLOCKS": "Maximum cached system prompt blocks",
     "PROMPT_CACHE_MAX_TOOLS": "Maximum cached tool definitions",
     "REDIS_PASSWORD": "Redis password",
@@ -2583,7 +2611,6 @@
     "opensandbox": "OpenSandbox",
     "events": "Event Merger",
     "general": "General",
-    "harness": "Harness",
     "github": "GitHub",
     "google": "Google",
     "index": "Index",
