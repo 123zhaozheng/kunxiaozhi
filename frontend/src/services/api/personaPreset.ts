@@ -13,6 +13,7 @@ import type {
   PersonaWeComConfigCreate,
   PersonaWeComStatus,
   PersonaWeComStatusBatchResponse,
+  WeComNotifyTargetsResponse,
 } from "../../types/personaPreset";
 
 const PERSONA_PRESETS_API = `${API_BASE}/api/persona-presets`;
@@ -222,6 +223,35 @@ export const personaPresetApi = {
       `${PERSONA_PRESETS_API}/${encodeURIComponent(presetId)}/wecom`,
       {
         method: "DELETE",
+      },
+    );
+  },
+
+  async getWeComNotifyTargets(
+    presetId: string,
+  ): Promise<WeComNotifyTargetsResponse> {
+    try {
+      return await authFetch<WeComNotifyTargetsResponse>(
+        `${PERSONA_PRESETS_API}/${encodeURIComponent(
+          presetId,
+        )}/wecom/notify-targets`,
+      );
+    } catch {
+      return { targets: [] };
+    }
+  },
+
+  async updateWeComNotifyTargets(
+    presetId: string,
+    targets: string[],
+  ): Promise<WeComNotifyTargetsResponse> {
+    return authFetch<WeComNotifyTargetsResponse>(
+      `${PERSONA_PRESETS_API}/${encodeURIComponent(
+        presetId,
+      )}/wecom/notify-targets`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ targets }),
       },
     );
   },

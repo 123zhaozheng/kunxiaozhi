@@ -46,6 +46,7 @@ import type {
   PersonaWeComConfig,
   PreferredAgentId,
   MarketplaceSkillResponse,
+  WeComNotifyTargetItem,
 } from "../../types";
 import { DEFAULT_PREFERRED_AGENT_ID, PREFERRED_AGENT_IDS } from "../../types";
 
@@ -155,6 +156,8 @@ export function PersonaEditorModal({
       setIconPickerOpen(false);
       setShowWeCom(false);
       setWeComConfig(null);
+      setNotifyTargets([]);
+      setNotifyTargetInput("");
       setWeComDraft({
         aibotid: "",
         secret: "",
@@ -199,6 +202,12 @@ export function PersonaEditorModal({
     segment_target_chars: WECOM_DEFAULT_SEGMENT_TARGET_CHARS,
     session_ttl_hours: 24,
   });
+  // Notify target config state (within WeCom entry config, admin-only)
+  const [notifyTargets, setNotifyTargets] = useState<WeComNotifyTargetItem[]>(
+    [],
+  );
+  const [notifyTargetInput, setNotifyTargetInput] = useState("");
+  const [notifySaving, setNotifySaving] = useState(false);
 
   // Dify knowledge base binding (only shown when DIFY_KB_ENABLED is on)
   const { settings: systemSettings } = useSettingsContext();
@@ -282,6 +291,8 @@ export function PersonaEditorModal({
     try {
       await personaPresetApi.deleteWeComConfig(editingPreset.id);
       setWeComConfig(null);
+      setNotifyTargets([]);
+      setNotifyTargetInput("");
       setWeComDraft({
         aibotid: "",
         secret: "",
@@ -306,6 +317,66 @@ export function PersonaEditorModal({
       setWeComSaving(false);
     }
   }, [editingPreset?.id, wecomConfig, t]);
+
+  // Load WeCom notify targets once the WeCom entry config exists
+  useEffect(() => {
+    if (!showWeComSection || !editingPreset?.id || !wecomConfig) return;
+    let cancelled = false;
+    (async () => {
+      const result = await personaPresetApi.getWeComNotifyTargets(
+        editingPreset.id,
+      );
+      if (!cancelled) setNotifyTargets(result.targets);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showWeComSection, editingPreset?.id, wecomConfig]);
+
+  const handleAddNotifyTarget = useCallback(() => {
+    const username = notifyTargetInput.trim();
+    if (!username) return;
+    setNotifyTargets((prev) =>
+      prev.some((item) => item.username === username)
+        ? prev
+        : [...prev, { username, bound: false }],
+    );
+    setNotifyTargetInput("");
+  }, [notifyTargetInput]);
+
+  const handleRemoveNotifyTarget = useCallback((username: string) => {
+    setNotifyTargets((prev) =>
+      prev.filter((item) => item.username !== username),
+    );
+  }, []);
+
+  const handleNotifyTargetsSave = useCallback(async () => {
+    if (!editingPreset?.id) return;
+    setNotifySaving(true);
+    try {
+      const result = await personaPresetApi.updateWeComNotifyTargets(
+        editingPreset.id,
+        notifyTargets.map((item) => item.username),
+      );
+      setNotifyTargets(result.targets);
+      toast.success(
+        t(
+          "personaPresets.wecom.notifyTargetsSaveSuccess",
+          "Notify targets saved",
+        ),
+      );
+    } catch (err) {
+      toast.error(
+        (err as Error).message ||
+          t(
+            "personaPresets.wecom.notifyTargetsSaveFailed",
+            "Failed to save notify targets",
+          ),
+      );
+    } finally {
+      setNotifySaving(false);
+    }
+  }, [editingPreset?.id, notifyTargets, t]);
 
   useEffect(() => {
     if (!showModal || !skillDropdownOpen) return;
@@ -1502,6 +1573,144 @@ export function PersonaEditorModal({
                           </button>
                         )}
                       </div>
+
+                      {/* Notify targets (only when a WeCom entry exists) */}
+                      {wecomConfig && (
+                        <div className="ppe-field pt-1">
+                          <label className="ppe-label">
+                            {t(
+                              "personaPresets.wecom.notifyTargets",
+                              "Notify Targets",
+                            )}
+                          </label>
+                          <p
+                            className="text-xs mt-0.5 mb-2"
+                            style={{ color: "var(--theme-text-secondary)" }}
+                          >
+                            {t(
+                              "personaPresets.wecom.notifyTargetsDesc",
+                              "当企业微信用户对本 Persona 点赞/点踩时，向以下目标用户推送通知。",
+                            )}
+                          </p>
+
+                          {/* target list */}
+                          <div className="space-y-1.5">
+                            {notifyTargets.length === 0 && (
+                              <p
+                                className="text-xs"
+                                style={{
+                                  color: "var(--theme-text-secondary)",
+                                }}
+                              >
+                                {t(
+                                  "personaPresets.wecom.notifyTargetsEmpty",
+                                  "尚未配置通知对象",
+                                )}
+                              </p>
+                            )}
+                            {notifyTargets.map((item) => (
+                              <div
+                                key={item.username}
+                                className="flex items-center justify-between gap-2 rounded-md bg-stone-100 px-2 py-1.5 dark:bg-stone-800/60"
+                              >
+                                <span className="text-sm font-medium">
+                                  {item.username}
+                                </span>
+                                <span className="flex items-center gap-2">
+                                  <span
+                                    className={`inline-block rounded-full px-2 py-0.5 text-xs ${
+                                      item.bound
+                                        ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400"
+                                        : "bg-stone-200 text-stone-600 dark:bg-stone-700 dark:text-stone-400"
+                                    }`}
+                                  >
+                                    {item.bound
+                                      ? t(
+                                          "personaPresets.wecom.notifyTargetBound",
+                                          "已绑定",
+                                        )
+                                      : t(
+                                          "personaPresets.wecom.notifyTargetUnbound",
+                                          "未绑定",
+                                        )}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleRemoveNotifyTarget(item.username)
+                                    }
+                                    className="text-stone-400 hover:text-red-500"
+                                    aria-label={t("common.delete", "Delete")}
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* add target */}
+                          <div className="mt-2 flex gap-2">
+                            <input
+                              type="text"
+                              value={notifyTargetInput}
+                              onChange={(e) =>
+                                setNotifyTargetInput(e.target.value)
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  handleAddNotifyTarget();
+                                }
+                              }}
+                              className="ppe-input flex-1"
+                              placeholder={t(
+                                "personaPresets.wecom.notifyTargetInputPlaceholder",
+                                "企业微信 userid / username",
+                              )}
+                            />
+                            <button
+                              type="button"
+                              onClick={handleAddNotifyTarget}
+                              disabled={!notifyTargetInput.trim()}
+                              className="btn-secondary disabled:opacity-50"
+                            >
+                              <Plus size={16} />
+                              {t(
+                                "personaPresets.wecom.notifyTargetAdd",
+                                "添加",
+                              )}
+                            </button>
+                          </div>
+
+                          <p
+                            className="text-xs mt-2"
+                            style={{ color: "var(--theme-text-secondary)" }}
+                          >
+                            {t(
+                              "personaPresets.wecom.notifyTargetsUnboundHint",
+                              "未绑定的用户需在企业微信向本机器人发送『绑定通知』完成绑定",
+                            )}
+                          </p>
+
+                          <button
+                            type="button"
+                            onClick={handleNotifyTargetsSave}
+                            disabled={notifySaving}
+                            className="btn-primary mt-3 w-full disabled:opacity-50"
+                          >
+                            {notifySaving ? (
+                              <LoadingSpinner size="sm" />
+                            ) : (
+                              <Save size={16} />
+                            )}
+                            {t(
+                              "personaPresets.wecom.notifyTargetsSave",
+                              "保存通知对象",
+                            )}
+                          </button>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>

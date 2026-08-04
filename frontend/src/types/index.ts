@@ -69,6 +69,8 @@ export type {
   PersonaWeComReasonCode,
   PersonaWeComStatus,
   PersonaWeComStatusBatchResponse,
+  WeComNotifyTargetItem,
+  WeComNotifyTargetsResponse,
 } from "./personaPreset";
 export {
   DEFAULT_PREFERRED_AGENT_ID,

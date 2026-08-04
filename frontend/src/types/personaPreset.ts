@@ -147,6 +147,15 @@ export interface PersonaWeComStatusBatchResponse {
   statuses: Record<string, PersonaWeComStatus | null>;
 }
 
+export interface WeComNotifyTargetItem {
+  username: string;
+  bound: boolean;
+}
+
+export interface WeComNotifyTargetsResponse {
+  targets: WeComNotifyTargetItem[];
+}
+
 export interface PersonaPresetListResponse {
   presets: PersonaPreset[];
   total: number;

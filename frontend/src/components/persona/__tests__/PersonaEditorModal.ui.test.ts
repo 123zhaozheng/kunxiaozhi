@@ -69,3 +69,19 @@ test("skill dropdown options use structured professional rows", () => {
     /\.ppe-skill-option--selected\s+\.ppe-skill-option__check-ring\s*\{[\s\S]*border-color:\s*var\(--theme-primary\);/,
   );
 });
+
+test("WeCom entry config (including notify targets) is admin-only and gated on an existing preset", () => {
+  assert.match(
+    componentSource,
+    /showWeComSection\s*=\s*editorScope === "global" && canManageChannels && !!editingPreset;/,
+  );
+  assert.match(componentSource, /personaPresets\.wecom\.notifyTargets/);
+  assert.match(
+    componentSource,
+    /getWeComNotifyTargets\(\s*editingPreset\.id,?\s*\)/,
+  );
+  assert.match(
+    componentSource,
+    /updateWeComNotifyTargets\(\s*editingPreset\.id,\s*notifyTargets\.map\(/,
+  );
+});

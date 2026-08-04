@@ -3,7 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-hot-toast";
 import { X } from "lucide-react";
-import { useWebSocket } from "../../../hooks/useWebSocket";
+import {
+  useWebSocket,
+  type FeedbackNotification,
+} from "../../../hooks/useWebSocket";
 import { useBrowserNotification } from "../../../hooks/useBrowserNotification";
 import { sessionApi } from "../../../services/api";
 import { appNotificationService } from "../../../services/notifications/appNotificationService";
@@ -39,6 +42,101 @@ export function useWebSocketNotifications({
   // WebSocket for task completion notifications
   useWebSocket({
     enabled,
+    onFeedbackNotification: (notification: FeedbackNotification) => {
+      const {
+        preset_id,
+        preset_name,
+        rating,
+        operator,
+        comment,
+        user_question,
+        model_output,
+        ts,
+      } = notification.data;
+      const feedbackTitle = `「${preset_name}」收到新的${
+        rating === "up" ? "点赞" : "点踩"
+      }`;
+      const feedbackBody =
+        `操作人：${operator}` +
+        (rating === "down" && comment ? `；反馈：${comment}` : "") +
+        (user_question ? `；用户问题：${user_question}` : "") +
+        (model_output ? `；模型回复：${model_output}` : "");
+      const feedbackRoute = "/persona";
+
+      const isAppNotificationRuntime =
+        appNotificationService.getRuntime() !== "unsupported";
+      void appNotificationService.notify({
+        type: "task",
+        title: feedbackTitle,
+        body: feedbackBody,
+        route: feedbackRoute,
+        dedupeKey: `feedback:${preset_id}:${ts}`,
+      });
+
+      const navigateToPersona = () => navigate(feedbackRoute);
+
+      // Browser (non-native) runtime: surface via browser notification + toast
+      if (
+        !isAppNotificationRuntime &&
+        shouldAttemptBrowserNotification({
+          isSupported,
+          cachedPermission: permission,
+        })
+      ) {
+        notify(feedbackTitle, {
+          body: feedbackBody,
+          onClick: navigateToPersona,
+          url: feedbackRoute,
+        });
+      }
+
+      toast.custom(
+        (visible) => (
+          <div
+            className={`group relative pointer-events-auto cursor-pointer select-none max-w-[min(92vw,24rem)] w-full rounded-3xl border border-stone-100 bg-white px-4 py-3.5 text-black shadow-2xl transition-all dark:border-stone-800 dark:bg-stone-900 dark:text-white ${
+              visible
+                ? "translate-y-0 opacity-100"
+                : "translate-y-1.5 opacity-0"
+            }`}
+            onClick={(e) => {
+              e.stopPropagation();
+              navigateToPersona();
+              toast.remove();
+            }}
+          >
+            <div className="flex items-center gap-3 text-left">
+              <div className="flex shrink-0 items-center justify-center">
+                <img
+                  src="/icons/icon.svg"
+                  alt=""
+                  className="size-8 rounded-lg"
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="line-clamp-1 text-[13px] font-semibold leading-tight">
+                  {feedbackTitle}
+                </div>
+                <div className="mt-0.5 line-clamp-1 text-xs leading-snug text-stone-500 dark:text-stone-400">
+                  {feedbackBody}
+                </div>
+              </div>
+            </div>
+          </div>
+        ),
+        {
+          duration: isMobileDevice() ? 5_000 : 10_000,
+          position: "top-right",
+          style: {
+            background: "transparent",
+            padding: 0,
+            boxShadow: "none",
+            border: "none",
+            borderRadius: 0,
+            overflow: "visible",
+          },
+        },
+      );
+    },
     onTaskComplete: async (notification: {
       data: {
         session_id: string;

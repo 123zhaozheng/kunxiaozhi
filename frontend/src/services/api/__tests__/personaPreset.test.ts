@@ -67,3 +67,78 @@ test("personaPresetApi.list reuses in-flight and fresh identical list requests",
     globalThis.window = previousWindow;
   }
 });
+
+test("personaPresetApi.getWeComNotifyTargets returns empty targets on 404", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousLocalStorage = globalThis.localStorage;
+  const previousWindow = globalThis.window;
+
+  globalThis.localStorage = {
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {},
+  } as unknown as Storage;
+  globalThis.window = {
+    dispatchEvent: () => true,
+    location: { pathname: "/chat", search: "" },
+  } as unknown as Window & typeof globalThis;
+  globalThis.fetch = async () => new Response("{}", { status: 404 });
+
+  try {
+    const result = await personaPresetApi.getWeComNotifyTargets("preset-1");
+    assert.deepEqual(result, { targets: [] });
+  } finally {
+    globalThis.fetch = previousFetch;
+    globalThis.localStorage = previousLocalStorage;
+    globalThis.window = previousWindow;
+  }
+});
+
+test("personaPresetApi.updateWeComNotifyTargets sends PUT with full target list", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousLocalStorage = globalThis.localStorage;
+  const previousWindow = globalThis.window;
+  let capturedRequest: RequestInit | undefined;
+
+  globalThis.localStorage = {
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {},
+  } as unknown as Storage;
+  globalThis.window = {
+    dispatchEvent: () => true,
+    location: { pathname: "/chat", search: "" },
+  } as unknown as Window & typeof globalThis;
+  globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+    capturedRequest = init;
+    return new Response(
+      JSON.stringify({
+        targets: [
+          { username: "10001", bound: true },
+          { username: "10002", bound: false },
+        ],
+      }),
+      { status: 200 },
+    );
+  };
+
+  try {
+    const result = await personaPresetApi.updateWeComNotifyTargets("preset-1", [
+      "10001",
+      "10002",
+    ]);
+    assert.equal(capturedRequest?.method, "PUT");
+    assert.equal(
+      capturedRequest?.body,
+      JSON.stringify({ targets: ["10001", "10002"] }),
+    );
+    assert.deepEqual(
+      result.targets.map((item) => item.username),
+      ["10001", "10002"],
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+    globalThis.localStorage = previousLocalStorage;
+    globalThis.window = previousWindow;
+  }
+});

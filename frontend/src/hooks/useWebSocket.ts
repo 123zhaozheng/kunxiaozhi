@@ -19,8 +19,23 @@ export interface TaskCompleteNotification {
   };
 }
 
+export interface FeedbackNotification {
+  type: "notification:feedback";
+  data: {
+    preset_id: string;
+    preset_name: string;
+    rating: "up" | "down";
+    operator: string;
+    comment: string | null;
+    user_question: string | null;
+    model_output: string | null;
+    ts: string;
+  };
+}
+
 interface UseWebSocketOptions {
   onTaskComplete?: (notification: TaskCompleteNotification) => void;
+  onFeedbackNotification?: (notification: FeedbackNotification) => void;
   enabled?: boolean;
 }
 
@@ -32,12 +47,13 @@ const MAX_AUTH_FAILURES = 3; // Switch to long interval after this many consecut
 const AUTH_FAILURE_COOLDOWN = 5 * 60 * 1000; // 5 minutes cooldown after max failures
 
 export function useWebSocket(options: UseWebSocketOptions = {}) {
-  const { onTaskComplete, enabled = true } = options;
+  const { onTaskComplete, onFeedbackNotification, enabled = true } = options;
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
   const onTaskCompleteRef = useRef(onTaskComplete);
+  const onFeedbackNotificationRef = useRef(onFeedbackNotification);
   const isMountedRef = useRef(true);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -50,10 +66,14 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   // Consecutive auth failure counter
   const authFailureCountRef = useRef(0);
 
-  // Update ref when callback changes
+  // Update refs when callbacks change
   useEffect(() => {
     onTaskCompleteRef.current = onTaskComplete;
   }, [onTaskComplete]);
+
+  useEffect(() => {
+    onFeedbackNotificationRef.current = onFeedbackNotification;
+  }, [onFeedbackNotification]);
 
   const connect = useCallback(async () => {
     // Prevent multiple simultaneous connection attempts
@@ -147,6 +167,13 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
           if (message.type === "task:complete" && onTaskCompleteRef.current) {
             onTaskCompleteRef.current(message);
+          }
+
+          if (
+            message.type === "notification:feedback" &&
+            onFeedbackNotificationRef.current
+          ) {
+            onFeedbackNotificationRef.current(message);
           }
         } catch (e) {
           console.error("[WebSocket] Failed to parse message:", e);
