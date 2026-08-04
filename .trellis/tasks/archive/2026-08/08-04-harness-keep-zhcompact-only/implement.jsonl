@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/agent-harness.md", "reason": "harness 本地化契约 spec，定义模式机制/middleware 顺序/缓存断点/不变量——本次删除须同步更新"}
+{"file": ".trellis/tasks/08-04-harness-keep-zhcompact-only/research/backend-core-mechanism.md", "reason": "配置层+harness_prompt_overrides+persona 全清册：每处符号/行号/删除影响/注入时机/10 条 bug"}
+{"file": ".trellis/tasks/08-04-harness-keep-zhcompact-only/research/team-agent-prompt-construction.md", "reason": "team_agent prompt 逐常量三分支+compact_zh 逐字文本+成员构建链路+死代码 SANDBOX_* 发现+测试 drift"}
+{"file": ".trellis/tasks/08-04-harness-keep-zhcompact-only/research/search-fast-agent-prompts.md", "reason": "search/fast prompt 逐字 zh 文本+注入时机+deepagents HarnessProfile 集成+死代码+契约串清单"}
+{"file": ".trellis/tasks/08-04-harness-keep-zhcompact-only/research/frontend-i18n-tests-docs.md", "reason": "frontend/i18n/测试/文档全清册：4 个测试文件逐条改动方式+5 locale i18n key+spec 更新点"}
+{"file": ".trellis/tasks/08-04-harness-keep-zhcompact-only/design.md", "reason": "决策记录+架构不变量+harness_prompt_overrides 重构方案+persona 注册块改法"}

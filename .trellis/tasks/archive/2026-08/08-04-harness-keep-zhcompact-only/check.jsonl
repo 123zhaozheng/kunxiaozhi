@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/agent-harness.md", "reason": "harness 本地化契约——检查删除后是否同步更新为无模式形态"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量检查规范"}
+{"file": ".trellis/tasks/08-04-harness-keep-zhcompact-only/research/backend-core-mechanism.md", "reason": "验证删除是否覆盖全部消费点+bug 是否消除+死代码是否清理"}
+{"file": ".trellis/tasks/08-04-harness-keep-zhcompact-only/research/team-agent-prompt-construction.md", "reason": "验证 team_agent 改动完整性+test_team_router drift 修复"}
+{"file": ".trellis/tasks/08-04-harness-keep-zhcompact-only/research/search-fast-agent-prompts.md", "reason": "验证 search/fast 改动完整性+契约串保留"}
+{"file": ".trellis/tasks/08-04-harness-keep-zhcompact-only/research/frontend-i18n-tests-docs.md", "reason": "验证 frontend/i18n/测试/文档改动完整性"}
