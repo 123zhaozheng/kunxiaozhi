@@ -44,14 +44,12 @@ def build_goal_prompt_section(goal: dict | GoalSpec | None) -> str:
         return ""
 
     return (
-        "## Active Goal\n"
-        f"Objective: {spec.objective}\n\n"
-        "Completion rubric:\n"
+        "## 当前目标\n"
+        f"目标：{spec.objective}\n\n"
+        "完成标准：\n"
         f"{spec.rubric}\n\n"
-        "Work toward this goal across turns until the rubric is satisfied. "
-        "Every explicit requirement must be checked against current evidence. "
-        "Do not mark the goal complete unless the available evidence proves the "
-        "objective and rubric are satisfied."
+        "逐轮推进直至完成标准全部满足；每条显式要求须对照当前证据核实。"
+        "证据不足以证明目标与完成标准均已达成前，不得判定完成。"
     )
 
 

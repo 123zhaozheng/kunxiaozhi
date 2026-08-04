@@ -125,9 +125,9 @@ def _maybe_append_overflow_hint(prompt: str, total_count: int) -> str:
 
     return (
         prompt
-        + f"> **Note:** Only {_MAX_TOOLS_IN_PROMPT} of {total_count} tools are shown above. "
-        + 'Use `execute(command="mcporter list")` to find the right service, then '
-        + '`execute(command="mcporter list <service> --schema")` before the first call.\n'
+        + f"> 注：仅显示 {_MAX_TOOLS_IN_PROMPT}/{total_count} 个工具；"
+        + '先用 `execute(command="mcporter list")` 定位服务，'
+        + '再用 `execute(command="mcporter list <service> --schema")` 查看参数。\n'
     )
 
 
@@ -139,9 +139,9 @@ def _maybe_append_overflow_hint_sections(
         return prompt_sections
 
     return prompt_sections + (
-        f"> **Note:** Only {_MAX_TOOLS_IN_PROMPT} of {total_count} tools are shown above. "
-        'Use `execute(command="mcporter list")` to find the right service, then '
-        '`execute(command="mcporter list <service> --schema")` before the first call.\n',
+        f"> 注：仅显示 {_MAX_TOOLS_IN_PROMPT}/{total_count} 个工具；"
+        '先用 `execute(command="mcporter list")` 定位服务，'
+        '再用 `execute(command="mcporter list <service> --schema")` 查看参数。\n',
     )
 
 
@@ -201,7 +201,7 @@ def _format_params(schema: Any) -> str:
 
     if not parts:
         return ""
-    return "Params: " + ", ".join(parts)
+    return "参数： " + ", ".join(parts)
 
 
 def _format_tools_list(data: Any) -> tuple[str, int]:
@@ -243,47 +243,32 @@ def _format_tools_list_sections(data: Any) -> tuple[tuple[str, ...], int]:
         return (), 0
 
     intro_lines = [
-        "## Sandbox Tools (NOT MCP — DO NOT call directly)",
+        "## 沙箱工具（非 MCP，禁止直接调用）",
         "",
-        "⚠️ **IMPORTANT**: The tools listed below are **sandbox tools**, NOT MCP tools. "
-        "You do NOT have direct access to them. Do NOT attempt to call them as MCP tools "
-        "— such calls will fail.",
+        "⚠️ **重要**：以下工具是沙箱工具，不是 MCP 工具；你没有直接访问权限，"
+        "当作 MCP 工具直接调用会失败。唯一调用方式是经 `execute` 工具运行 `mcporter` 命令。",
         "",
-        "**How to use**: You MUST use the `execute` tool with `mcporter` commands. "
-        "The `execute` tool is your ONLY way to invoke sandbox tools.",
+        "**首次使用前必查参数**：下方参数摘要只说明工具存在，不是完整形态。"
+        "首个 `mcporter call` 前必须先用 `execute` 检查参数：先 `mcporter list` 定位服务，"
+        "再 `mcporter list <service> --schema` 查看该服务参数，不要跳过。",
         "",
-        "**Required first-use sequence**: before the first `mcporter call` for any sandbox tool, "
-        "you must inspect its parameters via `execute`: first identify the service with "
-        "`mcporter list`, then inspect that service with `mcporter list <service> --schema`.",
-        "Do NOT jump straight to `mcporter call` just because a short params summary appears below. "
-        "The summary tells you what exists, not the full tool shape.",
-        "",
-        "Example — find the service, inspect it, then call `server.my_tool` with arg `query=hello`:",
+        "示例（定位服务 → 查参数 → 调用 `server.my_tool`，参数 `query=hello`）：",
         "```",
         'execute(command="mcporter list")',
-        "# find the target service, then inspect it:",
         'execute(command="mcporter list server --schema")',
-        "# after confirming the tool and its parameters:",
         'execute(command="mcporter call server.my_tool query=hello")',
         "```",
         "",
-        "**Discovery** — run via `execute`:",
-        "- `mcporter list` — list configured services and their tools",
-        "- `mcporter list <service> --schema` — inspect one service's tools and parameter schemas before first use",
+        "**调用方式**：`mcporter call server.tool <args>`",
+        "- 命名参数：`mcporter call server.tool key=value`（值含空格必须加引号）",
+        "- 复杂参数用 JSON：`mcporter call server.tool --args '{\"key\": \"value\"}'`",
+        "- 禁止用 `--flag value` 语法（会把 value 当作位置参数）",
         "",
-        "**Repository search discipline**:",
-        "- avoid repo-wide searches unless absolutely necessary.",
-        "- When looking for code, use `ls` or `glob` first to narrow the area.",
-        "- narrow `path` before `grep`; do not start by grepping from the repository root with a broad pattern.",
+        "**代码搜索纪律**：除非必要避免全仓搜索；先用 `ls`/`glob` 缩小范围，"
+        "再针对具体 `path` 用 `grep`，不要从仓库根目录宽泛搜索。",
         "",
-        "**Invocation** — call via `execute`: `mcporter call server.tool <args>`",
-        "- Named args: `mcporter call server.tool key=value` (values with spaces MUST be quoted)",
-        '- JSON payload: `mcporter call server.tool --args \'{"key": "value"}\'` (for complex params)',
-        "",
-        "Do NOT use `--flag value` syntax — that passes `value` as a positional arg.",
-        "",
-        "**Server Management**: `sandbox_mcp_add` / `sandbox_mcp_update` / `sandbox_mcp_remove` — "
-        "changes are persisted and auto-restored on sandbox rebuild.",
+        "**服务管理**：`sandbox_mcp_add` / `sandbox_mcp_update` / `sandbox_mcp_remove` "
+        "的变更会持久化，沙箱重建后自动恢复。",
         "",
     ]
     tool_lines: list[str] = []
@@ -335,10 +320,10 @@ def _format_tools_list_sections(data: Any) -> tuple[tuple[str, ...], int]:
                 tool_lines.append(f"  {param_line}")
 
             tool_lines.append(
-                f'  → first inspect this service: `execute(command="mcporter list {server_name} --schema")`'
+                f'  → 先查参数：`execute(command="mcporter list {server_name} --schema")`'
             )
             tool_lines.append(
-                f'  → then call: `execute(command="mcporter call {full_name} <args>")`'
+                f'  → 再调用：`execute(command="mcporter call {full_name} <args>")`'
             )
 
         tool_lines.append("")

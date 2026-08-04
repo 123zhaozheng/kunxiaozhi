@@ -44,6 +44,7 @@ from src.agents.team_agent.prompt import (
     build_team_subagent_display_names,
     summarize_role_system_prompt,
 )
+from src.agents.team_agent.tool_exclusion import TeamToolExclusionMiddleware
 from src.infra.agent import AgentEventProcessor
 from src.infra.agent.middleware import (
     EnvVarPromptMiddleware,
@@ -338,6 +339,23 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
             )
             filtered_tools.append(search_tool)
 
+    # ── TeamAgent SOP 挂接 ──
+    # TEAM_SOP_MODE 开启且显式团队模式时：追加 update_sop 工具（主代理专属）。
+    if settings.TEAM_SOP_MODE and team and team.active_members:
+        from src.agents.team_agent.sop.tool import create_update_sop_tool
+
+        sop_tool = create_update_sop_tool(
+            session_id=state.get("session_id", ""),
+            user_id=context.user_id or "",
+            roster_subagent_types=[
+                build_team_member_subagent_type(member) for member in team.active_members
+            ],
+            presenter=presenter,
+        )
+        if filtered_tools is None:
+            filtered_tools = []
+        filtered_tools.append(sop_tool)
+
     marketplace_skill_prompt = (
         build_marketplace_skill_prompt_section(filtered_tools) if sandbox_backend else ""
     )
@@ -380,6 +398,8 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
                 )
             )
         mw.append(PromptCachingMiddleware())
+        # 团队模式全链路排除 write_todos（SOP 工具替代；主代理与子代理一致）
+        mw.append(TeamToolExclusionMiddleware())
         return mw
 
     custom_subagents: list[SubAgent | CompiledSubAgent] = []
@@ -435,16 +455,15 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
                     and role_system_prompts[member.member_id].strip() in role_section,
                     bool((member.role_instructions or "").strip())
                     and (member.role_instructions or "").strip() in role_section,
-                    any("## Skills System" in s for s in role_prompt_sections),
+                    any("## 技能" in s for s in role_prompt_sections),
                 )
 
                 custom_subagents.append(
                     {
                         "name": subagent_type,
                         "description": (
-                            f"Team member '{role_name}' "
-                            f"(member_id: {member.member_id}). "
-                            f"Dispatch tasks matching this role's expertise."
+                            f"团队成员 {role_name}（member_id: {member.member_id}）："
+                            f"分派该角色专长任务。"
                             + (f" {member.role_instructions}" if member.role_instructions else "")
                         ),
                         "system_prompt": SUBAGENT_PROMPT,
@@ -479,7 +498,7 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
         custom_subagents = [
             {
                 "name": "general-purpose",
-                "description": "General-purpose agent for researching complex questions, searching for files and content, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries use this agent to perform the search for you. This agent has access to all tools as the main agent.",
+                "description": "通用子代理：研究复杂问题、搜索文件内容、执行多步任务；关键词/文件首查无果时交其代查；工具权限与主代理一致。",
                 "system_prompt": SUBAGENT_PROMPT,
                 "middleware": _build_subagent_middleware(
                     prompt_sections=subagent_prompt_sections,
@@ -512,6 +531,10 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
     goal_section = build_goal_prompt_section(active_goal)
     if goal_section:
         _prompt_sections.append(goal_section)
+    if settings.TEAM_SOP_MODE and team and team.active_members:
+        from src.agents.team_agent.sop.prompt_section import build_sop_guidance_section
+
+        _prompt_sections.append(build_sop_guidance_section())
     if _prompt_sections:
         user_middleware.append(SectionPromptMiddleware(sections=_prompt_sections))
     if sandbox_backend:
@@ -539,6 +562,8 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
         user_middleware.append(rubric_middleware)
 
     user_middleware.append(PromptCachingMiddleware())
+    # 团队模式主代理排除 write_todos（路由职责之外；SOP 工具为正式替代）
+    user_middleware.append(TeamToolExclusionMiddleware())
 
     inner_graph = create_deep_agent(
         model=llm,

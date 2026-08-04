@@ -36,10 +36,10 @@ logger = get_logger(__name__)
 _FIND_LIMIT = 8
 _MARKETPLACE_SKILL_TOOL_NAMES = frozenset({"find_skills", "install_skill"})
 _MARKETPLACE_SKILL_PROMPT = (
-    "## Marketplace skills\n"
-    "If the task needs a capability you do not currently have, use `find_skills` before giving up. "
-    "Then use `install_skill` to place the selected skill in the active sandbox. "
-    "Read the returned `SKILL.md` path and run its scripts directly; no transfer step is needed."
+    "## 技能市场\n"
+    "当前工具无法完成任务时，先用 `find_skills` 搜索技能，"
+    "再用 `install_skill` 把选中的技能装入当前沙箱。"
+    "读取返回的 `SKILL.md` 路径并按脚本直接运行，无需 transfer 步骤。"
 )
 
 

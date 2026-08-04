@@ -109,29 +109,29 @@ async def build_skills_prompt(skills: list[dict]) -> str:
     # Format skills list with progressive disclosure pattern
     skills_lines = []
     for skill in skills:
-        name = skill.get("name", "unnamed skill")
-        description = skill.get("description", "no description")
+        name = skill.get("name", "未命名技能")
+        description = skill.get("description", "无描述")
         skill_path = f"/skills/{name}/SKILL.md"
 
         # Format skill entry matching SkillsMiddleware._format_skills_list
         desc_line = f"- **{name}**: {description}"
         skills_lines.append(desc_line)
-        skills_lines.append(f"  -> Read `{skill_path}` for full instructions")
+        skills_lines.append(f"  -> 读 `{skill_path}` 获取完整说明")
 
     skills_list_str = "\n".join(skills_lines)
 
     # Build full prompt matching SkillsMiddleware.SKILLS_SYSTEM_PROMPT format
-    prompt = f"""## Skills System
+    prompt = f"""## 技能
 
-**Skills Location**: `/skills/`
+技能位置：`/skills/`
 
-**Available Skills:**
+可用技能：
 
 {skills_list_str}
 
-**Usage:** When a task matches a skill's description, read its `SKILL.md` for step-by-step workflows. If a skill includes executable scripts, first transfer them out of `/skills/` into the sandbox workspace, then run the workspace copy with an absolute path.
-**Commands:** Use `ls("/skills/")`, `read_file`, `write_file`, `edit_file(path, old, new)` to access skills. Do NOT create directories manually.
+用法：任务命中技能描述时，读其 `SKILL.md` 按步骤执行；含脚本的技能先用 `transfer_file`/`transfer_path` 把文件从 `/skills/` 移到工作区，再以绝对路径运行副本。
+访问：用 `ls("/skills/")`、`read_file`、`write_file`、`edit_file(path, old, new)` 操作技能文件，禁止手动创建目录。
 
-**IMPORTANT:** `/skills/` is a virtual path backed by a database, NOT a real filesystem directory. NEVER use shell commands (e.g., `ls -la /skills/`, `cat /skills/x.md`, `python /skills/x.py`, `cp /skills/* .`) to access skills — they will fail. Use `transfer_file` or `transfer_path` to move skill files into the workspace before executing them. Always use the `ls`, `read_file`, `write_file`, `edit_file` tools instead.
+**重要**：`/skills/` 是数据库虚拟路径，不是真实目录，严禁用 shell 命令访问（如 `ls -la /skills/`、`cat /skills/x.md`、`python /skills/x.py`、`cp /skills/* .`），会失败。执行脚本前先用 `transfer_file`/`transfer_path` 移到工作区；一律使用 `ls`、`read_file`、`write_file`、`edit_file`。
 """
     return prompt

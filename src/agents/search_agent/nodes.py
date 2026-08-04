@@ -246,7 +246,7 @@ async def agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict[str,
     custom_subagents: list[SubAgent | CompiledSubAgent] = [
         {
             "name": "general-purpose",
-            "description": "General-purpose agent for researching complex questions, searching for files and content, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries use this agent to perform the search for you. This agent has access to all tools as the main agent.",
+            "description": "通用子代理：研究复杂问题、搜索文件内容、执行多步任务；关键词/文件首查无果时交其代查；工具权限与主代理一致。",
             "system_prompt": SUBAGENT_PROMPT,
             "middleware": subagent_middleware,
         }

@@ -42,12 +42,11 @@ async def build_env_var_prompt_sections(
         prompt_sections = ()
     else:
         intro_lines = [
-            "## Available Environment Variables",
+            "## 可用环境变量",
             "",
-            "The following environment variables are configured for sandbox execution. "
-            "Their secret contents are not shown. Use the names directly in shell commands "
-            "or code, for example `$FIRECRAWL_API_KEY` in shell or "
-            '`os.environ.get("FIRECRAWL_API_KEY")` in Python. Do not print or reveal secrets.',
+            "以下环境变量已配置用于沙箱执行，仅列键名（值不显示）。",
+            "shell 或代码中直接引用键名，例如 shell 用 `$FIRECRAWL_API_KEY`，",
+            'Python 用 `os.environ.get("FIRECRAWL_API_KEY")`。禁止打印或泄露密钥。',
         ]
         key_lines = [f"- `{key}`" for key in keys]
         prompt_sections = ("\n".join(intro_lines), "\n".join(key_lines))

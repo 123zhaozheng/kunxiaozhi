@@ -42,12 +42,10 @@ def build_persona_skill_harness_section(
         return ""
 
     lines = [
-        "## Persona skill capabilities",
-        "The active Persona recommends the exact Marketplace skills below.",
-        "When the user's task matches one of these descriptions, call "
-        "`install_skill` with that exact skill name before doing the task.",
-        "Do not call `find_skills` first for these named skills. Install only skills "
-        "that are relevant to the current task, then follow the returned path and read SKILL.md.",
+        "## Persona 技能能力",
+        "当前 Persona 推荐下列精确技能：任务命中某条描述时，",
+        "直接以该技能名调用 `install_skill`，勿先 `find_skills`。",
+        "只安装与当前任务相关的技能，按返回路径读取 SKILL.md。",
         "",
     ]
     lines.extend(f"- `{hint.name}`: {hint.description}" for hint in hints)
