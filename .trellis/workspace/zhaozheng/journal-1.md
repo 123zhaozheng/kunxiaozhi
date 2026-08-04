@@ -840,3 +840,24 @@ Added admin-configurable 3-hour idle sessions with Redis-backed sid state, atomi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 26: 08-04 persona 点赞/点踩通知（Web 实时 + 企微主动推送）
+
+**Date**: 2026-08-04
+**Task**: 08-04 persona 点赞/点踩通知（Web 实时 + 企微主动推送）
+**Branch**: `main`
+
+### Summary
+
+新增 persona 反馈通知：feedback_notify_targets 配置、绑定指令、双渠道分发、admin API、前端三层通知显示。排查：aibotid 双 preset 孤儿配置、appNotificationService 浏览器静默失败、分段回复后续段无 feedback（已知限制）。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `612383e3` | (see git log) |
+
+### Status
+
+[OK] **Completed**
