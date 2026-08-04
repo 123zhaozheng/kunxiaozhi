@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 26
+- **Total Sessions**: 27
 - **Last Active**: 2026-08-04
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~863 | Active |
+| `journal-1.md` | ~884 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 27 | 2026-08-04 | 删除 harness legacy/compact_en 模式，固化 compact_zh | `484367fd` | `main` |
 | 26 | 2026-08-04 | 08-04 persona 点赞/点踩通知（Web 实时 + 企微主动推送） | `612383e3` | `main` |
 | 25 | 2026-08-03 | Configurable idle login timeout | `e9d93971` | `main` |
 | 24 | 2026-08-03 | Finish Builtin Skill visibility and Trellis upgrade | `ed9db302`, `e0c5babb` | `main` |

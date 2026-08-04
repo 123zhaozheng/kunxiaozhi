@@ -861,3 +861,24 @@ Added admin-configurable 3-hour idle sessions with Redis-backed sid state, atomi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 27: 删除 harness legacy/compact_en 模式，固化 compact_zh
+
+**Date**: 2026-08-04
+**Task**: 删除 harness legacy/compact_en 模式，固化 compact_zh
+**Branch**: `main`
+
+### Summary
+
+删除 AGENT_HARNESS_MODE 三模式开关，hardcode compact_zh；catalog 从 10 工具扩充到 31 个；英文系统段翻译为浓缩中文；修复 CallableSchema 序列化崩溃；spec 新增新工具须加中文 catalog 约定
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `484367fd` | (see git log) |
+
+### Status
+
+[OK] **Completed**
