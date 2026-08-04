@@ -172,7 +172,7 @@ async def test_env_var_prompt_lists_keys_without_values(monkeypatch: pytest.Monk
 
     prompt = await env_var_prompt.build_env_var_prompt("user-1")
 
-    assert "## Available Environment Variables" in prompt
+    assert "## 可用环境变量" in prompt
     assert "`FIRECRAWL_API_KEY`" in prompt
     assert "$FIRECRAWL_API_KEY" in prompt
     assert "os.environ" in prompt
@@ -193,7 +193,7 @@ async def test_env_var_prompt_sections_split_intro_and_key_list(
     sections = await env_var_prompt.build_env_var_prompt_sections("user-1")
 
     assert len(sections) == 2
-    assert "## Available Environment Variables" in sections[0]
+    assert "## 可用环境变量" in sections[0]
     assert "`FIRECRAWL_API_KEY`" in sections[1]
     assert "os.environ" not in sections[1]
 
@@ -222,7 +222,7 @@ async def test_env_var_prompt_middleware_appends_key_list(
 
     async def fake_build_env_var_prompt_sections(user_id: str) -> tuple[str, ...]:
         assert user_id == "user-1"
-        return ("## Available Environment Variables", "- `FIRECRAWL_API_KEY`")
+        return ("## 可用环境变量", "- `FIRECRAWL_API_KEY`")
 
     monkeypatch.setattr(
         env_var_prompt,
@@ -244,7 +244,7 @@ async def test_env_var_prompt_middleware_appends_key_list(
     assert result == "ok"
     assert captured[0].system_message.content == [
         {"type": "text", "text": "base"},
-        {"type": "text", "text": "## Available Environment Variables"},
+        {"type": "text", "text": "## 可用环境变量"},
         {"type": "text", "text": "- `FIRECRAWL_API_KEY`"},
     ]
 

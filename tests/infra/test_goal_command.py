@@ -21,10 +21,10 @@ def test_build_goal_prompt_section_matches_traditional_goal_behavior() -> None:
 
     section = build_goal_prompt_section(goal.model_dump())
 
-    assert "Active Goal" in section
+    assert "当前目标" in section
     assert "migrate billing" in section
-    assert "Do not mark the goal complete" in section
-    assert "Every explicit requirement" in section
+    assert "不得判定完成" in section
+    assert "每条显式要求" in section
 
 
 def test_create_goal_rubric_middleware_uses_installed_deepagents_support() -> None:

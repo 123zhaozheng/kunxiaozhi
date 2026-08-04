@@ -1,14 +1,11 @@
 """Harness prompt contracts; direct module assertions require default compact_zh."""
 
-import hashlib
 import importlib.util
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
-
-import pytest
 
 from src.agents.core.subagent_prompts import (
     DEFAULT_SUBAGENT_PROMPT,
@@ -160,7 +157,7 @@ def test_search_agent_uses_single_section_prompt_middleware_instance() -> None:
     assert "_prompt_sections.append(" in source
 
 
-def _prompt_contract_for_mode(mode: str) -> dict[str, str]:
+def _prompt_contract_for_zh() -> dict[str, str]:
     script = """
 import json
 from src.agents.core.subagent_prompts import (
@@ -180,12 +177,9 @@ print(json.dumps({
     "memory": get_memory_guide(),
 }, ensure_ascii=False))
 """
-    env = os.environ.copy()
-    env["AGENT_HARNESS_MODE"] = mode
     completed = subprocess.run(
         [sys.executable, "-c", script],
         cwd=os.getcwd(),
-        env=env,
         check=True,
         capture_output=True,
         text=True,
@@ -193,9 +187,8 @@ print(json.dumps({
     return json.loads(completed.stdout.strip().splitlines()[-1])
 
 
-@pytest.mark.parametrize("mode", ["legacy", "compact_en", "compact_zh"])
-def test_each_mode_preserves_critical_prompt_contracts(mode: str) -> None:
-    prompts = _prompt_contract_for_mode(mode)
+def test_zh_harness_preserves_critical_prompt_contracts() -> None:
+    prompts = _prompt_contract_for_zh()
     for handoff in (prompts["default"], prompts["detailed"]):
         for phrase in (
             "## Handoff Notes",
@@ -219,28 +212,6 @@ def test_each_mode_preserves_critical_prompt_contracts(mode: str) -> None:
     for identifier in ("<memory_index>", "memory_retain", "memory_recall", "memory_delete"):
         assert identifier in prompts["memory"]
 
-    if mode == "compact_zh":
-        assert "等待 `write_file` 完成，再调用 `reveal_file`" in prompts["reveal"]
-        for phrase in ("查看/打开/显示", "昨天", "本周", "最终答复前"):
-            assert phrase in prompts["reveal"] + prompts["safety"]
-    else:
-        assert "Call `write_file` first" in prompts["reveal"]
-        for phrase in ("see/open/show", "today", "tomorrow", "yesterday", "latest"):
-            assert phrase in prompts["reveal"] + prompts["safety"]
-
-
-def test_legacy_prompt_rollback_fixture_is_pinned() -> None:
-    prompts = _prompt_contract_for_mode("legacy")
-    expected = {
-        "default": "123c559769144852ae2f14852d08faa1f596852e39cfb8da4cfda3b89d730884",
-        "detailed": "c134b55e9ffcc62620baf4641a931e889c065025631769771feda8169db76b82",
-        "reveal": "bcabaa1811ca026ad33f5274d078cb3d6dfb2fb335a31a9d0bb8cbf40077f0a9",
-        "safety": "1465107280b03d27671e2932dfb2475cb7e7279244967e1aa182feb72cbb64f6",
-        "task": "d68dd46fb70fc2c4050a0e85b6b30651d43d29cb41f08f645a765bb46be09473",
-        "memory": "4a4ebc0fa78e05d676207cac0f86037f7c5a77cce4e0b7ec7c611dccbf95d5e3",
-    }
-    actual = {
-        name: hashlib.sha256(value.encode()).hexdigest()
-        for name, value in prompts.items()
-    }
-    assert actual == expected
+    assert "等待 `write_file` 完成，再调用 `reveal_file`" in prompts["reveal"]
+    for phrase in ("查看/打开/显示", "昨天", "本周", "最终答复前"):
+        assert phrase in prompts["reveal"] + prompts["safety"]

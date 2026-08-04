@@ -57,7 +57,7 @@ def test_build_team_members_description_includes_runtime_role_summaries():
         role_summaries={"m1": "Investigates sources and verifies claims."},
     )
 
-    assert "Capability summary: Investigates sources and verifies claims." in desc
+    assert "能力: Investigates sources and verifies claims." in desc
 
 
 def test_team_router_prompt_includes_team_instructions():
@@ -82,7 +82,7 @@ def test_team_router_prompt_includes_team_instructions():
         role_summaries={"m1": "Finds evidence."},
     )
 
-    assert "## Team Instructions" in prompt
+    assert "## 团队指令" in prompt
     assert "Research before writing" in prompt
     assert "Finds evidence." in prompt
 
@@ -107,8 +107,8 @@ def test_team_router_prompt_forbids_coordination_notification_tasks():
         default_role="team-m1-writer",
     )
 
-    assert "Do not dispatch onboarding, coordination, reminder, or notification messages" in prompt
-    assert "The `task` tool is for work assignments only" in prompt
+    assert "不发送协调/提醒消息" in prompt
+    assert "用 `task` 分派" in prompt
 
 
 def test_build_team_members_description_skips_disabled():

@@ -1,4 +1,4 @@
-"""Mode, size, and contract tests for the reversible harness."""
+"""Size and contract tests for the compact_zh harness."""
 
 from __future__ import annotations
 
@@ -18,13 +18,12 @@ from langchain_core.tools import BaseTool, tool
 
 from src.agents.core.harness_prompt_overrides import (
     VENDOR_AVAILABLE_AGENTS_HEADING,
+    ZH_CATALOG,
     HarnessLocalizationMiddleware,
     build_harness_extra_middleware,
     build_short_todo_middleware,
-    catalog_for_mode,
     localize_tool_for_model,
 )
-from src.kernel.config import normalize_harness_mode
 
 
 def _without_annotations(value: Any) -> Any:
@@ -43,41 +42,15 @@ def _builtin_tools() -> list[BaseTool]:
     return [*FilesystemMiddleware().tools, *TodoListMiddleware().tools]
 
 
-def test_mode_validation_and_catalogs() -> None:
-    assert normalize_harness_mode(" Compact_ZH ") == "compact_zh"
-    with pytest.raises(ValueError, match="AGENT_HARNESS_MODE"):
-        normalize_harness_mode("broken")
-
-    for mode in ("compact_en", "compact_zh"):
-        catalog = catalog_for_mode(mode)
-        assert "{available_agents}" in catalog.tool_descriptions["task"]
-        assert len(catalog.tool_descriptions["task"]) < 600
-        assert len(catalog.tool_descriptions["write_todos"]) < 300
-        assert len(catalog.write_todos_system) < 200
-
-
-def test_mode_setting_is_typed_visible_and_restart_required() -> None:
-    from pydantic import ValidationError
-
-    from src.kernel.config.base import Settings
-    from src.kernel.config.constants import RESTART_REQUIRED_SETTINGS
-    from src.kernel.config.definitions import SETTING_DEFINITIONS, SettingType
-
-    definition = SETTING_DEFINITIONS["AGENT_HARNESS_MODE"]
-    assert definition["type"] is SettingType.SELECT
-    assert definition["default"] == "compact_zh"
-    assert definition["options"] == ["legacy", "compact_en", "compact_zh"]
-    assert (
-        Settings(_env_file=None, AGENT_HARNESS_MODE=" Compact_ZH ").AGENT_HARNESS_MODE
-        == "compact_zh"
-    )
-    assert "AGENT_HARNESS_MODE" in RESTART_REQUIRED_SETTINGS
-    with pytest.raises(ValidationError):
-        Settings(_env_file=None, AGENT_HARNESS_MODE="broken")
+def test_zh_catalog_contracts() -> None:
+    assert "{available_agents}" in ZH_CATALOG.tool_descriptions["task"]
+    assert len(ZH_CATALOG.tool_descriptions["task"]) < 600
+    assert len(ZH_CATALOG.tool_descriptions["write_todos"]) < 300
+    assert len(ZH_CATALOG.write_todos_system) < 200
 
 
 def test_compact_zh_uses_chinese_human_guidance() -> None:
-    catalog = catalog_for_mode("compact_zh")
+    catalog = ZH_CATALOG
     assert "执行" in catalog.tool_descriptions["task"]
     assert "复杂多步" in catalog.tool_descriptions["write_todos"]
     assert "文件规则" in catalog.filesystem_system
@@ -88,7 +61,7 @@ def test_todo_replacement_survives_exact_type_exclusion() -> None:
     from deepagents import HarnessProfile
     from deepagents._excluded_middleware import _apply_excluded_middleware
 
-    compact = build_short_todo_middleware("compact_zh")
+    compact = build_short_todo_middleware()
     assert len(compact) == 1
     assert type(compact[0]) is not TodoListMiddleware
     remaining = _apply_excluded_middleware(
@@ -98,7 +71,7 @@ def test_todo_replacement_survives_exact_type_exclusion() -> None:
     assert remaining == compact
     assert "write_todos" in {item.name for item in compact[0].tools}
     todo_tool = next(item for item in compact[0].tools if item.name == "write_todos")
-    expected = catalog_for_mode("compact_zh").tool_descriptions["write_todos"]
+    expected = ZH_CATALOG.tool_descriptions["write_todos"]
     assert todo_tool.description == expected
     assert "恰好一项 in_progress" in todo_tool.description
     assert "禁止并行调用" in todo_tool.description
@@ -111,7 +84,7 @@ def test_model_view_preserves_middleware_rendered_tool_descriptions() -> None:
     from deepagents.middleware.subagents import SubAgentMiddleware
     from langchain_openai import ChatOpenAI
 
-    catalog = catalog_for_mode("compact_zh")
+    catalog = ZH_CATALOG
     middleware = SubAgentMiddleware(
         backend=StateBackend(),
         subagents=[
@@ -158,7 +131,7 @@ def test_vendor_system_prompt_snapshots_are_pinned() -> None:
 
 
 def test_schema_localization_preserves_machine_contract() -> None:
-    catalog = catalog_for_mode("compact_zh")
+    catalog = ZH_CATALOG
     for original in _builtin_tools():
         localized = localize_tool_for_model(original, catalog)
         assert isinstance(localized, BaseTool)
@@ -177,7 +150,7 @@ def test_search_tools_schema_and_description_are_localized() -> None:
     from src.infra.tool.tool_search_tool import ToolSearchTool
 
     original = ToolSearchTool(manager=object())  # type: ignore[arg-type]
-    catalog = catalog_for_mode("compact_zh")
+    catalog = ZH_CATALOG
     localized = localize_tool_for_model(original, catalog)
 
     assert localized.description == catalog.tool_descriptions["search_tools"]
@@ -188,7 +161,7 @@ def test_search_tools_schema_and_description_are_localized() -> None:
 
 
 def test_schema_localization_preserves_cache_extras_and_unknown_tools() -> None:
-    catalog = catalog_for_mode("compact_zh")
+    catalog = ZH_CATALOG
     source = _builtin_tools()[0].model_copy(
         update={"extras": {"cache_control": {"type": "ephemeral"}, "x": 1}}
     )
@@ -224,9 +197,9 @@ def test_original_pydantic_schemas_still_enforce_required_defaults_and_enums() -
 
 
 def test_compact_tools_are_smaller_than_native_vendor_schemas() -> None:
-    catalog = catalog_for_mode("compact_zh")
+    catalog = ZH_CATALOG
     originals = _builtin_tools()
-    legacy_payload = [
+    native_payload = [
         {
             "name": item.name,
             "description": item.description,
@@ -242,17 +215,16 @@ def test_compact_tools_are_smaller_than_native_vendor_schemas() -> None:
         }
         for item in originals
     ]
-    legacy_chars = len(json.dumps(legacy_payload, ensure_ascii=False))
+    native_chars = len(json.dumps(native_payload, ensure_ascii=False))
     compact_chars = len(json.dumps(compact_payload, ensure_ascii=False))
-    assert compact_chars < legacy_chars * 0.65
+    assert compact_chars < native_chars * 0.65
 
 
 def test_extra_middleware_contains_todo_and_localizer() -> None:
-    middleware = list(build_harness_extra_middleware("compact_zh"))
+    middleware = list(build_harness_extra_middleware())
     assert len(middleware) == 2
     assert type(middleware[0]) is not TodoListMiddleware
     assert isinstance(middleware[1], HarnessLocalizationMiddleware)
-    assert build_harness_extra_middleware("legacy") == ()
 
 
 def test_localizer_rewrites_final_model_request_without_replacing_runtime_tools() -> None:
@@ -278,7 +250,7 @@ def test_localizer_rewrites_final_model_request_without_replacing_runtime_tools(
         system_message=SystemMessage(content=vendor_system),
         tools=[original],
     )
-    localized = HarnessLocalizationMiddleware(catalog_for_mode("compact_zh"))._override(
+    localized = HarnessLocalizationMiddleware(ZH_CATALOG)._override(
         request
     )
 
@@ -316,50 +288,35 @@ def test_shared_profile_resolves_for_supported_adapters() -> None:
         assert len(profile.materialize_extra_middleware()) == 2
 
 
-def test_three_modes_boot_in_isolated_processes() -> None:
+def test_zh_harness_boots_in_isolated_process() -> None:
     script = """
 import json
-from src.kernel.config import settings
 import src.agents.core.persona as persona
 from src.agents.fast_agent.prompt import FAST_SYSTEM_PROMPT
 print(json.dumps({
-    "mode": settings.AGENT_HARNESS_MODE,
     "behavior": persona._BEHAVIOR_GUIDE,
     "fast": FAST_SYSTEM_PROMPT,
 }, ensure_ascii=False))
 """
-    results: dict[str, dict[str, str]] = {}
-    for mode in ("legacy", "compact_en", "compact_zh"):
-        env = os.environ.copy()
-        env["AGENT_HARNESS_MODE"] = mode
-        completed = subprocess.run(
-            [sys.executable, "-c", script],
-            cwd=os.getcwd(),
-            env=env,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        results[mode] = json.loads(completed.stdout.strip().splitlines()[-1])
-
-    assert results["compact_zh"]["mode"] == "compact_zh"
-    assert "工作闭环" in results["compact_zh"]["behavior"]
-    assert "Be concise" in results["compact_en"]["behavior"]
-    assert "Core Behavior" in results["legacy"]["behavior"]
-    assert len(results["compact_zh"]["fast"]) < len(results["legacy"]["fast"])
-
-
-def test_deferred_manager_can_be_imported_first_without_cycle() -> None:
     completed = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "import src.infra.tool.deferred_manager as dm; print(dm._HARNESS_MODE)",
-        ],
+        [sys.executable, "-c", script],
         cwd=os.getcwd(),
-        env={**os.environ, "AGENT_HARNESS_MODE": "compact_zh"},
         check=True,
         capture_output=True,
         text=True,
     )
-    assert completed.stdout.strip().splitlines()[-1] == "compact_zh"
+    result = json.loads(completed.stdout.strip().splitlines()[-1])
+
+    assert "工作闭环" in result["behavior"]
+    assert len(result["fast"]) < 500
+
+
+def test_deferred_manager_can_be_imported_first_without_cycle() -> None:
+    completed = subprocess.run(
+        [sys.executable, "-c", "import src.infra.tool.deferred_manager"],
+        cwd=os.getcwd(),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0

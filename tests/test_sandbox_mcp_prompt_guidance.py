@@ -165,7 +165,7 @@ def test_sandbox_mcp_prompt_tells_model_to_use_mcporter_not_search_tools() -> No
     )
 
     assert total == 1
-    assert "NOT MCP" in prompt
+    assert "非 MCP" in prompt
     assert "execute" in prompt
     assert "mcporter call" in prompt
 
@@ -195,7 +195,7 @@ def test_sandbox_mcp_prompt_sections_split_intro_and_tool_listing() -> None:
 
     assert total == 1
     assert len(sections) == 2
-    assert "Sandbox Tools" in sections[0]
+    assert "沙箱工具" in sections[0]
     assert "`playwright.screenshot`" in sections[1]
 
 
@@ -230,8 +230,8 @@ def test_sandbox_mcp_prompt_requires_service_specific_schema_inspection_before_f
     )
 
     assert total == 1
-    assert "before the first `mcporter call`" in prompt
-    assert "must inspect its parameters via `execute`" in prompt
+    assert "首个 `mcporter call` 前" in prompt
+    assert "先用 `execute` 检查参数" in prompt
     assert "`mcporter list <service> --schema`" in prompt
     assert "`mcporter list`" in prompt
 
@@ -260,9 +260,9 @@ def test_sandbox_mcp_prompt_discourages_repo_wide_grep_searches() -> None:
     )
 
     assert total == 1
-    assert "avoid repo-wide searches" in prompt
-    assert "use `ls` or `glob` first" in prompt
-    assert "narrow `path` before `grep`" in prompt
+    assert "避免全仓搜索" in prompt
+    assert "先用 `ls`/`glob` 缩小范围" in prompt
+    assert "再针对具体 `path` 用 `grep`" in prompt
 
 
 def test_sandbox_mcp_prompt_cache_eviction_caps_users(monkeypatch: pytest.MonkeyPatch) -> None:

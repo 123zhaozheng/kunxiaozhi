@@ -727,7 +727,7 @@ async def test_team_role_subagent_prompt_includes_role_instructions_and_skills(
     assert "你是小红书风格文案写手，语气活泼可爱。" in sections
     assert "### 角色指令" in sections
     assert "多用 emoji，保持小红书博主语气。" in sections
-    assert "## Skills System" in sections
+    assert "## 技能" in sections
     assert "xiaohongshu-copy" in sections
     assert "unrelated-skill" not in sections
     assert fake_graph.captured_inner_config is not None
@@ -738,7 +738,7 @@ async def test_team_role_subagent_prompt_includes_role_instructions_and_skills(
     )
     router_sections = "\n\n".join(router_section_middleware._sections)
     assert "## Persona" not in router_sections
-    assert "## Skills System" not in router_sections
+    assert "## 技能" not in router_sections
     assert "xiaohongshu-copy" not in router_sections
 
 
@@ -810,7 +810,7 @@ async def test_team_role_subagent_inherits_global_skills_when_role_skills_are_em
     section_middleware = next(mw for mw in subagent["middleware"] if hasattr(mw, "_sections"))
     sections = "\n\n".join(section_middleware._sections)
     assert "你是诗词卡片设计师。" in sections
-    assert "## Skills System" in sections
+    assert "## 技能" in sections
     assert "redbook-publish" in sections
 
     router_section_middleware = next(

@@ -76,8 +76,8 @@ def test_session_stable_runtime_system_sections_are_cacheable() -> None:
             "type": "text",
             "text": "## Sandbox Runtime\n\nCurrent sandbox work_dir: `/tmp/session-a`",
         },
-        {"type": "text", "text": "## Sandbox Tools (NOT MCP — DO NOT call directly)"},
-        {"type": "text", "text": "## Available Environment Variables"},
+        {"type": "text", "text": "## 沙箱工具（非 MCP，禁止直接调用）"},
+        {"type": "text", "text": "## 可用环境变量"},
         {"type": "text", "text": "## Available Skills\n\n- RedBookSkills"},
         {"type": "text", "text": "## Current Workspace\n\ncwd: /workspace/project"},
     ]
@@ -112,8 +112,8 @@ def test_retag_system_message_keeps_session_stable_runtime_sections_in_cache_pre
             {"type": "text", "text": "base"},
             {"type": "text", "text": "persona"},
             {"type": "text", "text": "## Sandbox Runtime\n\nwork_dir: /tmp/session-a"},
-            {"type": "text", "text": "## Sandbox Tools (NOT MCP — DO NOT call directly)"},
-            {"type": "text", "text": "## Available Environment Variables"},
+            {"type": "text", "text": "## 沙箱工具（非 MCP，禁止直接调用）"},
+            {"type": "text", "text": "## 可用环境变量"},
             {"type": "text", "text": "<memory_index>\n- preference\n</memory_index>"},
         ]
     )
