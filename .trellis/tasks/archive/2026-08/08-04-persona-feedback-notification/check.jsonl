@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量检查（ruff/mypy/pytest）"}
+{"file": ".trellis/spec/backend/wecom-runtime-delivery.md", "reason": "WeCom 契约合规性"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "前端类型安全"}
