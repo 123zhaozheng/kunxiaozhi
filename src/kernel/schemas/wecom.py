@@ -45,6 +45,10 @@ class PersonaWeComConfigBase(BaseModel):
         description="分段回复每段目标字符数；实际仍受企业微信 UTF-8 字节上限约束",
     )
     session_ttl_hours: int = Field(24, description="会话 TTL 小时数，0 表示永不过期")
+    feedback_notify_targets: list[str] = Field(
+        default_factory=list,
+        description="点赞/点踩通知对象（企业微信 userid / 昆小智 username 列表，空则不通知）",
+    )
 
 
 class PersonaWeComConfigCreate(PersonaWeComConfigBase):
@@ -69,6 +73,7 @@ class PersonaWeComConfigUpdate(BaseModel):
         le=WECOM_SEGMENT_TARGET_CHARS_MAX,
     )
     session_ttl_hours: Optional[int] = None
+    feedback_notify_targets: Optional[list[str]] = None
 
 
 class PersonaWeComConfig(BaseModel):
@@ -82,5 +87,6 @@ class PersonaWeComConfig(BaseModel):
     segmented_reply: bool = True
     segment_target_chars: int = WECOM_DEFAULT_SEGMENT_TARGET_CHARS
     session_ttl_hours: int = 24
+    feedback_notify_targets: list[str] = Field(default_factory=list)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

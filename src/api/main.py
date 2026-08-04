@@ -360,6 +360,11 @@ def _startup_index_initializers():
         await AnalyticsStorage().ensure_indexes()
         logger.info("AnalyticsStorage indexes initialized")
 
+    async def _init_wecom_notify_bindings() -> None:
+        from src.infra.agent.wecom.binding import WeComNotifyBindingStorage
+
+        await WeComNotifyBindingStorage().create_indexes()
+
     return [
         ("agent_config_storage", _init_agent_config_storage),
         ("model_storage", _init_model_storage),
@@ -369,6 +374,7 @@ def _startup_index_initializers():
         ("revealed_file_storage", _init_revealed_file_storage),
         ("notification_storage", _init_notification_storage),
         ("analytics_storage", _init_analytics_storage),
+        ("wecom_notify_bindings", _init_wecom_notify_bindings),
     ]
 
 

@@ -368,6 +368,7 @@ class AgentConfigStorage:
                 "segment_target_chars", WECOM_DEFAULT_SEGMENT_TARGET_CHARS
             ),
             session_ttl_hours=doc.get("session_ttl_hours", 24),
+            feedback_notify_targets=doc.get("feedback_notify_targets", []),
             created_at=doc.get("created_at"),
             updated_at=doc.get("updated_at"),
         )
@@ -382,7 +383,8 @@ class AgentConfigStorage:
             aibotid: 企业微信机器人 ID
             secret: 机器人密钥（None 表示保留原值）
             **kwargs: 其他可选字段（stream_reply, send_thinking_message,
-                segmented_reply, segment_target_chars, session_ttl_hours）
+                segmented_reply, segment_target_chars, session_ttl_hours,
+                feedback_notify_targets）
         """
         now = utc_now()
         update_fields: dict[str, Any] = {
@@ -397,6 +399,7 @@ class AgentConfigStorage:
             "segmented_reply",
             "segment_target_chars",
             "session_ttl_hours",
+            "feedback_notify_targets",
         ):
             if key in kwargs and kwargs[key] is not None:
                 update_fields[key] = kwargs[key]
@@ -415,6 +418,7 @@ class AgentConfigStorage:
                 "segment_target_chars", WECOM_DEFAULT_SEGMENT_TARGET_CHARS
             )
             update_fields.setdefault("session_ttl_hours", 24)
+            update_fields.setdefault("feedback_notify_targets", [])
             if secret is not None and secret != "":
                 update_fields.setdefault("secret", secret)
 

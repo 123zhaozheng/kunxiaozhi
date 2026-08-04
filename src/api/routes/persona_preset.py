@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
 from src.api.deps import require_permissions
 from src.infra.agent.config_storage import get_agent_config_storage
+from src.infra.agent.wecom.binding import WeComNotifyBindingStorage
 from src.infra.logging import get_logger
 from src.infra.persona_preset.manager import PersonaPresetManager, PersonaSkillBindingError
 from src.kernel.exceptions import AuthorizationError, NotFoundError
@@ -20,6 +21,11 @@ from src.kernel.schemas.persona_preset import (
 )
 from src.kernel.schemas.user import TokenPayload
 from src.kernel.schemas.wecom import PersonaWeComConfig, PersonaWeComConfigCreate
+from src.kernel.schemas.wecom_notify import (
+    NotifyTargetItem,
+    NotifyTargetsResponse,
+    NotifyTargetsUpdate,
+)
 from src.kernel.schemas.wecom_status import (
     WeComConnectionStatus,
     WeComStatusBatchRequest,
@@ -380,6 +386,53 @@ async def set_persona_wecom_config(
         logger.warning("Failed to reload WeCom bot for preset %s: %s", preset_id, e)
 
     return config
+
+
+@router.get("/{preset_id}/wecom/notify-targets", response_model=NotifyTargetsResponse)
+async def get_persona_wecom_notify_targets(
+    preset_id: str,
+    _: TokenPayload = Depends(require_permissions("channel:manage")),
+):
+    """获取 persona preset 的企业微信通知目标（含绑定状态）"""
+    await _validate_global_preset(preset_id)
+
+    storage = get_agent_config_storage()
+    config = await storage.get_persona_wecom_config(preset_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="wecom_config_not_found")
+
+    targets = config.feedback_notify_targets or []
+    bound = await WeComNotifyBindingStorage().list_bound(config.aibotid, targets)
+    return NotifyTargetsResponse(
+        targets=[NotifyTargetItem(username=t, bound=t in bound) for t in targets]
+    )
+
+
+@router.put("/{preset_id}/wecom/notify-targets", response_model=NotifyTargetsResponse)
+async def update_persona_wecom_notify_targets(
+    preset_id: str,
+    data: NotifyTargetsUpdate,
+    _: TokenPayload = Depends(require_permissions("channel:manage")),
+):
+    """全量更新 persona preset 的企业微信通知目标（含绑定状态）"""
+    await _validate_global_preset(preset_id)
+
+    storage = get_agent_config_storage()
+    config = await storage.get_persona_wecom_config(preset_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="wecom_config_not_found")
+
+    config = await storage.set_persona_wecom_config(
+        preset_id=preset_id,
+        aibotid=config.aibotid,
+        feedback_notify_targets=data.targets,
+    )
+
+    targets = config.feedback_notify_targets or []
+    bound = await WeComNotifyBindingStorage().list_bound(config.aibotid, targets)
+    return NotifyTargetsResponse(
+        targets=[NotifyTargetItem(username=t, bound=t in bound) for t in targets]
+    )
 
 
 @router.delete("/{preset_id}/wecom")

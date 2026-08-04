@@ -610,6 +610,33 @@ def create_wecom_message_handler(
         aibotid = metadata.get("aibotid", "")
         delivery_chat_id = chat_id
 
+        # ── 绑定通知指令：在 persona 路由之前识别处理，不进入 AI 会话 ──
+        if content.strip() == "绑定通知":
+            try:
+                from src.infra.agent.wecom.binding import WeComNotifyBindingStorage
+
+                await WeComNotifyBindingStorage().upsert(aibotid, sender_id)
+            except Exception as e:
+                logger.warning(
+                    "[WeCom] Failed to upsert notify binding %s/%s: %s",
+                    aibotid,
+                    sender_id,
+                    e,
+                )
+            try:
+                await manager.send_message(
+                    aibotid,
+                    delivery_chat_id,
+                    "绑定成功！之后该机器人的点赞/点踩通知会推送到这里。",
+                )
+            except Exception as e:
+                logger.warning(
+                    "[WeCom] Failed to send bind confirmation to %s: %s",
+                    sender_id,
+                    e,
+                )
+            return
+
         try:
             logger.info(
                 "[WeCom] Processing message from %s, aibotid=%s: %s...",
@@ -1199,6 +1226,54 @@ async def _handle_wecom_feedback(
             run_id,
             sender_id,
         )
+
+        # ── 通知 persona 的通知对象（Web 实时 + WeCom 主动推送）────
+        # 通知失败绝不影响反馈写入，整体 try/except 兜底。
+        try:
+            from src.infra.agent.wecom.manager import get_wecom_bot_manager
+            from src.infra.notification.feedback_notifier import (
+                notify_persona_feedback,
+            )
+            from src.infra.persona_preset.manager import PersonaPresetManager
+
+            preset_id = get_wecom_bot_manager().get_preset_id_for_aibotid(aibotid)
+            if not preset_id:
+                logger.warning(
+                    "[WeCom Feedback] No preset mapping for aibotid=%s, skipping feedback notification",
+                    aibotid,
+                )
+            else:
+                preset_name = preset_id
+                try:
+                    preset = await PersonaPresetManager().get_preset(
+                        preset_id,
+                        user_id="",
+                        is_admin=True,
+                    )
+                    if preset:
+                        preset_name = preset.name
+                except Exception as e:
+                    logger.warning(
+                        "[WeCom Feedback] Failed to load preset name for %s: %s",
+                        preset_id,
+                        e,
+                    )
+                await notify_persona_feedback(
+                    preset_id=preset_id,
+                    preset_name=preset_name,
+                    rating=rating,
+                    operator=sender_id,
+                    comment=comment,
+                    aibotid=aibotid,
+                    session_id=session_id,
+                    run_id=run_id,
+                )
+        except Exception as e:
+            logger.warning(
+                "[WeCom Feedback] Feedback notification failed for run %s: %s",
+                run_id,
+                e,
+            )
     except ValueError as e:
         # Duplicate from concurrent request
         logger.warning(
