@@ -23,6 +23,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [WeCom Persona Connection Status](./wecom-persona-connection-status.md) | Redis WS health, runtime isolation/control, status/reconnect API, plaza `has_wecom` vs admin poll | Filled |
 | [WeCom Deployment Network Settings](./wecom-network-settings.md) | Admin-managed direct/DMZ WSS and media routing, scoped proxy/CA, immediate reload and rollback | Filled |
 | [WeCom Runtime & Delivery](./wecom-runtime-delivery.md) | Bot-scoped sessions, cross-channel Persona parity/restore, long-text segmentation, reveal-file boundary | Filled |
+| [WeCom Feedback Notification](./wecom-notification.md) | Persona like/dislike → Web + WeCom notify, bind command, `feedback_notify_targets`, segmented-reply feedback gap | Filled |
 | [Persona Preferred Agent](./persona-preferred-agent.md) | `preferred_agent_id` (fast/search/team), shared resolve, Web/WeCom parity | Filled |
 | [Analytics Persona & Lists](./analytics-persona-and-lists.md) | Dual-dimension lists/CSV, single-Persona analyze boundary, users `_id` join, trace persona merge | Filled |
 | [Sandbox Provider Integration](./sandbox-providers.md) | Pluggable sandbox provider kit (Daytona/E2B/OpenSandbox): backend+factory+adapter+dispatch, sync-SDK wrapping, cross-session reuse | Filled |

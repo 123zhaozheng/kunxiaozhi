@@ -94,6 +94,16 @@ This pattern is used for: `persistentToolPanelState`, `activeRevealPreviewStore`
 
 ---
 
+## Real-time Notification Display Pattern
+
+WebSocket-driven notifications (e.g. `useWebSocketNotifications` handling `task:complete` / `notification:feedback`) must use a **three-layer display**:
+
+1. `appNotificationService.notify(...)` — native runtime only (tauri / capacitor-android). In a plain browser `detectAppNotificationRuntime()` returns `"unsupported"` and `notify()` **silently drops** the notification (`getAdapter()` → null). Never rely on it alone for browser users.
+2. `useBrowserNotification().notify(...)` — browser Notification API, gated by `shouldAttemptBrowserNotification({ isSupported, cachedPermission: permission })` and only when `appNotificationService.getRuntime() === "unsupported"`.
+3. `toast.custom(...)` / `toast(...)` — universal fallback visible in every runtime.
+
+Guard each layer individually; a notification that hits only layer 1 will be invisible to web users (learned 2026-08-04: `notification:feedback` initially wired to layer 1 only, silently lost in browser).
+
 ## Common Mistakes
 
 - ❌ Don't put side effects in hook bodies without `useEffect`
