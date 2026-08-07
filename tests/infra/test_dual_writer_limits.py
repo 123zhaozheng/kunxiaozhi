@@ -394,3 +394,96 @@ async def test_flush_mongo_buffer_offloads_bulk_operation_building(
     assert calls == ["_build_mongo_bulk_operations"]
     assert len(writer.trace.collection.operations) == 1
     assert writer._mongo_buffer == []
+
+
+@pytest.mark.asyncio
+async def test_merge_read_uses_trace_array_ordinal_for_legacy_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Backfill IDs and merge fallback IDs must identify the same event."""
+
+    class _Trace:
+        async def get_event_store_session_events(self, session_id: str, **kwargs):
+            del session_id, kwargs
+            return [
+                {
+                    "trace_id": "trace-2",
+                    "event_id": dual_writer.TraceStorage.legacy_event_id(
+                        "trace-2", 0, {
+                            "event_type": "done",
+                            "data": {},
+                            "timestamp": "t3",
+                            "seq": 3,
+                        }
+                    ),
+                    "seq": 3,
+                    "event_type": "done",
+                    "data": {},
+                    "timestamp": "t3",
+                }
+            ]
+
+        async def get_session_events(self, session_id: str, *args, **kwargs):
+            del session_id, args, kwargs
+            return [
+                {
+                    "trace_id": "trace-1",
+                    "seq": 1,
+                    "event_type": "message:chunk",
+                    "data": {"content": "one"},
+                    "timestamp": "t1",
+                    "_event_index": 0,
+                },
+                {
+                    "trace_id": "trace-2",
+                    "seq": 3,
+                    "event_type": "done",
+                    "data": {},
+                    "timestamp": "t3",
+                    "_event_index": 0,
+                },
+            ]
+
+    monkeypatch.setattr(dual_writer.settings, "TRACE_EVENT_READ_MODE", "merge", raising=False)
+    writer = dual_writer.DualEventWriter()
+    writer._trace = _Trace()
+
+    events = await writer.read_session_events("session-1")
+
+    assert len(events) == 2
+    assert events[1]["event_id"] == dual_writer.TraceStorage.legacy_event_id(
+        "trace-2", 0, {
+            "event_type": "done",
+            "data": {},
+            "timestamp": "t3",
+            "seq": 3,
+        }
+    )
+    assert all("_event_index" not in event for event in events)
+
+
+@pytest.mark.asyncio
+async def test_merge_page_reader_keeps_a_probe_row_for_legacy_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Trace:
+        def __init__(self) -> None:
+            self.max_events = None
+
+        async def get_event_store_session_events(self, session_id: str, **kwargs):
+            del session_id, kwargs
+            return []
+
+        async def get_session_events(self, session_id: str, *args, **kwargs):
+            del session_id, args
+            self.max_events = kwargs["max_events"]
+            return []
+
+    monkeypatch.setattr(dual_writer.settings, "TRACE_EVENT_READ_MODE", "merge", raising=False)
+    trace = _Trace()
+    writer = dual_writer.DualEventWriter()
+    writer._trace = trace
+
+    await writer.read_session_events_page("session-1", limit=2)
+
+    assert trace.max_events == 3

@@ -215,6 +215,8 @@ export interface HistoryEventData {
 // History event from backend
 export interface HistoryEvent {
   id?: string | number;
+  event_id?: string;
+  trace_id?: string;
   event_type: string;
   data: HistoryEventData | unknown;
   timestamp?: string;

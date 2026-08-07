@@ -27,6 +27,35 @@ test("reconstructMessagesFromEvents preserves backend user message ids", () => {
   assert.equal(messages[0]?.runId, "run-1");
 });
 
+test("reconstructMessagesFromEvents keeps legacy events before sequenced events", () => {
+  const messages = reconstructMessagesFromEvents(
+    [
+      {
+        event_id: "new-event",
+        event_type: "user:message",
+        run_id: "run-new",
+        seq: 1,
+        timestamp: "2026-01-01T00:00:00.000Z",
+        data: { content: "new", message_id: "new-user" },
+      },
+      {
+        event_id: "legacy-event",
+        event_type: "user:message",
+        run_id: "run-legacy",
+        timestamp: "2026-01-02T00:00:00.000Z",
+        data: { content: "legacy", message_id: "legacy-user" },
+      },
+    ] satisfies HistoryEvent[],
+    new Set<string>(),
+    { activeSubagentStack: [] },
+  );
+
+  assert.deepEqual(
+    messages.filter((message) => message.role === "user").map((message) => message.id),
+    ["legacy-user", "new-user"],
+  );
+});
+
 test("reconstructMessagesFromEvents ignores goal update events as message content", () => {
   const messages = reconstructMessagesFromEvents(
     [

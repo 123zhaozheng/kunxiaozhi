@@ -252,7 +252,14 @@ class TraceStorage:
         """
         query: Dict[str, Any] = {"session_id": session_id}
         if filters.get("completed_only", True):
-            trace_query: Dict[str, Any] = {"session_id": session_id, "status": {"$ne": "running"}}
+            # Completed-only history must fail closed: an immutable event is
+            # visible only when its trace metadata explicitly proves a
+            # terminal state.  ``$ne: running`` would also admit missing or
+            # unknown statuses during a partial migration.
+            trace_query: Dict[str, Any] = {
+                "session_id": session_id,
+                "status": {"$in": ["completed", "error"]},
+            }
             if filters.get("run_id"):
                 trace_query["run_id"] = filters["run_id"]
             if filters.get("exclude_run_id"):

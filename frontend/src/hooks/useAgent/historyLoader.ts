@@ -236,15 +236,27 @@ export function reconstructMessagesFromEvents(
   // is immune to same-millisecond timestamp ties that made the old
   // timestamp-only sort reorder a run's events and spawn duplicate assistant
   // ids. Fall back to timestamp for legacy events written before seq existed.
+  // Match the backend composite order. In particular, do not fall back to
+  // timestamp when only one side has a sequence: merge mode can contain both
+  // legacy and immutable events, and that fallback reorders the page.
   const sortedEvents = [...events].sort((a, b) => {
     const seqA = typeof a.seq === "number" ? a.seq : null;
     const seqB = typeof b.seq === "number" ? b.seq : null;
-    if (seqA !== null && seqB !== null) {
-      return seqA - seqB;
-    }
-    const timeA = parseEventTimestamp(a.timestamp, 0).getTime();
-    const timeB = parseEventTimestamp(b.timestamp, 0).getTime();
-    return timeA - timeB;
+    if ((seqA !== null) !== (seqB !== null)) return seqA === null ? -1 : 1;
+    if (seqA !== null && seqB !== null && seqA !== seqB) return seqA - seqB;
+
+    const timeA = a.timestamp || "";
+    const timeB = b.timestamp || "";
+    if (timeA !== timeB) return timeA < timeB ? -1 : 1;
+
+    const traceA = a.trace_id || "";
+    const traceB = b.trace_id || "";
+    if (traceA !== traceB) return traceA < traceB ? -1 : 1;
+
+    const eventA = String(a.event_id ?? a.id ?? "");
+    const eventB = String(b.event_id ?? b.id ?? "");
+    if (eventA !== eventB) return eventA < eventB ? -1 : 1;
+    return 0;
   });
 
   const reconstructedMessages: Message[] = [];

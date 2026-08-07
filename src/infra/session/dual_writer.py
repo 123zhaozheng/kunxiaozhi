@@ -859,18 +859,29 @@ class DualEventWriter:
             legacy = await self.trace.get_session_events(
                 session_id, event_types, run_id=run_id, exclude_run_id=exclude_run_id,
                 completed_only=completed_only, run_ids=run_ids, max_events=max_events,
+                # Preserve each trace-array ordinal so the fallback identity
+                # exactly matches ``backfill_legacy_events``.  Using the
+                # flattened session ordinal would make a backfilled legacy
+                # event look like a second event during merge reads.
+                _include_cursor_metadata=True,
             )
             merged: dict[str, Dict[str, Any]] = {}
-            for ordinal, event in enumerate(legacy):
+            for flattened_ordinal, event in enumerate(legacy):
                 # Legacy arrays written before the shared ``event_id`` field
                 # was introduced still need a deterministic identity that
                 # matches backfill-generated immutable documents.
+                trace_ordinal = event.get("_event_index")
+                if not isinstance(trace_ordinal, int) or trace_ordinal < 0:
+                    trace_ordinal = flattened_ordinal
                 key = str(
                     event.get("event_id")
                     or event.get("id")
-                    or TraceStorage.legacy_event_id(str(event.get("trace_id") or ""), ordinal, event)
+                    or TraceStorage.legacy_event_id(
+                        str(event.get("trace_id") or ""), trace_ordinal, event
+                    )
                 )
                 event.setdefault("event_id", key)
+                event.pop("_event_index", None)
                 merged[key] = event
             for event in immutable:
                 key = str(event.get("event_id") or event.get("id") or "")
@@ -906,12 +917,18 @@ class DualEventWriter:
                 run_ids=run_ids, limit=limit, after=after,
             )
         if _event_read_mode() == "merge":
+            default_limit = getattr(settings, "SESSION_EVENT_READ_DEFAULT_LIMIT", 1000)
+            page_limit = max(min(int(str(limit or default_limit)), 10000), 1)
             events = await self.read_session_events(
                 session_id, event_types, run_id=run_id, exclude_run_id=exclude_run_id,
                 completed_only=completed_only, run_ids=run_ids,
+                # The merge reader must retain a probe row; otherwise a
+                # legacy-only session with more than the default 1000 events
+                # would report ``has_more=false`` and make the rest
+                # unreachable.  Event-store mode has its own unbounded page
+                # reader; this bound is only the migration fallback.
+                max_events=min(page_limit + 1, 10000),
             )
-            default_limit = getattr(settings, "SESSION_EVENT_READ_DEFAULT_LIMIT", 1000)
-            page_limit = max(min(int(str(limit or default_limit)), 10000), 1)
             fingerprint = filter_fingerprint(
                 scope=session_id, event_types=event_types or [], run_id=run_id,
                 exclude_run_id=exclude_run_id, run_ids=run_ids or [],
