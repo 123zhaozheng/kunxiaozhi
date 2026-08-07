@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 29
+- **Total Sessions**: 30
 - **Last Active**: 2026-08-07
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~929 | Active |
+| `journal-1.md` | ~951 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 30 | 2026-08-07 | 完成无损 trace 事件存储 | `87d98309`, `d477b342` | `main` |
 | 29 | 2026-08-07 | 完成 trace 唯一性与写入 readiness | `dd15687e`, `941551f5` | `main` |
 | 28 | 2026-08-07 | 完成会话历史游标分页与纯读取链路 | `a80af817`, `d5a68f3d`, `09cf4653` | `main` |
 | 27 | 2026-08-04 | 删除 harness legacy/compact_en 模式，固化 compact_zh | `484367fd` | `main` |

@@ -927,3 +927,25 @@ Added admin-configurable 3-hour idle sessions with Redis-backed sid state, atomi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 30: 完成无损 trace 事件存储
+
+**Date**: 2026-08-07
+**Task**: 完成无损 trace 事件存储
+**Branch**: `main`
+
+### Summary
+
+新增不可变 trace_events 集合、稳定 event_id、幂等写入、dual/event_store 迁移模式、背压与失败重试、双读去重、completed-only 过滤、backfill 覆盖检测和 rollback 契约；独立 check 修复高优问题并通过 103 个相关测试。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `87d98309` | (see git log) |
+| `d477b342` | (see git log) |
+
+### Status
+
+[OK] **Completed**
