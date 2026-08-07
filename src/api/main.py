@@ -40,6 +40,7 @@ from src.api.routes import (
     share,
     skill,
     team,
+    trace_migration,
     upload,
     user,
     version,
@@ -710,6 +711,11 @@ def create_app() -> FastAPI:
     app.include_router(memory.router, prefix="/api/memory", tags=["Memory"])
     app.include_router(mcp.router, prefix="/api/mcp", tags=["MCP"])
     app.include_router(mcp.admin_router, prefix="/api/admin/mcp", tags=["MCP Admin"])
+    app.include_router(
+        trace_migration.router,
+        prefix="/api/admin/traces",
+        tags=["Trace Maintenance"],
+    )
     app.include_router(envvar.router, prefix="/api/env-vars", tags=["Environment Variables"])
     app.include_router(upload.router, prefix="/api/upload", tags=["Upload"])
     app.include_router(revealed_file.router, prefix="/api/files", tags=["Files"])
