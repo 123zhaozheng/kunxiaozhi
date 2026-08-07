@@ -626,15 +626,6 @@ export function SharedPage() {
       {/* Scrollable article area */}
       <main className="relative flex-1 overflow-x-hidden scroll-smooth">
         <article className="max-w-3xl lg:max-w-4xl xl:max-w-5xl mx-auto">
-          {data.history_complete === false && (
-            <div className="mx-4 mt-4 flex items-center gap-2 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-2 text-sm text-amber-800 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-200">
-              <AlertCircle size={16} aria-hidden="true" />
-              <span>
-                {t("chat.historyIncomplete", "History may be incomplete")}
-                {data.history_error ? `: ${data.history_error}` : ""}
-              </span>
-            </div>
-          )}
           {/* Editorial hero */}
           <header className="pt-[calc(5rem+var(--app-safe-area-top,0px))] sm:pt-[calc(7rem+var(--app-safe-area-top,0px))] lg:pt-[calc(9rem+var(--app-safe-area-top,0px))] pb-0 animate-in fade-in duration-800">
             {/* Overline label */}

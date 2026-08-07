@@ -45,8 +45,6 @@ export function ChatView({
   currentRunId,
   isLoading,
   isLoadingHistory,
-  historyIncomplete,
-  historyError,
   connectionStatus,
   canSendMessage,
   tools,
@@ -433,15 +431,6 @@ export function ChatView({
         ref={messagesContainerRef}
         className="relative flex-1 min-h-0 overflow-hidden"
       >
-        {historyIncomplete && (
-          <div className="mx-auto mt-2 flex w-full max-w-3xl items-center gap-2 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-2 text-sm text-amber-800 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-200 lg:max-w-4xl xl:max-w-5xl">
-            <span aria-hidden="true">?</span>
-            <span>
-              {t("chat.historyIncomplete", "History may be incomplete")}
-              {historyError ? `: ${historyError}` : ""}
-            </span>
-          </div>
-        )}
         {messages.length === 0 ? (
           isLoading ? (
             <ChatSkeleton count={5} />
