@@ -949,3 +949,25 @@ Added admin-configurable 3-hour idle sessions with Redis-backed sid state, atomi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 31: 完成重复 trace 安全迁移
+
+**Date**: 2026-08-07
+**Task**: 完成重复 trace 安全迁移
+**Branch**: `main`
+
+### Summary
+
+新增默认 dry-run、显式 apply/confirm、租约与活跃 writer 保护、全量备份、确定性合并、checksum/count 校验、精确删除、审计、幂等重跑和 rollback；独立 check 修复全局 readiness、租约过期、rollback 竞态与排序问题。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c7d95012` | (see git log) |
+| `8cba4e7a` | (see git log) |
+
+### Status
+
+[OK] **Completed**
