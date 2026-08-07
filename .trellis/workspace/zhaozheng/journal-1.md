@@ -882,3 +882,26 @@ Added admin-configurable 3-hour idle sessions with Redis-backed sid state, atomi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 28: 完成会话历史游标分页与纯读取链路
+
+**Date**: 2026-08-07
+**Task**: 完成会话历史游标分页与纯读取链路
+**Branch**: `main`
+
+### Summary
+
+完成 session/share 游标分页、纯读取历史链路、前端取消与不完整提示，补齐跨层测试和规范；独立 implement/check 两轮验证通过并归档 Child A。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a80af817` | (see git log) |
+| `d5a68f3d` | (see git log) |
+| `09cf4653` | (see git log) |
+
+### Status
+
+[OK] **Completed**
