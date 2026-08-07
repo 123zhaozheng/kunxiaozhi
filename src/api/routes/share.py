@@ -4,7 +4,7 @@
 允许用户分享会话，支持公开链接或需要登录访问。
 """
 
-from typing import Annotated, Any, Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -12,6 +12,7 @@ from src.agents.core.base import get_agent_class
 from src.api.deps import get_current_user_optional, get_current_user_required
 from src.infra.logging import get_logger
 from src.infra.session.dual_writer import get_dual_writer
+from src.infra.session.history_cursor import HISTORY_PAGE_LIMIT_MAX, InvalidHistoryCursor
 from src.infra.session.manager import SessionManager
 from src.infra.share.storage import ShareStorage
 from src.infra.team.storage import TeamStorage
@@ -274,7 +275,9 @@ async def delete_share(
 @router.get("/public/{share_id}", response_model=SharedContentResponse)
 async def get_shared_content(
     share_id: str,
-    event_limit: Annotated[int | None, Query(ge=1)] = None,
+    event_limit: Annotated[int | None, Query(ge=1, le=HISTORY_PAGE_LIMIT_MAX)] = None,
+    limit: Annotated[int | None, Query(ge=1, le=HISTORY_PAGE_LIMIT_MAX)] = None,
+    after: Annotated[str | None, Query()] = None,
     user: Optional[TokenPayload] = Depends(get_current_user_optional),
 ):
     """
@@ -310,25 +313,28 @@ async def get_shared_content(
     partial_run_ids = (
         _bounded_partial_run_ids(share.run_ids) if share.share_type == ShareType.PARTIAL else None
     )
-    read_events_kwargs: dict[str, Any] = {"completed_only": True}
-    if event_limit is not None:
-        read_events_kwargs["max_events"] = event_limit + 1
+    requested_limit = limit if isinstance(limit, int) else event_limit
+    after_value = after if isinstance(after, str) else None
 
     # 如果是部分分享，只获取指定 run 的事件
-    if partial_run_ids:
-        events = await dual_writer.read_session_events(
-            share.session_id,
-            run_ids=partial_run_ids,
-            **read_events_kwargs,
-        )
-    else:
-        events = await dual_writer.read_session_events(
-            share.session_id,
-            **read_events_kwargs,
-        )
-    events_limited = event_limit is not None and len(events) > event_limit
-    if events_limited and event_limit is not None:
-        events = events[:event_limit]
+    try:
+        if partial_run_ids:
+            page = await dual_writer.read_session_events_page(
+                share.session_id,
+                run_ids=partial_run_ids,
+                completed_only=True,
+                limit=requested_limit,
+                after=after_value,
+            )
+        else:
+            page = await dual_writer.read_session_events_page(
+                share.session_id,
+                completed_only=True,
+                limit=requested_limit,
+                after=after_value,
+            )
+    except InvalidHistoryCursor as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # 获取分享者信息
     user_storage = UserStorage()
@@ -378,10 +384,14 @@ async def get_shared_content(
 
     return SharedContentResponse(
         session=session_info,
-        events=events,
+        events=page["events"],
         owner=owner_info,
         share_type=share.share_type,
         run_ids=partial_run_ids if share.share_type == ShareType.PARTIAL else share.run_ids,
-        events_limited=events_limited,
-        events_limit=event_limit,
+        events_limited=page.get("events_limited", page.get("has_more", False)),
+        events_limit=requested_limit,
+        has_more=page.get("has_more", False),
+        next_cursor=page.get("next_cursor"),
+        history_complete=page.get("history_complete", not page.get("has_more", False)),
+        ordering_version=page.get("ordering_version", 2),
     )

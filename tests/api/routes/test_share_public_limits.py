@@ -58,16 +58,30 @@ class _FakeSessionManager:
 
 
 class _FakeDualWriter:
-    def __init__(self):
+    def __init__(self, page=None, error: Exception | None = None):
         self.calls = []
+        self.page = page
+        self.error = error
 
-    async def read_session_events(self, session_id: str, **kwargs):
+    async def read_session_events_page(self, session_id: str, **kwargs):
         self.calls.append({"session_id": session_id, **kwargs})
-        return [
-            {"event_type": "user:message", "data": {"content": "one"}},
-            {"event_type": "message:chunk", "data": {"content": "two"}},
-            {"event_type": "done", "data": {}},
-        ]
+        if self.error is not None:
+            raise self.error
+        if self.page is not None:
+            return self.page
+        return {
+            "events": [
+                {"event_type": "user:message", "data": {"content": "one"}},
+                {"event_type": "message:chunk", "data": {"content": "two"}},
+                {"event_type": "done", "data": {}},
+            ],
+            "has_more": False,
+            "next_cursor": None,
+            "history_complete": False,
+            "ordering_version": 2,
+            "events_limited": False,
+            "events_limit": None,
+        }
 
 
 class _FakeUserStorage:
@@ -80,7 +94,7 @@ def _raise_unknown_agent(_agent_id: str):
     raise ValueError("unknown agent")
 
 
-def test_get_shared_content_event_limit_has_no_upper_bound_in_route_validation() -> None:
+def test_get_shared_content_event_limit_is_capped_by_route_validation() -> None:
     route = next(route for route in share_route.router.routes if route.path == "/public/{share_id}")
     limit_param = next(
         param for param in route.dependant.query_params if param.name == "event_limit"
@@ -91,7 +105,7 @@ def test_get_shared_content_event_limit_has_no_upper_bound_in_route_validation()
     }
 
     assert constraints["Ge"] == 1
-    assert "Le" not in constraints
+    assert constraints["Le"] == share_route.HISTORY_PAGE_LIMIT_MAX
 
 
 class _CreateShouldNotBeCalledShareStorage:
@@ -141,11 +155,14 @@ async def test_get_shared_content_returns_all_events_when_limit_is_omitted(
         {
             "session_id": "session-1",
             "completed_only": True,
+            "limit": None,
+            "after": None,
         }
     ]
     assert len(response.events) == 3
     assert response.events_limited is False
     assert response.events_limit is None
+    assert response.history_complete is False
 
 
 @pytest.mark.asyncio
@@ -171,10 +188,23 @@ async def test_get_shared_content_caps_legacy_partial_share_run_ids(
 
 
 @pytest.mark.asyncio
-async def test_get_shared_content_caps_full_share_events_with_probe_limit(
+async def test_get_shared_content_caps_full_share_events_with_page_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    dual_writer = _FakeDualWriter()
+    dual_writer = _FakeDualWriter(
+        page={
+            "events": [
+                {"event_type": "user:message", "data": {"content": "one"}},
+                {"event_type": "message:chunk", "data": {"content": "two"}},
+            ],
+            "has_more": True,
+            "next_cursor": "cursor-2",
+            "history_complete": False,
+            "ordering_version": 2,
+            "events_limited": True,
+            "events_limit": 2,
+        }
+    )
     monkeypatch.setattr(share_route, "ShareStorage", _FakeShareStorage)
     monkeypatch.setattr(share_route, "SessionManager", _FakeSessionManager)
     monkeypatch.setattr(share_route, "get_dual_writer", lambda: dual_writer)
@@ -191,9 +221,45 @@ async def test_get_shared_content_caps_full_share_events_with_probe_limit(
         {
             "session_id": "session-1",
             "completed_only": True,
-            "max_events": 3,
+            "limit": 2,
+            "after": None,
         }
     ]
     assert len(response.events) == 2
     assert response.events_limited is True
     assert response.events_limit == 2
+    assert response.has_more is True
+    assert response.next_cursor == "cursor-2"
+
+
+@pytest.mark.asyncio
+async def test_get_shared_content_rejects_invalid_cursor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.infra.session.history_cursor import InvalidHistoryCursor
+
+    dual_writer = _FakeDualWriter(
+        error=InvalidHistoryCursor("history cursor does not match this query")
+    )
+    monkeypatch.setattr(share_route, "ShareStorage", _FakeShareStorage)
+    monkeypatch.setattr(share_route, "SessionManager", _FakeSessionManager)
+    monkeypatch.setattr(share_route, "get_dual_writer", lambda: dual_writer)
+    monkeypatch.setattr(share_route, "UserStorage", _FakeUserStorage)
+    monkeypatch.setattr(share_route, "get_agent_class", _raise_unknown_agent)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await share_route.get_shared_content(
+            "share-1",
+            after="bad-cursor",
+            user=None,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert dual_writer.calls == [
+        {
+            "session_id": "session-1",
+            "completed_only": True,
+            "limit": None,
+            "after": "bad-cursor",
+        }
+    ]

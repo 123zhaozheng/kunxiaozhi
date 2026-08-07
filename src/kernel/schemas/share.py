@@ -117,3 +117,7 @@ class SharedContentResponse(BaseModel):
     run_ids: Optional[list[str]] = None
     events_limited: bool = False
     events_limit: Optional[int] = None
+    has_more: bool = False
+    next_cursor: Optional[str] = None
+    history_complete: bool
+    ordering_version: int = 2

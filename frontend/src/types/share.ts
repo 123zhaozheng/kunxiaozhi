@@ -69,4 +69,11 @@ export interface SharedContentResponse {
   owner: SharedContentOwner;
   share_type: ShareType;
   run_ids?: string[];
+  events_limited?: boolean;
+  events_limit?: number | null;
+  has_more?: boolean;
+  next_cursor?: string | null;
+  history_complete?: boolean;
+  ordering_version?: number;
+  history_error?: string;
 }

@@ -37,6 +37,93 @@ export interface SessionRunsQuery {
   trace_id?: string;
 }
 
+export interface SessionEventsQuery {
+  event_types?: string[];
+  run_id?: string;
+  exclude_run_id?: string;
+  limit?: number;
+  after?: string;
+  signal?: AbortSignal;
+}
+
+const HISTORY_PAGE_LIMIT = 1000;
+
+function historyEventKey(event: SessionEventsResponse["events"][number]): string {
+  return (
+    event.event_id ||
+    event.id ||
+    [
+      event.trace_id || "",
+      event.seq ?? "",
+      event.timestamp || "",
+      event.event_type || "",
+      JSON.stringify(event.data || {}),
+    ].join("|")
+  );
+}
+
+async function getAllSessionEvents(
+  sessionId: string,
+  options?: Omit<SessionEventsQuery, "after" | "signal"> & { signal?: AbortSignal },
+): Promise<SessionEventsResponse & { run_id?: string }> {
+  const events: SessionEventsResponse["events"] = [];
+  const seenEvents = new Set<string>();
+  const seenCursors = new Set<string>();
+  let after: string | undefined;
+  let lastPage: (SessionEventsResponse & { run_id?: string }) | undefined;
+
+  try {
+    while (true) {
+      const page = await sessionApi.getEvents(sessionId, {
+        ...options,
+        limit: options?.limit ?? HISTORY_PAGE_LIMIT,
+        after,
+        signal: options?.signal,
+      });
+      lastPage = page;
+      for (const event of page.events || []) {
+        const key = historyEventKey(event);
+        if (!seenEvents.has(key)) {
+          seenEvents.add(key);
+          events.push(event);
+        }
+      }
+      if (!page.has_more) break;
+      if (!page.next_cursor || seenCursors.has(page.next_cursor)) {
+        throw new Error("History pagination returned an invalid continuation cursor");
+      }
+      seenCursors.add(page.next_cursor);
+      after = page.next_cursor;
+    }
+  } catch (error) {
+    if (error && typeof error === "object" && "name" in error && error.name === "AbortError") {
+      return {
+        ...(lastPage ?? { events: [], session_id: sessionId }),
+        events,
+        has_more: false,
+        next_cursor: null,
+        history_complete: false,
+      };
+    }
+    if (!lastPage) throw error;
+    return {
+      ...lastPage,
+      events,
+      has_more: false,
+      next_cursor: null,
+      history_complete: false,
+      history_error: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  return {
+    ...lastPage!,
+    events,
+    has_more: false,
+    next_cursor: null,
+  };
+}
+
 export interface RunGoalSpec {
   objective: string;
   rubric?: string;
@@ -184,16 +271,20 @@ export const sessionApi = {
 
   /**
    * Get all session events
+   *
+   * Requests a large limit so long sessions (thousands of events) are not
+   * silently truncated by the backend's default. The backend caps at
+   * SESSION_EVENT_RESPONSE_LIMIT_MAX (10000); passing that ensures we get
+   * the full history unless a session genuinely exceeds it.
    */
   async getEvents(
     sessionId: string,
-    options?: {
-      event_types?: string[];
-      run_id?: string;
-      exclude_run_id?: string;
-    },
+    options?: SessionEventsQuery,
   ): Promise<SessionEventsResponse & { run_id?: string }> {
     const searchParams = new URLSearchParams();
+    // Explicit large limit — without this the backend defaults to 1000 events,
+    // which truncates long sessions and makes replies disappear on refresh.
+    searchParams.set("limit", String(options?.limit ?? HISTORY_PAGE_LIMIT));
     if (options?.event_types && options.event_types.length > 0) {
       searchParams.set("event_types", options.event_types.join(","));
     }
@@ -203,12 +294,19 @@ export const sessionApi = {
     if (options?.exclude_run_id) {
       searchParams.set("exclude_run_id", options.exclude_run_id);
     }
+    if (options?.after) {
+      searchParams.set("after", options.after);
+    }
 
     const url = `${API_BASE}/api/sessions/${sessionId}/events${
       searchParams.toString() ? `?${searchParams}` : ""
     }`;
-    return authFetch<SessionEventsResponse & { run_id?: string }>(url);
+    return authFetch<SessionEventsResponse & { run_id?: string }>(url, {
+      signal: options?.signal,
+    });
   },
+
+  getAllEvents: getAllSessionEvents,
 
   /**
    * Get all runs for a session

@@ -63,6 +63,8 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [historyIncomplete, setHistoryIncomplete] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [currentAgent, setCurrentAgent] = useState<string>("");
   const [agentsLoading, setAgentsLoading] = useState(false);
@@ -83,6 +85,7 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
 
   // Refs for connection management
   const abortControllerRef = useRef<AbortController | null>(null);
+  const historyAbortControllerRef = useRef<AbortController | null>(null);
   const pendingProjectIdRef = useRef<string | null>(null);
   const autoExpandProjectIdRef = useRef<string | null>(null);
   const isConnectingRef = useRef(false);
@@ -275,6 +278,9 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
+      if (historyAbortControllerRef.current) {
+        historyAbortControllerRef.current.abort();
+      }
       clearReconnectTimeout(reconnectTimeoutRef);
     };
   }, []);
@@ -299,6 +305,11 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
+      if (historyAbortControllerRef.current) {
+        historyAbortControllerRef.current.abort();
+      }
+      const historyAbortController = new AbortController();
+      historyAbortControllerRef.current = historyAbortController;
       isConnectingRef.current = false;
       streamingMessageIdRef.current = null;
       clearReconnectTimeout(reconnectTimeoutRef);
@@ -306,6 +317,8 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
       setIsLoading(true);
       setMessages([]);
       setError(null);
+      setHistoryIncomplete(false);
+      setHistoryError(null);
 
       processedEventIdsRef.current.clear();
       lastHistoryTimestampRef.current = null;
@@ -365,7 +378,9 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
           setGoalModeEnabled(false);
 
           // 并行发起 events、status 和 feedback 请求，减少串行等待时间
-          const eventsPromise = sessionApi.getEvents(targetSessionId);
+          const eventsPromise = sessionApi.getAllEvents(targetSessionId, {
+            signal: historyAbortController.signal,
+          });
           const statusPromise = currentRunId
             ? sessionApi.getStatus(targetSessionId, currentRunId).catch((e) => {
                 console.warn("[loadHistory] Failed to check status:", e);
@@ -387,6 +402,15 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
             feedbackPromise,
           ]);
           if (isStaleHistoryLoad()) return null;
+
+          if (eventsData.history_complete === false) {
+            console.warn(
+              "[loadHistory] Session history is incomplete:",
+              eventsData.history_error || "legacy history source may be truncated",
+            );
+          }
+          setHistoryIncomplete(eventsData.history_complete === false);
+          setHistoryError(eventsData.history_error || null);
 
           let isTaskRunning = false;
           if (statusData) {
@@ -518,6 +542,9 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
           setIsLoading(false);
           setIsLoadingHistory(false);
           isLoadingHistoryRef.current = false;
+          if (historyAbortControllerRef.current === historyAbortController) {
+            historyAbortControllerRef.current = null;
+          }
         }
       }
 
@@ -959,6 +986,8 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
     newlyCreatedSession,
     activeGoal,
     goalsByRunId,
+    historyIncomplete,
+    historyError,
     isInitializingSandbox,
     sandboxError,
     sendMessage,

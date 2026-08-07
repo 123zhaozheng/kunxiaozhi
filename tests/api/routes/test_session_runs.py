@@ -25,10 +25,17 @@ class _FakeDualWriter:
 
 
 class _FakeSessionEventsDualWriter:
-    def __init__(self):
+    def __init__(self, page=None, error: Exception | None = None):
         self.calls = []
+        self.page = page
+        self.error = error
 
-    async def read_session_events(self, session_id: str, event_types=None, **kwargs):
+    async def read_session_events_page(
+        self,
+        session_id: str,
+        event_types=None,
+        **kwargs,
+    ):
         self.calls.append(
             {
                 "session_id": session_id,
@@ -36,11 +43,23 @@ class _FakeSessionEventsDualWriter:
                 **kwargs,
             }
         )
-        return [
-            {"event_type": "user:message", "data": {"content": "one"}},
-            {"event_type": "message:chunk", "data": {"content": "two"}},
-            {"event_type": "done", "data": {}},
-        ]
+        if self.error is not None:
+            raise self.error
+        if self.page is not None:
+            return self.page
+        return {
+            "events": [
+                {"event_type": "user:message", "data": {"content": "one"}},
+                {"event_type": "message:chunk", "data": {"content": "two"}},
+                {"event_type": "done", "data": {}},
+            ],
+            "has_more": True,
+            "next_cursor": "cursor-1",
+            "history_complete": False,
+            "ordering_version": 2,
+            "events_limited": True,
+            "events_limit": 2,
+        }
 
 
 class _FakeTraceStorage:
@@ -374,7 +393,7 @@ def test_get_session_raw_traces_limits_are_capped_by_route_validation(
 
 
 @pytest.mark.asyncio
-async def test_get_session_events_uses_bounded_history_read(
+async def test_get_session_events_uses_page_reader(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     session_routes = _load_session_routes_module(monkeypatch)
@@ -397,11 +416,16 @@ async def test_get_session_events_uses_bounded_history_read(
         "events": [
             {"event_type": "user:message", "data": {"content": "one"}},
             {"event_type": "message:chunk", "data": {"content": "two"}},
+            {"event_type": "done", "data": {}},
         ],
         "session_id": "session-1",
         "run_id": "run-1",
         "events_limited": True,
         "events_limit": 2,
+        "has_more": True,
+        "next_cursor": "cursor-1",
+        "history_complete": False,
+        "ordering_version": 2,
     }
     assert dual_writer.calls == [
         {
@@ -410,9 +434,85 @@ async def test_get_session_events_uses_bounded_history_read(
             "run_id": "run-1",
             "exclude_run_id": None,
             "completed_only": True,
-            "max_events": 3,
+            "limit": 2,
+            "after": None,
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_get_session_events_forwards_after_cursor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_routes = _load_session_routes_module(monkeypatch)
+    dual_writer_module = sys.modules["src.infra.session.dual_writer"]
+    dual_writer = _FakeSessionEventsDualWriter(
+        page={
+            "events": [{"event_type": "done", "data": {}}],
+            "has_more": False,
+            "next_cursor": None,
+            "history_complete": False,
+            "ordering_version": 2,
+        }
+    )
+
+    monkeypatch.setattr(session_routes, "SessionManager", lambda: _FakeSessionManager())
+    monkeypatch.setattr(dual_writer_module, "get_dual_writer", lambda: dual_writer)
+
+    response = await session_routes.get_session_events(
+        "session-1",
+        event_types=None,
+        run_id=None,
+        exclude_run_id=None,
+        limit=None,
+        after="opaque-cursor-9",
+        user=SimpleNamespace(sub="user-1"),
+    )
+
+    assert response["next_cursor"] is None
+    assert response["has_more"] is False
+    assert dual_writer.calls == [
+        {
+            "session_id": "session-1",
+            "event_types": None,
+            "run_id": None,
+            "exclude_run_id": None,
+            "completed_only": True,
+            "limit": None,
+            "after": "opaque-cursor-9",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_session_events_rejects_invalid_cursor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastapi import HTTPException
+
+    from src.infra.session.history_cursor import InvalidHistoryCursor
+
+    session_routes = _load_session_routes_module(monkeypatch)
+    dual_writer_module = sys.modules["src.infra.session.dual_writer"]
+    dual_writer = _FakeSessionEventsDualWriter(
+        error=InvalidHistoryCursor("history cursor does not match this query")
+    )
+
+    monkeypatch.setattr(session_routes, "SessionManager", lambda: _FakeSessionManager())
+    monkeypatch.setattr(dual_writer_module, "get_dual_writer", lambda: dual_writer)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await session_routes.get_session_events(
+            "session-1",
+            event_types=None,
+            run_id=None,
+            exclude_run_id=None,
+            limit=None,
+            after="bad-cursor",
+            user=SimpleNamespace(sub="user-1"),
+        )
+
+    assert exc_info.value.status_code == 400
 
 
 @pytest.mark.asyncio

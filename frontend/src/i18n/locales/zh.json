@@ -743,6 +743,7 @@
     "queued": "排队中 (第 {{position}} 位)...",
     "rateLimited": "请求过于频繁，请稍后再试",
     "requestFailed": "加载会话失败",
+    "historyIncomplete": "历史记录可能不完整",
     "sandbox": {
       "error": "初始化失败",
       "initializing": "正在初始化环境",

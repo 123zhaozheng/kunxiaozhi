@@ -717,6 +717,7 @@
     "queued": "대기 중 ({{position}}번째)...",
     "rateLimited": "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요",
     "requestFailed": "세션 로드에 실패했습니다",
+    "historyIncomplete": "기록이 불완전할 수 있습니다",
     "sandbox": {
       "error": "초기화 실패",
       "initializing": "환경 초기화 중",

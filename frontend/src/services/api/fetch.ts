@@ -57,6 +57,9 @@ export async function authFetch<T>(
 
   const response = await fetch(url, {
     ...restOptions,
+    // Keep AbortController cancellation intact for paginated history loads.
+    // `signal` lives in RequestInit and is intentionally forwarded unchanged.
+    signal: restOptions.signal,
     headers: finalHeaders,
   });
 

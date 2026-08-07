@@ -52,6 +52,9 @@ export interface SessionListResponse {
 
 export interface SSEEventRecord {
   id: string;
+  event_id?: string;
+  trace_id?: string;
+  seq?: number;
   event_type: string;
   data: Record<string, unknown>;
   timestamp: string;
@@ -60,4 +63,13 @@ export interface SSEEventRecord {
 
 export interface SessionEventsResponse {
   events: SSEEventRecord[];
+  session_id?: string;
+  run_id?: string;
+  events_limited?: boolean;
+  events_limit?: number | null;
+  has_more?: boolean;
+  next_cursor?: string | null;
+  history_complete?: boolean;
+  ordering_version?: number;
+  history_error?: string;
 }

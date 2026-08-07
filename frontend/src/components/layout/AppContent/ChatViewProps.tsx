@@ -92,6 +92,8 @@ export interface ChatViewProps {
   currentRunId: string | null;
   isLoading: boolean;
   isLoadingHistory: boolean;
+  historyIncomplete: boolean;
+  historyError: string | null;
   connectionStatus?: ConnectionStatus;
   canSendMessage: boolean;
   tools: ToolState[];

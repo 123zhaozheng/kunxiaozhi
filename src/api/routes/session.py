@@ -15,6 +15,7 @@ from src.api.deps import get_current_user_required
 from src.infra.folder.storage import get_project_storage
 from src.infra.logging import get_logger
 from src.infra.session.favorites import is_session_favorite, normalize_session_metadata
+from src.infra.session.history_cursor import HISTORY_PAGE_LIMIT_MAX, InvalidHistoryCursor
 from src.infra.session.manager import SessionManager
 from src.infra.session.storage import SessionStorage
 from src.kernel.config import settings
@@ -28,7 +29,7 @@ logger = get_logger(__name__)
 # 支持的语言白名单
 SUPPORTED_LANGUAGES = frozenset(["en", "zh", "ja", "ko"])
 SESSION_EVENT_TYPE_FILTER_LIMIT = 100
-SESSION_EVENT_RESPONSE_LIMIT_MAX = 10000
+SESSION_EVENT_RESPONSE_LIMIT_MAX = HISTORY_PAGE_LIMIT_MAX
 SESSION_RAW_TRACE_RESPONSE_LIMIT_MAX = 20
 SESSION_RAW_TRACE_EVENTS_LIMIT_MAX = 200
 
@@ -287,6 +288,7 @@ async def get_session_events(
         le=SESSION_EVENT_RESPONSE_LIMIT_MAX,
         description="最大返回事件数，不传则不限制",
     ),
+    after: Optional[str] = Query(None, description="Opaque cursor for the next history page"),
     user: TokenPayload = Depends(get_current_user_required),
 ):
     """
@@ -313,31 +315,36 @@ async def get_session_events(
 
     # 解析事件类型过滤
     types_list = _parse_event_types_filter(event_types)
+    after_value = after if isinstance(after, str) else None
 
     # 重要：completed_only=True，确保正在运行的 trace 中的事件不要被返回，而是单独去请求/stream接口，避免重复返回事件，导致前端消息重复显示。
     # 否则刷新页面时，当前 run 的 user:message 事件会丢失，导致消息合并
-    events_probe_limit = (limit + 1) if limit is not None else None
-    events = await dual_writer.read_session_events(
-        session_id,
-        types_list,
-        run_id=run_id,
-        exclude_run_id=exclude_run_id,
-        completed_only=True,
-        max_events=events_probe_limit,
-    )
-    events_limited = limit is not None and len(events) > limit
-    if events_limited:
-        events = events[:limit]
+    try:
+        page = await dual_writer.read_session_events_page(
+            session_id,
+            types_list,
+            run_id=run_id,
+            exclude_run_id=exclude_run_id,
+            completed_only=True,
+            limit=limit,
+            after=after_value,
+        )
+    except InvalidHistoryCursor as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # 获取 session 的 current_run_id 用于响应
     current_run_id = session.metadata.get("current_run_id") if session.metadata else None
 
     return {
-        "events": events,
+        "events": page["events"],
         "session_id": session_id,
         "run_id": run_id or current_run_id,
-        "events_limited": events_limited,
+        "events_limited": page.get("events_limited", page.get("has_more", False)),
         "events_limit": limit,
+        "has_more": page.get("has_more", False),
+        "next_cursor": page.get("next_cursor"),
+        "history_complete": page.get("history_complete", not page.get("has_more", False)),
+        "ordering_version": page.get("ordering_version", 2),
     }
 
 

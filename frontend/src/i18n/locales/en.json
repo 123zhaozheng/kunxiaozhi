@@ -743,6 +743,7 @@
     "queued": "Queued (position {{position}})...",
     "rateLimited": "Too many requests, please try again later",
     "requestFailed": "Failed to load session",
+    "historyIncomplete": "History may be incomplete",
     "sandbox": {
       "error": "initialization failed",
       "initializing": "initializing environment",

@@ -717,6 +717,7 @@
     "queued": "順番待ち中 ({{position}}番目)...",
     "rateLimited": "リクエストが多すぎます。しばらくしてからお試しください",
     "requestFailed": "セッションの読み込みに失敗しました",
+    "historyIncomplete": "履歴が不完全な可能性があります",
     "sandbox": {
       "error": "初期化に失敗しました",
       "initializing": "環境を初期化中",

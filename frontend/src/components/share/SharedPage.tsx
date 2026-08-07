@@ -231,13 +231,22 @@ export function SharedPage() {
       return;
     }
 
+    const controller = new AbortController();
+
     const loadSharedContent = async () => {
       setIsLoading(true);
       setError(null);
       try {
-        const response = await shareApi.getSharedContent(shareId);
-        setData(response);
+        const response = await shareApi.getAllSharedContent(shareId, {
+          signal: controller.signal,
+        });
+        // The paginated helper intentionally returns partial data on abort;
+        // an obsolete effect must not publish that data over a newer share.
+        if (!controller.signal.aborted) {
+          setData(response);
+        }
       } catch (err) {
+        if (controller.signal.aborted) return;
         console.error("Failed to load shared content:", err);
         if (err instanceof Error) {
           if (err.message.includes("401") || err.message.includes("需要登录")) {
@@ -254,11 +263,14 @@ export function SharedPage() {
           setError(t("share.loadFailed"));
         }
       } finally {
-        setIsLoading(false);
+        if (!controller.signal.aborted) {
+          setIsLoading(false);
+        }
       }
     };
 
     loadSharedContent();
+    return () => controller.abort();
   }, [shareId, t]);
 
   // Reconstruct messages from events using the same logic as the main chat
@@ -557,7 +569,7 @@ export function SharedPage() {
         className="safe-area-top fixed top-0 inset-x-0 z-50 bg-white/80 dark:bg-stone-950/80 border-b border-stone-100/60 dark:border-stone-800/40"
       >
         {/* Scroll progress bar */}
-        <div
+      <div
           className="absolute bottom-0 left-0 h-[2px] landing-progress-bar"
           style={{ width: `${scrollProgress * 100}%` }}
         />
@@ -614,6 +626,15 @@ export function SharedPage() {
       {/* Scrollable article area */}
       <main className="relative flex-1 overflow-x-hidden scroll-smooth">
         <article className="max-w-3xl lg:max-w-4xl xl:max-w-5xl mx-auto">
+          {data.history_complete === false && (
+            <div className="mx-4 mt-4 flex items-center gap-2 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-2 text-sm text-amber-800 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-200">
+              <AlertCircle size={16} aria-hidden="true" />
+              <span>
+                {t("chat.historyIncomplete", "History may be incomplete")}
+                {data.history_error ? `: ${data.history_error}` : ""}
+              </span>
+            </div>
+          )}
           {/* Editorial hero */}
           <header className="pt-[calc(5rem+var(--app-safe-area-top,0px))] sm:pt-[calc(7rem+var(--app-safe-area-top,0px))] lg:pt-[calc(9rem+var(--app-safe-area-top,0px))] pb-0 animate-in fade-in duration-800">
             {/* Overline label */}

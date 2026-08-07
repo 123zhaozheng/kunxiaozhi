@@ -656,6 +656,29 @@ class DualEventWriter:
             max_events=max_events,
         )
 
+    async def read_session_events_page(
+        self,
+        session_id: str,
+        event_types: Optional[List[str]] = None,
+        run_id: Optional[str] = None,
+        exclude_run_id: Optional[str] = None,
+        completed_only: bool = True,
+        run_ids: Optional[List[str]] = None,
+        limit: Optional[int] = None,
+        after: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Read a cursor page from the legacy trace store."""
+        return await self.trace.get_session_events_page(
+            session_id,
+            event_types,
+            run_id=run_id,
+            exclude_run_id=exclude_run_id,
+            completed_only=completed_only,
+            run_ids=run_ids,
+            limit=limit,
+            after=after,
+        )
+
     async def get_stream_length(self, session_id: str, run_id: Optional[str] = None) -> int:
         """
         获取 Redis Stream 长度

@@ -32,6 +32,14 @@ import asyncio
 from typing import Any, Dict, List, Optional
 
 from src.infra.logging import get_logger
+from src.infra.session.history_cursor import (
+    HISTORY_ORDERING_VERSION,
+    InvalidHistoryCursor,
+    decode_history_cursor,
+    encode_history_cursor,
+    event_ordering_key,
+    filter_fingerprint,
+)
 from src.infra.storage.mongodb import get_mongo_client
 from src.infra.utils.datetime import utc_now, utc_now_iso
 from src.kernel.config import settings
@@ -41,7 +49,11 @@ logger = get_logger(__name__)
 _SESSION_EVENTS_BATCH_SIZE = 200
 SESSION_EVENT_FILTER_LIST_LIMIT = 100
 TRACE_EVENTS_DEFAULT_LIMIT = 1000
-TRACE_EVENTS_READ_LIMIT = 5000
+# Upper bound for a single read_session_events call. Must match the API layer's
+# SESSION_EVENT_RESPONSE_LIMIT_MAX (10000) so the frontend can request the full
+# history without being silently truncated here. A long team/SOP session can
+# easily exceed the old 5000 cap, which made replies vanish on refresh.
+TRACE_EVENTS_READ_LIMIT = 10000
 TRACE_LIST_LIMIT = 100
 
 
@@ -753,6 +765,9 @@ class TraceStorage:
         completed_only: bool = True,
         run_ids: Optional[List[str]] = None,
         max_events: Optional[int] = None,
+        after: Optional[str] = None,
+        _allow_probe: bool = False,
+        _include_cursor_metadata: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         获取会话的所有事件（跨 traces 聚合）
@@ -793,6 +808,8 @@ class TraceStorage:
                     max_events,
                     default=_get_session_event_read_default_limit(),
                 )
+                if _allow_probe and max_events == TRACE_EVENTS_READ_LIMIT:
+                    max_events += 1
 
             if max_events <= 0:
                 return []
@@ -808,35 +825,90 @@ class TraceStorage:
                         "events.data": 1,
                         "events.timestamp": 1,
                         "events.seq": 1,
+                        "events.event_id": 1,
+                        "events.id": 1,
                     }
                 },
-                {"$unwind": "$events"},
+                {"$unwind": {"path": "$events", "includeArrayIndex": "event_index"}},
             ]
             if event_types:
                 pipeline.append({"$match": {"events.event_type": {"$in": event_types}}})
-            # Sort by the session-level global sequence number when present, so
-            # cross-trace event order is stable and matches causal write order.
-            # Legacy events written before seq was introduced have no seq; they
-            # are older than any seq-bearing event, so treat missing seq as 0
-            # (sorts before seq>=1) and break ties by timestamp. $limit is
-            # applied AFTER this sort so the returned window is the earliest
-            # max_events in stable order (not an arbitrary $limit over an
-            # unstable cross-trace order).
+            # Normalize a total ordering. Missing seq values remain in the legacy
+            # bucket; trace/event identity breaks timestamp ties deterministically.
             pipeline.append(
                 {
                     "$set": {
+                        "events.legacy_bucket": {
+                            "$cond": [{"$isNumber": "$events.seq"}, 1, 0]
+                        },
                         "events.seq_sort": {
-                            "$ifNull": ["$events.seq", 0]
-                        }
+                            "$cond": [{"$isNumber": "$events.seq"}, "$events.seq", 0]
+                        },
+                        "events.timestamp_sort": {"$ifNull": ["$events.timestamp", ""]},
+                        "events.event_id_sort": {
+                            "$ifNull": ["$events.event_id", {"$ifNull": ["$events.id", ""]}]
+                        },
+                        "events.event_index_sort": {"$ifNull": ["$event_index", 0]},
                     }
                 }
             )
+            if after:
+                fingerprint = filter_fingerprint(
+                    scope=session_id,
+                    event_types=event_types,
+                    run_id=run_id,
+                    exclude_run_id=exclude_run_id,
+                    run_ids=run_ids,
+                )
+                key = decode_history_cursor(after, scope=session_id, fingerprint=fingerprint)
+                pipeline.append(
+                    {
+                        "$match": {
+                            "$or": [
+                                {"events.legacy_bucket": {"$gt": key[0]}},
+                                {
+                                    "events.legacy_bucket": key[0],
+                                    "events.seq_sort": {"$gt": key[1]},
+                                },
+                                {
+                                    "events.legacy_bucket": key[0],
+                                    "events.seq_sort": key[1],
+                                    "events.timestamp_sort": {"$gt": key[2]},
+                                },
+                                {
+                                    "events.legacy_bucket": key[0],
+                                    "events.seq_sort": key[1],
+                                    "events.timestamp_sort": key[2],
+                                    "trace_id": {"$gt": key[3]},
+                                },
+                                {
+                                    "events.legacy_bucket": key[0],
+                                    "events.seq_sort": key[1],
+                                    "events.timestamp_sort": key[2],
+                                    "trace_id": key[3],
+                                    "events.event_id_sort": {"$gt": key[4]},
+                                },
+                                {
+                                    "events.legacy_bucket": key[0],
+                                    "events.seq_sort": key[1],
+                                    "events.timestamp_sort": key[2],
+                                    "trace_id": key[3],
+                                    "events.event_id_sort": key[4],
+                                    "events.event_index_sort": {"$gt": key[5]},
+                                },
+                            ]
+                        }
+                    }
+                )
             pipeline.append(
                 {
                     "$sort": {
+                        "events.legacy_bucket": 1,
                         "events.seq_sort": 1,
-                        "started_at": 1,
-                        "events.timestamp": 1,
+                        "events.timestamp_sort": 1,
+                        "trace_id": 1,
+                        "events.event_id_sort": 1,
+                        "events.event_index_sort": 1,
                     }
                 }
             )
@@ -852,6 +924,8 @@ class TraceStorage:
                             "data": "$events.data",
                             "timestamp": "$events.timestamp",
                             "seq": "$events.seq",
+                            "event_id": {"$ifNull": ["$events.event_id", "$events.id"]},
+                            "_event_index": "$event_index",
                         }
                     },
                 ]
@@ -859,15 +933,81 @@ class TraceStorage:
 
             events: List[Dict[str, Any]] = []
             async for event in self.collection.aggregate(pipeline):
+                if not _include_cursor_metadata:
+                    event.pop("_event_index", None)
                 events.append(event)
             logger.debug(
                 f"Session {session_id} (run_id={run_id}) returned {len(events)} bounded events"
             )
             return events
+        except InvalidHistoryCursor:
+            raise
         except Exception as e:
             logger.error(f"Failed to get session events: {e}")
             return []
 
+    async def get_session_events_page(
+        self,
+        session_id: str,
+        event_types: Optional[List[str]] = None,
+        run_id: Optional[str] = None,
+        exclude_run_id: Optional[str] = None,
+        completed_only: bool = True,
+        run_ids: Optional[List[str]] = None,
+        limit: Optional[int] = None,
+        after: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Read one cursor page while retaining the legacy list API."""
+        page_limit = limit or _get_session_event_read_default_limit()
+        page_limit = _clamp_event_read_limit(page_limit, default=_get_session_event_read_default_limit())
+        # Probe one extra item. The extra slot is intentionally allowed above the
+        # single-page safety cap so a request at 10,000 can report has_more exactly.
+        probe = min(page_limit + 1, TRACE_EVENTS_READ_LIMIT + 1)
+        events = await self.get_session_events(
+            session_id,
+            event_types,
+            run_id=run_id,
+            exclude_run_id=exclude_run_id,
+            completed_only=completed_only,
+            run_ids=run_ids,
+            max_events=probe,
+            after=after,
+            _allow_probe=True,
+            _include_cursor_metadata=True,
+        )
+        has_more = len(events) > page_limit
+        page_events = events[:page_limit]
+        fingerprint = filter_fingerprint(
+            scope=session_id,
+            event_types=_bounded_unique_strings(event_types, SESSION_EVENT_FILTER_LIST_LIMIT),
+            run_id=run_id,
+            exclude_run_id=exclude_run_id,
+            run_ids=_bounded_unique_strings(run_ids, SESSION_EVENT_FILTER_LIST_LIMIT),
+        )
+        next_cursor = None
+        if has_more and page_events:
+            next_cursor = encode_history_cursor(
+                scope=session_id,
+                fingerprint=fingerprint,
+                key=event_ordering_key(
+                    page_events[-1],
+                    ordinal=page_events[-1].get("_event_index"),
+                ),
+            )
+        for event in page_events:
+            event.pop("_event_index", None)
+        return {
+            "events": page_events,
+            "has_more": has_more,
+            "next_cursor": next_cursor,
+            # Legacy trace arrays can already have been truncated by $slice or
+            # buffer pressure. Reaching their end proves only that this source
+            # has no more retained events, not that durable history is complete.
+            "history_complete": False,
+            "ordering_version": HISTORY_ORDERING_VERSION,
+            "events_limited": has_more,
+            "events_limit": limit,
+        }
     async def get_run_events(
         self,
         session_id: str,

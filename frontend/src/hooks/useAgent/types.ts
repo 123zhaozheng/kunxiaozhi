@@ -228,6 +228,8 @@ export interface UseAgentReturn {
   messages: Message[];
   isLoading: boolean;
   isLoadingHistory: boolean;
+  historyIncomplete: boolean;
+  historyError: string | null;
   error: string | null;
   sessionId: string | null;
   currentProjectId: string | null;
