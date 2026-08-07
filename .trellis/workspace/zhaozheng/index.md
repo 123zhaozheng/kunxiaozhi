@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 28
+- **Total Sessions**: 29
 - **Last Active**: 2026-08-07
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~907 | Active |
+| `journal-1.md` | ~929 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 29 | 2026-08-07 | 完成 trace 唯一性与写入 readiness | `dd15687e`, `941551f5` | `main` |
 | 28 | 2026-08-07 | 完成会话历史游标分页与纯读取链路 | `a80af817`, `d5a68f3d`, `09cf4653` | `main` |
 | 27 | 2026-08-04 | 删除 harness legacy/compact_en 模式，固化 compact_zh | `484367fd` | `main` |
 | 26 | 2026-08-04 | 08-04 persona 点赞/点踩通知（Web 实时 + 企微主动推送） | `612383e3` | `main` |

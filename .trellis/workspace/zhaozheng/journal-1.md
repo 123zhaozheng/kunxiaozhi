@@ -905,3 +905,25 @@ Added admin-configurable 3-hour idle sessions with Redis-backed sid state, atomi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 29: 完成 trace 唯一性与写入 readiness
+
+**Date**: 2026-08-07
+**Task**: 完成 trace 唯一性与写入 readiness
+**Branch**: `main`
+
+### Summary
+
+封闭 trace 创建、追加、完成和 bulk flush 的 readiness/身份旁路，接入 /ready 部署探针，失败批次可重试；独立 check 修复并通过 98 个相关测试，归档 Child C。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dd15687e` | (see git log) |
+| `941551f5` | (see git log) |
+
+### Status
+
+[OK] **Completed**
