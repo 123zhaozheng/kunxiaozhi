@@ -62,6 +62,48 @@ class Settings(BaseSettings):
     SESSION_EVENT_MONGO_BUFFER_MAX: int = 10000
     SESSION_EVENT_TTL_CACHE_MAX: int = 5000
     SESSION_EVENT_REDIS_REPLAY_BATCH_SIZE: int = 500
+    # Immutable trace event rollout.  ``legacy`` preserves the pre-migration
+    # array reader/writer; ``dual`` writes both stores and reads can be merged;
+    # ``event_store`` makes trace_events authoritative.
+    TRACE_EVENT_WRITE_MODE: str = "legacy"
+    TRACE_EVENT_READ_MODE: str = "legacy"
+    TRACE_EVENT_BACKFILL_ENABLED: bool = False
+    MONGODB_TRACE_EVENTS_COLLECTION: str = "trace_events"
+
+    @field_validator("TRACE_EVENT_WRITE_MODE", mode="before")
+    @classmethod
+    def validate_trace_event_write_mode(cls, value: Any) -> str:
+        normalized = str(value or "legacy").strip().lower()
+        allowed = {"legacy", "dual", "event_store"}
+        if normalized not in allowed:
+            raise ValueError(
+                f"trace event write mode must be one of {sorted(allowed)}, got {value!r}"
+            )
+        return normalized
+
+    @field_validator("TRACE_EVENT_READ_MODE", mode="before")
+    @classmethod
+    def validate_trace_event_read_mode(cls, value: Any) -> str:
+        normalized = str(value or "legacy").strip().lower()
+        allowed = {"legacy", "merge", "event_store"}
+        if normalized not in allowed:
+            raise ValueError(
+                f"trace event read mode must be one of {sorted(allowed)}, got {value!r}"
+            )
+        return normalized
+
+    @field_validator("MONGODB_TRACE_EVENTS_COLLECTION", mode="before")
+    @classmethod
+    def validate_trace_event_collection(cls, value: Any) -> str:
+        normalized = str(value or "").strip()
+        if (
+            not normalized
+            or normalized.startswith("$")
+            or "\x00" in normalized
+            or normalized.startswith("system.")
+        ):
+            raise ValueError("MONGODB_TRACE_EVENTS_COLLECTION must be a simple collection name")
+        return normalized
     # ============================================
     # All settings below get defaults from SETTING_DEFINITIONS
     # ============================================

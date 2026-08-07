@@ -29,8 +29,11 @@ Trace Storage - 按 trace 聚合事件存储
 """
 
 import asyncio
+import hashlib
+import json
 from typing import Any, Dict, List, Optional
 
+from pymongo import UpdateOne
 from pymongo.errors import DuplicateKeyError
 
 from src.infra.logging import get_logger
@@ -126,6 +129,7 @@ class TraceStorage:
     def __init__(self):
         self._collection = None
         self._counter_collection = None
+        self._event_collection = None
         self._merger = None  # 事件合并器
         self._indexes_lock = asyncio.Lock()
         self._indexes_task: Optional[asyncio.Task[bool]] = None
@@ -166,6 +170,194 @@ class TraceStorage:
             db = client[settings.MONGODB_DB]
             self._counter_collection = db["session_events_counter"]
         return self._counter_collection
+
+    @property
+    def event_collection(self):
+        """Immutable one-event-per-document collection."""
+        if self._event_collection is None:
+            client = get_mongo_client()
+            self._event_collection = client[settings.MONGODB_DB][
+                getattr(settings, "MONGODB_TRACE_EVENTS_COLLECTION", "trace_events")
+            ]
+        return self._event_collection
+
+    async def ensure_event_indexes(self) -> bool:
+        """Create the idempotency and cursor indexes for ``trace_events``."""
+        collection = self.event_collection
+        indexes: tuple[tuple[str, list[tuple[str, int]], dict[str, Any]], ...] = (
+            ("session_trace_event_unique", [("session_id", 1), ("trace_id", 1), ("event_id", 1)], {"unique": True}),
+            ("session_seq_event_idx", [("session_id", 1), ("seq", 1), ("event_id", 1)], {}),
+            ("session_run_seq_event_idx", [("session_id", 1), ("run_id", 1), ("seq", 1), ("event_id", 1)], {}),
+            ("trace_type_timestamp_idx", [("trace_id", 1), ("event_type", 1), ("timestamp", 1)], {}),
+        )
+        try:
+            for name, keys, kwargs in indexes:
+                await collection.create_index(keys, name=name, background=True, **kwargs)
+            return True
+        except Exception as exc:
+            logger.error("trace_events index initialization failed: %s", exc)
+            return False
+
+    async def write_trace_events(self, events: List[Dict[str, Any]]) -> Any:
+        """Idempotently upsert immutable event documents.
+
+        ``$setOnInsert`` guarantees retries with an existing event id do not
+        mutate its sequence or payload. Callers retain the batch when this
+        raises so transient Mongo failures are retryable.
+        """
+        if not events:
+            return None
+        operations = []
+        seen_identities: set[tuple[str, str, str]] = set()
+        for event in events:
+            identity = {
+                "session_id": event["session_id"],
+                "trace_id": event["trace_id"],
+                "event_id": event["event_id"],
+            }
+            identity_key = (identity["session_id"], identity["trace_id"], identity["event_id"])
+            if identity_key in seen_identities:
+                continue
+            seen_identities.add(identity_key)
+            doc = dict(event)
+            doc.setdefault("created_at", utc_now())
+            operations.append(UpdateOne(identity, {"$setOnInsert": doc}, upsert=True))
+        return await self.event_collection.bulk_write(operations, ordered=False)
+
+    async def get_event_store_session_events(self, session_id: str, **filters: Any) -> List[Dict[str, Any]]:
+        """Read immutable events, normalized to the history cursor contract.
+
+        ``trace_events`` deliberately stores event data separately from trace
+        metadata.  A completed-only read therefore has to join against the
+        trace collection; filtering on an event document's status would be
+        incorrect because status is mutable metadata and is not copied onto
+        each immutable event.
+        """
+        query: Dict[str, Any] = {"session_id": session_id}
+        if filters.get("completed_only", True):
+            trace_query: Dict[str, Any] = {"session_id": session_id, "status": {"$ne": "running"}}
+            if filters.get("run_id"):
+                trace_query["run_id"] = filters["run_id"]
+            if filters.get("exclude_run_id"):
+                trace_query["run_id"] = {"$ne": filters["exclude_run_id"]}
+            if filters.get("run_ids"):
+                trace_query["run_id"] = {"$in": filters["run_ids"]}
+            trace_cursor = self.collection.find(trace_query, {"trace_id": 1})
+            completed_trace_ids: list[str] = []
+            async for trace in trace_cursor:
+                trace_id = trace.get("trace_id")
+                if trace_id:
+                    completed_trace_ids.append(str(trace_id))
+            # Fail closed when metadata is missing: an immutable event without
+            # a known terminal trace must not leak into completed history.
+            if not completed_trace_ids:
+                return []
+            query["trace_id"] = {"$in": completed_trace_ids}
+        if filters.get("run_id"):
+            query["run_id"] = filters["run_id"]
+        if filters.get("exclude_run_id"):
+            query["run_id"] = {"$ne": filters["exclude_run_id"]}
+        if filters.get("run_ids"):
+            query["run_id"] = {"$in": filters["run_ids"]}
+        if filters.get("event_types"):
+            query["event_type"] = {"$in": filters["event_types"]}
+        cursor = self.event_collection.find(query).sort([("seq", 1), ("event_id", 1)])
+        events: List[Dict[str, Any]] = []
+        async for event in cursor:
+            event.pop("_id", None)
+            events.append(event)
+        events.sort(key=event_ordering_key)
+        return events
+
+    async def get_event_store_session_events_page(self, session_id: str, **kwargs: Any) -> Dict[str, Any]:
+        """Cursor pagination for the immutable event source."""
+        events = await self.get_event_store_session_events(session_id, **kwargs)
+        after = kwargs.get("after")
+        if after:
+            fingerprint = filter_fingerprint(
+                scope=session_id,
+                event_types=_bounded_unique_strings(kwargs.get("event_types"), SESSION_EVENT_FILTER_LIST_LIMIT),
+                run_id=kwargs.get("run_id"), exclude_run_id=kwargs.get("exclude_run_id"),
+                run_ids=_bounded_unique_strings(kwargs.get("run_ids"), SESSION_EVENT_FILTER_LIST_LIMIT),
+            )
+            key = decode_history_cursor(after, scope=session_id, fingerprint=fingerprint)
+            events = [event for event in events if event_ordering_key(event) > key]
+        limit = _clamp_event_read_limit(kwargs.get("limit"), default=_get_session_event_read_default_limit())
+        has_more = len(events) > limit
+        page = events[:limit]
+        fingerprint = filter_fingerprint(
+            scope=session_id,
+            event_types=_bounded_unique_strings(kwargs.get("event_types"), SESSION_EVENT_FILTER_LIST_LIMIT),
+            run_id=kwargs.get("run_id"), exclude_run_id=kwargs.get("exclude_run_id"),
+            run_ids=_bounded_unique_strings(kwargs.get("run_ids"), SESSION_EVENT_FILTER_LIST_LIMIT),
+        )
+        next_cursor = encode_history_cursor(scope=session_id, fingerprint=fingerprint, key=event_ordering_key(page[-1])) if has_more and page else None
+        return {"events": page, "has_more": has_more, "next_cursor": next_cursor,
+                "history_complete": not has_more, "ordering_version": HISTORY_ORDERING_VERSION,
+                "events_limited": has_more, "events_limit": kwargs.get("limit")}
+
+    @staticmethod
+    def legacy_event_id(trace_id: str, ordinal: int, event: Dict[str, Any]) -> str:
+        """Derive a stable id for an event copied from a legacy array."""
+        canonical = json.dumps(
+            [trace_id, ordinal, event.get("event_type"), event.get("timestamp"), event.get("data")],
+            ensure_ascii=True, sort_keys=True, separators=(",", ":"), default=str,
+        )
+        return "legacy-" + hashlib.sha256(canonical.encode()).hexdigest()
+
+    async def backfill_legacy_events(
+        self, *, batch_size: int = 100, dry_run: bool = True, session_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Replay legacy arrays into ``trace_events`` without mutating source data.
+
+        The returned counters are suitable for an audit/coverage record. A
+        truncated legacy array is reported as incomplete because backfill
+        cannot reconstruct events already discarded by the old writer.
+        """
+        query: Dict[str, Any] = {}
+        if session_id:
+            query["session_id"] = session_id
+        copied = 0
+        traces = 0
+        errors: List[str] = []
+        pending: List[Dict[str, Any]] = []
+        cursor = self.collection.find(query, {"trace_id": 1, "session_id": 1, "run_id": 1, "events": 1, "event_count": 1})
+        async for trace in cursor:
+            traces += 1
+            trace_id = str(trace.get("trace_id") or "")
+            sid = str(trace.get("session_id") or "")
+            events = trace.get("events") or []
+            expected_count = trace.get("event_count")
+            if isinstance(expected_count, int) and expected_count > len(events):
+                # The old array writer counted every event but retained only a
+                # bounded tail.  Backfill cannot reconstruct the discarded
+                # prefix, so surface an incomplete coverage result.
+                errors.append(f"{trace_id or 'missing-trace'}:legacy_events_truncated")
+            for ordinal, event in enumerate(events):
+                if not isinstance(event, dict) or not trace_id or not sid:
+                    errors.append(trace_id or "missing-trace")
+                    continue
+                pending.append({
+                    "event_id": self.legacy_event_id(trace_id, ordinal, event),
+                    "session_id": sid,
+                    "trace_id": trace_id,
+                    "run_id": trace.get("run_id"),
+                    "seq": event.get("seq"),
+                    "timestamp": event.get("timestamp"),
+                    "event_type": event.get("event_type", ""),
+                    "data": event.get("data", {}),
+                })
+                if len(pending) >= max(int(batch_size), 1):
+                    if not dry_run:
+                        await self.write_trace_events(pending)
+                    copied += len(pending)
+                    pending = []
+        if pending:
+            if not dry_run:
+                await self.write_trace_events(pending)
+            copied += len(pending)
+        return {"dry_run": dry_run, "traces": traces, "copied": copied,
+                "errors": errors, "complete": not errors}
 
     async def next_event_seq(self, session_id: str) -> int:
         """

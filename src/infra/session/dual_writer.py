@@ -14,6 +14,7 @@ Dual Event Writer - 双写事件到 Redis Stream + MongoDB
 import asyncio
 import json
 import time
+import uuid
 from collections import OrderedDict, defaultdict
 from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, List, Optional
@@ -22,6 +23,12 @@ from pymongo import UpdateOne
 
 from src.infra.async_utils import run_blocking_io
 from src.infra.logging import get_logger
+from src.infra.session.history_cursor import (
+    decode_history_cursor,
+    encode_history_cursor,
+    event_ordering_key,
+    filter_fingerprint,
+)
 from src.infra.session.trace_storage import (
     TraceIdentityConflictError,
     TraceStorage,
@@ -44,7 +51,7 @@ _LIVE_STREAM_READ_TIMEOUT_SECONDS = 24 * 60 * 60
 _SSE_HEARTBEAT_INTERVAL_SECONDS = 15
 _REDIS_XREAD_BLOCK_MS = 5000
 _REDIS_REPLAY_BATCH_SIZE = 500
-MongoBufferItem = tuple[str, str, dict, str, Optional[str], datetime]
+MongoBufferItem = tuple[str, str, dict, str, Optional[str], datetime, str, Optional[int]]
 
 
 def _get_max_events_per_trace() -> int:
@@ -75,6 +82,14 @@ def _get_redis_replay_batch_size() -> int:
     )
 
 
+def _event_write_mode() -> str:
+    return str(getattr(settings, "TRACE_EVENT_WRITE_MODE", "legacy") or "legacy").lower()
+
+
+def _event_read_mode() -> str:
+    return str(getattr(settings, "TRACE_EVENT_READ_MODE", "legacy") or "legacy").lower()
+
+
 async def _serialize_event_data_for_redis(data: Any) -> str:
     if isinstance(data, dict):
         return await run_blocking_io(json.dumps, data, ensure_ascii=False)
@@ -102,8 +117,13 @@ def _build_mongo_bulk_operations(
     # so each event gets the next seq for its session.
     seq_cursor: dict[str, int] = {}
 
-    for trace_id, event_type, data, session_id, run_id, timestamp in batch:
+    for item in batch:
+        trace_id, event_type, data, session_id, run_id, timestamp = item[:6]
+        event_id = item[6] if len(item) > 6 else uuid.uuid4().hex
         event_doc: dict = {
+            # Keep the compatibility array keyed by the same immutable id so
+            # dual-read can replace (rather than duplicate) each event.
+            "event_id": event_id,
             "event_type": event_type,
             "data": data,
             "timestamp": timestamp,
@@ -140,6 +160,38 @@ def _build_mongo_bulk_operations(
             )
         )
     return operations
+
+
+def _build_trace_event_documents(
+    batch: list[MongoBufferItem],
+    *,
+    seqs_by_session: Optional[Dict[str, List[int]]] = None,
+) -> list[dict[str, Any]]:
+    """Normalize buffered records into immutable event documents."""
+    seq_cursor: dict[str, int] = {}
+    documents: list[dict[str, Any]] = []
+    for item in batch:
+        trace_id, event_type, data, session_id, run_id, timestamp = item[:6]
+        event_id = item[6] if len(item) > 6 else uuid.uuid4().hex
+        seq = item[7] if len(item) > 7 else None
+        if seq is None and seqs_by_session and session_id in seqs_by_session:
+            index = seq_cursor.get(session_id, 0)
+            values = seqs_by_session[session_id]
+            if index < len(values):
+                seq = values[index]
+                seq_cursor[session_id] = index + 1
+        document = {
+            "event_id": event_id,
+            "session_id": session_id,
+            "trace_id": trace_id,
+            "run_id": run_id,
+            "seq": seq,
+            "timestamp": timestamp,
+            "event_type": event_type,
+            "data": data,
+        }
+        documents.append(document)
+    return documents
 
 
 class DualEventWriter:
@@ -219,6 +271,7 @@ class DualEventWriter:
         trace_id: Optional[str] = None,
         agent_id: Optional[str] = None,
         run_id: Optional[str] = None,
+        event_id: Optional[str] = None,
     ) -> bool:
         """
         双写事件到 Redis + MongoDB
@@ -228,10 +281,17 @@ class DualEventWriter:
         """
         # 统一时间戳，确保 Redis 和 MongoDB 使用相同的时间
         timestamp = utc_now()
+        event_id = event_id or uuid.uuid4().hex
+        seq: Optional[int] = None
+        if trace_id and _event_write_mode() in {"dual", "event_store"}:
+            next_seq = getattr(self.trace, "next_event_seq", None)
+            if next_seq is not None:
+                seq = await next_seq(session_id)
 
         # ---- Redis 写入（立即，无锁） ----
         stream_key = self._stream_key(session_id, run_id)
         fields = {
+            "event_id": event_id,
             "event_type": event_type,
             "data": await _serialize_event_data_for_redis(data),
             "timestamp": timestamp.isoformat(),
@@ -241,28 +301,25 @@ class DualEventWriter:
         # ---- MongoDB 写入（缓冲，使用 Event 触发） ----
         if trace_id:
             should_flush_now = False
-            buffer_size = 0
+            while True:
+                async with self._mongo_lock:
+                    mongo_buffer_max = _get_mongo_buffer_max()
+                    buffer_size = len(self._mongo_buffer)
+                    if buffer_size < mongo_buffer_max:
+                        if buffer_size >= int(mongo_buffer_max * 0.8):
+                            logger.warning("MongoDB event buffer at %d/%d", buffer_size, mongo_buffer_max)
+                        self._mongo_buffer.append(
+                            (trace_id, event_type, data, session_id, run_id, timestamp, event_id, seq)
+                        )
+                        break
+                # Backpressure rather than silently dropping old events.
+                await self.flush_mongo_buffer()
             async with self._mongo_lock:
-                mongo_buffer_max = _get_mongo_buffer_max()
                 buffer_size = len(self._mongo_buffer)
                 # 防止 buffer 无限增长（MongoDB 慢/宕机时丢弃最旧的事件）
                 if buffer_size >= mongo_buffer_max:
-                    keep_count = mongo_buffer_max // 2
-                    dropped_count = buffer_size - keep_count
-                    self._mongo_buffer = self._mongo_buffer[-keep_count:] if keep_count else []
-                    logger.error(
-                        f"MongoDB buffer exceeded {mongo_buffer_max}, dropped {dropped_count} oldest entries. "
-                        f"This indicates MongoDB is slow or down. Check MongoDB health!"
-                    )
+                    raise RuntimeError("MongoDB event buffer remained full after backpressure flush")
                 # 当缓冲区达到 80% 时发出警告
-                elif buffer_size >= int(mongo_buffer_max * 0.8):
-                    logger.warning(
-                        f"MongoDB buffer at {buffer_size}/{mongo_buffer_max} ({buffer_size * 100 // mongo_buffer_max}%). "
-                        f"Consider checking MongoDB performance."
-                    )
-                self._mongo_buffer.append(
-                    (trace_id, event_type, data, session_id, run_id, timestamp)
-                )
                 # 达到批量大小立即刷新
                 if len(self._mongo_buffer) >= _MONGO_BATCH_SIZE:
                     should_flush_now = True
@@ -349,7 +406,8 @@ class DualEventWriter:
         # before issuing the bulk update; otherwise a delayed flush could create
         # traces while the unique index is unavailable.
         trace_context: dict[str, tuple[str, Optional[str]]] = {}
-        for trace_id, _event_type, _data, session_id, run_id, _timestamp in batch:
+        for item in batch:
+            trace_id, _event_type, _data, session_id, run_id, _timestamp = item[:6]
             identity = (session_id, run_id)
             previous = trace_context.setdefault(trace_id, identity)
             if previous != identity:
@@ -402,8 +460,10 @@ class DualEventWriter:
         # message ids and wrong message order in the chat history.
         seqs_by_session: Dict[str, List[int]] = {}
         session_counts: Dict[str, int] = {}
-        for _trace_id, _event_type, _data, session_id, _run_id, _ts in batch:
-            if session_id:
+        for item in batch:
+            _trace_id, _event_type, _data, session_id, _run_id, _ts = item[:6]
+            existing_seq = item[7] if len(item) > 7 else None
+            if session_id and existing_seq is None:
                 session_counts[session_id] = session_counts.get(session_id, 0) + 1
         for session_id, count in session_counts.items():
             try:
@@ -418,18 +478,79 @@ class DualEventWriter:
                     range(base - count + 1, base + 1)
                 )
             except Exception as e:
+                if _event_write_mode() in {"dual", "event_store"}:
+                    async with self._mongo_lock:
+                        self._mongo_buffer = batch + self._mongo_buffer
+                        self._flush_event.set()
+                    raise
                 logger.warning(
                     f"Failed to allocate event seq for session {session_id}: {e}"
                 )
                 seqs_by_session[session_id] = []
 
-        operations = await run_blocking_io(
-            _build_mongo_bulk_operations,
-            batch,
-            now=now,
-            max_events=max_events,
-            seqs_by_session=seqs_by_session,
-        )
+        if _event_write_mode() in {"dual", "event_store"}:
+            event_documents = await run_blocking_io(
+                _build_trace_event_documents, batch, seqs_by_session=seqs_by_session
+            )
+            try:
+                ensure_events = getattr(self.trace, "ensure_event_indexes", None)
+                if ensure_events is not None and not await ensure_events():
+                    raise TraceWriteUnavailableError("trace_events indexes are not ready")
+                result = await self.trace.write_trace_events(event_documents)
+                # Metadata is repairable bookkeeping; durable event documents
+                # remain authoritative if this best-effort update fails.
+                upserted_ids = getattr(result, "upserted_ids", None)
+                if isinstance(upserted_ids, dict):
+                    inserted_documents = [
+                        event_documents[index]
+                        for index in upserted_ids
+                        if isinstance(index, int) and 0 <= index < len(event_documents)
+                    ]
+                else:
+                    # Some lightweight Mongo fakes expose only upserted_count;
+                    # in that case retain the historical all-new assumption.
+                    inserted_documents = event_documents[: int(getattr(result, "upserted_count", len(event_documents)) or 0)]
+                if inserted_documents:
+                    grouped_counts: dict[str, int] = defaultdict(int)
+                    for document in inserted_documents:
+                        grouped_counts[document["trace_id"]] += 1
+                    for trace_id, count in grouped_counts.items():
+                        update_one = getattr(self.trace.collection, "update_one", None)
+                        if update_one is not None:
+                            try:
+                                await update_one(
+                                    {"trace_id": trace_id},
+                                    {"$inc": {"event_count": count}, "$set": {"updated_at": now}},
+                                )
+                            except Exception:
+                                logger.warning("trace metadata repair deferred for %s", trace_id)
+            except Exception:
+                async with self._mongo_lock:
+                    self._mongo_buffer = batch + self._mongo_buffer
+                    self._flush_event.set()
+                raise
+
+            # Legacy arrays are compatibility-only in dual mode. They are
+            # intentionally not written in event_store mode, avoiding $slice
+            # and whole-array rewrites on the authoritative path.
+            if _event_write_mode() == "dual":
+                operations = await run_blocking_io(
+                    _build_mongo_bulk_operations,
+                    batch,
+                    now=now,
+                    max_events=max_events,
+                    seqs_by_session=seqs_by_session,
+                )
+            else:
+                operations = []
+        else:
+            operations = await run_blocking_io(
+                _build_mongo_bulk_operations,
+                batch,
+                now=now,
+                max_events=max_events,
+                seqs_by_session=seqs_by_session,
+            )
 
         # 批量执行
         if operations:
@@ -480,6 +601,10 @@ class DualEventWriter:
         if not await self.trace.ensure_indexes_if_needed():
             raise TraceWriteUnavailableError(
                 "trace writes are disabled until trace indexes become ready"
+            )
+        if _event_write_mode() in {"dual", "event_store"}:
+            return await self.trace.complete_trace(
+                trace_id, status, metadata, ensure_token_usage=False
             )
         return await self.trace.complete_trace(trace_id, status, metadata)
 
@@ -578,6 +703,7 @@ class DualEventWriter:
                 for entry_id, fields in entries:
                     event = {
                         "id": entry_id,
+                        "event_id": fields.get("event_id") or entry_id,
                         "event_type": fields.get("event_type"),
                         "data": await _parse_event_data_from_redis(fields.get("data", "{}")),
                         "timestamp": fields.get("timestamp"),
@@ -636,6 +762,7 @@ class DualEventWriter:
                             for entry_id, fields in entries:
                                 event = {
                                     "id": entry_id,
+                                    "event_id": fields.get("event_id") or entry_id,
                                     "event_type": fields.get("event_type"),
                                     "data": await _parse_event_data_from_redis(
                                         fields.get("data", "{}")
@@ -714,6 +841,42 @@ class DualEventWriter:
         Returns:
             事件列表
         """
+        if _event_read_mode() == "event_store":
+            return await self.trace.get_event_store_session_events(
+                session_id,
+                event_types=event_types,
+                run_id=run_id,
+                exclude_run_id=exclude_run_id,
+                completed_only=completed_only,
+                run_ids=run_ids,
+            )
+        if _event_read_mode() == "merge":
+            immutable = await self.trace.get_event_store_session_events(
+                session_id, event_types=event_types, run_id=run_id,
+                exclude_run_id=exclude_run_id, completed_only=completed_only,
+                run_ids=run_ids,
+            )
+            legacy = await self.trace.get_session_events(
+                session_id, event_types, run_id=run_id, exclude_run_id=exclude_run_id,
+                completed_only=completed_only, run_ids=run_ids, max_events=max_events,
+            )
+            merged: dict[str, Dict[str, Any]] = {}
+            for ordinal, event in enumerate(legacy):
+                # Legacy arrays written before the shared ``event_id`` field
+                # was introduced still need a deterministic identity that
+                # matches backfill-generated immutable documents.
+                key = str(
+                    event.get("event_id")
+                    or event.get("id")
+                    or TraceStorage.legacy_event_id(str(event.get("trace_id") or ""), ordinal, event)
+                )
+                event.setdefault("event_id", key)
+                merged[key] = event
+            for event in immutable:
+                key = str(event.get("event_id") or event.get("id") or "")
+                if key:
+                    merged[key] = event
+            return sorted(merged.values(), key=event_ordering_key)
         return await self.trace.get_session_events(
             session_id,
             event_types,
@@ -736,6 +899,36 @@ class DualEventWriter:
         after: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Read a cursor page from the legacy trace store."""
+        if _event_read_mode() == "event_store":
+            return await self.trace.get_event_store_session_events_page(
+                session_id, event_types=event_types, run_id=run_id,
+                exclude_run_id=exclude_run_id, completed_only=completed_only,
+                run_ids=run_ids, limit=limit, after=after,
+            )
+        if _event_read_mode() == "merge":
+            events = await self.read_session_events(
+                session_id, event_types, run_id=run_id, exclude_run_id=exclude_run_id,
+                completed_only=completed_only, run_ids=run_ids,
+            )
+            default_limit = getattr(settings, "SESSION_EVENT_READ_DEFAULT_LIMIT", 1000)
+            page_limit = max(min(int(str(limit or default_limit)), 10000), 1)
+            fingerprint = filter_fingerprint(
+                scope=session_id, event_types=event_types or [], run_id=run_id,
+                exclude_run_id=exclude_run_id, run_ids=run_ids or [],
+            )
+            if after:
+                key = decode_history_cursor(after, scope=session_id, fingerprint=fingerprint)
+                events = [event for event in events if event_ordering_key(event) > key]
+            has_more = len(events) > page_limit
+            page_events = events[:page_limit]
+            next_cursor = encode_history_cursor(
+                scope=session_id, fingerprint=fingerprint, key=event_ordering_key(page_events[-1])
+            ) if has_more and page_events else None
+            return {
+                "events": page_events, "has_more": has_more, "next_cursor": next_cursor,
+                "history_complete": False, "ordering_version": 2,
+                "events_limited": has_more, "events_limit": limit,
+            }
         return await self.trace.get_session_events_page(
             session_id,
             event_types,
