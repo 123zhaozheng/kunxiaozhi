@@ -37,6 +37,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Session History Cursor Pagination](./session-history-pagination.md) | Read-only session/share cursor contract, completeness semantics, cancellation, and cross-layer tests | Filled |
 | [Trace Uniqueness and Write Readiness](./trace-uniqueness-readiness.md) | Fail-closed trace indexes, identity validation, bulk-write gates, and deployment readiness | Filled |
 | [Durable Trace Event Storage](./trace-event-storage.md) | Immutable event documents, dual-write/read rollout, backpressure, backfill, and rollback | Filled |
+| [Duplicate Trace Migration](./trace-duplicate-migration.md) | Dry-run-first duplicate repair, backup, leases, deterministic merge, audit, and rollback | Filled |
 
 ---
 
