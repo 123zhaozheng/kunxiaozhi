@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 31
+- **Total Sessions**: 32
 - **Last Active**: 2026-08-07
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~973 | Active |
+| `journal-1.md` | ~995 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 32 | 2026-08-07 | 完成 stale-running 生命周期恢复 | `d4985bb5`, `8b776396` | `main` |
 | 31 | 2026-08-07 | 完成重复 trace 安全迁移 | `c7d95012`, `8cba4e7a` | `main` |
 | 30 | 2026-08-07 | 完成无损 trace 事件存储 | `87d98309`, `d477b342` | `main` |
 | 29 | 2026-08-07 | 完成 trace 唯一性与写入 readiness | `dd15687e`, `941551f5` | `main` |

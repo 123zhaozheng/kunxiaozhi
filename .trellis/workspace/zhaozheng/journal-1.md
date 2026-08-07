@@ -971,3 +971,25 @@ Added admin-configurable 3-hour idle sessions with Redis-backed sid state, atomi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 32: 完成 stale-running 生命周期恢复
+
+**Date**: 2026-08-07
+**Task**: 完成 stale-running 生命周期恢复
+**Branch**: `main`
+
+### Summary
+
+完成保守的 stale-running trace 恢复：基于 grace、心跳与 CAS 终态收敛，接入启动清理租约，补齐审计、指标、配置和回归测试，并记录跨层契约。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d4985bb5` | (see git log) |
+| `8b776396` | (see git log) |
+
+### Status
+
+[OK] **Completed**
