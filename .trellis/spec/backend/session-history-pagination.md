@@ -69,4 +69,3 @@ const result = await sessionApi.getAllEvents(sessionId, {
 setEvents(result.events);
 setHistoryIncomplete(result.history_complete === false);
 ```
-
