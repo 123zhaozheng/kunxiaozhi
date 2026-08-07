@@ -25,6 +25,7 @@ Use this contract whenever session history or public-share history is read acros
 - Normal history GET paths are read-only: they must not deduplicate trace documents, reconcile stale state, or perform any other database write.
 - Frontend loaders preserve already loaded pages on later-page failure or cancellation. Non-abort failures set `history_complete=false` and `history_error`; `AbortError` sets incomplete history without presenting an error.
 - Every fetch layer must pass the same `AbortSignal` to the native `fetch`. Components must own an `AbortController`, abort on identity/effect cleanup, and suppress stale state updates.
+- History reconstruction must preserve this composite ordering when normalizing mixed legacy and immutable events; a timestamp-only fallback is not equivalent when only some events have `seq`.
 
 ### 4. Validation & Error Matrix
 

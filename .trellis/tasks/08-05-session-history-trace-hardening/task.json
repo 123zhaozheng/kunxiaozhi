@@ -1,0 +1,32 @@
+{
+  "id": "session-history-trace-hardening",
+  "name": "session-history-trace-hardening",
+  "title": "完善会话历史持久化与 trace 一致性",
+  "description": "",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "zhaozheng",
+  "assignee": "zhaozheng",
+  "createdAt": "2026-08-05",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-05-session-history-cursor",
+    "08-05-trace-event-storage",
+    "08-05-trace-uniqueness-readiness",
+    "08-05-trace-duplicate-migration",
+    "08-05-trace-stale-recovery"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

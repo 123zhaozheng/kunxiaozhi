@@ -31,6 +31,7 @@ Each immutable document contains at least `session_id`, `trace_id`, `run_id`, `e
 - Buffer pressure applies backpressure. Preflight/write failure requeues events in order, re-arms flushing, raises/logs visibly, and never discards a batch.
 - Metadata counts are repairable projections. Event durability happens first; metadata failure cannot delete immutable events.
 - Backfill is source-preserving and dry-run capable. Deterministic legacy IDs must match merge fallback IDs. If `event_count` exceeds the retained array length, coverage is incomplete and cutover must be blocked.
+- Merge fallback IDs use the event's ordinal within its source trace array (not the flattened session ordinal), so a backfilled legacy event replaces rather than duplicates the legacy read.
 - Rollback changes read/write modes only; it never deletes `trace_events`.
 
 ### 4. Validation & Error Matrix
