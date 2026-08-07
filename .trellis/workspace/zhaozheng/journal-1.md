@@ -993,3 +993,26 @@ Added admin-configurable 3-hour idle sessions with Redis-backed sid state, atomi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 33: 完成会话历史与 trace 硬化
+
+**Date**: 2026-08-07
+**Task**: 完成会话历史与 trace 硬化
+**Branch**: `main`
+
+### Summary
+
+完成游标分页、不可变事件存储、trace 唯一性与重复迁移、stale-running 恢复的跨层验收；移除泛化的历史不完整提示，并在环境示例中记录安全 rollout 与回滚配置。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1795fac0` | (see git log) |
+| `a549ed92` | (see git log) |
+| `2ce8b7de` | (see git log) |
+
+### Status
+
+[OK] **Completed**
