@@ -35,6 +35,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [read_document Dispatch](./read-document-dispatch.md) | File-type dispatch (MinerU / plain-text / sandbox-guidance), charset-normalizer short-CJK gotcha | Filled |
 | [Idle Login Sessions](./auth-idle-sessions.md) | Redis-backed per-login idle timeout, JWT `sid`, atomic activity, refresh/HTTP/SSE/WebSocket enforcement | Filled |
 | [Session History Cursor Pagination](./session-history-pagination.md) | Read-only session/share cursor contract, completeness semantics, cancellation, and cross-layer tests | Filled |
+| [Trace Uniqueness and Write Readiness](./trace-uniqueness-readiness.md) | Fail-closed trace indexes, identity validation, bulk-write gates, and deployment readiness | Filled |
 
 ---
 
