@@ -318,6 +318,7 @@ class TaskStartupCleanupService:
         resume_interrupted_run: Callable[[Any, str, str], Awaitable[dict[str, Any]]],
         replay_pending_queued_tasks: Callable[[], Awaitable[None]] | None = None,
         cleanup_stale_queues: Callable[[], Awaitable[None]] | None = None,
+        reconcile_stale_traces: Callable[[], Awaitable[int]] | None = None,
     ) -> None:
         self._storage = storage
         self._heartbeat = heartbeat
@@ -326,6 +327,7 @@ class TaskStartupCleanupService:
         self._resume_interrupted_run = resume_interrupted_run
         self._replay_pending_queued_tasks_cb = replay_pending_queued_tasks
         self._cleanup_stale_queues_cb = cleanup_stale_queues
+        self._reconcile_stale_traces_cb = reconcile_stale_traces
 
     async def cleanup_stale_tasks(self) -> None:
         """
@@ -377,6 +379,16 @@ class TaskStartupCleanupService:
 
             if cleaned_count > 0:
                 logger.info("Cleaned up %s stale tasks without heartbeat", cleaned_count)
+
+            if self._reconcile_stale_traces_cb is not None:
+                try:
+                    reconciled = await self._reconcile_stale_traces_cb()
+                    if reconciled:
+                        logger.info("Reconciled %s stale running trace(s)", reconciled)
+                except Exception as exc:
+                    # Trace repair must never prevent queue/task cleanup. The
+                    # callback logs the per-trace failure details as well.
+                    logger.error("Failed to reconcile stale running traces: %s", exc, exc_info=True)
 
             await self.replay_pending_queued_tasks()
             await self.cleanup_stale_queues()

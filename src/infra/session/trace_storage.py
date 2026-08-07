@@ -31,7 +31,8 @@ Trace Storage - 按 trace 聚合事件存储
 import asyncio
 import hashlib
 import json
-from typing import Any, Dict, List, Optional
+from datetime import timedelta
+from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 
 from pymongo import UpdateOne
 from pymongo.errors import DuplicateKeyError
@@ -68,6 +69,7 @@ TRACE_EVENTS_DEFAULT_LIMIT = 1000
 # easily exceed the old 5000 cap, which made replies vanish on refresh.
 TRACE_EVENTS_READ_LIMIT = 10000
 TRACE_LIST_LIMIT = 100
+TRACE_STALE_RECOVERY_TERMINAL_EVENTS = ("done", "error", "complete")
 
 
 def _get_session_event_read_default_limit() -> int:
@@ -140,6 +142,21 @@ class TraceStorage:
         self._index_errors: Dict[str, str] = {}
         self._index_attempts = 0
         self._duplicate_trace_ids: List[str] = []
+        self._reconcile_metrics: Dict[str, int] = {
+            "scanned": 0,
+            "reconciled": 0,
+            "skipped_active_heartbeat": 0,
+            "skipped_running_task": 0,
+            "skipped_current_run": 0,
+            "skipped_no_terminal_evidence": 0,
+            "cas_conflicts": 0,
+            "failures": 0,
+        }
+
+    @property
+    def stale_recovery_metrics(self) -> Dict[str, int]:
+        """Return counters from the most recent stale-trace recovery pass."""
+        return dict(self._reconcile_metrics)
 
     @property
     def index_status(self) -> Dict[str, Any]:
@@ -1106,6 +1123,174 @@ class TraceStorage:
         except Exception as e:
             logger.error(f"Failed to list run summaries: {e}")
             return []
+
+    async def reconcile_stale_running_traces(
+        self,
+        session_id: str | None = None,
+        *,
+        session_collection: Any | None = None,
+        heartbeat_check: Callable[[str], Awaitable[bool]] | None = None,
+        grace_seconds: int | None = None,
+        batch_size: int | None = None,
+    ) -> int:
+        """Conservatively recover abandoned running traces outside the read path.
+
+        A trace is a candidate only after the configured grace period. A live
+        heartbeat always wins. Otherwise a terminal session task state is
+        sufficient, or a persisted terminal event is accepted only when the
+        owning task is no longer running. Every write includes the observed
+        identity/timestamp and ``status=running`` so a concurrent writer wins
+        the race instead of being overwritten.
+        """
+        if not getattr(settings, "TRACE_STALE_RECOVERY_ENABLED", True):
+            logger.info("[Trace] stale-running recovery disabled")
+            return 0
+        grace_value: Any = (
+            grace_seconds
+            if grace_seconds is not None
+            else getattr(settings, "TRACE_STALE_RECOVERY_GRACE_SECONDS", 120)
+        )
+        batch_value: Any = (
+            batch_size
+            if batch_size is not None
+            else getattr(settings, "TRACE_STALE_RECOVERY_BATCH_SIZE", 100)
+        )
+        grace = max(int(cast(Any, grace_value)), 1)
+        limit = min(max(int(cast(Any, batch_value)), 1), 1000)
+        now = utc_now()
+        cutoff = now - timedelta(seconds=grace)
+        self._reconcile_metrics = {key: 0 for key in self._reconcile_metrics}
+
+        if session_collection is None:
+            try:
+                client = get_mongo_client()
+                session_collection = client[settings.MONGODB_DB][settings.MONGODB_SESSIONS_COLLECTION]
+            except Exception as exc:
+                self._reconcile_metrics["failures"] += 1
+                logger.error("[Trace] stale-running recovery cannot load sessions: %s", exc, exc_info=True)
+                return 0
+        if heartbeat_check is None:
+            async def _check(run_id: str) -> bool:
+                from src.infra.task.heartbeat import TaskHeartbeat
+
+                return await TaskHeartbeat().check_exists_strict(run_id)
+
+            heartbeat_check = _check
+
+        query: Dict[str, Any] = {
+            "status": "running",
+            "$or": [
+                {"updated_at": {"$lt": cutoff}},
+                {"updated_at": {"$exists": False}, "started_at": {"$lt": cutoff}},
+            ],
+        }
+        if session_id:
+            query["session_id"] = session_id
+        try:
+            cursor = self.collection.find(query).sort("updated_at", 1).limit(limit)
+            candidates = await cursor.to_list(length=limit) if hasattr(cursor, "to_list") else [doc async for doc in cursor]
+        except Exception as exc:
+            self._reconcile_metrics["failures"] += 1
+            logger.error("[Trace] stale-running candidate scan failed: %s", exc, exc_info=True)
+            return 0
+
+        reconciled = 0
+        terminal_task_statuses = {"completed", "failed", "cancelled", "expired"}
+        for trace in candidates[:limit]:
+            self._reconcile_metrics["scanned"] += 1
+            trace_id = str(trace.get("trace_id") or "")
+            trace_session_id = str(trace.get("session_id") or session_id or "")
+            run_id = str(trace.get("run_id") or "")
+            if not trace_id or not trace_session_id or not run_id:
+                self._reconcile_metrics["skipped_no_terminal_evidence"] += 1
+                continue
+            try:
+                session = await session_collection.find_one(
+                    {"session_id": trace_session_id},
+                    {"metadata.task_status": 1, "metadata.current_run_id": 1},
+                )
+                if not session:
+                    self._reconcile_metrics["skipped_current_run"] += 1
+                    continue
+                metadata = (session or {}).get("metadata") or {}
+                task_status = str(metadata.get("task_status") or "")
+                current_run_id = metadata.get("current_run_id")
+                if not current_run_id or str(current_run_id) != run_id:
+                    self._reconcile_metrics["skipped_current_run"] += 1
+                    continue
+                if await heartbeat_check(run_id):
+                    self._reconcile_metrics["skipped_active_heartbeat"] += 1
+                    continue
+                terminal_events = {
+                    str(event.get("event_type"))
+                    for event in (trace.get("events") or [])
+                    if isinstance(event, dict)
+                }.intersection(TRACE_STALE_RECOVERY_TERMINAL_EVENTS)
+                if task_status not in terminal_task_statuses and not terminal_events:
+                    self._reconcile_metrics["skipped_no_terminal_evidence"] += 1
+                    continue
+                if task_status in {"starting", "queued", "pending", "cancelling"}:
+                    self._reconcile_metrics["skipped_running_task"] += 1
+                    continue
+                reason = "terminal_task_status" if task_status in terminal_task_statuses else "heartbeat_timeout_with_terminal_event"
+                terminal_status = "error" if (
+                    task_status in {"failed", "cancelled", "expired"}
+                    or "error" in terminal_events
+                ) else "completed"
+                observed = {
+                    "task_status": task_status or None,
+                    "current_run_id": str(current_run_id) if current_run_id else None,
+                    "heartbeat": False,
+                    "terminal_events": sorted(terminal_events),
+                    "reconciled_status": terminal_status,
+                    "observed_at": now,
+                }
+                update_now = utc_now()
+                update = {
+                    "$set": {
+                        "status": terminal_status,
+                        "completed_at": update_now,
+                        "updated_at": update_now,
+                        "reconciled_at": update_now,
+                        "reconciled_reason": reason,
+                        "reconciled_observed_state": observed,
+                    }
+                }
+                cas_query: Dict[str, Any] = {
+                    "session_id": trace_session_id,
+                    "trace_id": trace_id,
+                    "run_id": run_id,
+                    "status": "running",
+                }
+                if trace.get("_id") is not None:
+                    cas_query["_id"] = trace["_id"]
+                if trace.get("updated_at") is not None:
+                    cas_query["updated_at"] = trace["updated_at"]
+                elif trace.get("started_at") is not None:
+                    cas_query["started_at"] = trace["started_at"]
+                result = None
+                for attempt in range(2):
+                    try:
+                        result = await self.collection.update_one(cas_query, update)
+                        break
+                    except Exception:
+                        if attempt == 1:
+                            raise
+                        await asyncio.sleep(0)
+                        logger.warning("[Trace] retrying stale recovery CAS: trace=%s", trace_id)
+                assert result is not None
+                if result.modified_count > 0:
+                    reconciled += 1
+                    self._reconcile_metrics["reconciled"] += 1
+                else:
+                    self._reconcile_metrics["cas_conflicts"] += 1
+                    logger.info("[Trace] stale recovery CAS lost race: trace=%s run=%s", trace_id, run_id)
+            except Exception as exc:
+                self._reconcile_metrics["failures"] += 1
+                logger.error("[Trace] stale recovery failed: trace=%s: %s", trace_id, exc, exc_info=True)
+        if reconciled:
+            logger.info("[Trace] reconciled %d stale running trace(s); metrics=%s", reconciled, self._reconcile_metrics)
+        return reconciled
 
     async def get_session_events(
         self,

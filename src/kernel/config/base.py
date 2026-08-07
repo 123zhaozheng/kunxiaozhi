@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     TRACE_EVENT_READ_MODE: str = "legacy"
     TRACE_EVENT_BACKFILL_ENABLED: bool = False
     MONGODB_TRACE_EVENTS_COLLECTION: str = "trace_events"
+    # Stale trace recovery runs under the startup cleanup lease. It is
+    # deliberately opt-out and bounded so rollback is a single config change.
+    TRACE_STALE_RECOVERY_ENABLED: bool = True
+    TRACE_STALE_RECOVERY_GRACE_SECONDS: int = Field(default=120, gt=0)
+    TRACE_STALE_RECOVERY_BATCH_SIZE: int = Field(default=100, gt=0)
 
     @field_validator("TRACE_EVENT_WRITE_MODE", mode="before")
     @classmethod

@@ -161,12 +161,26 @@ class BackgroundTaskManager:
         )
 
     def _startup_cleanup_service(self) -> TaskStartupCleanupService:
+        async def _reconcile_stale_traces() -> int:
+            from src.infra.session.trace_storage import get_trace_storage
+
+            trace_storage = get_trace_storage()
+            return await trace_storage.reconcile_stale_running_traces(
+                session_collection=self.storage.collection,
+                heartbeat_check=getattr(
+                    self._heartbeat,
+                    "check_exists_strict",
+                    self._heartbeat.check_exists,
+                ),
+            )
+
         return TaskStartupCleanupService(
             storage=self.storage,
             heartbeat=self._heartbeat,
             ensure_executor=self._ensure_executor,
             load_session_record=self._load_session_record,
             resume_interrupted_run=self._resume_interrupted_run,
+            reconcile_stale_traces=_reconcile_stale_traces,
         )
 
     async def _mark_run_failed(self, run_id: str, reason: str, session: Any) -> None:

@@ -111,6 +111,18 @@ class TaskHeartbeat:
             logger.warning(f"Failed to check heartbeat for run_id={run_id}: {e}")
             return False
 
+    async def check_exists_strict(self, run_id: str) -> bool:
+        """Check a heartbeat without treating Redis failures as a timeout.
+
+        Recovery code must fail closed when the heartbeat source is
+        unavailable. Callers that intentionally use the historical
+        best-effort behavior should continue to use :meth:`check_exists`.
+        """
+        redis_client = get_redis_client()
+        heartbeat_key = f"{HEARTBEAT_PREFIX}{run_id}"
+        heartbeat = await redis_client.get(heartbeat_key)
+        return heartbeat is not None
+
     def is_running(self, run_id: str) -> bool:
         """检查本地心跳任务是否在运行"""
         return run_id in self._heartbeat_tasks
