@@ -333,7 +333,15 @@ def _startup_index_initializers():
     async def _init_trace_storage() -> None:
         from src.infra.session.trace_storage import get_trace_storage
 
-        await get_trace_storage().ensure_indexes_if_needed()
+        trace_storage = get_trace_storage()
+        ready = await trace_storage.ensure_indexes_if_needed()
+        if not ready:
+            status = trace_storage.index_status
+            # Keep the service up with trace writes disabled so readiness can
+            # expose the failed uniqueness preflight and a later probe can
+            # retry transient Mongo/index failures.
+            logger.error("TraceStorage indexes are not ready: %s", status)
+            return
         logger.info("TraceStorage initialized")
 
     async def _init_session_storage() -> None:

@@ -22,7 +22,12 @@ from pymongo import UpdateOne
 
 from src.infra.async_utils import run_blocking_io
 from src.infra.logging import get_logger
-from src.infra.session.trace_storage import TraceStorage, get_trace_storage
+from src.infra.session.trace_storage import (
+    TraceIdentityConflictError,
+    TraceStorage,
+    TraceWriteUnavailableError,
+    get_trace_storage,
+)
 from src.infra.storage.redis import RedisStorage
 from src.infra.utils.datetime import utc_now
 from src.kernel.config import settings
@@ -93,7 +98,6 @@ def _build_mongo_bulk_operations(
     seqs_by_session: Optional[Dict[str, List[int]]] = None,
 ) -> list[UpdateOne]:
     grouped: dict[str, list[dict]] = defaultdict(list)
-    trace_context: dict[str, tuple[str, Optional[str]]] = {}
     # Per-session cursor into the pre-allocated seq list, advanced in batch order
     # so each event gets the next seq for its session.
     seq_cursor: dict[str, int] = {}
@@ -111,12 +115,9 @@ def _build_mongo_bulk_operations(
                 event_doc["seq"] = seqs[idx]
                 seq_cursor[session_id] = idx + 1
         grouped[trace_id].append(event_doc)
-        if trace_id not in trace_context:
-            trace_context[trace_id] = (session_id, run_id)
 
     operations: list[UpdateOne] = []
     for trace_id, events in grouped.items():
-        session_id, run_id = trace_context.get(trace_id, ("", None))
         operations.append(
             UpdateOne(
                 {"trace_id": trace_id},
@@ -129,14 +130,13 @@ def _build_mongo_bulk_operations(
                     },
                     "$inc": {"event_count": len(events)},
                     "$set": {"updated_at": now},
-                    "$setOnInsert": {
-                        "session_id": session_id,
-                        "run_id": run_id or "",
-                        "status": "running",
-                        "started_at": now,
-                    },
                 },
-                upsert=True,
+                # Trace documents are created and identity-validated through
+                # TraceStorage before this bulk update.  Keeping this update
+                # non-upserting prevents buffered events from bypassing the
+                # readiness gate or creating a trace with a conflicting
+                # session/run identity.
+                upsert=False,
             )
         )
     return operations
@@ -194,6 +194,14 @@ class DualEventWriter:
         user_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
+        # Presenter creation is a write path in its own right.  Do not rely on
+        # the background bulk flusher to perform readiness checks later; that
+        # would allow a trace document to be created before the uniqueness
+        # preflight has completed.
+        if not await self.trace.ensure_indexes_if_needed():
+            raise TraceWriteUnavailableError(
+                "trace writes are disabled until trace indexes become ready"
+            )
         return await self.trace.create_trace(
             trace_id=trace_id,
             session_id=session_id,
@@ -336,6 +344,56 @@ class DualEventWriter:
         now = utc_now()
         max_events = _get_max_events_per_trace()
 
+        # A buffered event is itself a trace write.  Ensure every trace has
+        # passed the same readiness and identity checks as Presenter.create_trace
+        # before issuing the bulk update; otherwise a delayed flush could create
+        # traces while the unique index is unavailable.
+        trace_context: dict[str, tuple[str, Optional[str]]] = {}
+        for trace_id, _event_type, _data, session_id, run_id, _timestamp in batch:
+            identity = (session_id, run_id)
+            previous = trace_context.setdefault(trace_id, identity)
+            if previous != identity:
+                async with self._mongo_lock:
+                    self._mongo_buffer = batch + self._mongo_buffer
+                    self._flush_event.set()
+                raise TraceIdentityConflictError(
+                    f"trace_id {trace_id!r} has conflicting session/run identities "
+                    f"{previous!r} and {identity!r}"
+                )
+
+        ensure_indexes = getattr(self.trace, "ensure_indexes_if_needed", None)
+        if ensure_indexes is not None:
+            if not await ensure_indexes():
+                # Put the batch back so a later readiness retry can persist it.
+                async with self._mongo_lock:
+                    self._mongo_buffer = batch + self._mongo_buffer
+                    self._flush_event.set()
+                raise TraceWriteUnavailableError(
+                    "trace writes are disabled until trace indexes become ready"
+                )
+
+        create_trace = getattr(self.trace, "create_trace", None)
+        if create_trace is not None:
+            try:
+                for trace_id, (session_id, run_id) in trace_context.items():
+                    if not session_id:
+                        raise TraceIdentityConflictError(
+                            f"trace_id {trace_id!r} has no session identity"
+                        )
+                    created = await create_trace(
+                        trace_id=trace_id,
+                        session_id=session_id,
+                        run_id=run_id,
+                    )
+                    if not created:
+                        raise RuntimeError(f"failed to ensure trace {trace_id!r}")
+            except Exception:
+                # Do not silently drop events when the trace preflight fails.
+                async with self._mongo_lock:
+                    self._mongo_buffer = batch + self._mongo_buffer
+                    self._flush_event.set()
+                raise
+
         # Pre-allocate a session-level global sequence number for every event in
         # the batch, grouped by session (one atomic $inc per session). seq gives
         # a stable, monotonic global order across all traces of a session so that
@@ -381,7 +439,13 @@ class DualEventWriter:
                     f"Bulk write: {result.modified_count} modified, {result.upserted_count} upserted"
                 )
             except Exception as e:
+                # Preserve events for a later retry and make the persistence
+                # failure visible to complete()/explicit flush callers.
+                async with self._mongo_lock:
+                    self._mongo_buffer = batch + self._mongo_buffer
+                    self._flush_event.set()
                 logger.warning(f"Bulk write failed: {e}")
+                raise
 
         # 标记完成，允许下次刷新
         self._flush_event.set()
@@ -413,6 +477,10 @@ class DualEventWriter:
         Returns:
             是否更新成功
         """
+        if not await self.trace.ensure_indexes_if_needed():
+            raise TraceWriteUnavailableError(
+                "trace writes are disabled until trace indexes become ready"
+            )
         return await self.trace.complete_trace(trace_id, status, metadata)
 
     async def _write_to_redis_direct(

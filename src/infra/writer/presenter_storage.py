@@ -10,6 +10,10 @@ from typing import TYPE_CHECKING, Any, Dict
 
 from src.infra.async_utils import run_blocking_io
 from src.infra.logging import get_logger
+from src.infra.session.trace_storage import (
+    TraceIdentityConflictError,
+    TraceWriteUnavailableError,
+)
 
 if TYPE_CHECKING:
     from src.infra.session.dual_writer import DualEventWriter
@@ -103,7 +107,12 @@ class StoragePresenterMixin:
 
         dual_writer = await self._get_dual_writer()
         if not dual_writer:
-            logger.debug("_ensure_trace: dual_writer is None, skipping")
+            # Storage is enabled and a session is being traced, so silently
+            # continuing here would let the presenter report a successful run
+            # with no durable trace at all.
+            if self.config.session_id:
+                raise TraceWriteUnavailableError("trace writer is unavailable")
+            logger.debug("_ensure_trace: dual_writer is None, no session configured")
             return
 
         # 如果没有 session_id，跳过 trace 创建
@@ -121,7 +130,7 @@ class StoragePresenterMixin:
                 self.config.session_id,
             )
             metadata = await self._build_trace_metadata()
-            await dual_writer.create_trace(
+            created = await dual_writer.create_trace(
                 trace_id=self.trace_id,
                 session_id=self.config.session_id,
                 agent_id=self.config.agent_id,
@@ -129,8 +138,17 @@ class StoragePresenterMixin:
                 user_id=self.config.user_id,
                 metadata=metadata,
             )
+            if created is False:
+                raise TraceWriteUnavailableError(
+                    f"trace storage rejected creation for {self.trace_id!r}"
+                )
             self._trace_created = True
             logger.debug("Trace created successfully: %s", self.trace_id)
+        except (TraceWriteUnavailableError, TraceIdentityConflictError):
+            # Readiness and identity failures are data-integrity failures.  Do
+            # not mark the presenter as successful or silently continue the
+            # run without its trace.
+            raise
         except Exception as e:
             logger.warning("Failed to create trace: %s", e)
 
@@ -185,6 +203,8 @@ class StoragePresenterMixin:
                     self._goal_end_recorded = True
                 elif event_type == "done":
                     self._done_recorded = True
+        except (TraceWriteUnavailableError, TraceIdentityConflictError):
+            raise
         except Exception as e:
             logger.warning("Failed to save event: %s", e)
 
@@ -209,6 +229,12 @@ class StoragePresenterMixin:
         """
         if self._completed:
             return
+
+        # A run with no events still needs a trace identity before it can be
+        # reported complete.  This also makes readiness failures visible to
+        # callers instead of allowing a missing trace to look successful.
+        if self.config.enable_storage and self.config.session_id:
+            await self._ensure_trace()
 
         dual_writer = await self._get_dual_writer()
         if dual_writer and self.config.session_id:
@@ -236,6 +262,8 @@ class StoragePresenterMixin:
                         await mgr.increment_unread_count(self.config.session_id)
                     except Exception as e:
                         logger.warning("Failed to increment unread_count: %s", e)
+            except (TraceWriteUnavailableError, TraceIdentityConflictError):
+                raise
             except Exception as e:
                 logger.warning("Failed to complete trace %s: %s", self.trace_id, e)
 

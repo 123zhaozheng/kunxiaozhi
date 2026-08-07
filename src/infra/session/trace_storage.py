@@ -31,6 +31,8 @@ Trace Storage - 按 trace 聚合事件存储
 import asyncio
 from typing import Any, Dict, List, Optional
 
+from pymongo.errors import DuplicateKeyError
+
 from src.infra.logging import get_logger
 from src.infra.session.history_cursor import (
     HISTORY_ORDERING_VERSION,
@@ -45,6 +47,14 @@ from src.infra.utils.datetime import utc_now, utc_now_iso
 from src.kernel.config import settings
 
 logger = get_logger(__name__)
+
+
+class TraceWriteUnavailableError(RuntimeError):
+    """Raised when trace writes are disabled while uniqueness is not ready."""
+
+
+class TraceIdentityConflictError(ValueError):
+    """Raised when a trace id is reused for a different session/run."""
 
 _SESSION_EVENTS_BATCH_SIZE = 200
 SESSION_EVENT_FILTER_LIST_LIMIT = 100
@@ -117,6 +127,26 @@ class TraceStorage:
         self._collection = None
         self._counter_collection = None
         self._merger = None  # 事件合并器
+        self._indexes_lock = asyncio.Lock()
+        self._indexes_task: Optional[asyncio.Task[bool]] = None
+        # ``None`` means index initialization has not been attempted yet. This
+        # preserves direct storage usage in tests while startup gates production
+        # traffic on the explicit readiness result.
+        self._indexes_ready: Optional[bool] = None
+        self._index_errors: Dict[str, str] = {}
+        self._index_attempts = 0
+        self._duplicate_trace_ids: List[str] = []
+
+    @property
+    def index_status(self) -> Dict[str, Any]:
+        """Return an immutable snapshot suitable for readiness/health output."""
+        return {
+            "ready": self._indexes_ready is True,
+            "attempted": self._indexes_ready is not None,
+            "attempts": self._index_attempts,
+            "errors": dict(self._index_errors),
+            "duplicate_trace_ids": list(self._duplicate_trace_ids),
+        }
 
     @property
     def collection(self):
@@ -153,62 +183,113 @@ class TraceStorage:
         )
         return int(doc.get("seq", 1))
 
-    async def ensure_indexes_if_needed(self):
-        """确保索引存在（由首次使用时调用）"""
-        if not hasattr(self, "_indexes_ensured"):
-            self._indexes_ensured = True
-            task = asyncio.create_task(self._ensure_indexes())
-            task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
-            # 启动事件合并器
-            self._start_merger()
+    async def ensure_indexes_if_needed(self) -> bool:
+        """Await index initialization, coalescing concurrent callers.
 
-    async def _ensure_indexes(self):
-        """确保必要的索引存在"""
-        if self._collection is None:
-            return
+        A failed attempt leaves readiness false and the next call starts a new
+        attempt. This makes transient Mongo failures retryable without allowing
+        writes to proceed under an unknown uniqueness contract.
+        """
+        if self._indexes_ready is True:
+            return True
+        async with self._indexes_lock:
+            task = self._indexes_task
+            if task is None or task.done():
+                task = asyncio.create_task(self._initialize_indexes())
+                self._indexes_task = task
         try:
-            # 复合索引：用于 get_session_events 查询
-            # 查询模式: session_id + status (可选) + sort by started_at
-            # 把 status 放在 session_id 后面、started_at 前面，使排序能利用索引
-            await self._collection.create_index(
+            ready = await asyncio.shield(task)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self._indexes_ready = False
+            self._index_errors.setdefault("__initialization__", str(exc))
+            return False
+        self._indexes_ready = bool(ready)
+        if ready:
+            self._start_merger()
+        return bool(ready)
+
+    async def _initialize_indexes(self) -> bool:
+        """Create each index independently, with bounded transient retries."""
+        self._index_attempts += 1
+        self._index_errors = {}
+        self._duplicate_trace_ids = []
+        collection = self.collection
+        regular_indexes = [
+            (
+                "session_status_started_at_idx",
                 [("session_id", 1), ("status", 1), ("started_at", 1)],
-                name="session_status_started_at_idx",
-                background=True,
-            )
-            # 复合索引：用于按 run_id 查询
-            await self._collection.create_index(
-                [("session_id", 1), ("run_id", 1), ("status", 1)],
-                name="session_run_status_idx",
-                background=True,
-            )
-            # 唯一索引：trace_id
-            await self._collection.create_index(
-                [("trace_id", 1)],
-                unique=True,
-                name="trace_id_unique_idx",
-                background=True,
-            )
-            # 索引：用于按时间排序列出 traces
-            await self._collection.create_index(
-                [("started_at", -1)],
-                name="started_at_idx",
-                background=True,
-            )
-            # 复合索引：用于列表页 run 摘要查询
-            await self._collection.create_index(
-                [("session_id", 1), ("started_at", -1)],
-                name="session_started_at_desc_idx",
-                background=True,
-            )
-            # 索引：用于 EventMerger 查询未合并的已完成 traces
-            await self._collection.create_index(
-                [("status", 1), ("metadata.merged", 1)],
-                name="status_merged_idx",
-                background=True,
-            )
+            ),
+            ("session_run_status_idx", [("session_id", 1), ("run_id", 1), ("status", 1)]),
+            ("started_at_idx", [("started_at", -1)]),
+            ("session_started_at_desc_idx", [("session_id", 1), ("started_at", -1)]),
+            ("status_merged_idx", [("status", 1), ("metadata.merged", 1)]),
+        ]
+        for name, keys in regular_indexes:
+            try:
+                await self._create_index_with_retry(collection, name, keys)
+            except Exception as exc:
+                self._index_errors[name] = str(exc)
+
+        unique_name = "trace_id_unique_idx"
+        try:
+            self._duplicate_trace_ids = await self._find_duplicate_trace_ids(collection)
+            if self._duplicate_trace_ids:
+                self._index_errors[unique_name] = (
+                    f"duplicate trace_id values: {len(self._duplicate_trace_ids)}"
+                )
+            else:
+                await self._create_index_with_retry(
+                    collection, unique_name, [("trace_id", 1)], unique=True
+                )
+        except Exception as exc:
+            self._index_errors[unique_name] = str(exc)
+
+        ready = not self._index_errors and not self._duplicate_trace_ids
+        if ready:
             logger.info("MongoDB indexes ensured for trace_storage")
-        except Exception as e:
-            logger.warning(f"Failed to create indexes (non-critical): {e}")
+        else:
+            logger.error(
+                "Trace storage index readiness failed: errors=%s duplicates=%d",
+                self._index_errors,
+                len(self._duplicate_trace_ids),
+            )
+        return ready
+
+    async def _ensure_indexes(self) -> bool:
+        """Backward-compatible explicit initializer used by maintenance/tests."""
+        return await self._initialize_indexes()
+
+    async def _create_index_with_retry(
+        self,
+        collection: Any,
+        name: str,
+        keys: List[tuple[str, int]],
+        **kwargs: Any,
+    ) -> None:
+        last_error: Optional[Exception] = None
+        for attempt in range(3):
+            try:
+                await collection.create_index(keys, name=name, background=True, **kwargs)
+                return
+            except Exception as exc:
+                last_error = exc
+                if attempt < 2:
+                    await asyncio.sleep(0.05 * (2**attempt))
+        assert last_error is not None
+        raise last_error
+
+    async def _find_duplicate_trace_ids(self, collection: Any) -> List[str]:
+        pipeline = [
+            {"$match": {"trace_id": {"$exists": True, "$ne": None}}},
+            {"$group": {"_id": "$trace_id", "count": {"$sum": 1}}},
+            {"$match": {"count": {"$gt": 1}}},
+            {"$project": {"_id": 1}},
+            {"$limit": 1000},
+        ]
+        rows = await collection.aggregate(pipeline).to_list(length=1000)
+        return [str(row["_id"]) for row in rows if row.get("_id") is not None]
 
     def _start_merger(self):
         """启动事件合并器"""
@@ -249,8 +330,10 @@ class TraceStorage:
         Returns:
             是否创建成功（已存在也返回 True）
         """
-        from pymongo.errors import DuplicateKeyError
-
+        if self._indexes_ready is False:
+            raise TraceWriteUnavailableError(
+                "trace writes are disabled until trace indexes become ready"
+            )
         now = utc_now()
         doc: Dict[str, Any] = {
             "trace_id": trace_id,
@@ -267,24 +350,92 @@ class TraceStorage:
         }
 
         try:
-            result = await self.collection.insert_one(doc)
-            logger.info(
-                f"Created trace {trace_id} for session {session_id}, inserted_id={result.inserted_id}"
-            )
-            return True
-        except DuplicateKeyError:
-            # Trace already exists (e.g., pre-write path created it before worker).
-            # Merge missing metadata keys (esp. persona_preset_id) so analytics
-            # can attribute tokens when the first create had incomplete metadata.
+            # $setOnInsert makes concurrent callers converge on one document and
+            # prevents a later partial create from overwriting initial metadata.
+            try:
+                result = await self.collection.update_one(
+                    {"trace_id": trace_id},
+                    {"$setOnInsert": doc},
+                    upsert=True,
+                )
+            except TypeError:
+                # A small compatibility fallback for legacy test doubles and
+                # rolling deployments whose collection wrapper lacks upsert.
+                result = await self.collection.insert_one(doc)
+                logger.info(
+                    "Created trace %s for session %s, inserted_id=%s",
+                    trace_id,
+                    session_id,
+                    result.inserted_id,
+                )
+                return True
+
+            upserted_id = getattr(result, "upserted_id", None)
+            if upserted_id is not None:
+                logger.info("Created trace %s for session %s", trace_id, session_id)
+                return True
+
+            find_one = getattr(self.collection, "find_one", None)
+            if find_one is None:
+                await self._merge_trace_metadata_if_missing(trace_id, metadata or {})
+                return True
+            try:
+                existing = await find_one(
+                    {"trace_id": trace_id},
+                    {"session_id": 1, "run_id": 1, "metadata": 1},
+                )
+            except TypeError:
+                existing = await find_one({"trace_id": trace_id})
+            if existing is None:
+                # The document may have disappeared between upsert and read;
+                # report failure rather than claiming an idempotent success.
+                logger.error("Trace %s disappeared after idempotent upsert", trace_id)
+                return False
+            self._validate_trace_identity(existing, session_id, run_id, trace_id)
             await self._merge_trace_metadata_if_missing(trace_id, metadata or {})
             logger.debug("Trace %s already exists, merged missing metadata", trace_id)
             return True
+        except DuplicateKeyError:
+            # During rolling deployment a concurrent writer can still race an
+            # index build. Validate the winner before treating this as success.
+            find_one = getattr(self.collection, "find_one", None)
+            if find_one is None:
+                await self._merge_trace_metadata_if_missing(trace_id, metadata or {})
+                return True
+            existing = await find_one({"trace_id": trace_id})
+            if existing is None:
+                logger.error("Duplicate trace %s cannot be loaded for validation", trace_id)
+                return False
+            self._validate_trace_identity(existing, session_id, run_id, trace_id)
+            await self._merge_trace_metadata_if_missing(trace_id, metadata or {})
+            return True
+        except TraceIdentityConflictError:
+            raise
         except Exception as e:
             logger.error(f"Failed to create trace {trace_id}: {e}")
             import traceback
 
             traceback.print_exc()
             return False
+
+    @staticmethod
+    def _validate_trace_identity(
+        existing: Dict[str, Any],
+        session_id: str,
+        run_id: Optional[str],
+        trace_id: str,
+    ) -> None:
+        existing_session = existing.get("session_id")
+        existing_run = existing.get("run_id")
+        if existing_session and existing_session != session_id:
+            raise TraceIdentityConflictError(
+                f"trace_id {trace_id!r} belongs to session {existing_session!r}, "
+                f"not {session_id!r}"
+            )
+        if run_id and existing_run and existing_run != run_id:
+            raise TraceIdentityConflictError(
+                f"trace_id {trace_id!r} belongs to run {existing_run!r}, not {run_id!r}"
+            )
 
     async def _merge_trace_metadata_if_missing(
         self,
@@ -343,6 +494,10 @@ class TraceStorage:
         Returns:
             是否追加成功
         """
+        if self._indexes_ready is False:
+            raise TraceWriteUnavailableError(
+                "trace writes are disabled until trace indexes become ready"
+            )
         try:
             seq = await self.next_event_seq(session_id) if session_id else None
             event_doc: Dict[str, Any] = {
@@ -450,6 +605,10 @@ class TraceStorage:
         Returns:
             是否更新成功
         """
+        if self._indexes_ready is False:
+            raise TraceWriteUnavailableError(
+                "trace writes are disabled until trace indexes become ready"
+            )
         update = {
             "$set": {
                 "status": status,

@@ -4,7 +4,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+import asyncio
+import time
+
+from fastapi import APIRouter, Depends, HTTPException
 
 from src.api.deps import require_permissions
 from src.infra.monitoring import get_memory_monitor
@@ -12,6 +15,8 @@ from src.kernel.config import settings
 from src.kernel.schemas.agent import HealthResponse, MemoryHealthSummary
 
 router = APIRouter()
+_READINESS_RETRY_BACKOFF_SECONDS = 1.0
+_readiness_probe_lock = asyncio.Lock()
 
 
 def _format_mb(value: int | None) -> str | None:
@@ -133,6 +138,33 @@ async def health_check() -> HealthResponse:
 @router.get("/ready")
 async def readiness_check():
     """就绪检查"""
+    from src.infra.session.trace_storage import get_trace_storage
+
+    trace_storage = get_trace_storage()
+    async with _readiness_probe_lock:
+        trace_status = trace_storage.index_status
+        if not trace_status["ready"]:
+            # Startup and concurrent probes already coalesce initialization in
+            # TraceStorage.  This small per-storage cooldown avoids hammering
+            # Mongo with a full duplicate preflight on every failed probe.
+            now = time.monotonic()
+            next_retry = float(getattr(trace_storage, "_readiness_next_retry_at", 0.0))
+            if now >= next_retry:
+                await trace_storage.ensure_indexes_if_needed()
+                trace_status = trace_storage.index_status
+                if not trace_status["ready"]:
+                    setattr(
+                        trace_storage,
+                        "_readiness_next_retry_at",
+                        now + _READINESS_RETRY_BACKOFF_SECONDS,
+                    )
+            else:
+                trace_status = trace_storage.index_status
+    # An unattempted index check is not a safe state: startup may still be
+    # initializing Mongo indexes, or initialization may have been skipped.
+    # Keep readiness fail-closed until the unique index preflight succeeds.
+    if not trace_status["ready"]:
+        raise HTTPException(status_code=503, detail={"status": "not_ready", **trace_status})
     return {"status": "ready"}
 
 
