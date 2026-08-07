@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend quality review entry point."}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Mongo query, mutation, index, and pagination conventions."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Error handling, observability, and test expectations."}
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend quality review entry point."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Ensure response metadata is represented and consumed."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Verify the complete event round-trip across layers."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Review duplicated hard limits and new helper placement."}
+{"file":".trellis/tasks/08-05-session-history-loss-review/research/session-history-loss-review.md","reason":"Research findings requiring independent verification."}

@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend spec entry point for trace storage and API review."}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Mongo storage, pagination, and data-access conventions."}
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend spec entry point for history API and loader review."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Frontend/backend response contract requirements."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"End-to-end event limit and truncation contract review."}
+{"file":".trellis/tasks/08-05-session-history-loss-review/research/session-history-loss-review.md","reason":"Independent evidence and preliminary findings to verify."}
