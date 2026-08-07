@@ -38,6 +38,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Trace Uniqueness and Write Readiness](./trace-uniqueness-readiness.md) | Fail-closed trace indexes, identity validation, bulk-write gates, and deployment readiness | Filled |
 | [Durable Trace Event Storage](./trace-event-storage.md) | Immutable event documents, dual-write/read rollout, backpressure, backfill, and rollback | Filled |
 | [Duplicate Trace Migration](./trace-duplicate-migration.md) | Dry-run-first duplicate repair, backup, leases, deterministic merge, audit, and rollback | Filled |
+| [Stale Running Trace Recovery](./trace-stale-recovery.md) | Grace, strict heartbeat/task evidence, identity-scoped CAS, audit, and startup cleanup | Filled |
 
 ---
 
