@@ -1037,3 +1037,26 @@ Added admin-configurable 3-hour idle sessions with Redis-backed sid state, atomi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 35: 完成 TeamAgent SOP DAG 门禁与可视化
+
+**Date**: 2026-08-10
+**Task**: 完成 TeamAgent SOP DAG 门禁与可视化
+**Branch**: `main`
+
+### Summary
+
+完成审批门禁、原子状态存储、子代理工具隔离、SOP DAG 前端与历史恢复；经多代理审计、后端与前端测试、类型和构建检查以及桌面/390px 浏览器 fixture 验证后归档任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `75a92f4d` | (see git log) |
+| `04612bf2` | (see git log) |
+| `ba9fbba8` | (see git log) |
+
+### Status
+
+[OK] **Completed**

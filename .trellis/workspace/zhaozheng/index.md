@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 34
+- **Total Sessions**: 35
 - **Last Active**: 2026-08-10
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1039 | Active |
+| `journal-1.md` | ~1062 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 35 | 2026-08-10 | 完成 TeamAgent SOP DAG 门禁与可视化 | `75a92f4d`, `04612bf2`, `ba9fbba8` | `main` |
 | 34 | 2026-08-10 | 统一默认中文 Agent Harness | `44f4a6e1` | `main` |
 | 33 | 2026-08-07 | 完成会话历史与 trace 硬化 | `1795fac0`, `a549ed92`, `2ce8b7de` | `main` |
 | 32 | 2026-08-07 | 完成 stale-running 生命周期恢复 | `d4985bb5`, `8b776396` | `main` |
