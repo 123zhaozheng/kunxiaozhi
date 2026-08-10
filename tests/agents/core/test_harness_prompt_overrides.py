@@ -1,4 +1,4 @@
-"""Size and contract tests for the compact_zh harness."""
+"""Size and contract tests for the default Chinese concise harness."""
 
 from __future__ import annotations
 
@@ -17,11 +17,12 @@ from langchain_core.messages import SystemMessage
 from langchain_core.tools import BaseTool, tool
 
 from src.agents.core.harness_prompt_overrides import (
+    DEFAULT_HARNESS_BEHAVIOR_GUIDE,
+    DEFAULT_HARNESS_CATALOG,
     VENDOR_AVAILABLE_AGENTS_HEADING,
-    ZH_CATALOG,
     HarnessLocalizationMiddleware,
+    build_default_harness_profile,
     build_harness_extra_middleware,
-    build_short_todo_middleware,
     localize_tool_for_model,
 )
 
@@ -42,41 +43,32 @@ def _builtin_tools() -> list[BaseTool]:
     return [*FilesystemMiddleware().tools, *TodoListMiddleware().tools]
 
 
-def test_zh_catalog_contracts() -> None:
-    assert "{available_agents}" in ZH_CATALOG.tool_descriptions["task"]
-    assert len(ZH_CATALOG.tool_descriptions["task"]) < 600
-    assert len(ZH_CATALOG.tool_descriptions["write_todos"]) < 300
-    assert len(ZH_CATALOG.write_todos_system) < 200
+def test_default_harness_catalog_contracts() -> None:
+    assert "{available_agents}" in DEFAULT_HARNESS_CATALOG.tool_descriptions["task"]
+    assert len(DEFAULT_HARNESS_CATALOG.tool_descriptions["task"]) < 600
+    assert len(DEFAULT_HARNESS_CATALOG.tool_descriptions["write_todos"]) < 300
+    assert len(DEFAULT_HARNESS_CATALOG.write_todos_system) < 200
 
 
-def test_compact_zh_uses_chinese_human_guidance() -> None:
-    catalog = ZH_CATALOG
+def test_default_harness_uses_chinese_human_guidance() -> None:
+    catalog = DEFAULT_HARNESS_CATALOG
     assert "执行" in catalog.tool_descriptions["task"]
     assert "复杂多步" in catalog.tool_descriptions["write_todos"]
     assert "文件规则" in catalog.filesystem_system
     assert "Current task start time" in catalog.tool_descriptions["task"]
 
 
-def test_todo_replacement_survives_exact_type_exclusion() -> None:
-    from deepagents import HarnessProfile
-    from deepagents._excluded_middleware import _apply_excluded_middleware
+def test_default_profile_keeps_one_native_todo_with_localized_model_view() -> None:
+    profile = build_default_harness_profile()
+    assert TodoListMiddleware not in profile.excluded_middleware
+    assert len(profile.materialize_extra_middleware()) == 1
 
-    compact = build_short_todo_middleware()
-    assert len(compact) == 1
-    assert type(compact[0]) is not TodoListMiddleware
-    remaining = _apply_excluded_middleware(
-        [TodoListMiddleware(), compact[0]],
-        HarnessProfile(excluded_middleware=frozenset({TodoListMiddleware})),
-    )
-    assert remaining == compact
-    assert "write_todos" in {item.name for item in compact[0].tools}
-    todo_tool = next(item for item in compact[0].tools if item.name == "write_todos")
-    expected = ZH_CATALOG.tool_descriptions["write_todos"]
-    assert todo_tool.description == expected
-    assert "恰好一项 in_progress" in todo_tool.description
-    assert "禁止并行调用" in todo_tool.description
-    assert "恰好一项 in_progress" in compact[0].system_prompt
-    assert "禁止并行调用" in compact[0].system_prompt
+    todo = TodoListMiddleware()
+    todo_tool = next(item for item in todo.tools if item.name == "write_todos")
+    localized = localize_tool_for_model(todo_tool, DEFAULT_HARNESS_CATALOG)
+    assert localized.description == DEFAULT_HARNESS_CATALOG.tool_descriptions["write_todos"]
+    assert "恰好一项 in_progress" in localized.description
+    assert "禁止并行调用" in localized.description
 
 
 def test_model_view_preserves_middleware_rendered_tool_descriptions() -> None:
@@ -84,7 +76,7 @@ def test_model_view_preserves_middleware_rendered_tool_descriptions() -> None:
     from deepagents.middleware.subagents import SubAgentMiddleware
     from langchain_openai import ChatOpenAI
 
-    catalog = ZH_CATALOG
+    catalog = DEFAULT_HARNESS_CATALOG
     middleware = SubAgentMiddleware(
         backend=StateBackend(),
         subagents=[
@@ -113,16 +105,19 @@ def test_vendor_system_prompt_snapshots_are_pinned() -> None:
         FILESYSTEM_SYSTEM_PROMPT,
     )
     from deepagents.middleware.subagents import TASK_SYSTEM_PROMPT, SubAgentMiddleware
+    from langchain.agents.middleware.todo import WRITE_TODOS_SYSTEM_PROMPT
 
     expected = {
         "filesystem": "017d28a83d0e389385274fa29bfaaaba8567e9e71d899314bc61ae77369f6092",
         "execute": "7f1082b1dca0563378cd0a41f3b139b6f6fb46e5b485f1c2d3460896551c5c2c",
         "task": "efc798167c4614ff3bd46aff5fa592468c6cd9acbb181f7e4cfd0618c02ee9ca",
+        "todo": "f5ac422b1b71a61b9a6d1367d93fa7bd6671c42e9ac63c593aec98a8e2ff7f7a",
     }
     actual = {
         "filesystem": hashlib.sha256(FILESYSTEM_SYSTEM_PROMPT.encode()).hexdigest(),
         "execute": hashlib.sha256(EXECUTION_SYSTEM_PROMPT.encode()).hexdigest(),
         "task": hashlib.sha256(TASK_SYSTEM_PROMPT.encode()).hexdigest(),
+        "todo": hashlib.sha256(WRITE_TODOS_SYSTEM_PROMPT.encode()).hexdigest(),
     }
     assert actual == expected
     assert VENDOR_AVAILABLE_AGENTS_HEADING in inspect.getsource(
@@ -131,7 +126,7 @@ def test_vendor_system_prompt_snapshots_are_pinned() -> None:
 
 
 def test_schema_localization_preserves_machine_contract() -> None:
-    catalog = ZH_CATALOG
+    catalog = DEFAULT_HARNESS_CATALOG
     for original in _builtin_tools():
         localized = localize_tool_for_model(original, catalog)
         assert isinstance(localized, BaseTool)
@@ -150,7 +145,7 @@ def test_search_tools_schema_and_description_are_localized() -> None:
     from src.infra.tool.tool_search_tool import ToolSearchTool
 
     original = ToolSearchTool(manager=object())  # type: ignore[arg-type]
-    catalog = ZH_CATALOG
+    catalog = DEFAULT_HARNESS_CATALOG
     localized = localize_tool_for_model(original, catalog)
 
     assert localized.description == catalog.tool_descriptions["search_tools"]
@@ -161,7 +156,7 @@ def test_search_tools_schema_and_description_are_localized() -> None:
 
 
 def test_schema_localization_preserves_cache_extras_and_unknown_tools() -> None:
-    catalog = ZH_CATALOG
+    catalog = DEFAULT_HARNESS_CATALOG
     source = _builtin_tools()[0].model_copy(
         update={"extras": {"cache_control": {"type": "ephemeral"}, "x": 1}}
     )
@@ -196,8 +191,8 @@ def test_original_pydantic_schemas_still_enforce_required_defaults_and_enums() -
         grep_schema.model_validate({"pattern": "x", "output_mode": "invalid"})
 
 
-def test_compact_tools_are_smaller_than_native_vendor_schemas() -> None:
-    catalog = ZH_CATALOG
+def test_default_harness_tools_are_smaller_than_native_vendor_schemas() -> None:
+    catalog = DEFAULT_HARNESS_CATALOG
     originals = _builtin_tools()
     native_payload = [
         {
@@ -222,9 +217,8 @@ def test_compact_tools_are_smaller_than_native_vendor_schemas() -> None:
 
 def test_extra_middleware_contains_todo_and_localizer() -> None:
     middleware = list(build_harness_extra_middleware())
-    assert len(middleware) == 2
-    assert type(middleware[0]) is not TodoListMiddleware
-    assert isinstance(middleware[1], HarnessLocalizationMiddleware)
+    assert len(middleware) == 1
+    assert isinstance(middleware[0], HarnessLocalizationMiddleware)
 
 
 def test_localizer_rewrites_final_model_request_without_replacing_runtime_tools() -> None:
@@ -233,6 +227,7 @@ def test_localizer_rewrites_final_model_request_without_replacing_runtime_tools(
         FILESYSTEM_SYSTEM_PROMPT,
     )
     from deepagents.middleware.subagents import TASK_SYSTEM_PROMPT
+    from langchain.agents.middleware.todo import WRITE_TODOS_SYSTEM_PROMPT
     from langchain_openai import ChatOpenAI
 
     original = _builtin_tools()[0]
@@ -241,6 +236,7 @@ def test_localizer_rewrites_final_model_request_without_replacing_runtime_tools(
             FILESYSTEM_SYSTEM_PROMPT,
             EXECUTION_SYSTEM_PROMPT,
             TASK_SYSTEM_PROMPT,
+            WRITE_TODOS_SYSTEM_PROMPT,
             "Available subagent types:\n- researcher: Find facts",
         )
     )
@@ -250,7 +246,7 @@ def test_localizer_rewrites_final_model_request_without_replacing_runtime_tools(
         system_message=SystemMessage(content=vendor_system),
         tools=[original],
     )
-    localized = HarnessLocalizationMiddleware(ZH_CATALOG)._override(
+    localized = HarnessLocalizationMiddleware(DEFAULT_HARNESS_CATALOG)._override(
         request
     )
 
@@ -262,6 +258,8 @@ def test_localizer_rewrites_final_model_request_without_replacing_runtime_tools(
     assert "Execute Tool" not in localized.system_message.text
     assert "subagent spawner" not in localized.system_message.text
     assert "Available subagent types:" not in localized.system_message.text
+    assert DEFAULT_HARNESS_CATALOG.write_todos_system in localized.system_message.text
+    assert "The `write_todos` tool should never be called multiple times" not in localized.system_message.text
     assert localized.tools[0] is not original
     assert original.get_input_schema().model_json_schema()["properties"]["path"][
         "description"
@@ -274,8 +272,6 @@ def test_shared_profile_resolves_for_supported_adapters() -> None:
     from langchain_google_genai import ChatGoogleGenerativeAI
     from langchain_openai import ChatOpenAI
 
-    import src.agents.core.persona as persona
-
     models = (
         ChatAnthropic(model_name="claude-harness-test", api_key="test"),
         ChatOpenAI(model="gpt-harness-test", api_key="test"),
@@ -283,18 +279,19 @@ def test_shared_profile_resolves_for_supported_adapters() -> None:
     )
     for model in models:
         profile = _harness_profile_for_model(model, None)
-        assert profile.base_system_prompt == persona._BEHAVIOR_GUIDE
+        assert profile.base_system_prompt == DEFAULT_HARNESS_BEHAVIOR_GUIDE
         assert "{available_agents}" in profile.tool_description_overrides["task"]
-        assert len(profile.materialize_extra_middleware()) == 2
+        assert TodoListMiddleware not in profile.excluded_middleware
+        assert len(profile.materialize_extra_middleware()) == 1
 
 
-def test_zh_harness_boots_in_isolated_process() -> None:
+def test_default_harness_boots_in_isolated_process() -> None:
     script = """
 import json
-import src.agents.core.persona as persona
+from src.agents.core.harness_prompt_overrides import DEFAULT_HARNESS_BEHAVIOR_GUIDE
 from src.agents.fast_agent.prompt import FAST_SYSTEM_PROMPT
 print(json.dumps({
-    "behavior": persona._BEHAVIOR_GUIDE,
+    "behavior": DEFAULT_HARNESS_BEHAVIOR_GUIDE,
     "fast": FAST_SYSTEM_PROMPT,
 }, ensure_ascii=False))
 """

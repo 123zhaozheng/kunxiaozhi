@@ -1,4 +1,4 @@
-"""Harness prompt contracts; direct module assertions require default compact_zh."""
+"""Harness prompt contracts for the default Chinese concise harness."""
 
 import importlib.util
 import json
@@ -157,7 +157,7 @@ def test_search_agent_uses_single_section_prompt_middleware_instance() -> None:
     assert "_prompt_sections.append(" in source
 
 
-def _prompt_contract_for_zh() -> dict[str, str]:
+def _prompt_contract_for_default_harness() -> dict[str, str]:
     script = """
 import json
 from src.agents.core.subagent_prompts import (
@@ -187,8 +187,8 @@ print(json.dumps({
     return json.loads(completed.stdout.strip().splitlines()[-1])
 
 
-def test_zh_harness_preserves_critical_prompt_contracts() -> None:
-    prompts = _prompt_contract_for_zh()
+def test_default_harness_preserves_critical_prompt_contracts() -> None:
+    prompts = _prompt_contract_for_default_harness()
     for handoff in (prompts["default"], prompts["detailed"]):
         for phrase in (
             "## Handoff Notes",

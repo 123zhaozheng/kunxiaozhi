@@ -1,4 +1,4 @@
-"""Provider-neutral harness compression (compact_zh)."""
+"""Provider-neutral default Chinese concise harness."""
 
 from __future__ import annotations
 
@@ -17,9 +17,12 @@ from langchain.agents.middleware.types import (
 from langchain_core.tools import BaseTool
 
 VENDOR_AVAILABLE_AGENTS_HEADING = "Available subagent types:"
+WRITE_TODOS_TOOL_NAME = "write_todos"
+WRITE_TODOS_SECTION_HEADINGS = frozenset({"`write_todos`", "write_todos"})
+SUPPORTED_HARNESS_PROVIDERS = ("anthropic", "openai", "google_genai")
 
 
-COMPACT_ZH_BEHAVIOR_GUIDE = """你可调用工具；用户能看到消息与工具活动。
+DEFAULT_HARNESS_BEHAVIOR_GUIDE = """你可调用工具；用户能看到消息与工具活动。
 
 ## 行为
 - 简洁直达，省略客套、复述和空泛赞美。
@@ -32,7 +35,6 @@ COMPACT_ZH_BEHAVIOR_GUIDE = """你可调用工具；用户能看到消息与工�
 
 @dataclass(frozen=True)
 class HarnessCatalog:
-    behavior_guide: str
     write_todos_system: str
     memory_guide: str
     tool_descriptions: Mapping[str, str]
@@ -43,12 +45,12 @@ class HarnessCatalog:
     available_agents_heading: str
 
 
-_ZH_WRITE_TODOS_TOOL = (
+_DEFAULT_WRITE_TODOS_TOOL = (
     "仅复杂多步工作使用。保持恰好一项 in_progress，完成即标 completed；"
     "禁止并行调用。最后一次更新后另行交付答案。"
 )
 
-_ZH_TOOLS = {
+_DEFAULT_TOOLS = {
     "task": "执行一个隔离的复杂任务。\n\n可用代理：\n{available_agents}\n\n提供完整上下文、期望输出及 `Current task start time: YYYY-MM-DD HH:mm:ss ±HH:MM Timezone`。独立任务并行调用；结果由主代理核验整合。",
     "ls": "列出绝对目录路径。",
     "read_file": "读取文件；默认100行，以 offset/limit 分页。媒体/PDF 返回多模态内容。",
@@ -58,7 +60,7 @@ _ZH_TOOLS = {
     "grep": "字面文本搜索；可用 glob 过滤并指定 output_mode。",
     "execute": "在沙箱运行 shell 命令；返回输出与退出码，timeout 单位秒。",
     "search_tools": "按完整名称或能力关键词加载延迟 MCP 工具的完整 schema。不搜索沙箱工具；沙箱工具用 execute + mcporter。",
-    "write_todos": _ZH_WRITE_TODOS_TOOL,
+    WRITE_TODOS_TOOL_NAME: _DEFAULT_WRITE_TODOS_TOOL,
     "memory_retain": "存储跨会话记忆。仅收高价值非临时信息；过短、似提问、像代码或重复近期记忆会被拒。优先存用户偏好、项目约束、反馈、外部链接，用 user_identity/project_constraint/feedback_rule/reference_link 等显式标签。",
     "memory_recall": "按语义检索跨会话记忆；返回与查询概念相关的历史记录。",
     "memory_delete": "按 ID 删除记忆；ID 取 memory_recall 输出。",
@@ -82,7 +84,7 @@ _ZH_TOOLS = {
     "create_agent_team": "按 search_persona_presets 结果组建团队；members 每项含 persona_preset_id 等字段。",
 }
 
-_ZH_FIELDS = {
+_DEFAULT_FIELDS = {
     "ls": {"path": "绝对目录路径。"},
     "read_file": {"file_path": "绝对文件路径。", "offset": "起始行，0基。", "limit": "最大行数。"},
     "write_file": {"file_path": "绝对目标路径。", "content": "写入文本。"},
@@ -116,8 +118,7 @@ _ZH_FIELDS = {
     "create_agent_team": {"name": "团队名（≤80 字符）。", "members": "成员列表，每项含 persona_preset_id 等字段。", "team_id": "已有团队 ID；更新时传入。", "description": "团队用途简述。", "avatar": "emoji 或头像图 URL。", "tags": "可搜索标签。"},
 }
 
-ZH_CATALOG = HarnessCatalog(
-    behavior_guide=COMPACT_ZH_BEHAVIOR_GUIDE,
+DEFAULT_HARNESS_CATALOG = HarnessCatalog(
     write_todos_system=(
         "## `write_todos`\n仅复杂多步工作使用；保持恰好一项 in_progress，完成即更新，"
         "禁止并行调用；简单任务跳过，最后一次调用后再交付答案。"
@@ -130,8 +131,8 @@ ZH_CATALOG = HarnessCatalog(
 
 `memory_delete` 删除错误或过时记忆。超过 30 天、路径、函数及开关均须重新核验；当前证据优先。用户要求忽略/忘记时不得再引用。仅用上述记忆工具，不使用 `/memories/` 路径。"""
     ),
-    tool_descriptions=_ZH_TOOLS,
-    schema_fields=_ZH_FIELDS,
+    tool_descriptions=_DEFAULT_TOOLS,
+    schema_fields=_DEFAULT_FIELDS,
     filesystem_system=(
         "## 文件规则\n编辑前先读，遵循现有风格；路径必须为绝对路径，大文件分页读取。超大结果存于 `/large_tool_results/<tool_call_id>`，用 `read_file` 或 `grep` 查看。"
     ),
@@ -143,36 +144,6 @@ ZH_CATALOG = HarnessCatalog(
     ),
     available_agents_heading="可用代理类型：",
 )
-
-
-_ShortTodoListMiddleware: type[Any] | None = None
-
-
-def _short_todo_class() -> type[Any] | None:
-    global _ShortTodoListMiddleware
-    if _ShortTodoListMiddleware is not None:
-        return _ShortTodoListMiddleware
-    try:
-        from langchain.agents.middleware import TodoListMiddleware
-    except ImportError:  # pragma: no cover
-        return None
-
-    class ShortTodoListMiddleware(TodoListMiddleware):
-        """Exact-type exclusion-safe compact TodoList middleware."""
-
-    _ShortTodoListMiddleware = ShortTodoListMiddleware
-    return _ShortTodoListMiddleware
-
-
-def build_short_todo_middleware() -> list[Any]:
-    if (cls := _short_todo_class()) is None:
-        return []
-    return [
-        cls(
-            system_prompt=ZH_CATALOG.write_todos_system,
-            tool_description=ZH_CATALOG.tool_descriptions["write_todos"],
-        )
-    ]
 
 
 def _compact_schema(node: Any, descriptions: Mapping[str, str]) -> Any:
@@ -224,12 +195,14 @@ def _replacements(catalog: HarnessCatalog) -> tuple[tuple[str, str], ...]:
             FILESYSTEM_SYSTEM_PROMPT,
         )
         from deepagents.middleware.subagents import TASK_SYSTEM_PROMPT
+        from langchain.agents.middleware.todo import WRITE_TODOS_SYSTEM_PROMPT
     except ImportError:  # pragma: no cover
         return ()
     return (
         (FILESYSTEM_SYSTEM_PROMPT, catalog.filesystem_system),
         (EXECUTION_SYSTEM_PROMPT, catalog.execute_system),
         (TASK_SYSTEM_PROMPT, catalog.task_system),
+        (WRITE_TODOS_SYSTEM_PROMPT, catalog.write_todos_system),
         (VENDOR_AVAILABLE_AGENTS_HEADING, catalog.available_agents_heading),
     )
 
@@ -291,4 +264,42 @@ class HarnessLocalizationMiddleware(AgentMiddleware):
 
 
 def build_harness_extra_middleware() -> Sequence[AgentMiddleware]:
-    return (*build_short_todo_middleware(), HarnessLocalizationMiddleware(ZH_CATALOG))
+    return (HarnessLocalizationMiddleware(DEFAULT_HARNESS_CATALOG),)
+
+
+def build_default_harness_profile(*, todo_enabled: bool = True) -> Any:
+    """Build the shared profile, optionally omitting the native Todo capability."""
+    from deepagents import HarnessProfile
+
+    profile_kwargs: dict[str, Any] = {
+        "base_system_prompt": DEFAULT_HARNESS_BEHAVIOR_GUIDE,
+        "tool_description_overrides": DEFAULT_HARNESS_CATALOG.tool_descriptions,
+        "extra_middleware": build_harness_extra_middleware,
+    }
+    if not todo_enabled:
+        from langchain.agents.middleware import TodoListMiddleware
+
+        profile_kwargs["excluded_middleware"] = frozenset({TodoListMiddleware})
+    return HarnessProfile(**profile_kwargs)
+
+
+_default_harness_registered = False
+
+
+def ensure_default_harness_registered() -> None:
+    """Register the default profile once for every supported model provider."""
+    global _default_harness_registered
+    if _default_harness_registered:
+        return
+    try:
+        from deepagents import register_harness_profile
+    except ImportError:  # pragma: no cover - compatibility with older deepagents builds
+        return
+
+    profile = build_default_harness_profile()
+    for provider in SUPPORTED_HARNESS_PROVIDERS:
+        register_harness_profile(provider, profile)
+    _default_harness_registered = True
+
+
+ensure_default_harness_registered()

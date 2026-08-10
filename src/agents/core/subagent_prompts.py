@@ -9,7 +9,7 @@ fast_agent / search_agent 均从此处导入，避免重复。
 # 共享 Workflow 段（fast_agent / search_agent 共用）
 # ---------------------------------------------------------------------------
 
-from src.agents.core.harness_prompt_overrides import ZH_CATALOG
+from src.agents.core.harness_prompt_overrides import DEFAULT_HARNESS_CATALOG
 from src.infra.tool.deferred_manager import DEFERRED_TOOL_SEARCH_GUIDE
 
 _ZH_FILE_WORKSPACE_GUIDE = """
@@ -86,7 +86,7 @@ MAIN_AGENT_PROMPT_SECTIONS: tuple[str, ...] = (
 
 
 def get_memory_guide() -> str:
-    return ZH_CATALOG.memory_guide
+    return DEFAULT_HARNESS_CATALOG.memory_guide
 
 
 # ---------------------------------------------------------------------------

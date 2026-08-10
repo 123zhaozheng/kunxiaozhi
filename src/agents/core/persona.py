@@ -13,34 +13,15 @@
   [Block 7+]  Memory index / Tool search                              ← 每 turn 变化
 """
 
-import importlib
-from typing import Any
 
 from src.agents.core.harness_prompt_overrides import (
-    COMPACT_ZH_BEHAVIOR_GUIDE,
-    ZH_CATALOG,
-    build_harness_extra_middleware,
+    DEFAULT_HARNESS_BEHAVIOR_GUIDE,
 )
-from src.infra.logging import get_logger
 from src.kernel.schemas.persona_preset import (
     DEFAULT_PREFERRED_AGENT_ID,
     PREFERRED_AGENT_IDS,
     PreferredAgentId,
 )
-
-logger = get_logger(__name__)
-
-_deepagents: Any = None
-try:
-    _deepagents = importlib.import_module("deepagents")
-except ImportError:  # pragma: no cover - compatibility with older deepagents builds
-    pass
-
-_HarnessProfile = getattr(_deepagents, "HarnessProfile", None) if _deepagents is not None else None
-_register_harness_profile = (
-    getattr(_deepagents, "register_harness_profile", None) if _deepagents is not None else None
-)
-
 
 DEFAULT_ROLE = "你是具备工具和技能的智能助手。"
 
@@ -80,28 +61,7 @@ _PERSONA_HEADING = "## Persona"
 # on top of this shared base.
 # ---------------------------------------------------------------------------
 
-_BEHAVIOR_GUIDE = COMPACT_ZH_BEHAVIOR_GUIDE
-
-if _HarnessProfile is not None and _register_harness_profile is not None:
-    # Register on import — this is idempotent (additive merge).
-    try:
-        from langchain.agents.middleware import TodoListMiddleware as _TodoListMiddleware
-    except ImportError:  # pragma: no cover - older langchain
-        _TodoListMiddleware = None  # type: ignore[misc, assignment]
-
-    _profile_kwargs: dict[str, Any] = {
-        "base_system_prompt": _BEHAVIOR_GUIDE,
-        "tool_description_overrides": ZH_CATALOG.tool_descriptions,
-        "extra_middleware": lambda: build_harness_extra_middleware(),
-    }
-    if _TodoListMiddleware is not None:
-        _profile_kwargs["excluded_middleware"] = frozenset({_TodoListMiddleware})
-
-    _shared_profile = _HarnessProfile(**_profile_kwargs)
-    for _provider_key in ("anthropic", "openai", "google_genai"):
-        _register_harness_profile(_provider_key, _shared_profile)
-    logger.info("[Harness] compact_zh harness profile registered")
-
+_BEHAVIOR_GUIDE = DEFAULT_HARNESS_BEHAVIOR_GUIDE
 
 def split_persona_prompt(system_prompt: str) -> tuple[str, str]:
     """Split a persona system_prompt into role identity and behavior body.

@@ -1,102 +1,96 @@
-# Agent Harness Localization (compact_zh)
+# Default Chinese Agent Harness
 
 ## 1. Scope / Trigger
 
 Use this contract when changing agent system prompts, `HarnessProfile`, built-in
-tool descriptions/schema annotations, or the compact_zh harness localization.
-The model-visible harness is localized to compact Chinese; runtime `BaseTool`
+tool descriptions/schema annotations, or the default Chinese concise harness.
+The model-visible harness is localized to concise Chinese; runtime `BaseTool`
 objects and validation schemas remain the execution authority.
 
 ## 2. Signatures
 
 ```python
+def ensure_default_harness_registered() -> None: ...
+def build_default_harness_profile(*, todo_enabled: bool = True) -> HarnessProfile: ...
+def build_harness_extra_middleware() -> Sequence[AgentMiddleware]: ...
 def localize_tool_for_model(tool: Any, catalog: HarnessCatalog) -> Any: ...
 ```
 
-The compact_zh catalog is a module-level singleton `ZH_CATALOG` in
-`src.agents.core.harness_prompt_overrides`. `build_short_todo_middleware()` and
-`build_harness_extra_middleware()` take no mode argument and always build the
-compact_zh middleware chain. Keep the import boundary general: infra must not
-import an `src.agents` module merely to read configuration values.
+`build_default_harness_profile()` is the sole capability switch: `True` keeps
+native Todo for Fast/Search; `False` excludes exactly `TodoListMiddleware` for
+Team assembly.
 
 ## 3. Contracts
 
-- Tool names, property names, required fields, types, enums, and defaults remain
-  unchanged between the native vendor view and the localized model view.
-- `{available_agents}` is a template only until `SubAgentMiddleware` renders the
-  final `task` description. Model-view localization must preserve the rendered
-  description and actual agent list.
-- `write_todos` has one catalog description used by both its middleware and the
-  model-view localizer. It must retain exactly-one-`in_progress` and no-parallel
-  constraints.
-- Vendor prompt replacements are pinned by SHA-256 tests so dependency copy
-  changes fail visibly instead of silently restoring long English guidance.
+`src.agents.core.harness_prompt_overrides` is the single harness authority. It
+owns `DEFAULT_HARNESS_CATALOG`, shared `write_todos` constants, model-view
+localization, vendor prompt replacements, profile construction, and idempotent
+provider registration. `persona.py` only supplies persona prompt sections.
+
+`ensure_default_harness_registered()` registers the default profile for
+`anthropic`, `openai`, and `google_genai`. `build_harness_extra_middleware()`
+adds only `HarnessLocalizationMiddleware`.
+
+- Fast and Search retain one native `TodoListMiddleware` supplied by DeepAgents.
+- `HarnessLocalizationMiddleware` replaces the native Todo system section and
+  model-view `write_todos` description with catalog-owned concise Chinese text.
+- The Todo contract retains exactly one `in_progress` item and no parallel
+  `write_todos` calls.
+- Team disables the native middleware at assembly with
+  `build_default_harness_profile(todo_enabled=False)`. Its request-layer
+  fallback remains and imports the shared tool name and section-heading
+  constants. `update_sop` is Team's Todo replacement.
+- Tool names, property names, required fields, types, enums, and defaults stay
+  unchanged between runtime and localized views.
+- `{available_agents}` is a template only until `SubAgentMiddleware` renders
+  the final `task` description; localization must preserve the rendered list.
+- Unknown, deferred, or non-serializable tools pass through unchanged.
+- Vendor prompt replacement sources are pinned by SHA-256 tests so dependency
+  changes fail visibly instead of restoring long English guidance.
+
+Every new model-visible built-in belongs in `_DEFAULT_TOOLS` and its field
+annotations belong in `_DEFAULT_FIELDS` in the same change. Keep tool names,
+parameter names, enum values, defaults, and runtime contract strings unchanged.
+Infra must not import the agent harness merely to read configuration; that
+creates an infra-agent-infra cycle.
 
 ## 4. Validation & Error Matrix
 
 | Condition | Required behavior |
-|---|---|
-| Vendor system source changes | Snapshot test fails; review replacement boundary |
-| Unknown/deferred third-party tool | Pass through unchanged |
-| Known tool schema localization | Description/title annotations may change; machine schema must compare equal |
-| `task` after middleware rendering | Preserve rendered description; never restore `{available_agents}` |
+| --- | --- |
+| Unknown/deferred/non-serializable tool | Pass through unchanged. |
+| `task` has rendered available agents | Preserve that rendered description; never restore `{available_agents}`. |
+| Vendor prompt source changes | SHA-256 snapshot test fails; review the replacement boundary. |
+| Team model key resolves | Install the temporary Team profile during synchronous graph assembly, then restore the exact registry entry. |
+| Team model key cannot resolve | Do not mutate the registry; retain `TeamToolExclusionMiddleware` as request-layer fallback. |
 
-## 5. Good / Bad Cases
+## 5. Good / Base / Bad Cases
 
-- Good: compact_zh localizes a copied schema while ToolNode invokes the
-  original tool and Pydantic model.
-- Bad: importing agent configuration from `src.agents.core` inside
-  `src.infra.tool`; this creates an infra → agents → infra import cycle.
-- Bad: replacing the final `task` description with the catalog template after
-  the subagent list has already been rendered.
+- **Good:** Fast/Search has one native Todo middleware; the final model view has
+  concise Chinese guidance and `write_todos`, while runtime tools and schemas
+  remain original.
+- **Base:** A known tool is copied only for the model request; only its
+  `description` and schema `title`/`description` annotations may differ.
+- **Bad:** Excluding Todo and adding a replacement Todo subclass, or giving Team
+  a Todo tool/prompt instead of SOP, creates duplicate or leaked capability.
 
 ## 6. Tests Required
 
-- A compact_zh single-chain smoke test that boots the middleware chain in a
-  fresh process.
-- A direct-first import test for `src.infra.tool.deferred_manager`.
-- Vendor prompt hashes.
-- Final `write_todos` description assertions for one-in-progress/no-parallel.
-- A real `SubAgentMiddleware` regression asserting the localized `task`
-  description contains an agent name and no literal `{available_agents}`.
+- Fresh-process default profile bootstrap and direct-first
+  `src.infra.tool.deferred_manager` import.
+- Provider resolution for Anthropic, OpenAI, and Google GenAI.
+- Native Todo present for Fast/Search profile behavior and absent for Team.
+- Team profile registry save/restore and unresolved-key fallback.
+- Final `write_todos` one-in-progress/no-parallel guidance.
+- Rendered `task` description retains agent names and no literal
+  `{available_agents}`.
 - Schema equality after recursively removing only `description` and `title`.
 
 ## 7. Wrong vs Correct
 
-```python
-# Wrong: destroys the dynamically rendered agent list.
-description = catalog.tool_descriptions[tool.name]
+**Wrong:** Register the harness from `persona.py`, duplicate the `write_todos`
+strings in Team filtering, or localize the runtime `BaseTool`/Pydantic schema.
 
-# Correct: task is dynamic; other reviewed descriptions are catalog-owned.
-description = (
-    tool.description
-    if tool.name == "task"
-    else catalog.tool_descriptions.get(tool.name, tool.description)
-)
-```
-
-## 8. Adding a New Tool — Required Harness Steps
-
-Every new built-in tool that becomes model-visible **must** be added to the
-compact_zh catalog on the same PR. Leaving it out means the model sees an
-English or verbose vendor description — a harness regression.
-
-### Checklist
-
-1. Add the tool name to `_ZH_TOOLS` in `harness_prompt_overrides.py` with a
-   **dense Chinese description** (行为约束 + 边界，不逐字翻译).
-2. Add the tool's parameter-name keys to `_ZH_FIELDS` with concise Chinese
-   field annotations. Tool names, parameter names, enum values, and defaults
-   are machine contracts — **never translate those**.
-3. Preserve any contract strings the tool relies on (e.g.
-   `upload_url_to_sandbox(url, absolute_file_path)`, `$KEY` references).
-4. If the tool's Pydantic input schema contains non-JSON-serializable types
-   (e.g. `Callable`), `localize_tool_for_model` already falls back to the
-   original tool — but prefer avoiding `Callable` fields in tool inputs.
-
-### Anti-patterns
-
-- Shipping a new tool without a catalog entry → model sees English/verbose
-  description, breaking the single-language harness.
-- Translating tool names, parameter names, or enum values → tool calls break.
-- Adding only `_ZH_TOOLS` but forgetting `_ZH_FIELDS` → fields stay English.
+**Correct:** Call the core idempotent registration entry point, consume
+`WRITE_TODOS_TOOL_NAME` and `WRITE_TODOS_SECTION_HEADINGS` from the core module,
+and localize copied model-view tools only.
