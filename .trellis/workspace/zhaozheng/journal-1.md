@@ -1060,3 +1060,24 @@ Added admin-configurable 3-hour idle sessions with Redis-backed sid state, atomi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 36: 完善 Team 聊天准入
+
+**Date**: 2026-08-10
+**Task**: 完善 Team 聊天准入
+**Branch**: `main`
+
+### Summary
+
+TeamBuilder 仅展示 Search Persona；聊天进入 Team 且未选团队时自动打开选择器并阻止发送，复用现有团队创建入口。前端 lint、build 与聚焦测试通过，独立检查无任务内缺陷。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7ede9f6a` | (see git log) |
+
+### Status
+
+[OK] **Completed**
