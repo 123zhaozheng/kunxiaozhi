@@ -1,0 +1,14 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端质量检查入口，全量复查时逐项核对"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量规范（lint/type/test 要求）"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误处理规范，检查 SOP 失败/blocked/取消语义是否合规"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "检查 sop_runs 持久化是否符合 MongoDB 规范"}
+{"file": ".trellis/spec/backend/agent-harness.md", "reason": "检查规划器/执行器是否破坏 harness 本地化契约"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端质量检查入口"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量规范（ESLint/tsc/build/test 要求）"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "检查 sop 类型 normalize/reduce 的类型安全"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "检查 useSopStatus/useAgent 状态接入是否合规"}
+{"file": ".trellis/tasks/08-04-teamagent-sop-dag-harness/research/codebase-current-state.md", "reason": "核对实现是否与现有审批/事件/前端接线点一致，检查跨层数据流"}
+{"file": ".trellis/tasks/08-04-teamagent-sop-dag-harness/research/dag-visualization-frontend.md", "reason": "核对 DAG 组件实现是否符合推荐模式（只读/状态着色/布局一次性）"}
+{"file": ".trellis/tasks/08-04-teamagent-sop-dag-harness/research/sop-design-recommendations.md", "reason": "核对实现不越界：v1 只做工具化+门禁+DAG 可视化，不得引入执行引擎/守卫（参考但以 prd/design 为准）"}
+{"file": ".trellis/tasks/08-04-teamagent-sop-dag-harness/prd.md", "reason": "验收标准来源，逐条核对 R1-R8 与 Acceptance Criteria"}
+{"file": ".trellis/tasks/08-04-teamagent-sop-dag-harness/design.md", "reason": "技术设计契约，核对实现与设计一致"}

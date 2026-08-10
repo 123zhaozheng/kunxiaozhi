@@ -98,6 +98,12 @@ Rules:
 - **Sorting**: `sort()` on cursor before iteration
 - **Caching**: Redis used for hot data (permissions, MCP tools, model lists); TTL-based
 
+SOP snapshots in `src/agents/team_agent/sop/store.py` use a full-document write only
+when replacing a plan. Status, feedback, and individual step updates must use
+targeted MongoDB `$set` operations (including the positional `steps.$` update) so
+concurrent workers cannot overwrite unrelated step changes. Plan-bound transitions
+must include `plan_id` in the update filter.
+
 ---
 
 ## Common Mistakes

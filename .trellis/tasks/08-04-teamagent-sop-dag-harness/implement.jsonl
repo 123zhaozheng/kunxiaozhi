@@ -1,0 +1,13 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端包预开发清单与质量检查入口"}
+{"file": ".trellis/spec/backend/agent-harness.md", "reason": "Agent harness 模式（legacy/compact_zh）契约，规划器 prompt 需与既有 harness 本地化保持一致"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误处理规范，SOP 校验/失败语义需遵循"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "MongoDB 持久化规范，sop_runs collection 设计需遵循"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "后端目录结构约定，新增 sop/ 子包落位"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端包预开发清单与质量检查入口"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "前端组件规范，SopBlock/SopNode 组件需遵循"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "前端状态管理约定，useSopStatus/useAgent 接入需遵循"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "前端类型安全约定，types/sop.ts normalize/reduce 需遵循"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "前端 hook 规范（含三层通知显示模式先例），useSopStatus 需遵循"}
+{"file": ".trellis/tasks/08-04-teamagent-sop-dag-harness/research/codebase-current-state.md", "reason": "代码库现状：团队模型/TeamAgent/审批/事件/前端接线点/昨日撤回实现可复用概念，全部带路径:行号"}
+{"file": ".trellis/tasks/08-04-teamagent-sop-dag-harness/research/sop-design-recommendations.md", "reason": "调研背景：SOP 数据模型/粒度参数/事件契约参考（v1 以 prd/design/implement 的简化工具化方案为准，不实现其中执行引擎/守卫部分）"}
+{"file": ".trellis/tasks/08-04-teamagent-sop-dag-harness/research/dag-visualization-frontend.md", "reason": "前端调研：React Flow v12 + dagre 布局/组件结构/状态流/交互设计推荐"}

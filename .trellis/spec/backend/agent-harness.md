@@ -40,6 +40,9 @@ adds only `HarnessLocalizationMiddleware`.
   `build_default_harness_profile(todo_enabled=False)`. Its request-layer
   fallback remains and imports the shared tool name and section-heading
   constants. `update_sop` is Team's Todo replacement.
+- Team role and fallback subagents must receive an explicit child tool list;
+  DeepAgents 0.6.x inherits the parent list when `tools` is omitted. Router-only
+  tools such as `update_sop` and approval controls must never reach children.
 - Tool names, property names, required fields, types, enums, and defaults stay
   unchanged between runtime and localized views.
 - `{available_agents}` is a template only until `SubAgentMiddleware` renders
@@ -63,6 +66,7 @@ creates an infra-agent-infra cycle.
 | Vendor prompt source changes | SHA-256 snapshot test fails; review the replacement boundary. |
 | Team model key resolves | Install the temporary Team profile during synchronous graph assembly, then restore the exact registry entry. |
 | Team model key cannot resolve | Do not mutate the registry; retain `TeamToolExclusionMiddleware` as request-layer fallback. |
+| Team child tool list | Pass an explicit filtered list; never rely on omitted `tools` defaults. |
 
 ## 5. Good / Base / Bad Cases
 
