@@ -31,7 +31,14 @@ test("team agent placeholder says @ switches teams", () => {
   );
 });
 
-test("team agent can submit without selecting an existing team", () => {
-  assert.doesNotMatch(chatInputSource, /requiresTeamSelection/);
-  assert.doesNotMatch(chatInputSource, /!\s*requiresTeamSelection/);
+test("team agent requires a selected team before submitting", () => {
+  assert.match(
+    chatInputSource,
+    /const requiresTeamSelection = currentAgent === "team" && !selectedTeamId/,
+  );
+  assert.match(
+    chatInputSource,
+    /if \(!canSend \|\| requiresTeamSelection\) return;/,
+  );
+  assert.match(chatInputSource, /!requiresTeamSelection/);
 });

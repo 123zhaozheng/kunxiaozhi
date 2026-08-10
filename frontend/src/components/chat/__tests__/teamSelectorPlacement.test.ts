@@ -77,6 +77,22 @@ test("team selector uses the persona selector interaction surfaces", () => {
   assert.doesNotMatch(teamPickerSource, /sm:w-\[420px\]/);
 });
 
+test("team mode opens the picker when entered without a selection", () => {
+  assert.match(chatInputSource, /const previousAgentRef = useRef\(currentAgent\)/);
+  assert.match(
+    chatInputSource,
+    /currentAgent === "team" && previousAgentRef\.current !== "team"/,
+  );
+  assert.match(
+    chatInputSource,
+    /enteredTeamMode && !selectedTeamId && onSelectTeam[\s\S]*setActivePanel\("team"\)/,
+  );
+  assert.match(
+    chatInputSource,
+    /previousAgentRef\.current = currentAgent/,
+  );
+});
+
 test("assistant message header shows the selected team in team mode", () => {
   assert.match(chatViewSource, /import \{ teamApi \} from/);
   assert.match(chatViewSource, /function useCurrentTeam/);

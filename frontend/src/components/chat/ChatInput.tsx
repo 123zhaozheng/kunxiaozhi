@@ -129,6 +129,7 @@ export const ChatInput = memo(function ChatInput({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const previousAgentRef = useRef(currentAgent);
   const [cursorPosition, setCursorPosition] = useState(0);
   const [mentionPopupPlacement, setMentionPopupPlacement] =
     useState<ReturnType<typeof getMentionPopupFixedPlacement>>(null);
@@ -163,8 +164,18 @@ export const ChatInput = memo(function ChatInput({
   });
 
   const mentionMode = currentAgent === "team" ? "team" : "persona";
+  const requiresTeamSelection = currentAgent === "team" && !selectedTeamId;
   const mentionEnabled =
     mentionMode === "team" ? !!onSelectTeam : !!onUsePersonaPreset;
+
+  useEffect(() => {
+    const enteredTeamMode =
+      currentAgent === "team" && previousAgentRef.current !== "team";
+    previousAgentRef.current = currentAgent;
+    if (enteredTeamMode && !selectedTeamId && onSelectTeam) {
+      setActivePanel("team");
+    }
+  }, [currentAgent, onSelectTeam, selectedTeamId]);
 
   const {
     mention,
@@ -414,7 +425,7 @@ export const ChatInput = memo(function ChatInput({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSend) return;
+    if (!canSend || requiresTeamSelection) return;
     if (input.trim() && canSubmit) {
       const trimmed = input.trim();
       onSend(trimmed, agentOptionValues, attachments);
@@ -525,7 +536,11 @@ export const ChatInput = memo(function ChatInput({
   const hasContent = !!input.trim() && !disabled;
   const hasUploadingAttachment = attachments.some((a) => a.isUploading);
   const canSubmit =
-    hasContent && canSend && !isLoading && !hasUploadingAttachment;
+    hasContent &&
+    canSend &&
+    !isLoading &&
+    !hasUploadingAttachment &&
+    !requiresTeamSelection;
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();

@@ -348,9 +348,12 @@ export const TeamBuilder = forwardRef<TeamBuilderHandle, TeamBuilderProps>(
       member.role_instructions.trim(),
     ).length;
     const filteredPresets = useMemo(() => {
-      if (!searchQuery.trim()) return presets;
+      const searchPresets = presets.filter(
+        (preset) => preset.preferred_agent_id === "search",
+      );
+      if (!searchQuery.trim()) return searchPresets;
       const q = searchQuery.toLowerCase();
-      return presets.filter(
+      return searchPresets.filter(
         (preset) =>
           preset.name.toLowerCase().includes(q) ||
           preset.description.toLowerCase().includes(q) ||

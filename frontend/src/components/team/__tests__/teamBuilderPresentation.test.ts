@@ -100,6 +100,19 @@ test("team editor uses one sidebar form matching role editor patterns", () => {
   assert.match(teamCss, /\.team-editor-validation\s*\{/);
 });
 
+test("team member candidates are restricted to Search personas", () => {
+  assert.match(
+    builderSource,
+    /preset\.preferred_agent_id === "search"/,
+  );
+  assert.match(
+    builderSource,
+    /const searchPresets = presets\.filter\(/,
+  );
+  assert.match(builderSource, /return searchPresets;/);
+  assert.match(builderSource, /return searchPresets\.filter\(/);
+});
+
 test("team editor defines dedicated tablet and mobile adaptations", () => {
   assert.match(teamCss, /@media \(max-width:\s*1180px\)/);
   assert.match(teamCss, /@media \(max-width:\s*760px\)/);
