@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import "katex/dist/katex.min.css";
+import "@xyflow/react/dist/style.css";
 import "./i18n";
 import App from "./App.tsx";
 import "./styles/tailwind.css";
@@ -23,6 +24,7 @@ import "./styles/syntax-highlight.css";
 import "./styles/markdown.css";
 import "./styles/pwa.css";
 import "./styles/utilities.css";
+import "./components/sop/sopPlanFlow.css";
 import { AuthProvider } from "./hooks/useAuth";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { installMobileViewportResetHandlers } from "./utils/mobile";

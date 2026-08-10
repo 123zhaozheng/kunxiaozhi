@@ -38,6 +38,7 @@
     "@codemirror/view": "^6.42.0",
     "@codesandbox/sandpack-react": "^2.20.0",
     "@codesandbox/sandpack-themes": "^2.0.21",
+    "@dagrejs/dagre": "^3.1.0",
     "@excalidraw/excalidraw": "^0.18.0",
     "@jvmr/pptx-to-html": "^1.0.1",
     "@lobehub/fluent-emoji": "^4.1.0",

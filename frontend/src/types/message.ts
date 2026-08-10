@@ -85,6 +85,8 @@ export interface TodoPart {
   isStreaming?: boolean;
 }
 
+// SOP 计划块类型（DAG 卡片）。主要渲染路径是 useAgent 的 `sopPlan` 状态
+// （ChatView → SopBlock）；此 part 注册供 parts 体系按 `{type, ...}` 分发。
 export interface SummaryPart {
   type: "summary";
   content: string;

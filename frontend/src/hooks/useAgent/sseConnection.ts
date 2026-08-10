@@ -114,6 +114,7 @@ export async function connectToSSE(
     return;
   }
   isConnectingRef.current = true;
+  const connectionVersion = ctx.streamVersionRef.current;
   streamingMessageIdRef.current = messageId;
 
   if (abortControllerRef.current) {
@@ -203,7 +204,14 @@ export async function connectToSSE(
             event: event.event as EventType,
             data: event.data,
           };
-          handleStreamEvent(streamEvent, messageId, eventId, timestamp, ctx);
+          handleStreamEvent(
+            streamEvent,
+            messageId,
+            eventId,
+            timestamp,
+            ctx,
+            connectionVersion,
+          );
         },
         onerror: (err) => {
           console.error("[SSE] Connection error:", err);

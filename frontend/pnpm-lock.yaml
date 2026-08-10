@@ -53,6 +53,9 @@ importers:
       '@codesandbox/sandpack-themes':
         specifier: ^2.0.21
         version: 2.0.21
+      '@dagrejs/dagre':
+        specifier: ^3.1.0
+        version: 3.1.0
       '@excalidraw/excalidraw':
         specifier: ^0.18.0
         version: 0.18.1(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(immer@11.1.7)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -1000,6 +1003,12 @@ packages:
 
   '@codesandbox/sandpack-themes@2.0.21':
     resolution: {integrity: sha512-CMH/MO/dh6foPYb/3eSn2Cu/J3+1+/81Fsaj7VggICkCrmRk0qG5dmgjGAearPTnRkOGORIPHuRqwNXgw0E6YQ==}
+
+  '@dagrejs/dagre@3.1.0':
+    resolution: {integrity: sha512-22SWJOfiQVCSFF0qN43SMiYS7Ch9Z6HZoO8+5PycGzGgmtdXIvHoZ2DoT5BweVGf+wwHxBFZu4eO0do0RIYQaw==}
+
+  '@dagrejs/graphlib@4.0.3':
+    resolution: {integrity: sha512-9kvysNliOxG5m3lr1Qq5uCc+SYxx+BaLDM2SDGkgoZvKJ1bSESzbZ3gn4rSxqX1xR07swcSdeuGyKYQhAURxAA==}
 
   '@dnd-kit/accessibility@3.1.1':
     resolution: {integrity: sha512-2P+YgaXF+gRsIihwwY1gCsQSYnu9Zyj2py8kY5fFvUM1qm2WA2u639R6YNVfU4GWr+ZM5mqEsfHZZLoRONbemw==}
@@ -7833,6 +7842,12 @@ snapshots:
       react-is: 17.0.2
 
   '@codesandbox/sandpack-themes@2.0.21': {}
+
+  '@dagrejs/dagre@3.1.0':
+    dependencies:
+      '@dagrejs/graphlib': 4.0.3
+
+  '@dagrejs/graphlib@4.0.3': {}
 
   '@dnd-kit/accessibility@3.1.1(react@19.2.5)':
     dependencies:

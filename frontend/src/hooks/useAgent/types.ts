@@ -6,6 +6,7 @@ import type {
   MessageAttachment,
   PersonaPresetSnapshot,
 } from "../../types";
+import type { SopPlan } from "../../types/sop";
 
 // Event types from backend
 export type EventType =
@@ -17,6 +18,7 @@ export type EventType =
   | "tool:start"
   | "tool:result"
   | "todo:updated"
+  | "sop:updated"
   | "summary"
   | "recommend:questions"
   | "followup:questions"
@@ -63,6 +65,11 @@ export interface EventData {
   message?: string;
   choices?: string[];
   default?: string;
+  // approval type discriminator (approval_required): "sop_plan" for SOP plans
+  approval_type?: string;
+  // sop_plan approval payload: nested full SOPPlan snapshot + plan_id
+  plan_id?: string;
+  plan?: Record<string, unknown>;
   // sandbox event fields
   sandbox_id?: string;
   work_dir?: string;
@@ -210,6 +217,10 @@ export interface HistoryEventData {
     url: string;
   }>;
   message_id?: string;
+  // sop:updated / approval_required(sop_plan) fields
+  approval_type?: string;
+  plan_id?: string;
+  plan?: Record<string, unknown>;
 }
 
 // History event from backend
@@ -245,6 +256,8 @@ export interface UseAgentReturn {
   newlyCreatedSession: BackendSession | null;
   activeGoal: ActiveGoalSpec | null;
   goalsByRunId: Record<string, ActiveGoalSpec>;
+  /** 最新 SOP 计划快照（DAG 卡片），由 sop:updated / approval_required(sop_plan) 驱动 */
+  sopPlan: SopPlan | null;
   isInitializingSandbox: boolean;
   sandboxError: string | null;
   sendMessage: (

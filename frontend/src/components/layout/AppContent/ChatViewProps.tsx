@@ -17,6 +17,7 @@ import type {
   PersonaPresetSnapshot,
 } from "../../../types";
 import type { ActiveGoalSpec } from "../../../hooks/useAgent/types";
+import type { SopPlan } from "../../../types/sop";
 import type { RevealPreviewRequest } from "../../chat/ChatMessage/items/revealPreviewData";
 import type { ExternalNavigationTargetFile } from "./externalNavigationState";
 
@@ -169,6 +170,8 @@ export interface ChatViewProps {
     approved: boolean,
   ) => void;
   approvalLoading: boolean;
+  /** 最新 SOP 计划快照（DAG 卡片） */
+  sopPlan: SopPlan | null;
   onSendMessage: (content: string, attachments?: MessageAttachment[]) => void;
   onStopGeneration: () => void;
   activeGoal: ActiveGoalSpec | null;

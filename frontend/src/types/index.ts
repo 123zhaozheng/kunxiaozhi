@@ -46,6 +46,20 @@ export type {
 } from "./message";
 
 // ============================================
+// SOP Types
+// ============================================
+export type {
+  SopStepStatus,
+  SopPlanStatus,
+  SopStep,
+  SopPlan,
+  SopNodeData,
+  SopFlowNode,
+  SopFlowEdge,
+} from "./sop";
+export { normalizeSopEvent, reduceSop, isSopReplayEvent } from "./sop";
+
+// ============================================
 // Persona Preset Types
 // ============================================
 export type {

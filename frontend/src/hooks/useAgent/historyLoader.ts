@@ -62,7 +62,10 @@ function canAttachEventTypeToPreviousAssistant(eventType: string): boolean {
     eventType !== "metadata" &&
     eventType !== "done" &&
     eventType !== "goal:updated" &&
-    eventType !== "approval_required"
+    eventType !== "approval_required" &&
+    // SOP plans have their own DAG card rebuilt from `sopPlan` state — do not
+    // rehydrate them into message bodies.
+    eventType !== "sop:updated"
   );
 }
 
@@ -106,7 +109,10 @@ function processHistoryEvent(
   if (
     eventType === "metadata" ||
     eventType === "done" ||
-    eventType === "goal:updated"
+    eventType === "goal:updated" ||
+    // SOP plans are rebuilt from the latest sop:updated snapshot into the
+    // `sopPlan` state — they are not part of a message body.
+    eventType === "sop:updated"
   ) {
     return currentAssistantMessage;
   }
@@ -117,8 +123,18 @@ function processHistoryEvent(
       id?: string;
       message?: string;
       type?: string;
+      approval_type?: string;
+      plan?: Record<string, unknown>;
       fields?: FormField[];
     };
+    // SOP plans have their own structured DAG card. Do not rehydrate them into
+    // the generic approval list on history loads.
+    if (
+      approvalData.approval_type === "sop_plan" ||
+      approvalData.type === "sop_plan"
+    ) {
+      return currentAssistantMessage;
+    }
     if (approvalData.id && opts.options?.onApprovalRequired) {
       authFetch<{
         status: string;

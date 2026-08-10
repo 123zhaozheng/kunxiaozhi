@@ -23,6 +23,7 @@ import type {
 } from "./types";
 import { clearAllLoadingStates } from "./messageParts";
 import { convertAttachments, processMessageEvent } from "./eventProcessor";
+import { reduceSop, type SopPlan } from "../../types/sop";
 
 /**
  * Context passed to event handler
@@ -45,6 +46,7 @@ export interface EventHandlerContext {
   setGoalsByRunId: React.Dispatch<
     React.SetStateAction<Record<string, import("./types").ActiveGoalSpec>>
   >;
+  setSopPlan?: React.Dispatch<React.SetStateAction<SopPlan | null>>;
 }
 
 /**
@@ -56,7 +58,14 @@ export function handleStreamEvent(
   eventId: string,
   eventTimestamp: string | undefined,
   ctx: EventHandlerContext,
+  connectionVersion?: number,
 ): void {
+  if (
+    connectionVersion !== undefined &&
+    connectionVersion !== ctx.streamVersionRef.current
+  ) {
+    return;
+  }
   console.log("[handleStreamEvent] Received event:", {
     eventType: event.event,
     messageId,
@@ -248,7 +257,27 @@ export function handleStreamEvent(
     }
 
     case "approval_required": {
+      // SOP plans have their own DAG card and confirmation buttons. Intercept
+      // before the generic approval handler so the approval never falls into
+      // the generic ApprovalPanel (which would render a duplicate form).
+      if (
+        data.type === "sop_plan" || data.approval_type === "sop_plan"
+      ) {
+        ctx.setSopPlan?.((prev) =>
+          reduceSop(prev, { event_type: "approval_required", data }),
+        );
+        return;
+      }
       handleApprovalRequired(data, ctx);
+      return;
+    }
+
+    case "sop:updated": {
+      // Full snapshot replacement (same semantics as todo:updated). The
+      // card itself is rendered from the useAgent `sopPlan` state.
+      ctx.setSopPlan?.((prev) =>
+        reduceSop(prev, { event_type: "sop:updated", data }),
+      );
       return;
     }
 

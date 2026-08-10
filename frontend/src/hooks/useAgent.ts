@@ -48,6 +48,8 @@ import { planGoalSubmission } from "./useAgent/goalCommands";
 import { translateBackendError } from "../utils/backendErrors";
 import { dispatchSessionTitleUpdated } from "../utils/sessionTitleEvents";
 import { resolveAvailableAgentId } from "./useAgent/agentSelection";
+import { useSopStatus } from "./useSopStatus";
+import { isSopReplayEvent, reduceSop } from "../types/sop";
 
 export function useAgent(options?: UseAgentOptions): UseAgentReturn {
   const { hasAnyPermission } = useAuth();
@@ -82,6 +84,7 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
     Record<string, ActiveGoalSpec>
   >({});
   const [goalModeEnabled, setGoalModeEnabled] = useState(false);
+  const { plan: sopPlan, setSopPlan } = useSopStatus(null);
 
   // Refs for connection management
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -149,8 +152,9 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
       setSandboxError,
       setActiveGoal,
       setGoalsByRunId,
+      setSopPlan,
     }),
-    [options],
+    [options, setSopPlan],
   );
 
   // Create SSE connection context
@@ -305,6 +309,8 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
+      // Invalidate callbacks already queued by the previous SSE connection.
+      streamVersionRef.current += 1;
       if (historyAbortControllerRef.current) {
         historyAbortControllerRef.current.abort();
       }
@@ -328,6 +334,7 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
 
       // Clear approvals before loading new session
       options?.onClearApprovals?.();
+      setSopPlan(null);
 
       try {
         await markReadPromise;
@@ -380,6 +387,7 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
           // 并行发起 events、status 和 feedback 请求，减少串行等待时间
           const eventsPromise = sessionApi.getAllEvents(targetSessionId, {
             signal: historyAbortController.signal,
+            ...(currentRunId ? { run_id: currentRunId } : {}),
           });
           const statusPromise = currentRunId
             ? sessionApi.getStatus(targetSessionId, currentRunId).catch((e) => {
@@ -467,6 +475,42 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
               extractGoalsByRunFromEvents(eventsData.events as HistoryEvent[]),
             );
 
+            // Reconstruct the SOP card from the latest sop:updated /
+            // approval_required(sop_plan) event. Full snapshots mean the latest
+            // event is enough — no history folding required.
+            const historyEvents = eventsData.events as HistoryEvent[];
+            const orderedHistoryEvents = historyEvents
+              .map((event, index) => ({ event, index }))
+              .sort((a, b) => {
+                const at = a.event.timestamp ? Date.parse(a.event.timestamp) : 0;
+                const bt = b.event.timestamp ? Date.parse(b.event.timestamp) : 0;
+                return at - bt || (a.event.seq ?? a.index) - (b.event.seq ?? b.index);
+              })
+              .map(({ event }) => event);
+            const replayEvents = orderedHistoryEvents.filter(isSopReplayEvent);
+            const latestSopEvent = replayEvents.at(-1);
+            const restoredPlan = latestSopEvent
+              ? reduceSop(null, latestSopEvent)
+              : null;
+            // Approval IDs are scoped to a plan. Do not attach an approval
+            // from an earlier plan when replay events from multiple replans
+            // share the same session history.
+            const latestApproval = restoredPlan
+              ? replayEvents
+                  .slice()
+                  .reverse()
+                  .find((event) => {
+                    if (event.event_type !== "approval_required") return false;
+                    const approvalPlan = reduceSop(null, event);
+                    return approvalPlan?.plan_id === restoredPlan.plan_id;
+                  })
+              : undefined;
+            setSopPlan(
+              restoredPlan && latestApproval
+                ? reduceSop(restoredPlan, latestApproval)
+                : restoredPlan,
+            );
+
             // When the task is still running, target the assistant message for
             // that same run. If history has the user message but no assistant
             // events yet, append a fresh assistant bubble after the latest user.
@@ -503,6 +547,7 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
             setMessages([]);
             setActiveGoal(null);
             setGoalsByRunId({});
+            setSopPlan(null);
 
             if (isTaskRunning && currentRunId) {
               setCurrentRunId(currentRunId);
@@ -550,7 +595,7 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
 
       return null;
     },
-    [options, createSSEContext, canReadFeedback],
+    [options, createSSEContext, canReadFeedback, setSopPlan],
   );
 
   // Send message
@@ -843,6 +888,7 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
 
     // Clear approvals immediately (don't wait for SSE cancel event which may never arrive)
     options?.onClearApprovals?.();
+    setSopPlan(null);
 
     // Clear loading states on all messages and their parts
     setMessages((prev) =>
@@ -864,7 +910,7 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
         );
       }
     }
-  }, [options]);
+  }, [options, setSopPlan]);
 
   const clearMessages = useCallback(() => {
     loadHistoryRequestIdRef.current += 1;
@@ -883,12 +929,13 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
     setGoalModeEnabled(false);
     setActiveGoal(null);
     setGoalsByRunId({});
+    setSopPlan(null);
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
     clearReconnectTimeout(reconnectTimeoutRef);
-  }, []);
+  }, [setSopPlan]);
 
   const clearActiveGoal = useCallback(() => {
     setGoalModeEnabled(false);
@@ -986,6 +1033,7 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
     newlyCreatedSession,
     activeGoal,
     goalsByRunId,
+    sopPlan,
     historyIncomplete,
     historyError,
     isInitializingSandbox,

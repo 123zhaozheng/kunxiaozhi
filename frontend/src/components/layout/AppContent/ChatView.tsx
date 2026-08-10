@@ -12,6 +12,7 @@ import { ChatInput } from "../../chat/ChatInput";
 import { WelcomePage } from "../../chat/WelcomePage";
 import { Virtuoso, type ListRange } from "react-virtuoso";
 import { ApprovalPanel } from "../../panels/ApprovalPanel";
+import { SopBlock } from "../../sop/SopBlock";
 import {
   ChatSkeleton,
   ChatSkeletonMessagesOnly,
@@ -97,6 +98,7 @@ export function ChatView({
   approvals,
   onRespondApproval,
   approvalLoading,
+  sopPlan,
   onSendMessage,
   onStopGeneration,
   activeGoal,
@@ -491,6 +493,17 @@ export function ChatView({
         onRespond={onRespondApproval}
         isLoading={approvalLoading}
       />
+
+      {/* SOP plan DAG card — rendered from useAgent sopPlan state.
+          Constrained to the chat column width so it aligns with the messages. */}
+      <div className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:max-w-4xl xl:max-w-5xl">
+        <SopBlock
+          plan={sopPlan}
+          isStreaming={sessionRunning}
+          onRespond={onRespondApproval}
+          isLoading={approvalLoading}
+        />
+      </div>
 
       <RevealPreviewHost
         preview={activePreview}

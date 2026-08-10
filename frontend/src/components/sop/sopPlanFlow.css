@@ -1,0 +1,52 @@
+/* Dark mode: blend flow canvas with the card background */
+.dark .sop-flow-canvas.react-flow {
+  background-color: transparent !important;
+}
+
+.sop-flow-canvas.react-flow {
+  background-color: transparent !important;
+}
+
+/* React Flow controls theme override — uses CSS vars that switch per light/dark */
+.sop-flow-controls {
+  border-color: var(--theme-border) !important;
+  background: var(--theme-bg-card) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+  border-radius: 8px !important;
+}
+
+.sop-flow-controls button {
+  background: var(--theme-bg-card) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text-secondary) !important;
+  width: 26px !important;
+  height: 26px !important;
+}
+
+.sop-flow-controls button:hover {
+  background: var(--theme-primary-light) !important;
+}
+
+.sop-flow-controls button svg {
+  max-width: 14px;
+  max-height: 14px;
+}
+
+/* Breathing animation for the running step node */
+@keyframes sop-node-breath {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px
+      color-mix(in srgb, var(--theme-primary) 35%, transparent),
+      0 0 10px 0 color-mix(in srgb, var(--theme-primary) 18%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 1px
+        color-mix(in srgb, var(--theme-primary) 80%, transparent),
+      0 0 18px 2px color-mix(in srgb, var(--theme-primary) 32%, transparent);
+  }
+}
+
+.sop-node-breath {
+  animation: sop-node-breath 1.8s ease-in-out infinite;
+}

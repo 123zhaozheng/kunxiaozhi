@@ -175,6 +175,7 @@ export function ChatAppContent({
     newlyCreatedSession,
     activeGoal,
     goalsByRunId,
+    sopPlan,
     sendMessage,
     clearActiveGoal,
     stopGeneration,
@@ -894,6 +895,7 @@ export function ChatAppContent({
           approvals={approvals}
           onRespondApproval={respondToApproval}
           approvalLoading={approvalLoading}
+          sopPlan={sopPlan}
           onSendMessage={(content, sendAttachments) =>
             void sendMessage(content, undefined, sendAttachments)
           }
