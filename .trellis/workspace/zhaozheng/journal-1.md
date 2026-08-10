@@ -1016,3 +1016,24 @@ Added admin-configurable 3-hour idle sessions with Redis-backed sid state, atomi
 ### Status
 
 [OK] **Completed**
+
+
+## Session 34: 统一默认中文 Agent Harness
+
+**Date**: 2026-08-10
+**Task**: 统一默认中文 Agent Harness
+**Branch**: `main`
+
+### Summary
+
+移除 compact_zh 与 ShortTodo 双层实现，统一默认中文简洁 Harness；Fast/Search 保留原生 Todo，Team 通过 profile 排除并保留请求层兜底；清理明显冗余、补齐测试与七段 backend spec。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `44f4a6e1` | (see git log) |
+
+### Status
+
+[OK] **Completed**

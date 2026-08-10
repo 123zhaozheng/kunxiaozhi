@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 33
-- **Last Active**: 2026-08-07
+- **Total Sessions**: 34
+- **Last Active**: 2026-08-10
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1018 | Active |
+| `journal-1.md` | ~1039 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 34 | 2026-08-10 | 统一默认中文 Agent Harness | `44f4a6e1` | `main` |
 | 33 | 2026-08-07 | 完成会话历史与 trace 硬化 | `1795fac0`, `a549ed92`, `2ce8b7de` | `main` |
 | 32 | 2026-08-07 | 完成 stale-running 生命周期恢复 | `d4985bb5`, `8b776396` | `main` |
 | 31 | 2026-08-07 | 完成重复 trace 安全迁移 | `c7d95012`, `8cba4e7a` | `main` |
