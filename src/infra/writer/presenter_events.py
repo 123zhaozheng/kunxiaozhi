@@ -417,6 +417,20 @@ class EventPresenterMixin:
             agent_id=agent_id,
         )
 
+    def present_team_event(self, event_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """构建 TeamAgent 编排事件（白名单校验 + 关联元数据）。
+
+        白名单：sop:updated / sop:plan_generating / approval_required。
+        sop:updated 的 data 为完整 SOPPlan 快照（steps 全字段 + 状态）。
+        """
+        if event_type not in {
+            "sop:updated",
+            "sop:plan_generating",
+            "approval_required",
+        }:
+            raise ValueError(f"unsupported TeamAgent event type: {event_type}")
+        return self._build_event(event_type, data)
+
     def present_user_message(
         self,
         content: str,

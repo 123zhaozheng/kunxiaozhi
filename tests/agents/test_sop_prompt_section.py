@@ -1,4 +1,4 @@
-"""build_sop_guidance_section 测试（compact_zh 固化版）。"""
+"""build_sop_guidance_section tests for the default Chinese concise harness."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from src.agents.team_agent.sop.prompt_section import build_sop_guidance_section
 from src.kernel.config import settings
 
 
-def test_compact_zh_section_contains_key_constraints() -> None:
+def test_default_section_contains_key_constraints() -> None:
     text = build_sop_guidance_section()
 
     assert "update_sop" in text
@@ -19,6 +19,6 @@ def test_compact_zh_section_contains_key_constraints() -> None:
     assert f"[{settings.TEAM_SOP_MIN_STEPS}, {settings.TEAM_SOP_MAX_STEPS}]" in text
 
 
-def test_default_section_is_compact_zh() -> None:
+def test_default_section_is_chinese() -> None:
     text = build_sop_guidance_section()
     assert "SOP 规划" in text

@@ -339,7 +339,7 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "category": SettingCategory.AGENT,
         "subcategory": "team",
         "description": "settingDesc.TEAM_SOP_MODE",
-        "default": True,
+        "default": False,
         "frontend_visible": True,
     },
     "TEAM_SOP_MAX_STEPS": {

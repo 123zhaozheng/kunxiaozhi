@@ -9,7 +9,16 @@ TEAM_ROUTER_SYSTEM_PROMPT = """你负责团队路由：理解请求、拆分任�
 {team_instructions_section}
 默认角色：{default_role}。
 
-按角色能力分派实际工作，不发送协调/提醒消息；独立任务并行，转交用户时间戳。收齐结果后以证据消解冲突，明确失败，最终只输出统一答案。"""
+按角色能力分派实际工作，不发送协调/提醒消息；独立任务并行，转交用户时间戳。收齐结果后以证据消解冲突，明确失败，最终只输出统一答案。
+
+## 路由约束（强制）
+- 主代理只做拆分、分派、核验与整合，**不亲自执行**实际工作。
+- 用户上传的文档/附件一律指派子代理阅读与处理，主代理不直接读取。
+- 文件创建/修改、`reveal_file`/`reveal_project` 交付、shell 执行均由子代理完成；主代理仅整合子代理返回的证据与结论。{sop_clause}"""
+
+# TEAM_SOP_MODE 开启时附加到路由约束末尾的 SOP 强制条款。
+_TEAM_SOP_ROUTER_CLAUSE = """
+- 复杂/多角色任务：执行对应 SOP 节点前必须先调 `update_sop` 把该步骤状态置 `running`，节点完成后更新状态与输出。"""
 
 
 def build_team_members_description(team, role_summaries: dict[str, str] | None = None) -> str:
@@ -44,11 +53,13 @@ def build_team_router_system_prompt(
     *,
     default_role: str,
     role_summaries: dict[str, str] | None = None,
+    sop_enabled: bool = False,
 ) -> str:
     """Build the router system prompt for a concrete team."""
     team_instructions = (getattr(team, "team_instructions", "") or "").strip()
     heading = "## 团队指令"
     team_instructions_section = f"{heading}\n{team_instructions}" if team_instructions else ""
+    sop_clause = _TEAM_SOP_ROUTER_CLAUSE if sop_enabled else ""
     return TEAM_ROUTER_SYSTEM_PROMPT.format(
         team_members_description=build_team_members_description(
             team,
@@ -56,6 +67,7 @@ def build_team_router_system_prompt(
         ),
         team_instructions_section=team_instructions_section,
         default_role=default_role,
+        sop_clause=sop_clause,
     )
 
 

@@ -23,7 +23,9 @@ from src.agents.core.node_utils import (
 from src.agents.core.persona import build_persona_prompt_sections
 from src.agents.core.subagent_prompts import (
     MAIN_AGENT_PROMPT_SECTIONS,
+    SAFETY_AND_VERIFICATION_GUIDE,
     SUBAGENT_PROMPT,
+    SUBAGENT_TASK_GUIDE,
     build_role_subagent_section,
     get_memory_guide,
 )
@@ -37,6 +39,7 @@ from src.agents.search_agent.prompt import (
     SANDBOX_SYSTEM_PROMPT as SEARCH_SANDBOX_SYSTEM_PROMPT,
 )
 from src.agents.team_agent.context import TeamAgentContext
+from src.agents.team_agent.harness_profile import team_harness_profile
 from src.agents.team_agent.prompt import (
     build_team_member_subagent_type,
     build_team_router_system_prompt,
@@ -256,6 +259,7 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
             team,
             default_role=default_role,
             role_summaries=role_summaries,
+            sop_enabled=bool(settings.TEAM_SOP_MODE and team.active_members),
         )
     else:
         system_prompt = FAST_SYSTEM_PROMPT
@@ -341,6 +345,7 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
 
     # ── TeamAgent SOP 挂接 ──
     # TEAM_SOP_MODE 开启且显式团队模式时：追加 update_sop 工具（主代理专属）。
+    resolved_team_id = configurable.get("team_id") or ""
     if settings.TEAM_SOP_MODE and team and team.active_members:
         from src.agents.team_agent.sop.tool import create_update_sop_tool
 
@@ -351,6 +356,7 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
                 build_team_member_subagent_type(member) for member in team.active_members
             ],
             presenter=presenter,
+            team_id=resolved_team_id,
         )
         if filtered_tools is None:
             filtered_tools = []
@@ -403,6 +409,11 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
         return mw
 
     custom_subagents: list[SubAgent | CompiledSubAgent] = []
+    role_tools = [
+        tool
+        for tool in (filtered_tools or [])
+        if getattr(tool, "name", "") not in {"update_sop", "ask_human"}
+    ]
     subagent_display_names: dict[str, str] = {}
     subagent_avatars: dict[str, str] = {}
     sandbox_capability_section = (
@@ -467,6 +478,7 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
                             + (f" {member.role_instructions}" if member.role_instructions else "")
                         ),
                         "system_prompt": SUBAGENT_PROMPT,
+                        "tools": role_tools,
                         "middleware": _build_subagent_middleware(
                             subagent_type,
                             prompt_sections=role_prompt_sections,
@@ -500,6 +512,9 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
                 "name": "general-purpose",
                 "description": "通用子代理：研究复杂问题、搜索文件内容、执行多步任务；关键词/文件首查无果时交其代查；工具权限与主代理一致。",
                 "system_prompt": SUBAGENT_PROMPT,
+                # DeepAgents 0.6.7 inherits parent tools when this field is
+                # omitted, so keep the fallback child explicitly isolated.
+                "tools": role_tools,
                 "middleware": _build_subagent_middleware(
                     prompt_sections=subagent_prompt_sections,
                 ),
@@ -507,14 +522,34 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
         ]
 
     # ── 主代理中间件栈 ──
+    # Team routing is narrower than the child execution surface: delivery and
+    # reveal tools belong to delegated workers, not the router.
+    router_tools = filtered_tools
+    if team and router_tools is not None:
+        router_tools = [
+            tool
+            for tool in router_tools
+            if getattr(tool, "name", "")
+            not in {"reveal_file", "reveal_project", "transfer_file"}
+        ]
+
     user_middleware = create_retry_middleware(
         fallback_model=fallback_model_id, thinking=thinking_config
     )
     user_middleware.append(ToolResultBinaryMiddleware(base_url=subagent_base_url))
+    # 团队模式：主代理是纯路由者/整合者，只保留安全栅栏 + task 契约；
+    # 文件操作/交付/工具发现引导属于子代理职责，不注入主代理。
+    if team:
+        router_base_sections: tuple[str, ...] = (
+            SAFETY_AND_VERIFICATION_GUIDE,
+            SUBAGENT_TASK_GUIDE,
+        )
+    else:
+        router_base_sections = MAIN_AGENT_PROMPT_SECTIONS
     _prompt_sections = [
         s
         for s in (
-            *MAIN_AGENT_PROMPT_SECTIONS,
+            *router_base_sections,
             *persona_sections,
             router_skills_prompt,
             memory_guide,
@@ -564,18 +599,32 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
     user_middleware.append(PromptCachingMiddleware())
     # 团队模式主代理排除 write_todos（路由职责之外；SOP 工具为正式替代）
     user_middleware.append(TeamToolExclusionMiddleware())
+    # SOP dispatch 守卫：执行节点前未置 running → 提醒主代理（运行时兜底）
+    if settings.TEAM_SOP_MODE and team and team.active_members:
+        from src.agents.team_agent.sop.guard import SopDispatchGuardMiddleware
 
-    inner_graph = create_deep_agent(
-        model=llm,
-        system_prompt=system_prompt,
-        backend=backend,
-        tools=filtered_tools,
-        checkpointer=inner_checkpointer,
-        store=store,
-        skills=None,
-        subagents=custom_subagents,
-        middleware=user_middleware,
-    ).with_config({"recursion_limit": settings.SESSION_MAX_RUNS_PER_SESSION})
+        user_middleware.append(
+            SopDispatchGuardMiddleware(
+                session_id=state.get("session_id", ""),
+                team_id=resolved_team_id,
+            )
+        )
+
+    # 团队模式：临时叠加 Team HarnessProfile，让 deepagents 在组装期按精确类型剔除
+    # TodoListMiddleware（write_todos 工具与引导文案从根上不注入）。
+    graph_builder = create_deep_agent
+    with team_harness_profile(llm):
+        inner_graph = graph_builder(
+            model=llm,
+            system_prompt=system_prompt,
+            backend=backend,
+            tools=router_tools,
+            checkpointer=inner_checkpointer,
+            store=store,
+            skills=None,
+            subagents=custom_subagents,
+            middleware=user_middleware,
+        ).with_config({"recursion_limit": settings.SESSION_MAX_RUNS_PER_SESSION})
     graph_compile_time = time.time() - graph_compile_start
     logger.debug(f"[TeamAgent] Graph compile: {graph_compile_time * 1000:.3f}ms")
 

@@ -253,6 +253,25 @@ class ApprovalStorage:
         result = await self.collection.update_one({"_id": approval_id}, {"$set": update_doc})
         return result.modified_count > 0
 
+    async def claim_response(
+        self,
+        approval_id: str,
+        status: str,
+        response: ApprovalResponse,
+    ) -> bool:
+        """Atomically claim a pending approval so concurrent clicks cannot both win."""
+        result = await self.collection.update_one(
+            {"_id": approval_id, "status": "pending", "expires_at": {"$gt": utc_now()}},
+            {
+                "$set": {
+                    "status": status,
+                    "response": response.model_dump(),
+                    "updated_at": utc_now(),
+                }
+            },
+        )
+        return result.modified_count > 0
+
     async def extend_expires_at(
         self,
         approval_id: str,

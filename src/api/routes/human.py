@@ -159,6 +159,25 @@ async def wait_for_response(approval_id: str, timeout: float = 300) -> Optional[
     Returns:
         ApprovalResponse 或 None (超时)
     """
+    initial_approval = await _approval_storage.get(approval_id)
+    initial_expires_at = initial_approval.expires_at if initial_approval else None
+
+    async def continue_if_extended() -> Optional[ApprovalResponse]:
+        current_response = await _approval_storage.get_response(approval_id)
+        if current_response is not None:
+            return current_response
+        latest = await _approval_storage.get(approval_id)
+        if (
+            initial_expires_at is not None
+            and latest is not None
+            and latest.expires_at is not None
+            and latest.expires_at > initial_expires_at
+        ):
+            extra_timeout = max(0.0, (latest.expires_at - utc_now()).total_seconds())
+            if extra_timeout > 0:
+                return await wait_for_response(approval_id, timeout=extra_timeout)
+        return None
+
     local_event = _touch_local_event(approval_id)
     event = local_event[0] if local_event else None
 
@@ -199,13 +218,16 @@ async def wait_for_response(approval_id: str, timeout: float = 300) -> Optional[
                     logger.warning(f"Wait task error: {e}")
 
             # 从 MongoDB 获取最终结果
-            return await _approval_storage.get_response(approval_id)
+            return await continue_if_extended()
 
         finally:
             _local_events.pop(approval_id, None)
     else:
         # 跨进程：直接使用 MongoDB 轮询
-        return await wait_for_response_distributed(approval_id, timeout)
+        response = await wait_for_response_distributed(approval_id, timeout)
+        if response is not None:
+            return response
+        return await continue_if_extended()
 
 
 def _cleanup_approval(approval_id: str) -> None:
@@ -247,6 +269,7 @@ async def respond_to_approval(
     approval_id: str,
     approved: bool = Query(..., description="是否批准"),
     response: str = Query("{}", description="响应数据（JSON 字符串）"),
+    user: TokenPayload | None = Depends(require_permissions("chat:write")),
 ):
     """
     响应审批请求
@@ -256,8 +279,24 @@ async def respond_to_approval(
     approval = await _approval_storage.get(approval_id)
     if not approval:
         raise HTTPException(status_code=404, detail="审批请求不存在")
+    owner_id = getattr(approval, "user_id", None)
+    if isinstance(user, TokenPayload) and owner_id and owner_id != user.sub:
+        raise HTTPException(status_code=403, detail="无权处理其他用户的审批")
 
     if approval.status != "pending":
+        # SOP 计划审批幂等：双击/重连时返回既有决策而非 400
+        # （参考昨日 team_plan 幂等 diff，防前端重复响应破坏流程）。
+        if approval.type == "sop_plan":
+            existing = await _approval_storage.get_response(approval_id)
+            existing_approved = (
+                existing.approved if existing is not None else approval.status == "approved"
+            )
+            return {
+                "status": "success",
+                "approval_id": approval_id,
+                "approved": existing_approved,
+                "idempotent": True,
+            }
         raise HTTPException(status_code=400, detail="审批请求已处理")
 
     # 解析 JSON 响应数据
@@ -269,7 +308,22 @@ async def respond_to_approval(
     # 记录响应并更新状态
     approval_response = ApprovalResponse(approved=approved, response=response_data)
     status = "approved" if approved else "rejected"
-    await _approval_storage.update_status(approval_id, status, approval_response)
+    claim = getattr(_approval_storage, "claim_response", None)
+    if claim is not None:
+        claimed = await claim(approval_id, status, approval_response)
+    else:
+        await _approval_storage.update_status(approval_id, status, approval_response)
+        claimed = True
+    if claim is not None and not claimed:
+        latest = await _approval_storage.get(approval_id)
+        if latest is not None and latest.type == "sop_plan":
+            existing = await _approval_storage.get_response(approval_id)
+            return {
+                "status": "success",
+                "approval_id": approval_id,
+                "approved": existing.approved if existing else latest.status == "approved",
+                "idempotent": True,
+            }
 
     # 通知等待的 Agent（分布式支持）
     # 1. 通过 Redis Pub/Sub 通知跨进程的 Agent

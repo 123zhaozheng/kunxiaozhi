@@ -159,7 +159,7 @@ class Settings(BaseSettings):
     RECOMMEND_QUESTIONS_MAX_BACKGROUND_TASKS: int = 8
 
     # Team Agent SOP Settings
-    TEAM_SOP_MODE: bool = True  # 团队模式 SOP DAG 总开关（默认开：团队模式即用 SOP；false = 旧路由，不暴露 update_sop）
+    TEAM_SOP_MODE: bool = False  # SOP opt-in; legacy team routing is the default.
     TEAM_SOP_MAX_STEPS: int = 8  # SOP 计划步骤数上限，超限工具拒绝并提示合并
     TEAM_SOP_MIN_STEPS: int = 2  # 步骤数下限，低于提示直接回答
 
