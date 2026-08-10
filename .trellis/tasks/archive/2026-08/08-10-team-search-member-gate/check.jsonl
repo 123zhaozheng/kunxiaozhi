@@ -1,0 +1,6 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend quality-check entry point."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Review component changes against local conventions."}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Review state transitions and avoid unnecessary global state."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Review tests, accessibility, i18n, lint, and build requirements."}
+{"file":".trellis/tasks/08-10-team-search-member-gate/research/team-member-search-only.md","reason":"Verify implementation matches researched TeamBuilder behavior."}
+{"file":".trellis/tasks/08-10-team-search-member-gate/research/team-chat-entry-gate.md","reason":"Verify Team entry and send gating against the full current flow."}

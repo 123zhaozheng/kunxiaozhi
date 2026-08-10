@@ -1,0 +1,6 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend package entry point and development checklist."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Chat and TeamBuilder component conventions."}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Keep picker and selection gating in the existing local state flow."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Frontend testing, accessibility, i18n, and styling requirements."}
+{"file":".trellis/tasks/08-10-team-search-member-gate/research/team-member-search-only.md","reason":"Current TeamBuilder Persona flow and Search-only candidate evidence."}
+{"file":".trellis/tasks/08-10-team-search-member-gate/research/team-chat-entry-gate.md","reason":"Current chat Team selection and send path evidence."}
