@@ -9,6 +9,7 @@ import json
 from typing import Any, Iterable
 
 HISTORY_ORDERING_VERSION = 2
+HISTORY_COMPAT_ORDERING_VERSION = 3
 HISTORY_PAGE_LIMIT_MAX = 10000
 
 
@@ -49,8 +50,12 @@ def filter_fingerprint(
     ).hexdigest()
 
 
-def encode_history_cursor(*, scope: str, fingerprint: str, key: list[Any]) -> str:
-    return _encode({"v": HISTORY_ORDERING_VERSION, "scope": scope, "filter": fingerprint, "key": key})
+def encode_history_cursor(
+    *, scope: str, fingerprint: str, key: list[Any], ordering_version: int = HISTORY_ORDERING_VERSION
+) -> str:
+    if ordering_version not in (HISTORY_ORDERING_VERSION, HISTORY_COMPAT_ORDERING_VERSION):
+        raise InvalidHistoryCursor("unsupported history cursor")
+    return _encode({"v": ordering_version, "scope": scope, "filter": fingerprint, "key": key})
 
 
 def decode_history_cursor(
@@ -58,15 +63,35 @@ def decode_history_cursor(
     *,
     scope: str,
     fingerprint: str,
+    ordering_version: int | None = None,
 ) -> list[Any]:
     payload = _decode(cursor)
-    if not isinstance(payload, dict) or payload.get("v") != HISTORY_ORDERING_VERSION:
+    if not isinstance(payload, dict) or payload.get("v") not in (
+        HISTORY_ORDERING_VERSION,
+        HISTORY_COMPAT_ORDERING_VERSION,
+    ):
         raise InvalidHistoryCursor("unsupported history cursor")
+    version = payload.get("v")
+    if ordering_version is not None and version != ordering_version:
+        raise InvalidHistoryCursor("history cursor ordering does not match this query")
     if payload.get("scope") != scope or payload.get("filter") != fingerprint:
         raise InvalidHistoryCursor("history cursor does not match this query")
     key = payload.get("key")
-    if not isinstance(key, list) or len(key) != 6:
+    expected_length = 4 if version == HISTORY_COMPAT_ORDERING_VERSION else 6
+    if not isinstance(key, list) or len(key) != expected_length:
         raise InvalidHistoryCursor("invalid history cursor key")
+    if version == HISTORY_COMPAT_ORDERING_VERSION:
+        event_timestamp, trace_started_at, trace_id, ordinal = key
+        if (
+            not isinstance(event_timestamp, str)
+            or not isinstance(trace_started_at, str)
+            or not isinstance(trace_id, str)
+            or not isinstance(ordinal, int)
+            or isinstance(ordinal, bool)
+            or ordinal < 0
+        ):
+            raise InvalidHistoryCursor("invalid history cursor key")
+        return key
     legacy_bucket, seq, timestamp, trace_id, event_id, ordinal = key
     if (
         not isinstance(legacy_bucket, int)
@@ -106,3 +131,16 @@ def event_ordering_key(event: dict[str, Any], *, ordinal: int | None = None) -> 
         event_id,
         int(ordinal or 0),
     ]
+
+
+def history_ordering_key(
+    event: dict[str, Any], *, ordinal: int | None = None, trace_started_at: Any = None
+) -> list[Any]:
+    """Return the scoped v3 key for merger-produced retained events."""
+    history_order = event.get("history_order")
+    if isinstance(history_order, list) and len(history_order) == 4:
+        return history_order
+    event_timestamp = event.get("timestamp") or trace_started_at or ""
+    started = trace_started_at or event.get("trace_started_at") or event_timestamp
+    trace_id = str(event.get("trace_id") or "")
+    return [str(event_timestamp), str(started), trace_id, int(ordinal or 0)]

@@ -491,11 +491,21 @@ class EventMerger:
         merged_data["started_at"] = first.get("timestamp")
         merged_data["ended_at"] = last.get("timestamp")
 
-        return {
+        merged_event = {
             "event_type": event_type,
             "data": merged_data,
             "timestamp": first.get("timestamp"),  # 使用第一个事件的时间戳
         }
+
+        # Keep the first source row's ordering and identity fields. The
+        # merged payload still represents the whole group, but these fields
+        # anchor it at the group's first occurrence for history ordering and
+        # stable cross-store identity.
+        for field in ("seq", "event_id", "id", "trace_id", "run_id"):
+            if field in first:
+                merged_event[field] = first[field]
+
+        return merged_event
 
 
 # Singleton

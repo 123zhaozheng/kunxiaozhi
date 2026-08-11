@@ -5,11 +5,13 @@ from typing import Any, Dict, List, Optional
 import pytest
 
 from src.infra.session.history_cursor import (
+    HISTORY_COMPAT_ORDERING_VERSION,
     InvalidHistoryCursor,
     decode_history_cursor,
     encode_history_cursor,
     event_ordering_key,
     filter_fingerprint,
+    history_ordering_key,
 )
 from src.infra.session.trace_storage import TraceStorage
 
@@ -90,6 +92,53 @@ class _FakeCursorCollection:
         return _FakeAggregationCursor(_simulate_aggregate(self._events, pipeline))
 
 
+class _FakeV3Collection(_FakeCursorCollection):
+    async def find_one(self, query, projection=None):
+        del query, projection
+        return {"events": [{"event_type": "thinking", "timestamp": "2026-04-25T00:00:01Z"}]}
+
+    def aggregate(self, pipeline):
+        self.aggregate_calls.append(pipeline)
+        limit = next((stage["$limit"] for stage in pipeline if "$limit" in stage), len(self._events))
+        cursor_match = next(
+            (
+                stage["$match"]["$or"]
+                for stage in pipeline
+                if "$match" in stage and "$or" in stage["$match"]
+            ),
+            None,
+        )
+        rows = []
+        for idx, event in enumerate(self._events):
+            started = event.get("trace_started_at", "2026-04-25T00:00:00Z")
+            key = history_ordering_key(event, ordinal=idx, trace_started_at=started)
+            if cursor_match:
+                def _gt(field: str, default: object) -> object:
+                    for item in cursor_match:
+                        value = item.get(field)
+                        if isinstance(value, dict) and "$gt" in value:
+                            return value["$gt"]
+                    return default
+
+                cursor_key = [_gt("events.timestamp_sort", key[0]), _gt("started_sort", key[1]), _gt("trace_id", key[2]), _gt("events.event_index_sort", key[3])]
+                if key <= cursor_key:
+                    continue
+            rows.append({
+                "trace_id": event.get("trace_id", "trace-1"),
+                "run_id": event.get("run_id", "run-1"),
+                "event_type": event["event_type"],
+                "data": event.get("data", {}),
+                "timestamp": event.get("timestamp"),
+                "seq": event.get("seq"),
+                "event_id": event.get("event_id"),
+                "_event_index": idx,
+                "_history_event_timestamp": key[0],
+                "_history_trace_started_at": key[1],
+            })
+        rows.sort(key=lambda row: history_ordering_key(row, ordinal=row["_event_index"], trace_started_at=row["_history_trace_started_at"]))
+        return _FakeAggregationCursor(rows[:limit])
+
+
 # ---------------------------------------------------------------------------
 # Cursor codec
 # ---------------------------------------------------------------------------
@@ -100,6 +149,29 @@ def test_cursor_round_trip() -> None:
     key = [1, 5, "2026-04-25T00:00:00Z", "trace-1", "event-1", 2]
     cursor = encode_history_cursor(scope="session-1", fingerprint=fp, key=key)
     assert decode_history_cursor(cursor, scope="session-1", fingerprint=fp) == key
+
+
+def test_v3_cursor_round_trip_and_version_mismatch() -> None:
+    fp = filter_fingerprint(scope="session-1")
+    key = ["2026-04-25T00:00:01Z", "2026-04-25T00:00:00Z", "trace-1", 3]
+    cursor = encode_history_cursor(
+        scope="session-1", fingerprint=fp, key=key, ordering_version=HISTORY_COMPAT_ORDERING_VERSION
+    )
+    assert decode_history_cursor(
+        cursor,
+        scope="session-1",
+        fingerprint=fp,
+        ordering_version=HISTORY_COMPAT_ORDERING_VERSION,
+    ) == key
+    with pytest.raises(InvalidHistoryCursor):
+        decode_history_cursor(cursor, scope="session-1", fingerprint=fp, ordering_version=2)
+
+
+def test_history_ordering_key_uses_retained_ordinal() -> None:
+    event = {"trace_id": "trace-1", "timestamp": "event-ts"}
+    assert history_ordering_key(event, ordinal=7, trace_started_at="trace-ts") == [
+        "event-ts", "trace-ts", "trace-1", 7
+    ]
 
 
 def test_cursor_rejects_wrong_scope() -> None:
@@ -177,6 +249,42 @@ async def test_get_session_events_page_probes_limit_plus_one() -> None:
     assert page["history_complete"] is False
     pipeline = collection.aggregate_calls[-1]
     assert {"$limit": 3} in pipeline
+
+
+@pytest.mark.asyncio
+async def test_get_session_events_page_selects_v3_and_keeps_page_boundary() -> None:
+    events = [
+        {"event_type": "thinking", "data": {"content": "a"}, "timestamp": "2026-04-25T00:00:01Z", "trace_id": "trace-1"},
+        {"event_type": "tool:start", "data": {}, "seq": 2, "timestamp": "2026-04-25T00:00:02Z", "trace_id": "trace-1"},
+        {"event_type": "message:chunk", "data": {"content": "b"}, "timestamp": "2026-04-25T00:00:03Z", "trace_id": "trace-1"},
+    ]
+    storage = TraceStorage()
+    storage._collection = _FakeV3Collection(events)
+
+    page1 = await storage.get_session_events_page("session-1", limit=2)
+    assert page1["ordering_version"] == HISTORY_COMPAT_ORDERING_VERSION
+    assert [event["event_type"] for event in page1["events"]] == ["thinking", "tool:start"]
+    assert all(len(event["history_order"]) == 4 for event in page1["events"])
+
+    page2 = await storage.get_session_events_page("session-1", limit=2, after=page1["next_cursor"])
+    assert [event["event_type"] for event in page2["events"]] == ["message:chunk"]
+    assert page2["has_more"] is False
+
+
+@pytest.mark.asyncio
+async def test_history_ordering_probe_treats_boolean_seq_as_non_numeric() -> None:
+    class _Collection:
+        async def find_one(self, query, projection=None):
+            del query, projection
+            return {"events": [{"seq": True}]}
+
+    storage = TraceStorage()
+    storage._collection = _Collection()
+
+    assert (
+        await storage.get_history_ordering_version("session-1")
+        == HISTORY_COMPAT_ORDERING_VERSION
+    )
 
 
 @pytest.mark.asyncio

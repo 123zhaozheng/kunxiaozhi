@@ -83,6 +83,29 @@ test("session history accumulates pages in order and deduplicates event identiti
   }
 });
 
+test("session history fallback deduplication preserves distinct history_order rows", async () => {
+  const original = sessionApi.getEvents;
+  const first: SSEEventRecord = {
+    id: "",
+    event_type: "thinking",
+    data: { content: "same payload" },
+    timestamp: "2026-08-11T00:00:00.000Z",
+    history_order: ["2026-08-11T00:00:01.000Z", "2026-08-11T00:00:00.000Z", "trace-1", 1],
+  };
+  const second: SSEEventRecord = {
+    ...first,
+    history_order: ["2026-08-11T00:00:02.000Z", "2026-08-11T00:00:00.000Z", "trace-1", 2],
+  };
+  sessionApi.getEvents = async () => sessionPage([first, second]);
+  try {
+    const result = await sessionApi.getAllEvents("session-1");
+    assert.equal(result.events.length, 2);
+    assert.deepEqual(result.events.map((event) => event.history_order?.[3]), [1, 2]);
+  } finally {
+    sessionApi.getEvents = original;
+  }
+});
+
 test("session history stops on a repeated cursor and preserves loaded events as incomplete", async () => {
   const original = sessionApi.getEvents;
   let callCount = 0;

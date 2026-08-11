@@ -39,12 +39,14 @@ from pymongo.errors import DuplicateKeyError
 
 from src.infra.logging import get_logger
 from src.infra.session.history_cursor import (
+    HISTORY_COMPAT_ORDERING_VERSION,
     HISTORY_ORDERING_VERSION,
     InvalidHistoryCursor,
     decode_history_cursor,
     encode_history_cursor,
     event_ordering_key,
     filter_fingerprint,
+    history_ordering_key,
 )
 from src.infra.storage.mongodb import get_mongo_client
 from src.infra.utils.datetime import utc_now, utc_now_iso
@@ -304,7 +306,12 @@ class TraceStorage:
                 run_id=kwargs.get("run_id"), exclude_run_id=kwargs.get("exclude_run_id"),
                 run_ids=_bounded_unique_strings(kwargs.get("run_ids"), SESSION_EVENT_FILTER_LIST_LIMIT),
             )
-            key = decode_history_cursor(after, scope=session_id, fingerprint=fingerprint)
+            key = decode_history_cursor(
+                after,
+                scope=session_id,
+                fingerprint=fingerprint,
+                ordering_version=HISTORY_ORDERING_VERSION,
+            )
             events = [event for event in events if event_ordering_key(event) > key]
         limit = _clamp_event_read_limit(kwargs.get("limit"), default=_get_session_event_read_default_limit())
         has_more = len(events) > limit
@@ -1311,6 +1318,7 @@ class TraceStorage:
         after: Optional[str] = None,
         _allow_probe: bool = False,
         _include_cursor_metadata: bool = False,
+        _ordering_version: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
         获取会话的所有事件（跨 traces 聚合）
@@ -1332,6 +1340,13 @@ class TraceStorage:
         try:
             event_types = _bounded_unique_strings(event_types, SESSION_EVENT_FILTER_LIST_LIMIT)
             run_ids = _bounded_unique_strings(run_ids, SESSION_EVENT_FILTER_LIST_LIMIT)
+            ordering_version = _ordering_version or await self.get_history_ordering_version(
+                session_id,
+                run_id=run_id,
+                exclude_run_id=exclude_run_id,
+                completed_only=completed_only,
+                run_ids=run_ids,
+            )
             # 构建查询条件
             match_query: Dict[str, Any] = {"session_id": session_id}
             if run_ids:
@@ -1370,31 +1385,45 @@ class TraceStorage:
                         "events.seq": 1,
                         "events.event_id": 1,
                         "events.id": 1,
+                        "started_at": 1,
                     }
                 },
                 {"$unwind": {"path": "$events", "includeArrayIndex": "event_index"}},
             ]
             if event_types:
                 pipeline.append({"$match": {"events.event_type": {"$in": event_types}}})
-            # Normalize a total ordering. Missing seq values remain in the legacy
-            # bucket; trace/event identity breaks timestamp ties deterministically.
-            pipeline.append(
-                {
-                    "$set": {
-                        "events.legacy_bucket": {
-                            "$cond": [{"$isNumber": "$events.seq"}, 1, 0]
-                        },
-                        "events.seq_sort": {
-                            "$cond": [{"$isNumber": "$events.seq"}, "$events.seq", 0]
-                        },
-                        "events.timestamp_sort": {"$ifNull": ["$events.timestamp", ""]},
-                        "events.event_id_sort": {
-                            "$ifNull": ["$events.event_id", {"$ifNull": ["$events.id", ""]}]
-                        },
-                        "events.event_index_sort": {"$ifNull": ["$event_index", 0]},
+            if ordering_version == HISTORY_COMPAT_ORDERING_VERSION:
+                pipeline.append(
+                    {
+                        "$set": {
+                            "events.timestamp_sort": {
+                                "$toString": {"$ifNull": ["$events.timestamp", "$started_at"]}
+                            },
+                            "started_sort": {"$toString": {"$ifNull": ["$started_at", ""]}},
+                            "events.event_index_sort": {"$ifNull": ["$event_index", 0]},
+                        }
                     }
-                }
-            )
+                )
+            else:
+                # Normalize a total ordering. Missing seq values remain in the
+                # legacy bucket; trace/event identity breaks timestamp ties deterministically.
+                pipeline.append(
+                    {
+                        "$set": {
+                            "events.legacy_bucket": {
+                                "$cond": [{"$isNumber": "$events.seq"}, 1, 0]
+                            },
+                            "events.seq_sort": {
+                                "$cond": [{"$isNumber": "$events.seq"}, "$events.seq", 0]
+                            },
+                            "events.timestamp_sort": {"$ifNull": ["$events.timestamp", ""]},
+                            "events.event_id_sort": {
+                                "$ifNull": ["$events.event_id", {"$ifNull": ["$events.id", ""]}]
+                            },
+                            "events.event_index_sort": {"$ifNull": ["$event_index", 0]},
+                        }
+                    }
+                )
             if after:
                 fingerprint = filter_fingerprint(
                     scope=session_id,
@@ -1403,11 +1432,27 @@ class TraceStorage:
                     exclude_run_id=exclude_run_id,
                     run_ids=run_ids,
                 )
-                key = decode_history_cursor(after, scope=session_id, fingerprint=fingerprint)
-                pipeline.append(
-                    {
-                        "$match": {
-                            "$or": [
+                key = decode_history_cursor(
+                    after, scope=session_id, fingerprint=fingerprint, ordering_version=ordering_version
+                )
+                if ordering_version == HISTORY_COMPAT_ORDERING_VERSION:
+                    cursor_or = [
+                        {"events.timestamp_sort": {"$gt": key[0]}},
+                        {"events.timestamp_sort": key[0], "started_sort": {"$gt": key[1]}},
+                        {
+                            "events.timestamp_sort": key[0],
+                            "started_sort": key[1],
+                            "trace_id": {"$gt": key[2]},
+                        },
+                        {
+                            "events.timestamp_sort": key[0],
+                            "started_sort": key[1],
+                            "trace_id": key[2],
+                            "events.event_index_sort": {"$gt": key[3]},
+                        },
+                    ]
+                else:
+                    cursor_or = [
                                 {"events.legacy_bucket": {"$gt": key[0]}},
                                 {
                                     "events.legacy_bucket": key[0],
@@ -1439,22 +1484,32 @@ class TraceStorage:
                                     "events.event_id_sort": key[4],
                                     "events.event_index_sort": {"$gt": key[5]},
                                 },
-                            ]
+                    ]
+                pipeline.append({"$match": {"$or": cursor_or}})
+            if ordering_version == HISTORY_COMPAT_ORDERING_VERSION:
+                pipeline.append(
+                    {
+                        "$sort": {
+                            "events.timestamp_sort": 1,
+                            "started_sort": 1,
+                            "trace_id": 1,
+                            "events.event_index_sort": 1,
                         }
                     }
                 )
-            pipeline.append(
-                {
-                    "$sort": {
+            else:
+                pipeline.append(
+                    {
+                        "$sort": {
                         "events.legacy_bucket": 1,
                         "events.seq_sort": 1,
                         "events.timestamp_sort": 1,
                         "trace_id": 1,
                         "events.event_id_sort": 1,
                         "events.event_index_sort": 1,
+                        }
                     }
-                }
-            )
+                )
             pipeline.extend(
                 [
                     {"$limit": max_events},
@@ -1469,6 +1524,8 @@ class TraceStorage:
                             "seq": "$events.seq",
                             "event_id": {"$ifNull": ["$events.event_id", "$events.id"]},
                             "_event_index": "$event_index",
+                            "_history_event_timestamp": "$events.timestamp_sort",
+                            "_history_trace_started_at": "$started_sort",
                         }
                     },
                 ]
@@ -1476,6 +1533,16 @@ class TraceStorage:
 
             events: List[Dict[str, Any]] = []
             async for event in self.collection.aggregate(pipeline):
+                if ordering_version == HISTORY_COMPAT_ORDERING_VERSION:
+                    event["history_order"] = [
+                        str(event.pop("_history_event_timestamp", event.get("timestamp") or "")),
+                        str(event.pop("_history_trace_started_at", "")),
+                        str(event.get("trace_id") or ""),
+                        int(event.get("_event_index") or 0),
+                    ]
+                else:
+                    event.pop("_history_event_timestamp", None)
+                    event.pop("_history_trace_started_at", None)
                 if not _include_cursor_metadata:
                     event.pop("_event_index", None)
                 events.append(event)
@@ -1488,6 +1555,49 @@ class TraceStorage:
         except Exception as e:
             logger.error(f"Failed to get session events: {e}")
             return []
+
+    async def get_history_ordering_version(
+        self,
+        session_id: str,
+        *,
+        run_id: Optional[str] = None,
+        exclude_run_id: Optional[str] = None,
+        completed_only: bool = True,
+        run_ids: Optional[List[str]] = None,
+    ) -> int:
+        """Select one ordering mode for the complete scoped history query."""
+        query: Dict[str, Any] = {"session_id": session_id, "metadata.merged": True}
+        if completed_only:
+            query["status"] = {"$ne": "running"}
+        if run_id:
+            query["run_id"] = run_id
+        elif run_ids:
+            query["run_id"] = {"$in": _bounded_unique_strings(run_ids, SESSION_EVENT_FILTER_LIST_LIMIT)}
+        if exclude_run_id:
+            query["run_id"] = {"$ne": exclude_run_id}
+        try:
+            find_one = getattr(self.collection, "find_one", None)
+            if find_one is None:
+                return HISTORY_ORDERING_VERSION
+            trace = await find_one(
+                {
+                    **query,
+                    "events": {
+                        "$elemMatch": {
+                            "$or": [{"seq": {"$exists": False}}, {"seq": {"$not": {"$type": "number"}}}]
+                        }
+                    },
+                },
+                {"events": 1},
+            )
+            if isinstance(trace, dict):
+                for event in trace.get("events") or []:
+                    seq = event.get("seq") if isinstance(event, dict) else None
+                    if not isinstance(seq, (int, float)) or isinstance(seq, bool):
+                        return HISTORY_COMPAT_ORDERING_VERSION
+        except Exception:
+            logger.debug("history ordering probe failed for session %s", session_id, exc_info=True)
+        return HISTORY_ORDERING_VERSION
 
     async def get_session_events_page(
         self,
@@ -1503,6 +1613,13 @@ class TraceStorage:
         """Read one cursor page while retaining the legacy list API."""
         page_limit = limit or _get_session_event_read_default_limit()
         page_limit = _clamp_event_read_limit(page_limit, default=_get_session_event_read_default_limit())
+        ordering_version = await self.get_history_ordering_version(
+            session_id,
+            run_id=run_id,
+            exclude_run_id=exclude_run_id,
+            completed_only=completed_only,
+            run_ids=run_ids,
+        )
         # Probe one extra item. The extra slot is intentionally allowed above the
         # single-page safety cap so a request at 10,000 can report has_more exactly.
         probe = min(page_limit + 1, TRACE_EVENTS_READ_LIMIT + 1)
@@ -1517,6 +1634,7 @@ class TraceStorage:
             after=after,
             _allow_probe=True,
             _include_cursor_metadata=True,
+            _ordering_version=ordering_version,
         )
         has_more = len(events) > page_limit
         page_events = events[:page_limit]
@@ -1533,9 +1651,9 @@ class TraceStorage:
                 scope=session_id,
                 fingerprint=fingerprint,
                 key=event_ordering_key(
-                    page_events[-1],
-                    ordinal=page_events[-1].get("_event_index"),
-                ),
+                    page_events[-1], ordinal=page_events[-1].get("_event_index")
+                ) if ordering_version == HISTORY_ORDERING_VERSION else history_ordering_key(page_events[-1], ordinal=page_events[-1].get("_event_index")),
+                ordering_version=ordering_version,
             )
         for event in page_events:
             event.pop("_event_index", None)
@@ -1547,10 +1665,11 @@ class TraceStorage:
             # buffer pressure. Reaching their end proves only that this source
             # has no more retained events, not that durable history is complete.
             "history_complete": False,
-            "ordering_version": HISTORY_ORDERING_VERSION,
+            "ordering_version": ordering_version,
             "events_limited": has_more,
             "events_limit": limit,
         }
+
     async def get_run_events(
         self,
         session_id: str,

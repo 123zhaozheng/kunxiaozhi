@@ -43,6 +43,9 @@ export interface SessionWithMessages {
   total_events: number;
 }
 
+/** Server-provided v3 compatibility ordering tuple for retained history. */
+export type HistoryOrder = [string, string, string, number];
+
 export interface SessionListResponse {
   sessions: SessionSummary[];
   total: number;
@@ -59,6 +62,7 @@ export interface SSEEventRecord {
   data: Record<string, unknown>;
   timestamp: string;
   run_id?: string;
+  history_order?: HistoryOrder;
 }
 
 export interface SessionEventsResponse {

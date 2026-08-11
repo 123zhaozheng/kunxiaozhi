@@ -150,6 +150,7 @@ export type {
   SessionSummary,
   SessionWithMessages,
   SessionListResponse,
+  HistoryOrder,
   SSEEventRecord,
   SessionEventsResponse,
 } from "./session";

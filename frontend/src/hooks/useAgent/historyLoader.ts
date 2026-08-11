@@ -22,6 +22,7 @@ import type {
 import { convertAttachments, processMessageEvent } from "./eventProcessor";
 import { clearAllLoadingStates } from "./messageParts";
 import { parseDate } from "../../utils/datetime";
+import type { HistoryOrder } from "../../types/session";
 
 function resolveUserMessageId(
   event: HistoryEvent,
@@ -53,6 +54,62 @@ function parseEventTimestamp(
   fallbackMs: number,
 ): Date {
   return timestamp ? parseDate(timestamp) : new Date(fallbackMs);
+}
+
+function isHistoryOrder(value: unknown): value is HistoryOrder {
+  return (
+    Array.isArray(value) &&
+    value.length === 4 &&
+    typeof value[0] === "string" &&
+    typeof value[1] === "string" &&
+    typeof value[2] === "string" &&
+    typeof value[3] === "number" &&
+    Number.isFinite(value[3])
+  );
+}
+
+function compareHistoryOrder(a: HistoryOrder, b: HistoryOrder): number {
+  for (let index = 0; index < a.length; index += 1) {
+    const left = a[index];
+    const right = b[index];
+    if (left === right) continue;
+    return left < right ? -1 : 1;
+  }
+  return 0;
+}
+
+function compareHistoryEvents(a: HistoryEvent, b: HistoryEvent): number {
+  const historyOrderA = isHistoryOrder(a.history_order)
+    ? a.history_order
+    : null;
+  const historyOrderB = isHistoryOrder(b.history_order)
+    ? b.history_order
+    : null;
+
+  // v3 pages carry one server-provided key for every event. Use it as a
+  // complete tuple so missing seq values cannot be grouped before sequenced
+  // tool events. Mixed/legacy pages retain the existing v2 comparator.
+  if (historyOrderA && historyOrderB) {
+    return compareHistoryOrder(historyOrderA, historyOrderB);
+  }
+
+  const seqA = typeof a.seq === "number" ? a.seq : null;
+  const seqB = typeof b.seq === "number" ? b.seq : null;
+  if ((seqA !== null) !== (seqB !== null)) return seqA === null ? -1 : 1;
+  if (seqA !== null && seqB !== null && seqA !== seqB) return seqA - seqB;
+
+  const timeA = a.timestamp || "";
+  const timeB = b.timestamp || "";
+  if (timeA !== timeB) return timeA < timeB ? -1 : 1;
+
+  const traceA = a.trace_id || "";
+  const traceB = b.trace_id || "";
+  if (traceA !== traceB) return traceA < traceB ? -1 : 1;
+
+  const eventA = String(a.event_id ?? a.id ?? "");
+  const eventB = String(b.event_id ?? b.id ?? "");
+  if (eventA !== eventB) return eventA < eventB ? -1 : 1;
+  return 0;
 }
 
 function canAttachEventTypeToPreviousAssistant(eventType: string): boolean {
@@ -255,25 +312,7 @@ export function reconstructMessagesFromEvents(
   // Match the backend composite order. In particular, do not fall back to
   // timestamp when only one side has a sequence: merge mode can contain both
   // legacy and immutable events, and that fallback reorders the page.
-  const sortedEvents = [...events].sort((a, b) => {
-    const seqA = typeof a.seq === "number" ? a.seq : null;
-    const seqB = typeof b.seq === "number" ? b.seq : null;
-    if ((seqA !== null) !== (seqB !== null)) return seqA === null ? -1 : 1;
-    if (seqA !== null && seqB !== null && seqA !== seqB) return seqA - seqB;
-
-    const timeA = a.timestamp || "";
-    const timeB = b.timestamp || "";
-    if (timeA !== timeB) return timeA < timeB ? -1 : 1;
-
-    const traceA = a.trace_id || "";
-    const traceB = b.trace_id || "";
-    if (traceA !== traceB) return traceA < traceB ? -1 : 1;
-
-    const eventA = String(a.event_id ?? a.id ?? "");
-    const eventB = String(b.event_id ?? b.id ?? "");
-    if (eventA !== eventB) return eventA < eventB ? -1 : 1;
-    return 0;
-  });
+  const sortedEvents = [...events].sort(compareHistoryEvents);
 
   const reconstructedMessages: Message[] = [];
   let currentAssistantMessage: Message | null = null;

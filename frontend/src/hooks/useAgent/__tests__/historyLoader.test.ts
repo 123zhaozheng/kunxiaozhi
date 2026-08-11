@@ -471,3 +471,141 @@ test("reconstructMessagesFromEvents does not duplicate an assistant id when a ru
   assert.equal(assistantA?.role, "assistant");
   assert.equal(assistantA?.content, "answer A part 1answer A part 2");
 });
+
+test("reconstructMessagesFromEvents uses history_order for merged interleaving", () => {
+  const runId = "run-merged";
+  const traceId = "trace-merged";
+  const messages = reconstructMessagesFromEvents(
+    [
+      {
+        event_id: "event-text",
+        event_type: "message:chunk",
+        run_id: runId,
+        // Missing seq is expected for merger-produced text rows.
+        timestamp: "2026-08-11T00:00:06.000Z",
+        history_order: ["2026-08-11T00:00:06.000Z", "2026-08-11T00:00:00.000Z", traceId, 5],
+        data: { content: "final" },
+      },
+      {
+        event_id: "event-thinking-3",
+        event_type: "thinking",
+        run_id: runId,
+        timestamp: "2026-08-11T00:00:05.000Z",
+        history_order: ["2026-08-11T00:00:05.000Z", "2026-08-11T00:00:00.000Z", traceId, 4],
+        data: { content: "third", thinking_id: "thinking-3" },
+      },
+      {
+        event_id: "event-tool-2",
+        event_type: "tool:start",
+        run_id: runId,
+        seq: 22,
+        timestamp: "2026-08-11T00:00:04.000Z",
+        history_order: ["2026-08-11T00:00:04.000Z", "2026-08-11T00:00:00.000Z", traceId, 3],
+        data: { tool: "second", tool_call_id: "tool-2", args: {} },
+      },
+      {
+        event_id: "event-thinking-2",
+        event_type: "thinking",
+        run_id: runId,
+        timestamp: "2026-08-11T00:00:03.000Z",
+        history_order: ["2026-08-11T00:00:03.000Z", "2026-08-11T00:00:00.000Z", traceId, 2],
+        data: { content: "second", thinking_id: "thinking-2" },
+      },
+      {
+        event_id: "event-tool-1",
+        event_type: "tool:start",
+        run_id: runId,
+        seq: 20,
+        timestamp: "2026-08-11T00:00:02.000Z",
+        history_order: ["2026-08-11T00:00:02.000Z", "2026-08-11T00:00:00.000Z", traceId, 1],
+        data: { tool: "first", tool_call_id: "tool-1", args: {} },
+      },
+      {
+        event_id: "event-thinking-1",
+        event_type: "thinking",
+        run_id: runId,
+        timestamp: "2026-08-11T00:00:01.000Z",
+        history_order: ["2026-08-11T00:00:01.000Z", "2026-08-11T00:00:00.000Z", traceId, 0],
+        data: { content: "first", thinking_id: "thinking-1" },
+      },
+      {
+        event_id: "event-user",
+        event_type: "user:message",
+        run_id: runId,
+        seq: 1,
+        timestamp: "2026-08-11T00:00:00.000Z",
+        history_order: ["2026-08-11T00:00:00.000Z", "2026-08-11T00:00:00.000Z", traceId, 0],
+        data: { content: "question", message_id: "user-merged" },
+      },
+    ] satisfies HistoryEvent[],
+    new Set<string>(),
+    { activeSubagentStack: [] },
+  );
+
+  const assistant = messages.find((message) => message.role === "assistant");
+  assert.deepEqual(assistant?.parts?.map((part) => part.type), [
+    "thinking",
+    "tool",
+    "thinking",
+    "tool",
+    "thinking",
+    "text",
+  ]);
+  assert.deepEqual(
+    assistant?.parts
+      ?.filter((part) => part.type === "thinking")
+      .map((part) => part.thinking_id),
+    ["thinking-1", "thinking-2", "thinking-3"],
+  );
+});
+
+test("reconstructMessagesFromEvents replays both completed turns", () => {
+  const messages = reconstructMessagesFromEvents(
+    [
+      {
+        event_id: "turn-2-answer",
+        event_type: "message:chunk",
+        run_id: "run-2",
+        seq: 4,
+        timestamp: "2026-08-11T00:01:03.000Z",
+        data: { content: "answer two" },
+      },
+      {
+        event_id: "turn-1-user",
+        event_type: "user:message",
+        run_id: "run-1",
+        seq: 1,
+        timestamp: "2026-08-11T00:01:00.000Z",
+        data: { content: "question one", message_id: "user-1" },
+      },
+      {
+        event_id: "turn-2-user",
+        event_type: "user:message",
+        run_id: "run-2",
+        seq: 3,
+        timestamp: "2026-08-11T00:01:02.000Z",
+        data: { content: "question two", message_id: "user-2" },
+      },
+      {
+        event_id: "turn-1-answer",
+        event_type: "message:chunk",
+        run_id: "run-1",
+        seq: 2,
+        timestamp: "2026-08-11T00:01:01.000Z",
+        data: { content: "answer one" },
+      },
+    ] satisfies HistoryEvent[],
+    new Set<string>(),
+    { activeSubagentStack: [] },
+  );
+
+  assert.deepEqual(
+    messages.map((message) => [message.role, message.content]),
+    [
+      ["user", "question one"],
+      ["assistant", "answer one"],
+      ["user", "question two"],
+      ["assistant", "answer two"],
+    ],
+  );
+});

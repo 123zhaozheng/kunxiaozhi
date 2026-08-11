@@ -32,6 +32,7 @@ function sharedHistoryEventKey(
       event.seq ?? "",
       event.timestamp || "",
       event.event_type || "",
+      JSON.stringify(event.history_order ?? []),
       JSON.stringify(event.data || {}),
     ].join("|")
   );

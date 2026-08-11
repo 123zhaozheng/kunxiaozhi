@@ -487,3 +487,47 @@ async def test_merge_page_reader_keeps_a_probe_row_for_legacy_history(
     await writer.read_session_events_page("session-1", limit=2)
 
     assert trace.max_events == 3
+
+
+@pytest.mark.asyncio
+async def test_merge_page_reader_does_not_truncate_before_continuation_cursor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Trace:
+        def __init__(self) -> None:
+            self.max_events: list[int] = []
+            self.events = [
+                {
+                    "trace_id": "trace-1",
+                    "seq": index,
+                    "event_type": "message:chunk",
+                    "data": {"content": str(index)},
+                    "timestamp": f"t{index}",
+                    "_event_index": index,
+                }
+                for index in range(5)
+            ]
+
+        async def get_event_store_session_events(self, session_id: str, **kwargs):
+            del session_id, kwargs
+            return []
+
+        async def get_session_events(self, session_id: str, *args, **kwargs):
+            del session_id, args
+            self.max_events.append(kwargs["max_events"])
+            return [dict(event) for event in self.events[: kwargs["max_events"]]]
+
+    monkeypatch.setattr(dual_writer.settings, "TRACE_EVENT_READ_MODE", "merge", raising=False)
+    trace = _Trace()
+    writer = dual_writer.DualEventWriter()
+    writer._trace = trace
+
+    first = await writer.read_session_events_page("session-1", limit=2)
+    second = await writer.read_session_events_page(
+        "session-1", limit=2, after=first["next_cursor"]
+    )
+
+    assert [event["data"]["content"] for event in first["events"]] == ["0", "1"]
+    assert [event["data"]["content"] for event in second["events"]] == ["2", "3"]
+    assert second["has_more"] is True
+    assert trace.max_events == [3, dual_writer.TRACE_EVENTS_READ_LIMIT]

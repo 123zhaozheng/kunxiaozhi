@@ -57,6 +57,7 @@ function historyEventKey(event: SessionEventsResponse["events"][number]): string
       event.seq ?? "",
       event.timestamp || "",
       event.event_type || "",
+      JSON.stringify(event.history_order ?? []),
       JSON.stringify(event.data || {}),
     ].join("|")
   );

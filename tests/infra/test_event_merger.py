@@ -67,6 +67,64 @@ def test_event_merger_limits_follow_runtime_settings(monkeypatch: pytest.MonkeyP
     assert event_merger._get_merge_max_events_per_trace() == 222
 
 
+@pytest.mark.parametrize(
+    ("event_type", "data_key"),
+    [("thinking", "thinking_id"), ("message:chunk", "text_id")],
+)
+def test_event_merger_preserves_first_event_ordering_and_identity_fields(
+    event_type: str,
+    data_key: str,
+) -> None:
+    merger = EventMerger(trace_storage=None)
+    group = [
+        {
+            "event_type": event_type,
+            "seq": 41,
+            "event_id": "event-first",
+            "id": "legacy-first",
+            "trace_id": "trace-first",
+            "run_id": "run-first",
+            "timestamp": "2026-08-11T01:02:03Z",
+            "data": {data_key: "group-1", "content": "hello "},
+        },
+        {
+            "event_type": event_type,
+            "seq": 42,
+            "event_id": "event-second",
+            "id": "legacy-second",
+            "trace_id": "trace-second",
+            "run_id": "run-second",
+            "timestamp": "2026-08-11T01:02:04Z",
+            "data": {data_key: "group-1", "content": "world"},
+        },
+    ]
+
+    merged = merger._merge_group(group)
+
+    assert merged["event_type"] == event_type
+    assert merged["timestamp"] == group[0]["timestamp"]
+    assert merged["data"]["content"] == "hello world"
+    assert merged["data"]["merged"] is True
+    assert merged["data"]["merged_count"] == 2
+    assert merged["data"]["started_at"] == group[0]["timestamp"]
+    assert merged["data"]["ended_at"] == group[1]["timestamp"]
+    for field in ("seq", "event_id", "id", "trace_id", "run_id"):
+        assert merged[field] == group[0][field]
+
+
+def test_event_merger_keeps_single_event_object_unchanged() -> None:
+    merger = EventMerger(trace_storage=None)
+    event = {
+        "event_type": "thinking",
+        "seq": 7,
+        "trace_id": "trace-1",
+        "timestamp": "2026-08-11T01:02:03Z",
+        "data": {"thinking_id": "thinking-1", "content": "complete"},
+    }
+
+    assert merger._merge_group([event]) is event
+
+
 @pytest.mark.asyncio
 async def test_event_merger_processes_traces_with_bounded_coroutines(
     monkeypatch: pytest.MonkeyPatch,

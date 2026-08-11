@@ -24,12 +24,16 @@ from pymongo import UpdateOne
 from src.infra.async_utils import run_blocking_io
 from src.infra.logging import get_logger
 from src.infra.session.history_cursor import (
+    HISTORY_COMPAT_ORDERING_VERSION,
+    HISTORY_ORDERING_VERSION,
     decode_history_cursor,
     encode_history_cursor,
     event_ordering_key,
     filter_fingerprint,
+    history_ordering_key,
 )
 from src.infra.session.trace_storage import (
+    TRACE_EVENTS_READ_LIMIT,
     TraceIdentityConflictError,
     TraceStorage,
     TraceWriteUnavailableError,
@@ -851,6 +855,18 @@ class DualEventWriter:
                 run_ids=run_ids,
             )
         if _event_read_mode() == "merge":
+            probe = getattr(self.trace, "get_history_ordering_version", None)
+            ordering_version = (
+                await probe(
+                    session_id,
+                    run_id=run_id,
+                    exclude_run_id=exclude_run_id,
+                    completed_only=completed_only,
+                    run_ids=run_ids,
+                )
+                if probe is not None
+                else HISTORY_ORDERING_VERSION
+            )
             immutable = await self.trace.get_event_store_session_events(
                 session_id, event_types=event_types, run_id=run_id,
                 exclude_run_id=exclude_run_id, completed_only=completed_only,
@@ -864,6 +880,7 @@ class DualEventWriter:
                 # flattened session ordinal would make a backfilled legacy
                 # event look like a second event during merge reads.
                 _include_cursor_metadata=True,
+                _ordering_version=ordering_version,
             )
             merged: dict[str, Dict[str, Any]] = {}
             for flattened_ordinal, event in enumerate(legacy):
@@ -881,13 +898,18 @@ class DualEventWriter:
                     )
                 )
                 event.setdefault("event_id", key)
+                if ordering_version == HISTORY_COMPAT_ORDERING_VERSION and "history_order" not in event:
+                    event["history_order"] = history_ordering_key(event, ordinal=trace_ordinal)
                 event.pop("_event_index", None)
                 merged[key] = event
-            for event in immutable:
+            for ordinal, event in enumerate(immutable):
                 key = str(event.get("event_id") or event.get("id") or "")
                 if key:
+                    if ordering_version == HISTORY_COMPAT_ORDERING_VERSION:
+                        event["history_order"] = history_ordering_key(event, ordinal=ordinal)
                     merged[key] = event
-            return sorted(merged.values(), key=event_ordering_key)
+            ordering_key = history_ordering_key if ordering_version == HISTORY_COMPAT_ORDERING_VERSION else event_ordering_key
+            return sorted(merged.values(), key=ordering_key)
         return await self.trace.get_session_events(
             session_id,
             event_types,
@@ -917,8 +939,31 @@ class DualEventWriter:
                 run_ids=run_ids, limit=limit, after=after,
             )
         if _event_read_mode() == "merge":
+            probe = getattr(self.trace, "get_history_ordering_version", None)
+            ordering_version = (
+                await probe(
+                    session_id,
+                    run_id=run_id,
+                    exclude_run_id=exclude_run_id,
+                    completed_only=completed_only,
+                    run_ids=run_ids,
+                )
+                if probe is not None
+                else HISTORY_ORDERING_VERSION
+            )
             default_limit = getattr(settings, "SESSION_EVENT_READ_DEFAULT_LIMIT", 1000)
             page_limit = max(min(int(str(limit or default_limit)), 10000), 1)
+            # Merge mode applies the cursor after combining the two sources in
+            # memory. Once a continuation cursor is present, reading only
+            # ``page_limit + 1`` rows would truncate the prefix before the
+            # cursor and make later pages appear empty. Read the bounded
+            # retained history for continuation requests, then apply the
+            # exclusive key below.
+            read_limit = (
+                TRACE_EVENTS_READ_LIMIT
+                if after
+                else min(page_limit + 1, TRACE_EVENTS_READ_LIMIT)
+            )
             events = await self.read_session_events(
                 session_id, event_types, run_id=run_id, exclude_run_id=exclude_run_id,
                 completed_only=completed_only, run_ids=run_ids,
@@ -927,23 +972,33 @@ class DualEventWriter:
                 # would report ``has_more=false`` and make the rest
                 # unreachable.  Event-store mode has its own unbounded page
                 # reader; this bound is only the migration fallback.
-                max_events=min(page_limit + 1, 10000),
+                max_events=read_limit,
             )
             fingerprint = filter_fingerprint(
                 scope=session_id, event_types=event_types or [], run_id=run_id,
                 exclude_run_id=exclude_run_id, run_ids=run_ids or [],
             )
             if after:
-                key = decode_history_cursor(after, scope=session_id, fingerprint=fingerprint)
-                events = [event for event in events if event_ordering_key(event) > key]
+                key = decode_history_cursor(
+                    after,
+                    scope=session_id,
+                    fingerprint=fingerprint,
+                    ordering_version=ordering_version,
+                )
+                ordering_key = history_ordering_key if ordering_version == HISTORY_COMPAT_ORDERING_VERSION else event_ordering_key
+                events = [event for event in events if ordering_key(event) > key]
             has_more = len(events) > page_limit
             page_events = events[:page_limit]
+            ordering_key = history_ordering_key if ordering_version == HISTORY_COMPAT_ORDERING_VERSION else event_ordering_key
             next_cursor = encode_history_cursor(
-                scope=session_id, fingerprint=fingerprint, key=event_ordering_key(page_events[-1])
+                scope=session_id,
+                fingerprint=fingerprint,
+                key=ordering_key(page_events[-1]),
+                ordering_version=ordering_version,
             ) if has_more and page_events else None
             return {
                 "events": page_events, "has_more": has_more, "next_cursor": next_cursor,
-                "history_complete": False, "ordering_version": 2,
+                "history_complete": False, "ordering_version": ordering_version,
                 "events_limited": has_more, "events_limit": limit,
             }
         return await self.trace.get_session_events_page(

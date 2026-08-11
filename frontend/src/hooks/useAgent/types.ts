@@ -7,6 +7,7 @@ import type {
   PersonaPresetSnapshot,
 } from "../../types";
 import type { SopPlan } from "../../types/sop";
+import type { HistoryOrder } from "../../types/session";
 
 // Event types from backend
 export type EventType =
@@ -234,6 +235,8 @@ export interface HistoryEvent {
   run_id?: string;
   /** Session-level global sequence number (monotonic across all traces). */
   seq?: number;
+  /** Server-provided v3 compatibility ordering tuple. */
+  history_order?: HistoryOrder;
 }
 
 // Return type for useAgent hook
