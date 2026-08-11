@@ -1,0 +1,9 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend spec index and applicable pre-development guidance"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index and applicable pre-development guidance"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Frontend TypeScript, testing, and quality conventions"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Backend Python, storage, typing, and test conventions"}
+{"file": ".trellis/spec/backend/session-history-pagination.md", "reason": "Authoritative v2 history ordering, cursor, pagination, and frontend contract"}
+{"file": ".trellis/spec/backend/trace-event-storage.md", "reason": "Legacy, merge, and immutable event storage compatibility contract"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Cross-layer data-flow and contract consistency checklist"}
+{"file": ".trellis/tasks/08-11-fix-refreshed-conversation-event-order/research/event-order-regression.md", "reason": "Mongo reproduction, regression commits, root causes, and scoped v3 design evidence"}
