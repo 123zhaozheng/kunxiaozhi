@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 36
-- **Last Active**: 2026-08-10
+- **Total Sessions**: 37
+- **Last Active**: 2026-08-11
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1083 | Active |
+| `journal-1.md` | ~1106 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 37 | 2026-08-11 | 修复刷新后会话历史缺失与乱序 | `0b968f6b`, `b09e34be`, `f6551c27` | `main` |
 | 36 | 2026-08-10 | 完善 Team 聊天准入 | `7ede9f6a` | `main` |
 | 35 | 2026-08-10 | 完成 TeamAgent SOP DAG 门禁与可视化 | `75a92f4d`, `04612bf2`, `ba9fbba8` | `main` |
 | 34 | 2026-08-10 | 统一默认中文 Agent Harness | `44f4a6e1` | `main` |

@@ -1081,3 +1081,26 @@ TeamBuilder 仅展示 Search Persona；聊天进入 Team 且未选团队时自�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 37: 修复刷新后会话历史缺失与乱序
+
+**Date**: 2026-08-11
+**Task**: 修复刷新后会话历史缺失与乱序
+**Branch**: `main`
+
+### Summary
+
+定位并修复普通历史被 current_run_id 限制为最后一轮，以及事件合并丢失 seq 后刷新重放乱序；新增 v3 兼容排序、游标分页、合并字段保留与跨层回归测试，完成只读会话重放验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0b968f6b` | (see git log) |
+| `b09e34be` | (see git log) |
+| `f6551c27` | (see git log) |
+
+### Status
+
+[OK] **Completed**
