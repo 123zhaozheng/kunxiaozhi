@@ -387,7 +387,9 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
           // 并行发起 events、status 和 feedback 请求，减少串行等待时间
           const eventsPromise = sessionApi.getAllEvents(targetSessionId, {
             signal: historyAbortController.signal,
-            ...(currentRunId ? { run_id: currentRunId } : {}),
+            // Normal history is session-scoped. Only an explicitly selected
+            // run (for example, a run-focused route) should narrow the query.
+            ...(targetRunId ? { run_id: targetRunId } : {}),
           });
           const statusPromise = currentRunId
             ? sessionApi.getStatus(targetSessionId, currentRunId).catch((e) => {
