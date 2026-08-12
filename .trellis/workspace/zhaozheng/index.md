@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 38
+- **Total Sessions**: 39
 - **Last Active**: 2026-08-12
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1130 | Active |
+| `journal-1.md` | ~1153 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 39 | 2026-08-12 | 修复 TeamAgent SOP 历史状态恢复 | `8520679f`, `134c5c9c`, `c43642ad` | `main` |
 | 38 | 2026-08-12 | 上线安全加固：首次改密与上传后缀拦截 | `b392e900`, `277eaf7a`, `45d6113a`, `7c39f9d1` | `main` |
 | 37 | 2026-08-11 | 修复刷新后会话历史缺失与乱序 | `0b968f6b`, `b09e34be`, `f6551c27` | `main` |
 | 36 | 2026-08-10 | 完善 Team 聊天准入 | `7ede9f6a` | `main` |

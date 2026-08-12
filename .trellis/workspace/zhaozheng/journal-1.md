@@ -1128,3 +1128,26 @@ TeamBuilder 仅展示 Search Persona；聊天进入 Team 且未选团队时自�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 39: 修复 TeamAgent SOP 历史状态恢复
+
+**Date**: 2026-08-12
+**Task**: 修复 TeamAgent SOP 历史状态恢复
+**Branch**: `main`
+
+### Summary
+
+定位并修复 SOP 历史 hydration 将旧审批快照覆盖最新完成状态的问题；复用 canonical history_order，按同 plan 仅合并审批元数据，补齐前后端回归测试与前端契约规范。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8520679f` | (see git log) |
+| `134c5c9c` | (see git log) |
+| `c43642ad` | (see git log) |
+
+### Status
+
+[OK] **Completed**
