@@ -34,6 +34,8 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Agent Harness Localization](./agent-harness.md) | Default Chinese concise harness localization, model-view schema localization, dynamic task/todo contracts, import boundary | Filled |
 | [read_document Dispatch](./read-document-dispatch.md) | File-type dispatch (MinerU / plain-text / sandbox-guidance), charset-normalizer short-CJK gotcha | Filled |
 | [Idle Login Sessions](./auth-idle-sessions.md) | Redis-backed per-login idle timeout, JWT `sid`, atomic activity, refresh/HTTP/SSE/WebSocket enforcement | Filled |
+| [Strong Password & First Login](./auth-password-first-login.md) | Unified strong-password policy, restricted first-login state, credential-version revocation, OA/OAuth parity | Filled |
+| [Main Upload Dangerous Extensions](./upload-dangerous-extensions.md) | Early server-side final-suffix denylist for `POST /api/upload/file` and its explicit limits | Filled |
 | [Session History Cursor Pagination](./session-history-pagination.md) | Read-only session/share cursor contract, completeness semantics, cancellation, and cross-layer tests | Filled |
 | [Trace Uniqueness and Write Readiness](./trace-uniqueness-readiness.md) | Fail-closed trace indexes, identity validation, bulk-write gates, and deployment readiness | Filled |
 | [Durable Trace Event Storage](./trace-event-storage.md) | Immutable event documents, dual-write/read rollout, backpressure, backfill, and rollback | Filled |

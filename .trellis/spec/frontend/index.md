@@ -23,6 +23,7 @@ This directory contains guidelines for frontend development. Fill in each file w
 | [WeCom Channel Sidebar](./wecom-channel-sidebar.md) | Virtual channel/Persona/session hierarchy and read-only compact navigation | Filled |
 | [OA SSO Portal Entry](./oa-sso-entry.md) | Exact `Accesstoken` deep-link contract, legacy aliases, and token stripping | Filled |
 | [Idle Login Monitor](./auth-idle-monitor.md) | Explicit human-activity reporting, status polling, cross-tab logout, and retryable refresh failures | Filled |
+| [Forced Password Change UI](./auth-forced-password-change.md) | `/me`-driven restricted routing, shared policy feedback, 403/401 handling, token cleanup | Filled |
 | [Session History Cursor Pagination](../backend/session-history-pagination.md) | Shared backend/API/frontend history pagination, partial-failure, and cancellation contract | Filled |
 
 ---
