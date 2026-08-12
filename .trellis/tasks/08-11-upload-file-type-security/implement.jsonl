@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend guideline index."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Keep route error behavior consistent."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Backend route, async, security, and test conventions."}
+{"file":".trellis/spec/backend/upload-dangerous-extensions.md","reason":"Final executable main-upload denylist contract."}
+{"file":".trellis/tasks/08-11-upload-file-type-security/research/current-upload-security-audit.md","reason":"Evidence for the main upload UNKNOWN-extension bypass."}

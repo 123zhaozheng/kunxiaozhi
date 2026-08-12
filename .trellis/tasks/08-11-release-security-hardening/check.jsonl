@@ -1,0 +1,12 @@
+{"file":".trellis/spec/backend/index.md","reason":"Run final backend package quality checks."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Review route, auth, async, storage, dependency, and test quality."}
+{"file":".trellis/spec/frontend/index.md","reason":"Run final frontend package quality checks."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Review frontend UX, tests, i18n, lint, and build."}
+{"file":".trellis/spec/backend/auth-idle-sessions.md","reason":"Verify auth/session/file route integration."}
+{"file":".trellis/spec/backend/auth-password-first-login.md","reason":"Verify final backend authentication contract."}
+{"file":".trellis/spec/backend/upload-dangerous-extensions.md","reason":"Verify final scoped upload contract."}
+{"file":".trellis/spec/frontend/auth-forced-password-change.md","reason":"Verify final frontend forced-change contract."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Review cross-child data flow and bypasses."}
+{"file":".trellis/tasks/08-11-strong-password-first-login/research/current-auth-security-audit.md","reason":"Ensure all authentication gaps are closed."}
+{"file":".trellis/tasks/08-11-upload-file-type-security/research/current-upload-security-audit.md","reason":"Ensure all upload and delivery gaps are closed."}
+{"file":".trellis/tasks/08-11-release-security-hardening/research/security-dependency-selection.md","reason":"Verify dependency/deployment constraints."}

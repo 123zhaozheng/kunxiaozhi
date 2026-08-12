@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/index.md","reason":"Run backend quality checks."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Verify safe stable rejection behavior."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Verify route, async, and tests."}
+{"file":".trellis/spec/backend/upload-dangerous-extensions.md","reason":"Check final main-upload denylist contract."}
+{"file":".trellis/tasks/08-11-upload-file-type-security/research/current-upload-security-audit.md","reason":"Confirm only the scoped main endpoint gap is addressed."}

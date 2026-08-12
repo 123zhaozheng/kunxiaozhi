@@ -1,0 +1,13 @@
+{"file":".trellis/spec/backend/index.md","reason":"Run the backend quality checklist."}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Check schema defaults and atomic storage mutations."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Check 401/403/503 and streaming error contracts."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Check backend quality, security, async, and tests."}
+{"file":".trellis/spec/backend/auth-idle-sessions.md","reason":"Check all token/cache/realtime paths against session contract."}
+{"file":".trellis/spec/backend/auth-password-first-login.md","reason":"Check final backend password/first-login contract."}
+{"file":".trellis/spec/frontend/oa-sso-entry.md","reason":"Prevent OA SSO compatibility regressions."}
+{"file":".trellis/spec/frontend/auth-idle-monitor.md","reason":"Check token preservation and cross-tab behavior."}
+{"file":".trellis/spec/frontend/auth-forced-password-change.md","reason":"Check final frontend forced-change contract."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Run frontend quality and UX checks."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Review end-to-end state propagation and bypasses."}
+{"file":".trellis/tasks/08-11-strong-password-first-login/research/current-auth-security-audit.md","reason":"Verify every audited channel and gap was addressed."}
+{"file":".trellis/tasks/08-11-release-security-hardening/research/security-dependency-selection.md","reason":"Verify dependency, byte-limit, and offline-policy decisions."}

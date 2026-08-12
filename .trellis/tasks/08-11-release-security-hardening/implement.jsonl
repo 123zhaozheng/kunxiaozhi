@@ -1,0 +1,11 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend package quality and security index."}
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend package quality index."}
+{"file":".trellis/spec/backend/auth-idle-sessions.md","reason":"Cross-task authentication/session boundary."}
+{"file":".trellis/spec/backend/auth-password-first-login.md","reason":"Final backend password/first-login contract."}
+{"file":".trellis/spec/backend/upload-dangerous-extensions.md","reason":"Final scoped upload contract."}
+{"file":".trellis/spec/frontend/oa-sso-entry.md","reason":"OA onboarding compatibility boundary."}
+{"file":".trellis/spec/frontend/auth-forced-password-change.md","reason":"Final frontend forced-change contract."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Parent integration spans identity, API, files, storage, realtime, and UI."}
+{"file":".trellis/tasks/08-11-strong-password-first-login/research/current-auth-security-audit.md","reason":"Authentication audit evidence."}
+{"file":".trellis/tasks/08-11-upload-file-type-security/research/current-upload-security-audit.md","reason":"Upload audit evidence."}
+{"file":".trellis/tasks/08-11-release-security-hardening/research/security-dependency-selection.md","reason":"Shared dependency and deployment decisions."}
