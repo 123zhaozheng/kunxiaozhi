@@ -33,6 +33,7 @@ import {
   prepareMessagesForRunningRun,
   extractGoalFromEvents,
   extractGoalsByRunFromEvents,
+  restoreSopPlanFromHistory,
 } from "./useAgent/historyLoader";
 import { clearAllLoadingStates } from "./useAgent/messageParts";
 import { type EventHandlerContext } from "./useAgent/eventHandlers";
@@ -49,7 +50,6 @@ import { translateBackendError } from "../utils/backendErrors";
 import { dispatchSessionTitleUpdated } from "../utils/sessionTitleEvents";
 import { resolveAvailableAgentId } from "./useAgent/agentSelection";
 import { useSopStatus } from "./useSopStatus";
-import { isSopReplayEvent, reduceSop } from "../types/sop";
 
 export function useAgent(options?: UseAgentOptions): UseAgentReturn {
   const { hasAnyPermission } = useAuth();
@@ -480,37 +480,8 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
             // Reconstruct the SOP card from the latest sop:updated /
             // approval_required(sop_plan) event. Full snapshots mean the latest
             // event is enough — no history folding required.
-            const historyEvents = eventsData.events as HistoryEvent[];
-            const orderedHistoryEvents = historyEvents
-              .map((event, index) => ({ event, index }))
-              .sort((a, b) => {
-                const at = a.event.timestamp ? Date.parse(a.event.timestamp) : 0;
-                const bt = b.event.timestamp ? Date.parse(b.event.timestamp) : 0;
-                return at - bt || (a.event.seq ?? a.index) - (b.event.seq ?? b.index);
-              })
-              .map(({ event }) => event);
-            const replayEvents = orderedHistoryEvents.filter(isSopReplayEvent);
-            const latestSopEvent = replayEvents.at(-1);
-            const restoredPlan = latestSopEvent
-              ? reduceSop(null, latestSopEvent)
-              : null;
-            // Approval IDs are scoped to a plan. Do not attach an approval
-            // from an earlier plan when replay events from multiple replans
-            // share the same session history.
-            const latestApproval = restoredPlan
-              ? replayEvents
-                  .slice()
-                  .reverse()
-                  .find((event) => {
-                    if (event.event_type !== "approval_required") return false;
-                    const approvalPlan = reduceSop(null, event);
-                    return approvalPlan?.plan_id === restoredPlan.plan_id;
-                  })
-              : undefined;
             setSopPlan(
-              restoredPlan && latestApproval
-                ? reduceSop(restoredPlan, latestApproval)
-                : restoredPlan,
+              restoreSopPlanFromHistory(eventsData.events as HistoryEvent[]),
             );
 
             // When the task is still running, target the assistant message for

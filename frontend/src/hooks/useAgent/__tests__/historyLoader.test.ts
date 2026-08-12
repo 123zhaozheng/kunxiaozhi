@@ -1,8 +1,188 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { reconstructMessagesFromEvents } from "../historyLoader.ts";
+import {
+  reconstructMessagesFromEvents,
+  restoreSopPlanFromHistory,
+} from "../historyLoader.ts";
 import type { HistoryEvent } from "../types.ts";
+
+test("restoreSopPlanFromHistory keeps completed state and matching approval metadata", () => {
+  const pending = {
+    plan_id: "plan-1", goal: "build", status: "awaiting_confirmation",
+    steps: [
+      { step_id: "s1", title: "Research", dependencies: [], assignee: "r1", expected_output: "out", status: "pending" },
+      { step_id: "s2", title: "Write", dependencies: ["s1"], assignee: "r2", expected_output: "out", status: "pending" },
+    ],
+  };
+  const completed = { ...pending, status: "completed", steps: pending.steps.map((step) => ({ ...step, status: "succeeded", output: "done" })) };
+  const restored = restoreSopPlanFromHistory([
+    { event_type: "sop:updated", timestamp: "2026-08-12T00:00:02Z", seq: 2, data: completed },
+    { event_type: "approval_required", timestamp: "2026-08-12T00:00:01Z", seq: 1, data: { id: "approval-1", type: "sop_plan", plan_id: "plan-1", plan: pending } },
+  ] satisfies HistoryEvent[]);
+  assert.equal(restored?.status, "completed");
+  assert.deepEqual(restored?.steps.map((step) => step.status), ["succeeded", "succeeded"]);
+  assert.equal(restored?.approval_id, "approval-1");
+});
+
+test("restoreSopPlanFromHistory ignores different-plan approvals", () => {
+  const current = { plan_id: "current", goal: "current", status: "completed", steps: [{ step_id: "s1", title: "Done", dependencies: [], assignee: "r1", expected_output: "out", status: "succeeded" }] };
+  const old = { ...current, plan_id: "old", status: "awaiting_confirmation", steps: [{ ...current.steps[0], status: "pending" }] };
+  const restored = restoreSopPlanFromHistory([
+    { event_type: "sop:updated", seq: 2, data: current },
+    { event_type: "approval_required", seq: 1, data: { id: "approval-old", type: "sop_plan", plan_id: "old", plan: old } },
+  ] satisfies HistoryEvent[]);
+  assert.equal(restored?.plan_id, "current");
+  assert.equal(restored?.approval_id, undefined);
+});
+
+test("restoreSopPlanFromHistory follows history_order over timestamps", () => {
+  const pending = {
+    plan_id: "plan-ordered", goal: "ordered", status: "awaiting_confirmation",
+    steps: [{ step_id: "s1", title: "Work", dependencies: [], assignee: "r1", expected_output: "out", status: "pending" }],
+  };
+  const completed = { ...pending, status: "completed", steps: [{ ...pending.steps[0], status: "succeeded" }] };
+  const historyOrder = (index: number): [string, string, string, number] => [
+    "2026-08-12T00:00:00.000Z",
+    "2026-08-12T00:00:00.000Z",
+    "trace-ordered",
+    index,
+  ];
+  const restored = restoreSopPlanFromHistory([
+    {
+      event_type: "sop:updated",
+      timestamp: "2026-08-12T00:00:01Z",
+      history_order: historyOrder(2),
+      data: completed,
+    },
+    {
+      event_type: "approval_required",
+      timestamp: "2026-08-12T00:00:02Z",
+      history_order: historyOrder(1),
+      data: { id: "approval-ordered", type: "sop_plan", plan_id: "plan-ordered", plan: pending },
+    },
+  ] satisfies HistoryEvent[]);
+  assert.equal(restored?.status, "completed");
+  assert.equal(restored?.steps[0]?.status, "succeeded");
+  assert.equal(restored?.approval_id, "approval-ordered");
+});
+
+test("restoreSopPlanFromHistory restores approval-only history", () => {
+  const restored = restoreSopPlanFromHistory([
+    {
+      event_type: "approval_required",
+      data: {
+        id: "approval-only",
+        type: "sop_plan",
+        plan_id: "plan-only",
+        plan: {
+          plan_id: "plan-only",
+          goal: "confirm",
+          status: "awaiting_confirmation",
+          steps: [{ step_id: "s1", title: "Confirm", dependencies: [], assignee: "r1", expected_output: "out", status: "pending" }],
+        },
+      },
+    },
+  ] satisfies HistoryEvent[]);
+  assert.equal(restored?.plan_id, "plan-only");
+  assert.equal(restored?.status, "awaiting_confirmation");
+  assert.equal(restored?.approval_id, "approval-only");
+});
+
+test("restoreSopPlanFromHistory rejects conflicting explicit approval plan ids", () => {
+  const restored = restoreSopPlanFromHistory([
+    {
+      event_type: "sop:updated",
+      seq: 2,
+      data: {
+        plan_id: "plan-current",
+        goal: "current",
+        status: "completed",
+        steps: [{ step_id: "s1", title: "Done", dependencies: [], assignee: "r1", expected_output: "out", status: "succeeded" }],
+      },
+    },
+    {
+      event_type: "approval_required",
+      seq: 1,
+      data: {
+        id: "approval-conflict",
+        type: "sop_plan",
+        plan_id: "plan-old",
+        plan: {
+          plan_id: "plan-current",
+          goal: "current",
+          status: "awaiting_confirmation",
+          steps: [{ step_id: "s1", title: "Done", dependencies: [], assignee: "r1", expected_output: "out", status: "pending" }],
+        },
+      },
+    },
+  ] satisfies HistoryEvent[]);
+  assert.equal(restored?.approval_id, undefined);
+});
+
+test("restoreSopPlanFromHistory fails closed for malformed explicit plan ids", () => {
+  const restored = restoreSopPlanFromHistory([
+    {
+      event_type: "sop:updated",
+      seq: 2,
+      data: {
+        plan_id: "plan-current",
+        goal: "current",
+        status: "completed",
+        steps: [{ step_id: "s1", title: "Done", dependencies: [], assignee: "r1", expected_output: "out", status: "succeeded" }],
+      },
+    },
+    {
+      event_type: "approval_required",
+      seq: 1,
+      data: {
+        id: "approval-malformed",
+        type: "sop_plan",
+        plan_id: 42,
+        plan: {
+          plan_id: "plan-current",
+          goal: "current",
+          status: "awaiting_confirmation",
+          steps: [{ step_id: "s1", title: "Done", dependencies: [], assignee: "r1", expected_output: "out", status: "pending" }],
+        },
+      },
+    },
+  ] satisfies HistoryEvent[]);
+  assert.equal(restored?.approval_id, undefined);
+});
+
+test("restoreSopPlanFromHistory retains approval expiry metadata", () => {
+  const restored = restoreSopPlanFromHistory([
+    {
+      event_type: "sop:updated",
+      seq: 2,
+      data: {
+        plan_id: "plan-expiry",
+        goal: "expiry",
+        status: "completed",
+        steps: [{ step_id: "s1", title: "Done", dependencies: [], assignee: "r1", expected_output: "out", status: "succeeded" }],
+      },
+    },
+    {
+      event_type: "approval_required",
+      seq: 1,
+      data: {
+        id: "approval-expiry",
+        type: "sop_plan",
+        plan_id: "plan-expiry",
+        expires_at: "2026-08-12T01:00:00Z",
+        plan: {
+          plan_id: "plan-expiry",
+          goal: "expiry",
+          status: "awaiting_confirmation",
+          steps: [{ step_id: "s1", title: "Done", dependencies: [], assignee: "r1", expected_output: "out", status: "pending" }],
+        },
+      },
+    },
+  ] satisfies HistoryEvent[]);
+  assert.equal(restored?.status, "completed");
+  assert.equal(restored?.approval_expires_at, "2026-08-12T01:00:00Z");
+});
 
 test("reconstructMessagesFromEvents preserves backend user message ids", () => {
   const messages = reconstructMessagesFromEvents(

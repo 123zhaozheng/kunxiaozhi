@@ -321,6 +321,10 @@ async def test_confirmed_plan_completion_sets_plan_status(
     assert snapshot is not None
     assert snapshot.status == "completed"
     assert all(step.status == StepStatus.succeeded for step in snapshot.steps)
+    assert [event_type for event_type, _ in harness.presenter.emitted] == ["sop:updated"]
+    emitted_plan = harness.presenter.emitted[0][1]
+    assert emitted_plan["status"] == "completed"
+    assert all(step["status"] == "succeeded" for step in emitted_plan["steps"])
 
 
 @pytest.mark.asyncio

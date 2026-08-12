@@ -23,6 +23,7 @@ import { convertAttachments, processMessageEvent } from "./eventProcessor";
 import { clearAllLoadingStates } from "./messageParts";
 import { parseDate } from "../../utils/datetime";
 import type { HistoryOrder } from "../../types/session";
+import { isSopReplayEvent, reduceSop, type SopPlan } from "../../types/sop";
 
 function resolveUserMessageId(
   event: HistoryEvent,
@@ -110,6 +111,60 @@ function compareHistoryEvents(a: HistoryEvent, b: HistoryEvent): number {
   const eventB = String(b.event_id ?? b.id ?? "");
   if (eventA !== eventB) return eventA < eventB ? -1 : 1;
   return 0;
+}
+
+/** Restore the latest SOP snapshot and attach same-plan approval metadata. */
+export function restoreSopPlanFromHistory(
+  events: HistoryEvent[],
+): SopPlan | null {
+  const replayEvents = events
+    .map((event, index) => ({ event, index }))
+    .sort((a, b) => {
+      return compareHistoryEvents(a.event, b.event) || a.index - b.index;
+    })
+    .map(({ event }) => event)
+    .filter(isSopReplayEvent);
+  const latestEvent = replayEvents.at(-1);
+  const restoredPlan = latestEvent ? reduceSop(null, latestEvent) : null;
+  if (!restoredPlan) return null;
+
+  const approvalEvent = replayEvents
+    .slice()
+    .reverse()
+    .find((event) => {
+      if (event.event_type !== "approval_required") return false;
+      const data = event.data;
+      if (typeof data !== "object" || data === null || Array.isArray(data)) {
+        return false;
+      }
+      const explicitPlanId = (data as { plan_id?: unknown }).plan_id;
+      if (
+        explicitPlanId !== undefined &&
+        (typeof explicitPlanId !== "string" ||
+          explicitPlanId !== restoredPlan.plan_id)
+      ) {
+        return false;
+      }
+      return reduceSop(null, event)?.plan_id === restoredPlan.plan_id;
+    });
+  if (!approvalEvent) return restoredPlan;
+  const approvalPlan = reduceSop(null, approvalEvent);
+  if (!approvalPlan?.approval_id) return restoredPlan;
+  const approvalData = approvalEvent.data;
+  const expiresAt =
+    typeof approvalData === "object" &&
+    approvalData !== null &&
+    !Array.isArray(approvalData) &&
+    (approvalData as { expires_at?: unknown }).expires_at;
+  return {
+    ...restoredPlan,
+    approval_id: approvalPlan.approval_id,
+    ...(typeof expiresAt === "string"
+      ? { approval_expires_at: expiresAt }
+      : approvalPlan.approval_expires_at !== undefined
+        ? { approval_expires_at: approvalPlan.approval_expires_at }
+        : {}),
+  };
 }
 
 function canAttachEventTypeToPreviousAssistant(eventType: string): boolean {
