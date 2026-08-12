@@ -7,6 +7,7 @@ from datetime import timezone
 
 from fastapi import APIRouter, HTTPException, Request, status
 
+from src.infra.auth.password_policy import PasswordPolicyError, validate_password
 from src.infra.logging import get_logger
 from src.infra.user.manager import UserManager
 from src.infra.utils.datetime import utc_now
@@ -145,15 +146,18 @@ async def reset_password(request_data: ResetPasswordRequest):
                 detail="重置令牌已过期",
             )
 
+    try:
+        validate_password(new_password, username=user.username, email=str(user.email))
+    except PasswordPolicyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     # 更新密码并清除重置令牌
-    await manager.storage.update(
-        user.id,
-        UserUpdate(
-            password=new_password,
-            reset_token=None,
-            reset_token_expires=None,
-        ),
-    )
+    changed = await manager.storage.reset_password(user.id, new_password, token)
+    if not changed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="鏃犳晥鐨勯噸缃护鐗?",
+        )
 
     logger.info("[Auth] Password reset successful for user %s", user.username)
 

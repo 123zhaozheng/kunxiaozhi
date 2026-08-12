@@ -27,6 +27,7 @@ import {
   resolvePostAuthRedirectPath,
 } from "./authRedirectTransition";
 import { readOaSsoToken } from "./oaSsoToken";
+import { passwordPolicyError } from "./passwordPolicy";
 
 type AuthMode = "login" | "register";
 
@@ -240,8 +241,13 @@ export function AuthPage({ onSuccess, initialMode }: AuthPageProps) {
       return;
     }
 
-    if (password.length < 6) {
-      setError(t("auth.validation.passwordMinLength"));
+    if (mode === "register" && passwordPolicyError(password)) {
+      setError(
+        t(
+          "auth.validation.passwordPolicy",
+          "Use 12-64 characters with at least three character types.",
+        ),
+      );
       return;
     }
 

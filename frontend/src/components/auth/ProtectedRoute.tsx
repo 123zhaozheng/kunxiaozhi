@@ -74,7 +74,7 @@ export function ProtectedRoute({
   showToast = false,
   toastMessage = "您没有权限访问此页面",
 }: ProtectedRouteProps) {
-  const { isAuthenticated, isLoading, hasAnyPermission, hasAllPermissions } =
+  const { isAuthenticated, isLoading, user, hasAnyPermission, hasAllPermissions } =
     useAuth();
 
   // 检查是否有访问权限
@@ -126,6 +126,10 @@ export function ProtectedRoute({
   // 未登录 → 重定向到登录页
   if (!isAuthenticated) {
     return <Navigate to="/auth/login" replace />;
+  }
+
+  if (user?.must_change_password) {
+    return <Navigate to="/auth/change-password" replace />;
   }
 
   // 无权限

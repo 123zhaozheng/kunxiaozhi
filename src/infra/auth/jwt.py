@@ -19,6 +19,7 @@ def create_access_token(
     user_id: str,
     expires_delta: Optional[timedelta] = None,
     sid: Optional[str] = None,
+    credential_version: int = 0,
 ) -> str:
     """
     创建访问令牌
@@ -43,6 +44,7 @@ def create_access_token(
     }
     if sid:
         payload["sid"] = sid
+    payload["credential_version"] = credential_version
 
     return jwt.encode(
         payload,
@@ -56,6 +58,7 @@ def create_refresh_token(
     username: str,
     expires_delta: Optional[timedelta] = None,
     sid: Optional[str] = None,
+    credential_version: int = 0,
 ) -> str:
     """
     创建刷新令牌
@@ -83,6 +86,7 @@ def create_refresh_token(
     }
     if sid:
         payload["sid"] = sid
+    payload["credential_version"] = credential_version
 
     return jwt.encode(
         payload,
@@ -148,15 +152,16 @@ def verify_token(token: str) -> TokenPayload:
         exp=datetime.fromtimestamp(payload["exp"], tz=timezone.utc),
         iat=datetime.fromtimestamp(payload["iat"], tz=timezone.utc),
         sid=payload.get("sid"),
+        credential_version=int(payload.get("credential_version", 0)),
     )
 
 
-async def create_token_pair(user_id: str, username: str) -> tuple[str, str]:
+async def create_token_pair(user_id: str, username: str, credential_version: int = 0) -> tuple[str, str]:
     """Create a token pair backed by a Redis idle session."""
     from src.infra.auth.session import create_session
 
     sid = await create_session(user_id)
     return (
-        create_access_token(user_id=user_id, sid=sid),
-        create_refresh_token(user_id=user_id, username=username, sid=sid),
+        create_access_token(user_id=user_id, sid=sid, credential_version=credential_version),
+        create_refresh_token(user_id=user_id, username=username, sid=sid, credential_version=credential_version),
     )

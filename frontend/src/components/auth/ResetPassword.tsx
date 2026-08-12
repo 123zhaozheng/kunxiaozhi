@@ -11,6 +11,7 @@ import { BrandWordmark } from "../common/BrandWordmark";
 import { PasswordInput } from "./PasswordInput";
 import { APP_NAME } from "../../constants";
 import { useMobileKeyboardAware } from "../../hooks/useMobileKeyboardAware";
+import { passwordPolicyError } from "./passwordPolicy";
 
 export function ResetPassword() {
   const { t } = useTranslation();
@@ -42,8 +43,13 @@ export function ResetPassword() {
       toast.error(t("auth.passwordRequired"));
       return;
     }
-    if (newPassword.length < 6) {
-      toast.error(t("auth.passwordTooShort"));
+    if (passwordPolicyError(newPassword)) {
+      toast.error(
+        t(
+          "auth.validation.passwordPolicy",
+          "Use 12-64 characters with at least three character types.",
+        ),
+      );
       return;
     }
     if (newPassword !== confirmPassword) {

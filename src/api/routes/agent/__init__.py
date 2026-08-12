@@ -15,7 +15,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from src.agents.core.base import AgentFactory
-from src.api.deps import get_current_user_optional, get_current_user_required
+from src.api.deps import (
+    credential_version_is_current,
+    get_current_user_optional,
+    get_current_user_required,
+)
 from src.api.routes.chat import validate_agent_model_access
 from src.infra.async_utils import run_blocking_io
 from src.infra.logging import get_logger
@@ -507,21 +511,46 @@ async def chat_stream(
         raise HTTPException(status_code=403, detail=str(e))
 
     async def event_generator():
+        from src.infra.auth.session import SessionInactiveError, SessionStoreError, assert_active
+
+        stream_iterator = agent.stream(
+            request_body.message,
+            session_id,
+            user_id=user_id,
+            disabled_tools=request_body.disabled_tools,
+            agent_options=agent_options,
+            base_url=base_url,
+            disabled_skills=request_body.disabled_skills,
+            disabled_mcp_tools=request_body.disabled_mcp_tools,
+        ).__aiter__()
+
+        async def _next_event() -> dict:
+            return await stream_iterator.__anext__()
+
+        next_event_task: asyncio.Task | None = asyncio.create_task(_next_event())
         try:
-            async for event in agent.stream(
-                request_body.message,
-                session_id,
-                user_id=user_id,
-                disabled_tools=request_body.disabled_tools,
-                agent_options=agent_options,
-                base_url=base_url,
-                disabled_skills=request_body.disabled_skills,
-                disabled_mcp_tools=request_body.disabled_mcp_tools,
-            ):
+            while next_event_task is not None:
                 # event 格式: {"event": "xxx", "data": {...}}
                 # 确保 data 被正确序列化为 JSON
+                done, _ = await asyncio.wait({next_event_task}, timeout=60.0)
+                if not done:
+                    try:
+                        await assert_active(user.sid, user.sub)
+                    except (SessionInactiveError, SessionStoreError):
+                        return
+                    if not await credential_version_is_current(user):
+                        return
+                    continue
+                try:
+                    event = next_event_task.result()
+                except StopAsyncIteration:
+                    break
                 yield await run_blocking_io(_format_agent_sse_event, event)
+                next_event_task = asyncio.create_task(_next_event())
         finally:
+            if next_event_task is not None and not next_event_task.done():
+                next_event_task.cancel()
+                await asyncio.gather(next_event_task, return_exceptions=True)
             # 清理请求上下文，防止 contextvars 泄漏
             from src.infra.logging.context import TraceContext
 

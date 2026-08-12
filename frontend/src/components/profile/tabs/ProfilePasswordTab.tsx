@@ -3,9 +3,12 @@ import { useTranslation } from "react-i18next";
 import { Eye, EyeOff, Check, AlertCircle } from "lucide-react";
 import { authApi } from "../../../services/api";
 import { LoadingSpinner } from "../../common/LoadingSpinner";
+import { passwordPolicyError } from "../../auth/passwordPolicy";
+import { useAuth } from "../../../hooks/useAuth";
 
 export function ProfilePasswordTab() {
   const { t } = useTranslation();
+  const { logout } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -35,8 +38,13 @@ export function ProfilePasswordTab() {
       return;
     }
 
-    if (newPassword.length < 6) {
-      setPasswordError(t("auth.validation.passwordMinLength"));
+    if (passwordPolicyError(newPassword)) {
+      setPasswordError(
+        t(
+          "auth.validation.passwordPolicy",
+          "Use 12-64 characters with at least three character types.",
+        ),
+      );
       return;
     }
 
@@ -47,6 +55,7 @@ export function ProfilePasswordTab() {
       setOldPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      logout();
     } catch (error) {
       setPasswordError(
         (error as Error).message || t("profile.passwordChangeFailed"),

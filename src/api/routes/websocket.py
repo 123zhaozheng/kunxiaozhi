@@ -9,7 +9,7 @@ import json
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
-from src.api.deps import get_current_user_from_websocket
+from src.api.deps import credential_version_is_current, get_current_user_from_websocket
 from src.infra.async_utils import run_blocking_io
 from src.infra.auth.session import SessionInactiveError, SessionStoreError, assert_active
 from src.infra.logging import get_logger
@@ -139,6 +139,9 @@ async def websocket_endpoint(
                 except SessionStoreError:
                     # Redis outages are transient; keep the connection and retry.
                     continue
+                if not await credential_version_is_current(user):
+                    await websocket.close(code=4001, reason="Credentials revoked")
+                    break
                 continue
             # 可以在这里处理客户端的心跳消息
             now_monotonic = asyncio.get_running_loop().time()
@@ -150,6 +153,9 @@ async def websocket_endpoint(
                     break
                 except SessionStoreError:
                     continue
+                if not await credential_version_is_current(user):
+                    await websocket.close(code=4001, reason="Credentials revoked")
+                    break
                 last_session_check = now_monotonic
             logger.debug(f"[WebSocket] Received from client: {data}")
 

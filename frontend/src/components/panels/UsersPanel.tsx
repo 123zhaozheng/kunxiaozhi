@@ -30,6 +30,7 @@ import { userApi, roleApi } from "../../services/api";
 import { useAuth } from "../../hooks/useAuth";
 import { formatDate } from "../../utils/datetime";
 import { Permission } from "../../types";
+import { passwordPolicyError } from "../auth/passwordPolicy";
 import type {
   User as UserType,
   UserCreate,
@@ -126,8 +127,13 @@ function UserFormModal({
       setError(t("users.validation.enterPassword"));
       return;
     }
-    if (!isEditing && password.length < 6) {
-      setError(t("users.validation.passwordMinLength"));
+    if (password && passwordPolicyError(password)) {
+      setError(
+        t(
+          "auth.validation.passwordPolicy",
+          "Use 12-64 characters with at least three character types.",
+        ),
+      );
       return;
     }
 

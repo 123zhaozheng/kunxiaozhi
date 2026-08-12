@@ -10,6 +10,7 @@ from typing import Any, Optional
 
 from src.infra.async_utils import run_blocking_io
 from src.infra.auth.password import hash_password, verify_password
+from src.infra.auth.password_policy import PasswordPolicyError, validate_password
 from src.infra.logging import get_logger
 from src.infra.utils.datetime import utc_now
 from src.kernel.config import settings
@@ -132,10 +133,24 @@ class UserStorage:
                 get_logger(__name__).info(
                     f"[Migration] Updated is_active for {result2.modified_count} users"
                 )
+
+            await self.collection.update_many(
+                {"must_change_password": {"$exists": False}},
+                {"$set": {"must_change_password": False}},
+            )
+            await self.collection.update_many(
+                {"credential_version": {"$exists": False}},
+                {"$set": {"credential_version": 0}},
+            )
         except Exception as e:
             get_logger(__name__).warning(f"[Migration] Failed to migrate legacy users: {e}")
 
-    async def create(self, user_data: UserCreate) -> UserInDB:
+    async def create(
+        self,
+        user_data: UserCreate,
+        *,
+        generated_password: bool = False,
+    ) -> UserInDB:
         """
         创建用户（并发安全）
 
@@ -160,10 +175,19 @@ class UserStorage:
         # For OAuth users, generate a random password if not provided
         password = user_data.password
         is_oauth_user = bool(user_data.oauth_provider and user_data.oauth_id)
-        if not password and is_oauth_user:
+        generated_secret = generated_password or (is_oauth_user and not user_data.password)
+        if not password and (generated_password or is_oauth_user):
             import secrets
 
             password = secrets.token_urlsafe(32)
+        if password and not generated_secret:
+            assert user_data.password is not None
+            try:
+                validate_password(
+                    password, username=user_data.username, email=str(user_data.email)
+                )
+            except PasswordPolicyError as exc:
+                raise ValidationError(str(exc)) from exc
 
         # OAuth 用户或管理员创建的用户自动激活和验证，普通用户需要邮箱验证
         should_skip_verification = is_oauth_user or user_data.skip_verification
@@ -181,6 +205,9 @@ class UserStorage:
             "verification_token_expires": None,
             "reset_token": None,
             "reset_token_expires": None,
+            "must_change_password": True,
+            "credential_version": 0,
+            "password_changed_at": None,
             "created_at": now,
             "updated_at": now,
         }
@@ -309,11 +336,26 @@ class UserStorage:
         if user_data.email is not None:
             update_dict["email"] = user_data.email
 
-        if user_data.password is not None:
+        password_was_changed = user_data.password is not None
+        if password_was_changed:
+            assert user_data.password is not None
+            existing_user = await self.get_by_id(user_id)
+            if not existing_user:
+                raise NotFoundError(f"鐢ㄦ埛 '{user_id}' 涓嶅瓨鍦?")
+            try:
+                validate_password(
+                    user_data.password,
+                    username=user_data.username or existing_user.username,
+                    email=str(user_data.email or existing_user.email),
+                )
+            except PasswordPolicyError as exc:
+                raise ValidationError(str(exc)) from exc
             update_dict["password_hash"] = await run_blocking_io(
                 hash_password,
                 user_data.password,
             )
+            update_dict["must_change_password"] = False
+            update_dict["password_changed_at"] = utc_now()
 
         # Check if avatar_url was explicitly set (even to None) using model_fields_set
         if "avatar_url" in user_data.model_fields_set:
@@ -324,6 +366,9 @@ class UserStorage:
 
         if user_data.is_active is not None:
             update_dict["is_active"] = user_data.is_active
+
+        if user_data.must_change_password is not None:
+            update_dict["must_change_password"] = user_data.must_change_password
 
         # 支持邮箱验证和密码重置字段
         if hasattr(user_data, "email_verified") and user_data.email_verified is not None:
@@ -344,9 +389,12 @@ class UserStorage:
         from bson import ObjectId
 
         try:
+            update_ops: dict[str, Any] = {"$set": update_dict}
+            if password_was_changed:
+                update_ops["$inc"] = {"credential_version": 1}
             result = await self.collection.find_one_and_update(
                 {"_id": ObjectId(user_id)},
-                {"$set": update_dict},
+                update_ops,
                 return_document=True,
             )
 
@@ -433,6 +481,112 @@ class UserStorage:
             users.append(User(**user_dict))
 
         return users
+
+    async def change_password(
+        self,
+        user_id: str,
+        new_password: str,
+        *,
+        expected_version: int | None = None,
+        current_password: str | None = None,
+    ) -> Optional[UserInDB]:
+        """Atomically set credentials, clear first-login state, and bump version."""
+        from bson import ObjectId
+
+        existing_user = await self.get_by_id(user_id)
+        if not existing_user:
+            return None
+        try:
+            validate_password(
+                new_password,
+                username=existing_user.username,
+                email=str(existing_user.email),
+                current_password=current_password,
+            )
+        except PasswordPolicyError as exc:
+            raise ValidationError(str(exc)) from exc
+        password_hash = await run_blocking_io(hash_password, new_password)
+        query: dict[str, Any] = {"_id": ObjectId(user_id)}
+        if expected_version is not None:
+            query["credential_version"] = expected_version
+        result = await self.collection.find_one_and_update(
+            query,
+            {
+                "$set": {
+                    "password_hash": password_hash,
+                    "must_change_password": False,
+                    "password_changed_at": utc_now(),
+                    "updated_at": utc_now(),
+                },
+                "$inc": {"credential_version": 1},
+            },
+            return_document=True,
+        )
+        if not result:
+            return None
+        result["id"] = str(result.pop("_id"))
+        try:
+            from src.api.deps import clear_auth_cache
+
+            clear_auth_cache()
+        except Exception:
+            pass
+        return UserInDB(**result)
+
+    async def reset_password(
+        self,
+        user_id: str,
+        new_password: str,
+        reset_token: str,
+    ) -> Optional[UserInDB]:
+        """Atomically consume a reset token while replacing the credentials."""
+        from bson import ObjectId
+
+        existing_user = await self.get_by_id(user_id)
+        if not existing_user:
+            return None
+        try:
+            validate_password(
+                new_password,
+                username=existing_user.username,
+                email=str(existing_user.email),
+            )
+        except PasswordPolicyError as exc:
+            raise ValidationError(str(exc)) from exc
+        password_hash = await run_blocking_io(hash_password, new_password)
+        now = utc_now()
+        result = await self.collection.find_one_and_update(
+            {
+                "_id": ObjectId(user_id),
+                "reset_token": reset_token,
+                "$or": [
+                    {"reset_token_expires": None},
+                    {"reset_token_expires": {"$gt": now}},
+                ],
+            },
+            {
+                "$set": {
+                    "password_hash": password_hash,
+                    "must_change_password": False,
+                    "password_changed_at": utc_now(),
+                    "reset_token": None,
+                    "reset_token_expires": None,
+                    "updated_at": utc_now(),
+                },
+                "$inc": {"credential_version": 1},
+            },
+            return_document=True,
+        )
+        if not result:
+            return None
+        result["id"] = str(result.pop("_id"))
+        try:
+            from src.api.deps import clear_auth_cache
+
+            clear_auth_cache()
+        except Exception:
+            pass
+        return UserInDB(**result)
 
     async def count_users(
         self,

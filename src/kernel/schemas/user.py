@@ -31,7 +31,9 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Schema for creating a user."""
 
-    password: Optional[str] = Field(None, min_length=6)  # Optional for OAuth users
+    password: Optional[str] = Field(
+        None, min_length=1, max_length=64
+    )  # Optional for generated OAuth/OA credentials
     roles: List[str] = Field(default_factory=list)
     skip_verification: bool = False  # 跳过邮箱验证（管理员创建时使用）
 
@@ -43,7 +45,7 @@ class UserUpdate(BaseModel):
 
     username: Optional[str] = Field(None, min_length=1, max_length=50)
     email: Optional[EmailStr] = None
-    password: Optional[str] = Field(None, min_length=6)
+    password: Optional[str] = Field(None, min_length=1, max_length=64)
     avatar_url: Optional[str] = None  # Data URI for avatar (data:image/xxx;base64,...)
     roles: Optional[List[str]] = None
     is_active: Optional[bool] = None
@@ -54,6 +56,7 @@ class UserUpdate(BaseModel):
     verification_token_expires: Optional[datetime] = None
     reset_token: Optional[str] = None
     reset_token_expires: Optional[datetime] = None
+    must_change_password: Optional[bool] = None
 
 
 class User(UserBase):
@@ -66,6 +69,9 @@ class User(UserBase):
     email_verified: bool = False  # 邮箱是否已验证
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
+    must_change_password: bool = False
+    credential_version: int = 0
+    password_changed_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -91,7 +97,7 @@ class UserListResponse(BaseModel):
 class UserInDB(User):
     """User model with sensitive data (database view)."""
 
-    password_hash: str
+    password_hash: Optional[str] = None
     verification_token: Optional[str] = None  # 邮箱验证令牌
     verification_token_expires: Optional[datetime] = None  # 邮箱验证令牌过期时间
     reset_token: Optional[str] = None  # 密码重置令牌
@@ -108,6 +114,7 @@ class TokenPayload(BaseModel):
     exp: Optional[datetime] = None
     iat: Optional[datetime] = None
     sid: Optional[str] = None
+    credential_version: int = 0
 
 
 class Token(BaseModel):
@@ -144,7 +151,12 @@ class ResetPasswordRequest(BaseModel):
     """重置密码请求."""
 
     token: str
-    new_password: str = Field(..., min_length=6)
+    new_password: str = Field(..., min_length=1, max_length=64)
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: Optional[str] = Field(None, max_length=64)
+    new_password: str = Field(..., min_length=1, max_length=64)
 
 
 class VerifyEmailRequest(BaseModel):

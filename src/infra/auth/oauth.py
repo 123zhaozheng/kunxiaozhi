@@ -266,7 +266,9 @@ class OAuthService:
             # 生成 JWT token
             from src.infra.auth.jwt import create_token_pair
 
-            access_token, refresh_token = await create_token_pair(user.id, user.username)
+            access_token, refresh_token = await create_token_pair(
+                user.id, user.username, user.credential_version
+            )
 
             return Token(
                 access_token=access_token,

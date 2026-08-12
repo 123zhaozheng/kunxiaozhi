@@ -31,6 +31,21 @@ def clear_auth_cache() -> None:
     _auth_cache.clear()
 
 
+async def credential_version_is_current(payload: TokenPayload) -> bool:
+    """Return whether a token still matches the persisted credential version.
+
+    Long-lived transports must repeat this check after they have authenticated;
+    otherwise a password reset can revoke ordinary requests while an existing
+    stream or socket continues to receive events.
+    """
+    try:
+        user = await UserStorage().get_by_id(payload.sub)
+    except Exception as exc:
+        logger.warning("Credential-version check failed for user %s: %s", payload.sub, exc)
+        return False
+    return bool(user and getattr(user, "credential_version", 0) == payload.credential_version)
+
+
 def _get_cached_user(token: str) -> TokenPayload | None:
     cached = _auth_cache.get(token)
     if not cached:
@@ -101,6 +116,9 @@ async def get_current_user(
         cached = getattr(request.state, "current_user", None)
         if isinstance(cached, TokenPayload):
             await assert_active(cached.sid, cached.sub)
+            user = await UserStorage().get_by_id(cached.sub)
+            if not user or getattr(user, "credential_version", 0) != cached.credential_version:
+                return None
             return cached.model_copy(deep=True)
 
         token = credentials.credentials
@@ -116,6 +134,9 @@ async def get_current_user(
             raise HTTPException(status_code=503, detail="会话存储暂时不可用")
         except SessionInactiveError as exc:
             raise HTTPException(status_code=401, detail=str(exc))
+        user = await UserStorage().get_by_id(payload.sub)
+        if not user or getattr(user, "credential_version", 0) != payload.credential_version:
+            return None
         return payload
     except HTTPException:
         raise
@@ -127,7 +148,7 @@ async def get_current_user(
 get_current_user_optional = get_current_user
 
 
-async def get_current_user_required(
+async def get_current_user_base(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> TokenPayload:
@@ -153,6 +174,9 @@ async def get_current_user_required(
                 raise HTTPException(status_code=503, detail=str(exc)) from exc
             except SessionInactiveError as exc:
                 raise HTTPException(status_code=401, detail=str(exc)) from exc
+            user = await UserStorage().get_by_id(cached_user.sub)
+            if not user or getattr(user, "credential_version", 0) != cached_user.credential_version:
+                raise HTTPException(status_code=401, detail="凭证已失效")
             return cached_user.model_copy(deep=True)
 
         cached = _get_cached_user(token)
@@ -163,8 +187,11 @@ async def get_current_user_required(
                 raise HTTPException(status_code=503, detail=str(exc)) from exc
             except SessionInactiveError as exc:
                 raise HTTPException(status_code=401, detail=str(exc)) from exc
-            request.state.current_user = cached.model_copy(deep=True)
-            return cached
+            user = await UserStorage().get_by_id(cached.sub)
+            if user and getattr(user, "credential_version", 0) == cached.credential_version:
+                request.state.current_user = cached.model_copy(deep=True)
+                return cached
+            _auth_cache.pop(token, None)
 
         parsed = getattr(request.state, "auth_payload", None)
         payload = (
@@ -204,6 +231,9 @@ async def get_current_user_required(
         payload.username = user.username
         payload.roles = roles
         payload.permissions = permissions
+        current_version = getattr(user, "credential_version", 0)
+        if payload.credential_version != current_version:
+            raise HTTPException(status_code=401, detail="凭证已失效")
 
         _set_cached_user(token, payload)
         request.state.current_user = payload.model_copy(deep=True)
@@ -266,6 +296,14 @@ async def get_current_user_from_websocket(
                 detail="用户不存在",
             )
 
+        if getattr(user, "credential_version", 0) != payload.credential_version:
+            raise HTTPException(status_code=401, detail="凭证已失效")
+        if getattr(user, "must_change_password", False):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "PASSWORD_CHANGE_REQUIRED", "message": "请先修改密码"},
+            )
+
         # 从缓存/数据库动态获取角色和权限
         roles, permissions = await _get_user_roles_and_permissions(user.roles)
 
@@ -278,16 +316,29 @@ async def get_current_user_from_websocket(
             exp=payload.exp,
             iat=payload.iat,
             sid=payload.sid,
+            credential_version=payload.credential_version,
         )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"[WebSocket] Auth error: {e}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+
+
+async def get_current_user_required(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+) -> TokenPayload:
+    """Authenticated user allowed to access normal business routes."""
+    payload = await get_current_user_base(request, credentials)
+    user = await UserStorage().get_by_id(payload.sub)
+    if user and getattr(user, "must_change_password", False):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "PASSWORD_CHANGE_REQUIRED", "message": "请先修改密码"},
         )
+    return payload
 
 
 async def get_user_manager() -> UserManager:

@@ -109,7 +109,9 @@ class UserManager:
                         permissions.add(perm.value)
 
         # 创建 token（用户信息从 API 动态获取）
-        access_token, refresh_token = await create_token_pair(user.id, user.username)
+        access_token, refresh_token = await create_token_pair(
+            user.id, user.username, user.credential_version
+        )
 
         return Token(
             access_token=access_token,

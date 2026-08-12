@@ -52,7 +52,7 @@ async def login_or_provision_from_workcode(workcode: str) -> Token:
             skip_verification=skip_verification,
         )
         try:
-            user = await storage.create(user_data)
+            user = await storage.create(user_data, generated_password=True)
             logger.info("[OA SSO] Provisioned user username=%s", workcode)
         except ValidationError as exc:
             if "已存在" in str(exc):
@@ -67,7 +67,9 @@ async def login_or_provision_from_workcode(workcode: str) -> Token:
 
     await storage.touch_updated_at(user.id)
 
-    access_token, refresh_token = await create_token_pair(user.id, user.username)
+    access_token, refresh_token = await create_token_pair(
+        user.id, user.username, user.credential_version
+    )
 
     return Token(
         access_token=access_token,

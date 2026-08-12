@@ -61,6 +61,9 @@ const RegistrationPending = lazy(() =>
     default: m.RegistrationPending,
   })),
 );
+const ForcedPasswordChange = lazy(() =>
+  import("./components/auth/ForcedPasswordChange").then((m) => ({ default: m.ForcedPasswordChange })),
+);
 const AuthPage = lazy(() =>
   import("./components/auth/AuthPage").then((m) => ({ default: m.AuthPage })),
 );
@@ -407,6 +410,7 @@ function App() {
             <Route path="/" element={<RootRedirect />} />
             {/* Auth routes */}
             <Route path="/auth/login" element={<AuthPageWrapper />} />
+            <Route path="/auth/change-password" element={<ForcedPasswordChange />} />
             <Route path="/auth/oa" element={<OaSsoLogin />} />
             <Route
               path="/auth/register"

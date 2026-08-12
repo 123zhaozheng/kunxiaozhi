@@ -6,8 +6,11 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from src.api.deps import get_current_user_required
+from src.api.deps import get_current_user_base
+from src.infra.async_utils import run_blocking_io
 from src.infra.auth.jwt import create_access_token, create_refresh_token, decode_token
+from src.infra.auth.password import verify_password
+from src.infra.auth.password_policy import PasswordPolicyError, validate_password
 from src.infra.auth.session import SessionInactiveError, SessionStoreError, assert_active, touch
 from src.infra.auth.turnstile import get_turnstile_service
 from src.infra.logging import get_logger
@@ -16,6 +19,7 @@ from src.kernel.config import settings
 from src.kernel.exceptions import ValidationError
 from src.kernel.schemas.permission import PermissionsResponse, get_permissions_response
 from src.kernel.schemas.user import (
+    ChangePasswordRequest,
     LoginActivityResponse,
     LoginRequest,
     RegisterResponse,
@@ -197,6 +201,8 @@ async def refresh_token(request: Request):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="用户不存在",
             )
+        if int(payload.get("credential_version", 0)) != getattr(user, "credential_version", 0):
+            raise HTTPException(status_code=401, detail="凭证已失效")
 
         # 生成新的 access token 和 refresh token（轮换 refresh token）
         sid = payload.get("sid")
@@ -206,8 +212,11 @@ async def refresh_token(request: Request):
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except SessionInactiveError as exc:
             raise HTTPException(status_code=401, detail=str(exc)) from exc
-        access_token = create_access_token(user_id=user_id, sid=sid)
-        new_refresh_token = create_refresh_token(user_id=user_id, username=username or user.username, sid=sid)
+        version = getattr(user, "credential_version", 0)
+        access_token = create_access_token(user_id=user_id, sid=sid, credential_version=version)
+        new_refresh_token = create_refresh_token(
+            user_id=user_id, username=username or user.username, sid=sid, credential_version=version
+        )
 
         return Token(
             access_token=access_token,
@@ -225,7 +234,7 @@ async def refresh_token(request: Request):
 
 @router.get("/me", response_model=User)
 async def get_current_user_info(
-    current_user: TokenPayload = Depends(get_current_user_required),
+    current_user: TokenPayload = Depends(get_current_user_base),
 ):
     """获取当前用户信息（包含动态权限）"""
     manager = UserManager()
@@ -241,7 +250,7 @@ async def get_current_user_info(
 
 
 @router.get("/activity", response_model=LoginActivityResponse)
-async def get_activity(current_user: TokenPayload = Depends(get_current_user_required)):
+async def get_activity(current_user: TokenPayload = Depends(get_current_user_base)):
     """Check idle-session status without extending it."""
     try:
         state = await assert_active(current_user.sid, current_user.sub)
@@ -252,8 +261,53 @@ async def get_activity(current_user: TokenPayload = Depends(get_current_user_req
     return _activity_response(state)
 
 
+@router.post("/change-password")
+async def change_password(
+    request_data: ChangePasswordRequest,
+    current_user: TokenPayload = Depends(get_current_user_base),
+):
+    storage = UserManager().storage
+    user = await storage.get_by_id(current_user.sub)
+    if not user:
+        raise HTTPException(status_code=401, detail="用户不存在")
+    if not user.must_change_password:
+        if (
+            not request_data.old_password
+            or not user.password_hash
+            or not await run_blocking_io(
+                verify_password, request_data.old_password, user.password_hash
+            )
+        ):
+            raise HTTPException(status_code=400, detail="当前密码错误")
+    try:
+        validate_password(
+            request_data.new_password,
+            username=user.username,
+            email=str(user.email),
+            current_password=request_data.old_password,
+        )
+    except PasswordPolicyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    changed = await storage.change_password(
+        user.id,
+        request_data.new_password,
+        expected_version=current_user.credential_version,
+        current_password=request_data.old_password,
+    )
+    if not changed:
+        raise HTTPException(status_code=409, detail="密码已被其他请求修改")
+    logger.info("[Auth] Password changed user=%s first_login=%s", user.id, user.must_change_password)
+    try:
+        from src.infra.auth.session import remove
+
+        await remove(current_user.sid)
+    except Exception:
+        pass
+    return {"message": "密码修改成功", "must_change_password": False}
+
+
 @router.post("/activity", response_model=LoginActivityResponse)
-async def post_activity(current_user: TokenPayload = Depends(get_current_user_required)):
+async def post_activity(current_user: TokenPayload = Depends(get_current_user_base)):
     """Record explicit browser activity and extend the idle deadline."""
     try:
         state = await touch(current_user.sid, current_user.sub)

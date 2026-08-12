@@ -7,7 +7,8 @@ import pytest
 
 from src.infra.user import storage as user_storage_module
 from src.infra.user.storage import UserStorage
-from src.kernel.schemas.user import UserCreate, UserInDB, UserUpdate
+from src.kernel.exceptions import ValidationError
+from src.kernel.schemas.user import OAuthProvider, UserCreate, UserInDB, UserUpdate
 
 
 class _InsertResult:
@@ -23,6 +24,20 @@ class _FakeCollection:
     async def insert_one(self, doc: dict[str, Any]) -> _InsertResult:
         self.inserted = doc
         return _InsertResult()
+
+    async def find_one(self, _query: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "_id": "user-id",
+            "username": "alice",
+            "email": "alice@example.com",
+            "password_hash": "hash:old-password",
+            "roles": ["user"],
+            "permissions": [],
+            "is_active": True,
+            "email_verified": True,
+            "created_at": datetime(2026, 4, 25, tzinfo=timezone.utc),
+            "updated_at": datetime(2026, 4, 25, tzinfo=timezone.utc),
+        }
 
     async def find_one_and_update(
         self,
@@ -79,13 +94,49 @@ async def test_create_hashes_password_off_event_loop() -> None:
         UserCreate(
             username="alice",
             email="alice@example.com",
-            password="secret123",
+                password="Strong-secret123!",
             skip_verification=True,
         )
     )
 
     assert _fake_run_blocking_io.calls == ["<lambda>"]
-    assert storage.collection.inserted["password_hash"] == "hash:secret123"
+    assert storage.collection.inserted["password_hash"] == "hash:Strong-secret123!"
+
+
+@pytest.mark.asyncio
+async def test_generated_password_bypasses_human_policy_only_when_explicit() -> None:
+    storage = UserStorage()
+    storage._collection = _FakeCollection()
+
+    await storage.create(
+        UserCreate(
+            username="oa-user",
+            email="oa-user@example.com",
+            password="x",
+            skip_verification=True,
+        ),
+        generated_password=True,
+    )
+
+    assert storage.collection.inserted["password_hash"] == "hash:x"
+
+
+@pytest.mark.asyncio
+async def test_oauth_supplied_password_still_uses_human_policy() -> None:
+    storage = UserStorage()
+    storage._collection = _FakeCollection()
+
+    with pytest.raises(ValidationError):
+        await storage.create(
+            UserCreate(
+                username="oauth-user",
+                email="oauth-user@example.com",
+                password="x",
+                oauth_provider=OAuthProvider.GOOGLE,
+                oauth_id="provider-id",
+                skip_verification=True,
+            )
+        )
 
 
 @pytest.mark.asyncio
@@ -93,10 +144,10 @@ async def test_update_hashes_password_off_event_loop() -> None:
     storage = UserStorage()
     storage._collection = _FakeCollection()
 
-    await storage.update("6659f5bd6b4a1b2c3d4e5f60", UserUpdate(password="new-secret"))
+    await storage.update("6659f5bd6b4a1b2c3d4e5f60", UserUpdate(password="New-strong-secret1!"))
 
     assert _fake_run_blocking_io.calls == ["<lambda>"]
-    assert storage.collection.updated["password_hash"] == "hash:new-secret"
+    assert storage.collection.updated["password_hash"] == "hash:New-strong-secret1!"
 
 
 @pytest.mark.asyncio

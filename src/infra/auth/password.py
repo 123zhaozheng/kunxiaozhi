@@ -7,6 +7,10 @@
 import bcrypt
 
 
+def _password_bytes(password: str) -> bytes:
+    return password.encode("utf-8")
+
+
 def _truncate_password(password: str, max_bytes: int = 72) -> bytes:
     """
     安全截断密码到指定字节数，确保不在多字节字符中间截断
@@ -18,7 +22,7 @@ def _truncate_password(password: str, max_bytes: int = 72) -> bytes:
     Returns:
         截断后的密码字节
     """
-    password_bytes = password.encode("utf-8")
+    password_bytes = _password_bytes(password)
     if len(password_bytes) <= max_bytes:
         return password_bytes
 
@@ -32,6 +36,14 @@ def _truncate_password(password: str, max_bytes: int = 72) -> bytes:
             break
         truncate_pos -= 1
 
+    # A lead byte can sit exactly at the boundary even when the previous byte
+    # is not a continuation byte. Ensure the retained prefix is valid UTF-8.
+    while truncate_pos > 0:
+        try:
+            password_bytes[:truncate_pos].decode("utf-8")
+            break
+        except UnicodeDecodeError:
+            truncate_pos -= 1
     return password_bytes[:truncate_pos]
 
 
@@ -45,8 +57,9 @@ def hash_password(password: str) -> str:
     Returns:
         哈希后的密码
     """
-    # bcrypt has a 72 byte limit, truncate safely if necessary
-    password_bytes = _truncate_password(password, 72)
+    password_bytes = _password_bytes(password)
+    if len(password_bytes) > 72:
+        raise ValueError("Password exceeds bcrypt's 72-byte limit")
     salt = bcrypt.gensalt()
     hashed = bcrypt.hashpw(password_bytes, salt)
     return hashed.decode("utf-8")
@@ -63,7 +76,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns:
         是否匹配
     """
-    # Truncate safely to match hashing behavior
-    password_bytes = _truncate_password(plain_password, 72)
+    password_bytes = _password_bytes(plain_password)
+    # Existing hashes were created with safe truncation; retain compatibility
+    # while ensuring newly selected values can never be truncated silently.
+    if len(password_bytes) > 72:
+        password_bytes = _truncate_password(plain_password, 72)
     hashed_bytes = hashed_password.encode("utf-8")
     return bcrypt.checkpw(password_bytes, hashed_bytes)

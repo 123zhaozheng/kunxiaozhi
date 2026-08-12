@@ -92,6 +92,9 @@ export interface User {
   };
   created_at: string;
   updated_at: string;
+  must_change_password?: boolean;
+  credential_version?: number;
+  password_changed_at?: string | null;
 }
 
 // 用户创建请求
