@@ -53,6 +53,74 @@ UPLOAD_READ_CHUNK_SIZE = 1024 * 1024
 UPLOAD_SPOOL_MEMORY_LIMIT = 2 * 1024 * 1024
 SIGNED_URL_KEYS_MAX = 100
 
+# Extensions that can become active content or native code when opened by a
+# client or storage consumer.  This is intentionally a denylist: legacy and
+# unknown compatibility extensions continue through the existing policy, while
+# these suffixes are rejected before any request body or storage is touched.
+DANGEROUS_UPLOAD_EXTENSIONS = frozenset(
+    {
+        "apk",
+        "appimage",
+        "asp",
+        "aspx",
+        "bat",
+        "bin",
+        "class",
+        "cmd",
+        "com",
+        "cpl",
+        "desktop",
+        "docm",
+        "dll",
+        "dylib",
+        "ear",
+        "exe",
+        "hta",
+        "htm",
+        "html",
+        "jar",
+        "js",
+        "jse",
+        "jsp",
+        "lnk",
+        "mjs",
+        "msi",
+        "msp",
+        "php",
+        "ps1",
+        "scr",
+        "sh",
+        "so",
+        "svg",
+        "vb",
+        "vbe",
+        "vbs",
+        "pptm",
+        "url",
+        "war",
+        "wsf",
+        "xlsm",
+        "xhtml",
+    }
+)
+
+
+def _final_extension(filename: str | None) -> str:
+    """Return the case-folded final suffix from a client-supplied name."""
+    basename = str(filename or "").replace("\\", "/").rsplit("/", 1)[-1]
+    if "." not in basename or basename.endswith("."):
+        return ""
+    return basename.rsplit(".", 1)[-1].casefold()
+
+
+def _reject_dangerous_upload_filename(filename: str | None) -> None:
+    extension = _final_extension(filename)
+    if extension in DANGEROUS_UPLOAD_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Dangerous file extension '.{extension}' is not allowed",
+        )
+
 
 async def drain_upload_delete_tasks() -> None:
     await _upload_delete_tasks.drain()
@@ -409,6 +477,9 @@ async def upload_file(
     Returns:
         Upload result with URL and metadata
     """
+    # Reject active/native final suffixes before initializing storage or reading
+    # the multipart body.  MIME and earlier compound suffixes are irrelevant.
+    _reject_dangerous_upload_filename(file.filename)
     storage = await get_or_init_storage()
 
     # Determine file category from filename and content_type (no need to read content)
