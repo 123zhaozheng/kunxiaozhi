@@ -25,6 +25,7 @@ This directory contains guidelines for frontend development. Fill in each file w
 | [Idle Login Monitor](./auth-idle-monitor.md) | Explicit human-activity reporting, status polling, cross-tab logout, and retryable refresh failures | Filled |
 | [Forced Password Change UI](./auth-forced-password-change.md) | `/me`-driven restricted routing, shared policy feedback, 403/401 handling, token cleanup | Filled |
 | [Session History Cursor Pagination](../backend/session-history-pagination.md) | Shared backend/API/frontend history pagination, partial-failure, and cancellation contract | Filled |
+| [SOP History Restoration](./sop-history-restoration.md) | Latest-snapshot authority, approval-envelope metadata merge, canonical ordering, and live/history parity | Filled |
 
 ---
 
