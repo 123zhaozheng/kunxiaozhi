@@ -1,0 +1,10 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend guideline entry point for the affected useAgent/history layer."}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"Project conventions for complex domain hooks and extracting testable logic from useAgent."}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Defines local frontend state and immutable update conventions relevant to SOP hydration."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Frontend validation and quality requirements."}
+{"file":".trellis/spec/frontend/sop-history-restoration.md","reason":"Executable source-of-truth, ordering, approval metadata, and regression-test contract introduced by this fix."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Ensures the event-to-history-to-UI contract remains explicit across boundaries."}
+{"file":".trellis/tasks/08-12-investigate-teamagent-sop-history-state/research/evidence-synthesis.md","reason":"Authoritative root-cause synthesis, scope boundary, and recommended fix contract."}
+{"file":".trellis/tasks/08-12-investigate-teamagent-sop-history-state/research/sop-frontend-history.md","reason":"Detailed frontend live/history reconstruction path and exact overwrite mechanism."}
+{"file":".trellis/tasks/08-12-investigate-teamagent-sop-history-state/research/test-reproduction-gap.md","reason":"Deterministic fixture, assertions, test surfaces, and focused commands."}
+{"file":".trellis/tasks/08-12-investigate-teamagent-sop-history-state/research/todos-reference-lifecycle.md","reason":"Reference implementation showing chronological full-snapshot replacement without a second stale merge."}

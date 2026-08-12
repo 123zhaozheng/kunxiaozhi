@@ -1,0 +1,8 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend quality-check entry point."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Required frontend review and validation rules."}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"Review extracted helper placement and useAgent integration against hook conventions."}
+{"file":".trellis/spec/frontend/sop-history-restoration.md","reason":"Verify implementation and tests match the persisted SOP history restoration contract."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Check event/history/UI contract consistency and avoid hidden schema changes."}
+{"file":".trellis/tasks/08-12-investigate-teamagent-sop-history-state/research/evidence-synthesis.md","reason":"Review source of truth, non-goals, and residual risks against the final diff."}
+{"file":".trellis/tasks/08-12-investigate-teamagent-sop-history-state/research/test-reproduction-gap.md","reason":"Validate the regression matrix and focused test coverage."}
+{"file":".trellis/tasks/08-12-investigate-teamagent-sop-history-state/research/git-evolution.md","reason":"Ensure the fix addresses the originating regression without undoing later history behavior."}

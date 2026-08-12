@@ -1,0 +1,59 @@
+# Research: TeamAgent SOP backend lifecycle
+
+- Query: Trace TeamAgent SOP creation/update through runtime state, tool/event messages, persistence, and history; identify authoritative state and stale-state risks.
+- Scope: internal backend (with minimal history interface references)
+- Date: 2026-08-12
+
+## Findings
+
+### 1. Runtime/tool construction and call path
+
+- `TeamAgent.graph.astream` creates a storage-enabled `Presenter` when one is not injected (`src/agents/team_agent/graph.py:126-135`), puts it in LangGraph `configurable` (`graph.py:164-179`), and `nodes.py` receives the same presenter while building the inner graph.
+- When `TEAM_SOP_MODE` and an explicit team with active members are present, `src/agents/team_agent/nodes.py:346-363` appends one `update_sop` `StructuredTool` to the main agent only. The closure receives the graph `session_id`, authenticated `user_id`, authoritative `team_id`, roster subagent types, and presenter. Team subagents are separately filtered from this tool (`nodes.py:407-415`, `harness_profile.py`).
+- The tool schema (`src/agents/team_agent/sop/tool.py:26-36`) accepts `action=create|update`, a complete `SOPPlan` snapshot, and `direct_answer`; `action` is intentionally discarded (`tool.py:166-181`). Therefore both create and update have full-replacement input semantics, and the call itself is not a patch correlated to a prior tool call ID.
+
+### 2. SOP state model and authoritative persistence
+
+- `SOPPlan` contains `plan_id`, `session_id`, `team_id`, goal/summary, complete `steps`, overall status, feedback/approval IDs, and timestamps (`src/agents/team_agent/sop/schemas.py:55-69`). Step status is an enum pending/running/succeeded/failed/cancelled (`schemas.py:16-24`); plan status includes draft, awaiting_confirmation, running, completed, failed, cancelled, rejected, timed_out (`schemas.py:43-52`).
+- `SopRunStore` stores one mutable document in Mongo collection `sop_runs`, uniquely keyed by `(session_id, team_id)` (`src/agents/team_agent/sop/store.py:20-24`, `43-49`, `69-71`). This is the backend source of truth for dispatch guards and recovery (`sop/guard.py:47-58`), not LangGraph/checkpointer messages.
+- `upsert_plan` takes a complete snapshot, preserves the existing `created_at`, replaces all fields with `$set`, and updates `updated_at` (`store.py:80-96`). `set_step_status` atomically updates a matching `steps.step_id` plus output/error and returns a fresh full snapshot (`store.py:141-164`). `set_status_for_plan` requires matching `plan_id` (`store.py:120-139`), while `set_status` only keys on session/team (`store.py:106-118`). Per-run asyncio locks serialize writes within one process (`store.py:26-29`, `73-78`), but Mongo remains the cross-process persistence boundary.
+
+### 3. `update_sop` state transitions and write ordering
+
+- Validation failures return errors before any store write or event (`tool.py:203-211`), preserving the previous plan. `direct_answer=true` or an empty step list sets `status=completed`, upserts the full plan, then emits one full `sop:updated` snapshot (`tool.py:197-201`).
+- A dispatching plan that is not already confirmed is rewritten as `awaiting_confirmation`, `user_feedback` cleared, upserted, and immediately emitted as `sop:updated` (`tool.py:110-123`). An approval record is then created with the same full plan snapshot (`tool.py:124-131`), approval ID is written back with another full upsert (`tool.py:132-134`), and `approval_required` is emitted with `type=sop_plan`, `plan_id`, and embedded full `plan` (`tool.py:54-70`).
+- Approval response transitions the mutable store to `running`, `rejected`, or `timed_out` using `set_status_for_plan`; each successful transition emits a fresh `sop:updated` snapshot (`tool.py:136-163`). Approval API responses are idempotent for `sop_plan` (`src/api/routes/human.py:286-326`), but this only protects approval state, not history event duplication/order.
+- Once the stored plan status is in `_CONFIRMED_STATUSES = {running, completed, failed, cancelled}` (`tool.py:23`), a later call with the same `plan_id` skips confirmation. `_update_confirmed_plan` iterates every submitted step and calls `set_step_status`, rereads the complete store snapshot, and only changes overall status when the submitted plan explicitly has a non-`draft` status different from the stored status (`tool.py:82-107`). It then emits exactly one full `sop:updated` snapshot after all step mutations.
+- Important semantic edge: a completion update whose plan status remains the default `draft` updates step statuses but deliberately leaves the stored overall status unchanged (`tool.py:98-104`). The prompt requires callers to send `status=completed`; otherwise the backend may persist all succeeded steps under `running`, but that is not a pending-confirmation state.
+
+### 4. Event/message emission and history persistence
+
+- `Presenter.emit_team_event` constructs a whitelisted event (`sop:updated`, `sop:plan_generating`, `approval_required`) and calls `save_event` (`src/infra/writer/presenter_events.py:420-432`; `src/infra/writer/present.py:224-228`). `_build_event` preserves the supplied plan dict and adds the presenter agent ID (`presenter_events.py:83-109`).
+- `save_event` sends every event to `DualEventWriter.write_event` with `event_type`, data, trace ID, session ID, and run ID (`src/infra/writer/presenter_storage.py:159-199`). Redis receives it immediately; Mongo is buffered and flushed, and durable immutable `trace_events` documents retain `session_id`, `trace_id`, `run_id`, event ID, sequence, timestamp, type, and data (`src/infra/session/dual_writer.py:270-317`; `.trellis/spec/backend/trace-event-storage.md`). Legacy mode also appends to `traces.events` with `$push`/`$slice` (`dual_writer.py:112-165`), so old arrays can be truncated at configured per-trace limits.
+- Presenter completion flushes the Mongo buffer before marking a trace completed (`src/infra/writer/presenter_storage.py:221-253`). Thus a successfully completed run normally has all emitted SOP snapshots in trace history, but a process/write failure can leave Redis/live state ahead of history; `save_event` catches generic exceptions and logs them (`presenter_storage.py:206-210`) while the SOP tool also catches presenter emission failures and only logs (`tool.py:44-51`, `54-70`). The mutable `sop_runs` write is not rolled back when event persistence fails.
+- Session history API returns completed trace events via `DualEventWriter.read_session_events_page` (`src/api/routes/session.py:314-347`), with `completed_only=True`; legacy, merge, and immutable modes differ in source but all return event records ordered by sequence/timestamp/event identity. Merge mode deduplicates only by event ID (`src/infra/session/dual_writer.py:857-912`), not by `plan_id` or SOP version.
+- History reconstruction deliberately treats `sop:updated` as a full snapshot event: no backend folding/aggregation is performed. The frontend interface is only relevant to the backend contract: history consumers select the latest replay event, so omission/reordering of the final event exposes an older snapshot. The backend does not query `sop_runs` when serving session history.
+
+### 5. Correlation semantics and comparison with native todos
+
+- Native `write_todos` is handled by `ToolEventMixin` at tool start: it emits `todo:updated` from the `todos` input and suppresses normal `tool:start`/`tool:result` (`src/infra/agent/events/tool_events.py:80-122`). The same full list is a snapshot replacement (`src/infra/writer/presenter_events.py:230-251`). There is no backend todo database; latest `todo:updated` event is the persisted state.
+- `update_sop` does not use the generic tool-event path for state. It directly emits `sop:updated` from inside tool execution, so each update has no tool-call correlation field. `tool:start` for `update_sop` may still be emitted by the generic processor, but SOP state is carried only in the dedicated team events. Consequently later SOP updates are associated by stream order and `plan_id` in payload, not by `tool_call_id`; immutable event merge treats each snapshot as a distinct event.
+
+## Ranked stale-state hypotheses
+
+1. **History projection lag/divergence (high confidence):** `sop_runs` is mutable authoritative state, but the history API only replays immutable/legacy trace events. If `emit_team_event`/`save_event` fails after a successful `SopRunStore` write, or if the final event remains in a buffered/lost legacy array, reopening cannot see the completed snapshot and falls back to an earlier `approval_required`/`awaiting_confirmation` snapshot. Both layers intentionally log-and-continue on event-write exceptions (`tool.py:44-51`, `presenter_storage.py:206-210`).
+2. **Legacy trace-array truncation (medium-high):** legacy Mongo writes use `$slice` to retain only the newest configured events (`dual_writer.py:143-165`). A long TeamAgent turn can discard an earlier approval event or, depending on ordering/trace boundaries and failed flushes, the final SOP event. Immutable `trace_events` mode avoids this, but default settings may still be legacy.
+3. **History ordering/source merge (medium):** merge mode deduplicates by event identity and orders by sequence/timestamp, never by `SOPPlan.updated_at` or `plan_id`. A stale event can win if sequence/timestamp metadata is missing or if legacy and immutable rows have mismatched identities. The backend offers no latest-per-plan query; consumers must trust event ordering.
+4. **Caller status omission (medium, distinct symptom):** `_update_confirmed_plan` refuses to infer overall completion from all step statuses; callers must submit `plan.status=completed`. This produces a running plan with succeeded steps, not `awaiting_confirmation`, but can make a supposedly finished SOP appear nonterminal in guards/history.
+5. **Cross-process write race (low-medium):** per-run asyncio locks only serialize writes in one process. Mongo operations are individually atomic but full-snapshot `upsert_plan` and per-step updates can interleave across workers. A stale LLM snapshot with the same plan ID can overwrite newer fields; there is no optimistic version/CAS on `updated_at`.
+
+## Persistence boundary and proposed diagnostic
+
+- Treat `sop_runs` as authoritative live state and `sop:updated` as an append-only historical projection. To prove the reported symptom, compare the latest `sop_runs` document for `(session_id, team_id)` with all persisted `sop:updated` events for the session/run, checking event IDs, sequence, timestamps, and whether the final `status=completed` snapshot exists in `trace_events` and/or `traces.events`.
+- A focused backend regression should simulate: (a) completed update writes store then event and history contains completed snapshot; (b) presenter failure leaves store completed but history stale (must be surfaced/handled according to chosen fix); (c) legacy `$slice`/merge reads retain the latest event; (d) repeated updates with same plan ID remain full snapshots and do not require tool-call IDs.
+
+## Caveats / Not Found
+
+- No backend code reads `sop_runs` from the session history API; any historical DAG must be reconstructed from events. Frontend replay code explicitly chooses the last `sop:updated`/SOP approval event, but that layer is outside this backend-focused artifact.
+- No SOP-specific event compaction, latest-per-plan reducer, or plan-version field was found in backend history storage. Event merger only combines `message:chunk` and `thinking` (`src/infra/session/event_merger.py:37`, `405-457`), so SOP snapshots are retained as independent rows.
+- The repository has focused SOP tool/store/presenter tests (`tests/agents/test_sop_tool_gate.py`, `tests/agents/test_sop_store.py`, `tests/infra/test_sop_presenter_events.py`) but no end-to-end test asserting that a completed `sop:updated` survives session history API read after a real persisted run.
