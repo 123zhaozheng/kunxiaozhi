@@ -1104,3 +1104,27 @@ TeamBuilder 仅展示 Search Persona；聊天进入 Team 且未选团队时自�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 38: 上线安全加固：首次改密与上传后缀拦截
+
+**Date**: 2026-08-12
+**Task**: 上线安全加固：首次改密与上传后缀拦截
+**Branch**: `main`
+
+### Summary
+
+实现统一强密码策略、全渠道首次登录强制改密、凭证版本撤销及前端受限流程；按缩小范围在主上传接口前置拦截危险最终后缀；补充回归测试与可执行安全规范。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b392e900` | (see git log) |
+| `277eaf7a` | (see git log) |
+| `45d6113a` | (see git log) |
+| `7c39f9d1` | (see git log) |
+
+### Status
+
+[OK] **Completed**
