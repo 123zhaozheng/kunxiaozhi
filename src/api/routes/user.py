@@ -9,6 +9,7 @@ from starlette.responses import Response
 
 from src.api.deps import require_permissions
 from src.infra.user.manager import UserManager
+from src.kernel.exceptions import ValidationError
 from src.kernel.schemas.user import TokenPayload, User, UserCreate, UserListResponse, UserUpdate
 
 router = APIRouter()
@@ -36,7 +37,10 @@ async def create_user(
     # 管理员创建的用户跳过邮箱验证
     # 创建新的 UserCreate 对象，设置 skip_verification=True
     admin_user_data = user_data.model_copy(update={"skip_verification": True})
-    return await manager.register(admin_user_data)
+    try:
+        return await manager.register(admin_user_data)
+    except ValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/{user_id}", response_model=User)

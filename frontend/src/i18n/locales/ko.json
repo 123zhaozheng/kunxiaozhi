@@ -534,6 +534,7 @@
     "oauthUrlFailed": "인증 URL 생성에 실패했습니다.",
     "onlyCreatorCanToggleTools": "이 서버의 도구는 생성자만 전환할 수 있습니다.",
     "onlyCreatorCanUpdate": "생성자만 업데이트할 수 있습니다.",
+    "passwordPolicy": "비밀번호가 정책 요구사항을 충족하지 않습니다.",
     "permissionMissing": "권한이 없습니다: {{permission}}",
     "projectNotFound": "프로젝트를 찾을 수 없습니다.",
     "publishSkillFailed": "스킬 게시에 실패했습니다.",

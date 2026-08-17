@@ -560,6 +560,7 @@
     "oauthUrlFailed": "创建授权链接失败",
     "onlyCreatorCanToggleTools": "只有创建者可以切换此服务器上的工具",
     "onlyCreatorCanUpdate": "只有创建者可以更新",
+    "passwordPolicy": "密码不符合密码策略要求",
     "permissionMissing": "缺少权限：{{permission}}",
     "projectNotFound": "项目不存在",
     "publishSkillFailed": "发布技能失败",

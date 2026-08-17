@@ -534,6 +534,7 @@
     "oauthUrlFailed": "認証URLの作成に失敗しました。",
     "onlyCreatorCanToggleTools": "このサーバーのツールを切り替えられるのは作成者のみです。",
     "onlyCreatorCanUpdate": "更新できるのは作成者のみです。",
+    "passwordPolicy": "パスワードがポリシーの要件を満たしていません。",
     "permissionMissing": "権限がありません: {{permission}}",
     "projectNotFound": "プロジェクトが見つかりません。",
     "publishSkillFailed": "スキルの公開に失敗しました。",

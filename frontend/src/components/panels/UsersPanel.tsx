@@ -160,7 +160,16 @@ function UserFormModal({
       }
       onClose();
     } catch (err) {
-      setError((err as Error).message || t("users.operationFailed"));
+      const message = err instanceof Error ? err.message : "";
+      const passwordPolicyMessage = t(
+        "backendErrors.passwordPolicy",
+        "Password does not meet the password policy.",
+      );
+      setError(
+        message === passwordPolicyMessage
+          ? message
+          : t("users.operationFailed"),
+      );
     }
   };
 
@@ -397,11 +406,10 @@ export function UsersPanel() {
         await userApi.create(data as UserCreate);
         toast.success(t("users.createSuccess"));
       }
-      setShowFormModal(false);
-      setEditingUser(null);
       loadData();
     } catch (error) {
-      toast.error((error as Error).message || t("users.operationFailed"));
+      if (error instanceof Error) throw error;
+      throw new Error(t("users.operationFailed"));
     } finally {
       setIsSaving(false);
     }

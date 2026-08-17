@@ -560,6 +560,7 @@
     "oauthUrlFailed": "Failed to create authorization URL.",
     "onlyCreatorCanToggleTools": "Only the creator can toggle tools on this server.",
     "onlyCreatorCanUpdate": "Only the creator can update this item.",
+    "passwordPolicy": "The password does not meet the password policy.",
     "permissionMissing": "Missing permission: {{permission}}",
     "projectNotFound": "Project not found.",
     "publishSkillFailed": "Failed to publish skill.",

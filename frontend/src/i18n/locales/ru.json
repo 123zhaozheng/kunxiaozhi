@@ -534,6 +534,7 @@
     "oauthUrlFailed": "Не удалось создать URL авторизации.",
     "onlyCreatorCanToggleTools": "Только создатель может переключать инструменты на этом сервере.",
     "onlyCreatorCanUpdate": "Обновлять может только создатель.",
+    "passwordPolicy": "Пароль не соответствует требованиям политики.",
     "permissionMissing": "Недостаточно прав: {{permission}}",
     "projectNotFound": "Проект не найден.",
     "publishSkillFailed": "Не удалось опубликовать навык.",

@@ -30,6 +30,26 @@ test("translates backend error patterns", () => {
   );
 });
 
+test("localizes all password policy details to one safe message", () => {
+  const policyMessages = [
+    "Password must be text",
+    "Password must be 12-64 characters",
+    "Password exceeds the 72-byte limit",
+    "Password cannot contain control or leading/trailing whitespace",
+    "Password must contain at least three character classes",
+    "New password must differ from the current password",
+    "Password cannot contain account identifiers",
+    "Password is too weak",
+  ];
+
+  for (const message of policyMessages) {
+    assert.equal(
+      translateBackendError(message, t),
+      "translated:backendErrors.passwordPolicy",
+    );
+  }
+});
+
 test("returns unknown backend messages unchanged", () => {
   assert.equal(
     translateBackendError("unexpected_backend_error", t),
