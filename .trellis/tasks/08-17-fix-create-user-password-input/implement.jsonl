@@ -1,0 +1,9 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend package conventions and relevant guideline routing."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Frontend testing, accessibility, i18n, and code-style requirements."}
+{"file":".trellis/spec/frontend/auth-forced-password-change.md","reason":"Shared password-policy feedback and backend-authoritative validation contract."}
+{"file":".trellis/spec/frontend/admin-user-password-feedback.md","reason":"Exact create-user input, save propagation, localized inline error, backend 400, and test contract."}
+{"file":".trellis/spec/backend/index.md","reason":"Backend package conventions and relevant guideline routing."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Required domain ValidationError to HTTPException mapping at route boundaries."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Backend typing, route, testing, and error-handling requirements."}
+{"file":".trellis/spec/backend/auth-password-first-login.md","reason":"Authoritative password policy, original-value hashing, and HTTP 400 contract."}
+{"file":".trellis/tasks/08-17-fix-create-user-password-input/research/create-user-password-investigation.md","reason":"Confirmed data flow, root causes, file anchors, existing patterns, and test gaps."}

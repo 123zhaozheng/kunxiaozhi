@@ -1,0 +1,7 @@
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Verify frontend test coverage, i18n, accessibility, and local conventions."}
+{"file":".trellis/spec/frontend/auth-forced-password-change.md","reason":"Verify consistent safe password-policy feedback and backend authority."}
+{"file":".trellis/spec/frontend/admin-user-password-feedback.md","reason":"Verify exact create-user password handling and cross-layer save/error behavior."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Verify explicit route-boundary ValidationError mapping and no broad swallowing."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Verify backend route and test quality requirements."}
+{"file":".trellis/spec/backend/auth-password-first-login.md","reason":"Verify password rules, original-value handling, and HTTP 400 behavior remain intact."}
+{"file":".trellis/tasks/08-17-fix-create-user-password-input/research/create-user-password-investigation.md","reason":"Review against confirmed root causes, caveats, affected paths, and regression targets."}
