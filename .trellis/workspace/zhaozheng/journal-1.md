@@ -1151,3 +1151,26 @@ TeamBuilder 仅展示 Search Persona；聊天进入 Team 且未选团队时自�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 40: Fix create-user password feedback
+
+**Date**: 2026-08-18
+**Task**: Fix create-user password feedback
+**Branch**: `main`
+
+### Summary
+
+Fixed create-user password save failures so the modal stays open with localized inline feedback, mapped backend password validation to HTTP 400, added focused tests, and documented the cross-layer contract.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e758013b` | (see git log) |
+| `a88c4b1e` | (see git log) |
+| `922c32fc` | (see git log) |
+
+### Status
+
+[OK] **Completed**
