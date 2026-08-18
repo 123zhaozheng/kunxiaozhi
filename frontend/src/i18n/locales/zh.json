@@ -391,6 +391,20 @@
     "submit": "提交"
   },
   "auth": {
+    "changePassword": "修改密码",
+    "changePasswordRequired": "设置新密码",
+    "changePasswordRequiredHint": "请设置一个高强度密码后继续。",
+    "passwordRequirements": {
+      "open": "查看密码要求",
+      "close": "隐藏密码要求",
+      "title": "密码要求",
+      "length": "请使用 12-64 个 Unicode 字符，且 UTF-8 编码不超过 72 个字节。",
+      "characters": "请勿使用首尾空白字符或控制字符。",
+      "composition": "至少包含大写字母、小写字母、数字和符号中的三种。",
+      "identifiers": "请勿包含用户名或邮箱中的片段。",
+      "currentPassword": "新密码不能与当前密码相同。",
+      "strength": "请避免常见密码、重复字符以及 123 或 abc 等可预测序列；这些模式可能导致完整密码强度不足。"
+    },
     "account": "账号",
     "backToLogin": "返回登录",
     "checkInboxStep": "检查您的收件箱（也请检查垃圾邮件文件夹）",
@@ -488,6 +502,7 @@
     "usernameOrEmailPlaceholder": "请输入用户名或邮箱",
     "usernamePlaceholder": "请输入用户名",
     "validation": {
+      "passwordPolicy": "请使用 12-64 个字符，并至少包含大写字母、小写字母、数字或符号中的三种。",
       "email": "邮箱",
       "enterEmail": "请输入邮箱",
       "enterPassword": "请输入密码",
@@ -561,6 +576,9 @@
     "onlyCreatorCanToggleTools": "只有创建者可以切换此服务器上的工具",
     "onlyCreatorCanUpdate": "只有创建者可以更新",
     "passwordPolicy": "密码不符合密码策略要求",
+    "passwordTooWeak": "密码强度不足。请避免使用常见密码、重复字符和可预测序列，并选择更难预测的密码。",
+    "passwordAccountIdentifiers": "密码不能包含用户名或邮箱片段。请选择与账户标识信息无关的密码。",
+    "passwordCurrentReuse": "新密码不能与当前密码相同。",
     "permissionMissing": "缺少权限：{{permission}}",
     "projectNotFound": "项目不存在",
     "publishSkillFailed": "发布技能失败",

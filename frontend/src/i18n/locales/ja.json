@@ -365,6 +365,20 @@
     "submit": "確定"
   },
   "auth": {
+    "changePassword": "パスワードを変更",
+    "changePasswordRequired": "新しいパスワードを設定",
+    "changePasswordRequiredHint": "続行するには強力なパスワードを設定してください。",
+    "passwordRequirements": {
+      "open": "パスワード要件を表示",
+      "close": "パスワード要件を非表示",
+      "title": "パスワード要件",
+      "length": "Unicode文字を12～64文字使用し、UTF-8で72バイト以内にしてください。",
+      "characters": "先頭または末尾の空白や制御文字は使用しないでください。",
+      "composition": "大文字、小文字、数字、記号のうち3種類以上を含めてください。",
+      "identifiers": "ユーザー名やメールアドレスの一部を含めないでください。",
+      "currentPassword": "現在のパスワードは再利用しないでください。",
+      "strength": "一般的なパスワード、同じ文字の繰り返し、123やabcなどの予測しやすい並びは避けてください。全体の強度が不足する場合があります。"
+    },
     "account": "アカウント",
     "backToLogin": "ログインに戻る",
     "checkInboxStep": "受信トレイを確認（スパムフォルダも確認してください）",
@@ -462,6 +476,7 @@
     "usernameOrEmailPlaceholder": "ユーザー名またはメールを入力",
     "usernamePlaceholder": "ユーザー名を入力",
     "validation": {
+      "passwordPolicy": "12～64文字で、大文字・小文字・数字・記号のうち3種類以上を含むパスワードを使用してください。",
       "email": "メール",
       "enterEmail": "メールアドレスを入力してください",
       "enterPassword": "パスワードを入力してください",
@@ -535,6 +550,9 @@
     "onlyCreatorCanToggleTools": "このサーバーのツールを切り替えられるのは作成者のみです。",
     "onlyCreatorCanUpdate": "更新できるのは作成者のみです。",
     "passwordPolicy": "パスワードがポリシーの要件を満たしていません。",
+    "passwordTooWeak": "パスワードが弱すぎます。一般的なパスワード、繰り返し文字、予測しやすい並びを避け、より予測しにくいパスワードを選んでください。",
+    "passwordAccountIdentifiers": "パスワードにユーザー名やメールアドレスの一部を含めることはできません。アカウント情報と無関係なパスワードを選んでください。",
+    "passwordCurrentReuse": "新しいパスワードは現在のパスワードと異なるものにしてください。",
     "permissionMissing": "権限がありません: {{permission}}",
     "projectNotFound": "プロジェクトが見つかりません。",
     "publishSkillFailed": "スキルの公開に失敗しました。",

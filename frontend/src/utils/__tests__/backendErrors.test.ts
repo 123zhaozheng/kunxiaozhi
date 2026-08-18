@@ -30,16 +30,14 @@ test("translates backend error patterns", () => {
   );
 });
 
-test("localizes all password policy details to one safe message", () => {
+test("keeps generic password policy details on the safe fallback", () => {
   const policyMessages = [
     "Password must be text",
     "Password must be 12-64 characters",
     "Password exceeds the 72-byte limit",
+    "Password exceeds bcrypt's 72-byte limit",
     "Password cannot contain control or leading/trailing whitespace",
     "Password must contain at least three character classes",
-    "New password must differ from the current password",
-    "Password cannot contain account identifiers",
-    "Password is too weak",
   ];
 
   for (const message of policyMessages) {
@@ -48,6 +46,21 @@ test("localizes all password policy details to one safe message", () => {
       "translated:backendErrors.passwordPolicy",
     );
   }
+});
+
+test("maps actionable password policy details to distinct guidance", () => {
+  assert.equal(
+    translateBackendError("New password must differ from the current password", t),
+    "translated:backendErrors.passwordCurrentReuse",
+  );
+  assert.equal(
+    translateBackendError("Password cannot contain account identifiers", t),
+    "translated:backendErrors.passwordAccountIdentifiers",
+  );
+  assert.equal(
+    translateBackendError("Password is too weak", t),
+    "translated:backendErrors.passwordTooWeak",
+  );
 });
 
 test("returns unknown backend messages unchanged", () => {

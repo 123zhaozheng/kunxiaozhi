@@ -31,6 +31,7 @@ import { useAuth } from "../../hooks/useAuth";
 import { formatDate } from "../../utils/datetime";
 import { Permission } from "../../types";
 import { passwordPolicyError } from "../auth/passwordPolicy";
+import { PasswordRequirementsHelp } from "../auth/PasswordRequirementsHelp";
 import type {
   User as UserType,
   UserCreate,
@@ -165,8 +166,14 @@ function UserFormModal({
         "backendErrors.passwordPolicy",
         "Password does not meet the password policy.",
       );
+      const passwordPolicyMessages = [
+        passwordPolicyMessage,
+        t("backendErrors.passwordTooWeak"),
+        t("backendErrors.passwordAccountIdentifiers"),
+        t("backendErrors.passwordCurrentReuse"),
+      ];
       setError(
-        message === passwordPolicyMessage
+        passwordPolicyMessages.includes(message)
           ? message
           : t("users.operationFailed"),
       );
@@ -258,9 +265,12 @@ function UserFormModal({
 
         {/* 密码 */}
         <div className="es-field">
-          <label className="es-label">
-            {t("users.password")} {isEditing && t("users.passwordHint")}
-          </label>
+          <div className="flex flex-wrap items-center justify-between">
+            <label className="es-label">
+              {t("users.password")} {isEditing && t("users.passwordHint")}
+            </label>
+            <PasswordRequirementsHelp context="admin" />
+          </div>
           <div className="relative">
             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-theme-text-secondary">
               <Lock size={16} />

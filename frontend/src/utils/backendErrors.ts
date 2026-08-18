@@ -122,15 +122,16 @@ const BACKEND_ERROR_KEYS: Record<string, string> = {
   "Password must be text": "backendErrors.passwordPolicy",
   "Password must be 12-64 characters": "backendErrors.passwordPolicy",
   "Password exceeds the 72-byte limit": "backendErrors.passwordPolicy",
+  "Password exceeds bcrypt's 72-byte limit": "backendErrors.passwordPolicy",
   "Password cannot contain control or leading/trailing whitespace":
     "backendErrors.passwordPolicy",
   "Password must contain at least three character classes":
     "backendErrors.passwordPolicy",
   "New password must differ from the current password":
-    "backendErrors.passwordPolicy",
+    "backendErrors.passwordCurrentReuse",
   "Password cannot contain account identifiers":
-    "backendErrors.passwordPolicy",
-  "Password is too weak": "backendErrors.passwordPolicy",
+    "backendErrors.passwordAccountIdentifiers",
+  "Password is too weak": "backendErrors.passwordTooWeak",
 };
 
 const BACKEND_ERROR_PATTERNS: Array<{

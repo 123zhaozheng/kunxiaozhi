@@ -9,6 +9,7 @@ import { ThemeToggle } from "../common/ThemeToggle";
 import { LanguageToggle } from "../common/LanguageToggle";
 import { BrandWordmark } from "../common/BrandWordmark";
 import { PasswordInput } from "./PasswordInput";
+import { PasswordRequirementsHelp } from "./PasswordRequirementsHelp";
 import { APP_NAME } from "../../constants";
 import { useMobileKeyboardAware } from "../../hooks/useMobileKeyboardAware";
 import { passwordPolicyError } from "./passwordPolicy";
@@ -190,9 +191,12 @@ export function ResetPassword() {
           <div className="auth-panel rounded-[1.35rem] p-4 sm:rounded-2xl sm:p-6">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="mb-1.5 block text-[13px] font-medium text-stone-600 dark:text-stone-400">
-                  {t("auth.newPassword")}
-                </label>
+                <div className="mb-1.5 flex flex-wrap items-center justify-between">
+                  <label className="block text-[13px] font-medium text-stone-600 dark:text-stone-400">
+                    {t("auth.newPassword")}
+                  </label>
+                  <PasswordRequirementsHelp context="reset" />
+                </div>
                 <PasswordInput
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}

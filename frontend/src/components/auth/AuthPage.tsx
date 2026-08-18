@@ -8,6 +8,7 @@ import { User, Mail, AlertCircle, AtSign, Building2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { OaSsoHelpDialog } from "./OaSsoHelpDialog";
 import { PasswordInput } from "./PasswordInput";
+import { PasswordRequirementsHelp } from "./PasswordRequirementsHelp";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { Turnstile } from "react-turnstile";
@@ -585,9 +586,14 @@ export function AuthPage({ onSuccess, initialMode }: AuthPageProps) {
 
               {/* Password */}
               <div>
-                <label className="mb-0.5 block text-[11px] font-medium text-stone-700 dark:text-stone-300 sm:mb-1.5 sm:text-sm">
-                  {t("auth.password")}
-                </label>
+                <div className="mb-0.5 flex flex-wrap items-center justify-between sm:mb-1.5">
+                  <label className="block text-[11px] font-medium text-stone-700 dark:text-stone-300 sm:text-sm">
+                    {t("auth.password")}
+                  </label>
+                  {mode === "register" && (
+                    <PasswordRequirementsHelp context="registration" />
+                  )}
+                </div>
                 <PasswordInput
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

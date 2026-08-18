@@ -13,3 +13,10 @@ test("rejects clipboard whitespace and control content without mutation", () => 
   assert.equal(passwordPolicyError(`${compliant} `), "whitespace");
   assert.equal(passwordPolicyError(`${compliant}\u0000`), "whitespace");
 });
+
+test("enforces Unicode length, UTF-8 byte, and composition boundaries", () => {
+  assert.equal(passwordPolicyError("Aa1!short"), "length");
+  assert.equal(passwordPolicyError("A1!" + "é".repeat(36)), "bytes");
+  assert.equal(passwordPolicyError("alllowercasepassword"), "composition");
+  assert.equal(passwordPolicyError("Aa1!securepass"), null);
+});

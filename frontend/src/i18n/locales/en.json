@@ -391,6 +391,20 @@
     "submit": "Submit"
   },
   "auth": {
+    "changePassword": "Change password",
+    "changePasswordRequired": "Set a new password",
+    "changePasswordRequiredHint": "Choose a strong password to continue.",
+    "passwordRequirements": {
+      "open": "Show password requirements",
+      "close": "Hide password requirements",
+      "title": "Password requirements",
+      "length": "Use 12-64 Unicode characters and no more than 72 UTF-8 bytes.",
+      "characters": "Do not use leading or trailing whitespace or control characters.",
+      "composition": "Include at least three of uppercase, lowercase, digit, and symbol.",
+      "identifiers": "Do not include username or email fragments.",
+      "currentPassword": "Do not reuse your current password.",
+      "strength": "Avoid common passwords, repeated characters, and predictable sequences such as 123 or abc; these patterns can make the full password too weak."
+    },
     "account": "Account",
     "backToLogin": "Back to Login",
     "checkInboxStep": "Check your inbox (also check spam folder)",
@@ -488,6 +502,7 @@
     "usernameOrEmailPlaceholder": "Enter username or email",
     "usernamePlaceholder": "Enter username",
     "validation": {
+      "passwordPolicy": "Use 12-64 characters with at least three character types.",
       "email": "Email",
       "enterEmail": "Please enter email",
       "enterPassword": "Please enter password",
@@ -561,6 +576,9 @@
     "onlyCreatorCanToggleTools": "Only the creator can toggle tools on this server.",
     "onlyCreatorCanUpdate": "Only the creator can update this item.",
     "passwordPolicy": "The password does not meet the password policy.",
+    "passwordTooWeak": "This password is too weak. Avoid common passwords, repeated characters, and predictable sequences, then choose a less predictable password.",
+    "passwordAccountIdentifiers": "This password cannot contain username or email fragments. Choose a password unrelated to your account identifiers.",
+    "passwordCurrentReuse": "Your new password must differ from your current password.",
     "permissionMissing": "Missing permission: {{permission}}",
     "projectNotFound": "Project not found.",
     "publishSkillFailed": "Failed to publish skill.",

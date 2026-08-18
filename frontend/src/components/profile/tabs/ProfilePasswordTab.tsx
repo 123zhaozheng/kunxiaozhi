@@ -4,6 +4,7 @@ import { Eye, EyeOff, Check, AlertCircle } from "lucide-react";
 import { authApi } from "../../../services/api";
 import { LoadingSpinner } from "../../common/LoadingSpinner";
 import { passwordPolicyError } from "../../auth/passwordPolicy";
+import { PasswordRequirementsHelp } from "../../auth/PasswordRequirementsHelp";
 import { useAuth } from "../../../hooks/useAuth";
 
 export function ProfilePasswordTab() {
@@ -106,9 +107,12 @@ export function ProfilePasswordTab() {
 
       {/* New Password */}
       <div>
-        <label className="block text-sm font-medium text-stone-700 dark:text-stone-300 mb-1.5">
-          {t("profile.newPassword")}
-        </label>
+        <div className="mb-1.5 flex flex-wrap items-center justify-between">
+          <label className="block text-sm font-medium text-stone-700 dark:text-stone-300">
+            {t("profile.newPassword")}
+          </label>
+          <PasswordRequirementsHelp context="profile" />
+        </div>
         <input
           type={showPassword ? "text" : "password"}
           value={newPassword}
