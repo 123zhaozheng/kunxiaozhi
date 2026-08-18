@@ -1,0 +1,7 @@
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Verify i18n coverage, test conventions, and frontend quality checks."}
+{"file":".trellis/spec/frontend/auth-forced-password-change.md","reason":"Verify first-login password UI remains behaviorally unchanged and localized."}
+{"file":".trellis/spec/frontend/admin-user-password-feedback.md","reason":"Verify shared password-policy feedback stays consistent across consumers."}
+{"file":".trellis/tasks/08-18-localize-password-setup-ui/research/password-setup-i18n.md","reason":"Review against the confirmed root cause, full locale matrix, and regression targets."}
+{"file":".trellis/tasks/08-18-localize-password-setup-ui/research/forced-password-logout.md","reason":"Verify shared logout cleanup, replace navigation, localized secondary action, and no form submission."}
+{"file":".trellis/tasks/08-18-localize-password-setup-ui/research/password-policy-guidance.md","reason":"Verify accurate strong-password guidance, client/backend authority boundaries, all consumers, and regression coverage."}
+{"file":".trellis/tasks/08-18-localize-password-setup-ui/research/password-help-popover.md","reason":"Verify reusable icon-help integration, accessibility, close behavior, responsive positioning, and test coverage."}

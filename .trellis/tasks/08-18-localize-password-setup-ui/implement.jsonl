@@ -1,0 +1,8 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend package conventions and guideline routing."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"i18n, testing, and frontend code-quality requirements."}
+{"file":".trellis/spec/frontend/auth-forced-password-change.md","reason":"First-login password route, policy feedback, and validation contract."}
+{"file":".trellis/spec/frontend/admin-user-password-feedback.md","reason":"Shared administrator password-policy feedback and localization contract."}
+{"file":".trellis/tasks/08-18-localize-password-setup-ui/research/password-setup-i18n.md","reason":"Confirmed missing-key root cause, locale matrix, affected consumers, and test targets."}
+{"file":".trellis/tasks/08-18-localize-password-setup-ui/research/forced-password-logout.md","reason":"Confirmed shared logout cleanup, required navigation, existing locale key, button semantics, and test targets."}
+{"file":".trellis/tasks/08-18-localize-password-setup-ui/research/password-policy-guidance.md","reason":"Authoritative policy, client/backend split, accurate sequence guidance, consumer matrix, reusable UX, and tests."}
+{"file":".trellis/tasks/08-18-localize-password-setup-ui/research/password-help-popover.md","reason":"Existing help/popover patterns, recommended component API, accessibility, responsive positioning, consumers, and tests."}
