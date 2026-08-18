@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 40
+- **Total Sessions**: 41
 - **Last Active**: 2026-08-18
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1176 | Active |
+| `journal-1.md` | ~1199 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 41 | 2026-08-18 | 完善密码设置提示与首次登录体验 | `b8877508`, `e0c15420`, `448d5e49` | `main` |
 | 40 | 2026-08-18 | Fix create-user password feedback | `e758013b`, `a88c4b1e`, `922c32fc` | `main` |
 | 39 | 2026-08-12 | 修复 TeamAgent SOP 历史状态恢复 | `8520679f`, `134c5c9c`, `c43642ad` | `main` |
 | 38 | 2026-08-12 | 上线安全加固：首次改密与上传后缀拦截 | `b392e900`, `277eaf7a`, `45d6113a`, `7c39f9d1` | `main` |

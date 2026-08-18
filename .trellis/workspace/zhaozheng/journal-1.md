@@ -1174,3 +1174,26 @@ Fixed create-user password save failures so the modal stays open with localized 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 41: 完善密码设置提示与首次登录体验
+
+**Date**: 2026-08-18
+**Task**: 完善密码设置提示与首次登录体验
+**Branch**: `main`
+
+### Summary
+
+完成首次登录修改密码中文化与退出登录入口，新增多语言密码要求帮助并覆盖注册、重置、个人资料和管理员建用户场景，完善密码错误映射、响应式交互、测试与规范；自动化检查和桌面/手机浏览器验收均通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b8877508` | (see git log) |
+| `e0c15420` | (see git log) |
+| `448d5e49` | (see git log) |
+
+### Status
+
+[OK] **Completed**
