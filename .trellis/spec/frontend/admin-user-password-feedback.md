@@ -28,13 +28,14 @@ Password-policy failure: HTTP 400 {"detail": "<known policy detail>"}
 translateBackendError(message: string): string;
 ```
 
-Known backend password-policy details map to `backendErrors.passwordPolicy` before they reach the form.
+Deterministic policy details map to `backendErrors.passwordPolicy` before they reach the form. Backend-only actionable details retain distinct localized guidance: weak-password rejection uses `backendErrors.passwordTooWeak`, account-identifier rejection uses `backendErrors.passwordAccountIdentifiers`, and current-password reuse uses `backendErrors.passwordCurrentReuse`.
 
 ### 3. Contracts
 
 - Keep the password byte-for-byte as entered. Do not trim, normalize, or transform it in the component, API client, route, or storage path.
 - Use the native input change path for both typing and paste. Do not add `onPaste` normalization to hide invalid clipboard content.
 - Run client-detectable policy checks before submission; backend validation remains authoritative for identifier and strength checks.
+- Render the shared `PasswordRequirementsHelp` control beside the create/replacement password label. Do not place it in the input's leading-icon or trailing adornment, and do not duplicate it on confirmation fields.
 - `UserFormModal` calls `onClose()` only after `await onSave(...)` succeeds.
 - The parent save handler may show success feedback and refresh the list, but it must rethrow failure. It must not close the modal or swallow the exception.
 - The modal catches save failure, preserves all field state, and renders exactly one localized inline error through its existing error region.
@@ -48,6 +49,7 @@ Known backend password-policy details map to `backendErrors.passwordPolicy` befo
 | Compliant typed or pasted value | Exact value submitted; success closes modal and refreshes users |
 | Leading/trailing whitespace, newline, or control content | Client policy rejects; no request; localized inline feedback |
 | Backend identifier or weak-password rejection | HTTP 400; modal remains open; values preserved; localized inline feedback |
+| Backend current-password reuse rejection | HTTP 400; modal remains open; values preserved; localized current-password guidance |
 | Unknown API failure | Modal remains open; localized generic operation failure |
 | Unexpected backend exception | Propagates to server error handling; never relabeled as validation |
 
@@ -62,7 +64,7 @@ Known backend password-policy details map to `backendErrors.passwordPolicy` befo
 - Source contract: assert the native controlled password input retains `value={password}` plus an `onChange` assignment from `event.target.value`, and the request payload uses that state without trimming.
 - Submit contract: assert `onClose()` follows the awaited save and the parent failure path rethrows without a duplicate catch toast.
 - Policy unit tests: accept a compliant value and reject trailing whitespace, newline, and control content without mutation.
-- Error translation tests: every backend password-policy detail maps to `backendErrors.passwordPolicy`; unknown messages keep the established fallback contract.
+- Error translation tests: deterministic backend policy details map to `backendErrors.passwordPolicy`, while weak-password, account-identifier, and current-password reuse details map to their distinct actionable keys; unknown messages keep the established fallback contract.
 - Backend route tests: `ValidationError` becomes HTTP 400 with `detail`; unrelated exceptions propagate.
 - When a DOM or browser interaction harness is added to the repository, add a rendered `paste -> input/change -> submit` regression that asserts exact typed/pasted payload parity. Until then, static source-contract tests are the supported frontend boundary.
 
