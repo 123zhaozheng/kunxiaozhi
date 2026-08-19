@@ -47,6 +47,7 @@ from src.api.routes import (
     websocket,
 )
 from src.api.routes import settings as settings_router
+from src.api.routes import opensandbox_admin
 from src.api.routes.agent import config as agent_config
 from src.api.routes.agent import model as agent_model
 from src.frontend_resolution import resolve_frontend_target
@@ -708,6 +709,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(settings_router.router, prefix="/api/settings", tags=["Settings"])
+    app.include_router(opensandbox_admin.router, prefix="/api/opensandbox", tags=["OpenSandbox"])
     app.include_router(memory.router, prefix="/api/memory", tags=["Memory"])
     app.include_router(mcp.router, prefix="/api/mcp", tags=["MCP"])
     app.include_router(mcp.admin_router, prefix="/api/admin/mcp", tags=["MCP Admin"])

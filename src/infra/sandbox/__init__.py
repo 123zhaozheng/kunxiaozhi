@@ -12,6 +12,9 @@ from .base import (
     get_sandbox_config_from_settings,
     get_sandbox_from_settings,
 )
+from .capacity_storage import OpenSandboxCapacityStorage
+from .node_scheduler import OpenSandboxNodeScheduler, admit_opensandbox_user
+from .node_storage import OpenSandboxNodeStorage, get_opensandbox_node_storage
 from .session_manager import (
     SessionSandboxManager,
     get_session_sandbox_manager,
@@ -31,4 +34,9 @@ __all__ = [
     "SessionSandboxManager",
     "get_session_sandbox_manager",
     "reset_session_sandbox_manager",
+    "OpenSandboxNodeStorage",
+    "get_opensandbox_node_storage",
+    "OpenSandboxCapacityStorage",
+    "OpenSandboxNodeScheduler",
+    "admit_opensandbox_user",
 ]

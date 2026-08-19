@@ -66,6 +66,7 @@ _SANDBOX_AFFECTED_SETTINGS = {
     "OPENSANDBOX_TIMEOUT",
     "OPENSANDBOX_WORK_DIR",
     "OPENSANDBOX_USE_SERVER_PROXY",
+    "OPENSANDBOX_NODES",
 }
 
 
@@ -331,6 +332,13 @@ async def refresh_settings(key: Optional[str] = None) -> None:
     if key:
         # Refresh single setting
         setting = await _settings_service._storage.get_raw(key)
+        # Dedicated OpenSandbox node configuration is revisioned in its own
+        # collection, not the scalar settings table.  Redis fan-out still uses
+        # the existing settings channel, so reset replicas even when get_raw()
+        # has no ordinary setting row to return.
+        if key == "OPENSANDBOX_NODES" and not setting:
+            await _reset_sandbox_runtime_state(f"setting '{key}' changed")
+            return
         if (
             setting
             and setting.value is not None

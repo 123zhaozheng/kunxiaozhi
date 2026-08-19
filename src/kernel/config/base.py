@@ -260,6 +260,9 @@ class Settings(BaseSettings):
     # the backend cannot reach the sandbox container network (k8s pod / host ->
     # server's Docker bridge). Defaults True for cross-network deployments.
     OPENSANDBOX_USE_SERVER_PROXY: bool = True
+    # Revision marker for the dedicated multi-node config collection. Secrets are
+    # never stored in this compatibility field.
+    OPENSANDBOX_NODES: list[dict] = []
 
     # Skills Settings
     ENABLE_SKILLS: bool = True

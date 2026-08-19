@@ -48,6 +48,33 @@ def test_adapter_sync_from_settings_reads_proxy_flag(monkeypatch: pytest.MonkeyP
     assert cfg.domain == "http://new:8090"
 
 
+def test_adapter_distinguishes_authoritative_not_found_from_outage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = _make_adapter(sync_settings=False)
+
+    class _SdkError(Exception):
+        def __init__(self, status_code: int | None):
+            self.status_code = status_code
+
+    class _NotFoundSandbox:
+        @staticmethod
+        def connect(*_args, **_kwargs):
+            raise _SdkError(404)
+
+    monkeypatch.setattr(adapter, "_get_sandbox_class", lambda: _NotFoundSandbox)
+    assert adapter.get_sandbox("missing") is None
+
+    class _UnavailableSandbox:
+        @staticmethod
+        def connect(*_args, **_kwargs):
+            raise _SdkError(None)
+
+    monkeypatch.setattr(adapter, "_get_sandbox_class", lambda: _UnavailableSandbox)
+    with pytest.raises(_SdkError):
+        adapter.get_sandbox("existing")
+
+
 def test_factory_create_opensandbox_passes_use_server_proxy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -11,7 +11,8 @@ User-Sandbox 绑定管理器
 import asyncio
 import threading
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Optional
+from datetime import timedelta
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 if TYPE_CHECKING:
     from daytona import Daytona
@@ -23,8 +24,9 @@ from src.infra.backend.daytona import DaytonaBackend
 from src.infra.backend.skills_store import create_skills_backend
 from src.infra.logging import get_logger
 from src.infra.tool.sandbox_mcp_rebuild import ensure_sandbox_mcp
-from src.infra.utils.datetime import utc_now_iso
+from src.infra.utils.datetime import utc_now, utc_now_iso
 from src.kernel.config import settings
+from src.kernel.exceptions import SandboxCapacityUnavailable
 
 logger = get_logger(__name__)
 
@@ -168,10 +170,7 @@ class E2BSandboxAdapter:
         try:
             sandbox.pause()
         except Exception:
-            try:
-                sandbox.kill()
-            except Exception:
-                pass
+            sandbox.kill()
 
     def kill_sandbox(self, sandbox) -> None:
         """永久销毁沙箱（数据丢失）"""
@@ -219,6 +218,7 @@ class OpenSandboxSandboxAdapter:
         timeout: int,
         work_dir: str = "/root",
         use_server_proxy: bool = True,
+        sync_settings: bool = True,
     ):
         self._domain = domain
         self._api_key = api_key
@@ -226,9 +226,12 @@ class OpenSandboxSandboxAdapter:
         self._timeout = timeout
         self._work_dir = work_dir
         self._use_server_proxy = use_server_proxy
+        self._sync_settings_enabled = sync_settings
 
     def _sync_from_settings(self) -> None:
         """Sync config values from global settings (after DB update)."""
+        if not self._sync_settings_enabled:
+            return
         from src.kernel.config.base import settings
 
         self._domain = settings.OPENSANDBOX_DOMAIN
@@ -251,6 +254,26 @@ class OpenSandboxSandboxAdapter:
         from opensandbox.sync.sandbox import SandboxSync
 
         return SandboxSync
+
+    def probe(self) -> float:
+        """Perform a non-mutating remote health request for Admin probes.
+
+        OpenSandbox 0.1.x does not expose a node-wide health API in the sync
+        SDK.  A bounded HTTP request to the server health path is therefore the
+        strongest non-creating check available; callers must report failures
+        rather than treating config construction as health.
+        """
+        import time
+        from urllib.request import Request, urlopen
+
+        started = time.perf_counter()
+        request = Request(f"{self._domain.rstrip('/')}/health", method="GET")
+        if self._api_key:
+            request.add_header("Authorization", f"Bearer {self._api_key}")
+        with urlopen(request, timeout=min(max(self._timeout, 1), 5)) as response:
+            if int(response.status) >= 400:
+                raise RuntimeError(f"health_http_{response.status}")
+        return (time.perf_counter() - started) * 1000
 
     def create_sandbox(
         self, user_id: str | None = None, envs: dict[str, str] | None = None
@@ -288,31 +311,65 @@ class OpenSandboxSandboxAdapter:
             sandbox_class = self._get_sandbox_class()
             cfg = self._get_connection_config()
             return sandbox_class.connect(sandbox_id, connection_config=cfg)
-        except Exception:
-            return None
+        except Exception as exc:
+            # Only a provider-confirmed 404 proves that the sandbox is gone.
+            # Timeouts, authentication failures and node outages are ambiguous
+            # and must retain the binding/reservation.
+            if getattr(exc, "status_code", None) == 404:
+                return None
+            raise
+
+    def get_sandbox_unchecked(self, sandbox_id: str) -> object | None:
+        """Connect without readiness polling for terminal actions on paused rows."""
+        try:
+            self._sync_from_settings()
+            return self._get_sandbox_class().connect(
+                sandbox_id,
+                connection_config=self._get_connection_config(),
+                skip_health_check=True,
+            )
+        except Exception as exc:
+            if getattr(exc, "status_code", None) == 404:
+                return None
+            raise
+
+    def resume_sandbox_by_id(self, sandbox_id: str) -> object | None:
+        """Resume a recorded paused sandbox through this node's connection."""
+        try:
+            self._sync_from_settings()
+            return self._get_sandbox_class().resume(
+                sandbox_id,
+                connection_config=self._get_connection_config(),
+            )
+        except Exception as exc:
+            if getattr(exc, "status_code", None) == 404:
+                return None
+            raise
 
     def get_sandbox_id(self, sandbox) -> str:
         return sandbox.id
+
+    def resume_sandbox(self, sandbox) -> object:
+        """Resume a paused sandbox and return the connected provider object."""
+        sandbox_class = self._get_sandbox_class()
+        return sandbox_class.resume(
+            self.get_sandbox_id(sandbox),
+            connection_config=self._get_connection_config(),
+        )
 
     def get_work_dir(self, sandbox) -> str:
         return self._work_dir
 
     def pause_sandbox(self, sandbox) -> None:
         """暂停沙箱（保留文件系统和内存状态）"""
-        try:
-            sandbox.pause()
-        except Exception as e:
-            logger.warning(f"[OpenSandbox] Failed to pause sandbox: {e}")
+        sandbox.pause()
 
     def stop_sandbox(self, sandbox) -> None:
         """停止沙箱 — 优先 pause（保留状态），失败则 kill"""
         try:
             sandbox.pause()
         except Exception:
-            try:
-                sandbox.kill()
-            except Exception:
-                pass
+            sandbox.kill()
 
     def kill_sandbox(self, sandbox) -> None:
         """永久销毁沙箱（数据丢失）"""
@@ -343,6 +400,28 @@ class OpenSandboxSandboxAdapter:
         except Exception:
             return {"sandbox_id": self.get_sandbox_id(sandbox), "state": "unknown"}
 
+    async def for_node(self, node_id: str | None) -> "OpenSandboxSandboxAdapter | None":
+        """Build an adapter from the persisted node when a binding has affinity."""
+        if not node_id:
+            return self
+        from src.infra.sandbox.node_storage import get_opensandbox_node_storage
+
+        current = await get_opensandbox_node_storage().get_current()
+        node = next((item for item in current.nodes if item.get("id") == node_id), None)
+        if not node:
+            # A binding with a missing configured node is not safe to route via
+            # the current default endpoint. Callers must fail closed.
+            return None
+        return OpenSandboxSandboxAdapter(
+            domain=str(node.get("domain", "")),
+            api_key=str(node.get("api_key", "")),
+            image=str(node.get("image", self._image)),
+            timeout=int(node.get("timeout", self._timeout)),
+            work_dir=str(node.get("work_dir", self._work_dir)),
+            use_server_proxy=bool(node.get("use_server_proxy", self._use_server_proxy)),
+            sync_settings=False,
+        )
+
 
 class SessionSandboxManager:
     """管理 User 与 Sandbox 的绑定关系（每个用户一个沙箱，跨 session 共享）"""
@@ -353,6 +432,7 @@ class SessionSandboxManager:
         self._opensandbox_adapter: Optional[OpenSandboxSandboxAdapter] = None
         self._collection: Any = None
         self._cache: OrderedDict[str, tuple[str, CompositeBackend, object | None]] = OrderedDict()
+        self._opensandbox_cache_nodes: dict[str, str] = {}
         self._locks: OrderedDict[str, asyncio.Lock] = OrderedDict()
         self._locks_mutex = threading.Lock()
 
@@ -374,6 +454,54 @@ class SessionSandboxManager:
                 work_dir=getattr(settings, "OPENSANDBOX_WORK_DIR", "/root"),
                 use_server_proxy=getattr(settings, "OPENSANDBOX_USE_SERVER_PROXY", True),
             )
+
+    async def admit(self, user_id: str) -> dict[str, Any]:
+        """Reserve OpenSandbox capacity before chat durability.
+
+        Legacy mode remains a no-op admission so existing Daytona/E2B and
+        single-node OpenSandbox flows retain their established behavior.
+        """
+        if settings.SANDBOX_PLATFORM.lower() != "opensandbox":
+            return {"user_id": user_id, "allocation_state": "legacy"}
+        from src.infra.sandbox.node_scheduler import admit_opensandbox_user
+
+        async def provision(binding: dict[str, Any]) -> None:
+            await self._create_and_bind_opensandbox(
+                "__web_admission__", user_id, binding=binding
+            )
+
+        async def discover_legacy(binding: dict[str, Any]) -> str | None:
+            from src.infra.sandbox.node_storage import get_opensandbox_node_storage
+
+            current = await get_opensandbox_node_storage().get_current()
+            found: list[str] = []
+            for node in current.nodes:
+                adapter = OpenSandboxSandboxAdapter(
+                    domain=str(node.get("domain", "")),
+                    api_key=str(node.get("api_key", "")),
+                    image=str(node.get("image", "ubuntu")),
+                    timeout=int(node.get("timeout", 3600)),
+                    work_dir=str(node.get("work_dir", "/root")),
+                    use_server_proxy=bool(node.get("use_server_proxy", True)),
+                    sync_settings=False,
+                )
+                provider = await run_blocking_io(
+                    adapter.get_sandbox_unchecked, str(binding["sandbox_id"])
+                )
+                if provider is not None:
+                    found.append(str(node["id"]))
+            if len(found) > 1:
+                raise SandboxCapacityUnavailable()
+            return found[0] if found else None
+
+        admitted = await admit_opensandbox_user(
+            user_id, provision=provision, discover_legacy=discover_legacy
+        )
+        # Existing bindings are remotely validated here; newly provisioned
+        # bindings hit the cache. Both paths finish before Web durability.
+        await self._get_or_create_opensandbox("__web_admission__", user_id)
+        refreshed = await self._get_binding(user_id)
+        return refreshed or admitted
 
     @property
     def _bindings(self):
@@ -463,6 +591,7 @@ class SessionSandboxManager:
         sandbox_id: str,
         state: str,
         is_new: bool = False,
+        allocation_token: str | None = None,
     ) -> None:
         """保存/更新用户的沙箱绑定"""
         now = utc_now_iso()
@@ -479,11 +608,53 @@ class SessionSandboxManager:
         else:
             update["$setOnInsert"] = {"sandbox_created_at": now}
 
+        query: dict[str, Any] = {"user_id": user_id}
+        if allocation_token:
+            query["allocation_token"] = allocation_token
         await self._bindings.update_one(
-            {"user_id": user_id},
+            query,
             update,
-            upsert=True,
+            upsert=not bool(allocation_token),
         )
+
+    async def _sync_managed_allocation(
+        self,
+        user_id: str,
+        state: str,
+        *,
+        timeout: int | None = None,
+        binding: dict[str, Any] | None = None,
+    ) -> None:
+        """Token-fence binding and reservation lifecycle metadata together."""
+        binding = binding or await self._get_binding(user_id)
+        if not binding or not all(
+            binding.get(key)
+            for key in ("node_id", "reservation_id", "allocation_token")
+        ):
+            return
+        from src.infra.sandbox.capacity_storage import OpenSandboxCapacityStorage
+
+        allocation_state = "allocated" if state == "running" else state
+        fields: dict[str, Any] = {"sandbox_state": state}
+        if timeout is not None:
+            fields["lease_expires_at"] = utc_now() + timedelta(seconds=timeout)
+        capacity = OpenSandboxCapacityStorage()
+        transitioned = await capacity.transition(
+            str(binding["node_id"]),
+            str(binding["reservation_id"]),
+            str(binding["allocation_token"]),
+            allocation_state,
+            **fields,
+        )
+        binding_result = await capacity._bindings().update_one(
+            {
+                "user_id": user_id,
+                "allocation_token": binding["allocation_token"],
+            },
+            {"$set": {"allocation_state": allocation_state, **fields}},
+        )
+        if not transitioned or not getattr(binding_result, "matched_count", 0):
+            raise SandboxCapacityUnavailable()
 
     async def get_or_create(
         self,
@@ -1005,20 +1176,47 @@ class SessionSandboxManager:
                 self._cache.move_to_end(user_id)  # LRU: mark as recently used
                 sandbox_id, backend, provider_obj = self._cache[user_id]
                 try:
+                    cache_adapter: OpenSandboxSandboxAdapter | None = self._opensandbox_adapter
+                    cached_node_id = self._opensandbox_cache_nodes.get(user_id)
+                    cache_binding = (
+                        await self._get_binding(user_id) if cached_node_id else None
+                    )
+                    if cached_node_id and (
+                        not cache_binding
+                        or str(cache_binding.get("node_id", "")) != cached_node_id
+                        or str(cache_binding.get("sandbox_id", "")) != sandbox_id
+                    ):
+                        raise SandboxCapacityUnavailable()
+                    if cached_node_id and cache_adapter is not None:
+                        cache_adapter = await cache_adapter.for_node(cached_node_id)
+                        if cache_adapter is None:
+                            raise SandboxCapacityUnavailable()
+                    if cache_adapter is None:
+                        raise SandboxCapacityUnavailable()
                     is_running = await run_blocking_io(
-                        self._opensandbox_adapter.sandbox_is_running,
+                        cache_adapter.sandbox_is_running,
                         provider_obj,
                     )
                     if is_running:
                         await run_blocking_io(
-                            self._opensandbox_adapter.extend_timeout,
+                            cache_adapter.extend_timeout,
                             provider_obj,
-                            settings.OPENSANDBOX_TIMEOUT,
+                            getattr(cache_adapter, "_timeout", settings.OPENSANDBOX_TIMEOUT),
                         )
-                        await self._save_binding(user_id, sandbox_id, "running")
+                        if cache_binding and cache_binding.get("allocation_token"):
+                            await self._sync_managed_allocation(
+                                user_id,
+                                "running",
+                                timeout=getattr(
+                                    cache_adapter, "_timeout", settings.OPENSANDBOX_TIMEOUT
+                                ),
+                                binding=cache_binding,
+                            )
+                        else:
+                            await self._save_binding(user_id, sandbox_id, "running")
                         await ensure_sandbox_mcp(backend, user_id)
                         work_dir = await run_blocking_io(
-                            self._opensandbox_adapter.get_work_dir,
+                            cache_adapter.get_work_dir,
                             provider_obj,
                         )
                         return backend, work_dir
@@ -1027,34 +1225,87 @@ class SessionSandboxManager:
                         f"[OpenSandbox] Cache hit but sandbox {sandbox_id} unhealthy: {e}"
                     )
                 del self._cache[user_id]
+                self._opensandbox_cache_nodes.pop(user_id, None)
 
             binding = await self._get_binding(user_id)
             metadata_sandbox_id = binding.get("sandbox_id") if binding else None
             if metadata_sandbox_id:
-                # SandboxSync.connect() 重连到已存在的沙箱
-                provider_obj = await run_blocking_io(
-                    self._opensandbox_adapter.get_sandbox, metadata_sandbox_id
-                )
+                try:
+                    # SandboxSync.connect() 重连到已存在的沙箱. Adapter
+                    # resolution and provider connect/resume are one fail-closed
+                    # boundary: only a returned None (SDK-confirmed 404) is
+                    # authoritative absence.
+                    adapter = (
+                        await self._opensandbox_adapter.for_node(
+                            binding.get("node_id") if binding else None
+                        )
+                        if hasattr(self._opensandbox_adapter, "for_node")
+                        else self._opensandbox_adapter
+                    )
+                    if adapter is None:
+                        raise SandboxCapacityUnavailable()
+                    if (
+                        binding
+                        and binding.get("sandbox_state") in {"paused", "stopped", "archived"}
+                        and hasattr(adapter, "resume_sandbox_by_id")
+                    ):
+                        provider_obj = await run_blocking_io(
+                            adapter.resume_sandbox_by_id, metadata_sandbox_id
+                        )
+                    else:
+                        provider_obj = await run_blocking_io(
+                            adapter.get_sandbox, metadata_sandbox_id
+                        )
+                except SandboxCapacityUnavailable:
+                    raise
+                except Exception as exc:
+                    logger.warning(
+                        f"[OpenSandbox] Recorded node unavailable for {metadata_sandbox_id}: "
+                        f"{type(exc).__name__}"
+                    )
+                    raise SandboxCapacityUnavailable() from exc
                 if provider_obj:
                     try:
                         await run_blocking_io(
-                            self._opensandbox_adapter.extend_timeout,
+                            adapter.extend_timeout,
                             provider_obj,
-                            settings.OPENSANDBOX_TIMEOUT,
+                            getattr(adapter, "_timeout", settings.OPENSANDBOX_TIMEOUT),
                         )
-                        backend = self._build_composite_backend_opensandbox(provider_obj, user_id)
+                        try:
+                            backend = self._build_composite_backend_opensandbox(
+                                provider_obj, user_id, adapter=adapter
+                            )
+                        except TypeError as exc:
+                            if "unexpected keyword argument 'adapter'" not in str(exc):
+                                raise
+                            backend = self._build_composite_backend_opensandbox(
+                                provider_obj, user_id
+                            )
                         self._cache[user_id] = (metadata_sandbox_id, backend, provider_obj)
+                        if binding and binding.get("node_id"):
+                            self._opensandbox_cache_nodes[user_id] = str(binding["node_id"])
                         self._evict_if_needed()
                         info = await run_blocking_io(
-                            self._opensandbox_adapter.get_sandbox_info,
+                            adapter.get_sandbox_info,
                             provider_obj,
                         )
-                        await self._save_binding(
-                            user_id, metadata_sandbox_id, info.get("state", "running")
-                        )
+                        state = info.get("state", "running")
+                        if binding and binding.get("allocation_token"):
+                            await self._sync_managed_allocation(
+                                user_id,
+                                state,
+                                timeout=getattr(
+                                    adapter, "_timeout", settings.OPENSANDBOX_TIMEOUT
+                                ),
+                                binding=binding,
+                            )
+                        else:
+                            await self._save_binding(
+                                user_id, metadata_sandbox_id, state
+                            )
                         await ensure_sandbox_mcp(backend, user_id)
                         work_dir = await run_blocking_io(
-                            self._opensandbox_adapter.get_work_dir,
+                            adapter.get_work_dir,
                             provider_obj,
                         )
                         return backend, work_dir
@@ -1062,14 +1313,72 @@ class SessionSandboxManager:
                         logger.warning(
                             f"[OpenSandbox] Failed to reconnect {metadata_sandbox_id}: {e}"
                         )
+                        raise SandboxCapacityUnavailable() from e
+
+                # ``None`` is authoritative not-found. Release the old fenced
+                # slot before selecting a replacement; adapter exceptions are
+                # ambiguous and have already propagated fail-closed.
+                if binding and binding.get("node_id") and binding.get("reservation_id"):
+                    from src.infra.sandbox.capacity_storage import OpenSandboxCapacityStorage
+
+                    capacity = OpenSandboxCapacityStorage()
+                    token = str(binding.get("allocation_token", ""))
+                    released_binding = await capacity.release_binding(
+                        user_id,
+                        str(binding["node_id"]),
+                        str(binding["reservation_id"]),
+                        token,
+                    )
+                    if not released_binding:
+                        raise SandboxCapacityUnavailable()
+                    released_reservation = await capacity.release(
+                        str(binding["node_id"]),
+                        str(binding["reservation_id"]),
+                        allocation_token=token,
+                    )
+                    if not released_reservation:
+                        raise SandboxCapacityUnavailable()
+                    binding = None
+
+                if binding and binding.get("node_id") and binding.get("sandbox_state") not in {
+                    "terminated", "destroyed", "not_found", "released"
+                }:
+                    raise SandboxCapacityUnavailable()
 
             return await self._create_and_bind_opensandbox(session_id, user_id)
 
     async def _create_and_bind_opensandbox(
-        self, session_id: str, user_id: str
+        self,
+        session_id: str,
+        user_id: str,
+        *,
+        binding: dict[str, Any] | None = None,
     ) -> tuple[CompositeBackend, str]:
         assert self._opensandbox_adapter is not None
-        adapter = self._opensandbox_adapter
+        binding = binding or await self._get_binding(user_id)
+        binding_state = str(
+            (binding or {}).get("sandbox_state")
+            or (binding or {}).get("allocation_state")
+            or ""
+        )
+        if binding_state in {"terminated", "destroyed", "not_found", "released"}:
+            binding = None
+        if (not binding or not binding.get("reservation_id")) and hasattr(
+            self._opensandbox_adapter, "for_node"
+        ):
+            from src.infra.sandbox.node_scheduler import admit_opensandbox_user
+
+            await admit_opensandbox_user(user_id)
+            binding = await self._get_binding(user_id)
+        adapter = (
+            await self._opensandbox_adapter.for_node(
+                binding.get("node_id") if binding else None
+            )
+            if hasattr(self._opensandbox_adapter, "for_node")
+            else self._opensandbox_adapter
+        )
+        if adapter is None:
+            raise SandboxCapacityUnavailable()
         from src.infra.backend.opensandbox import OpenSandboxBackend
 
         # 加载用户环境变量
@@ -1080,23 +1389,117 @@ class SessionSandboxManager:
                 user_id=user_id, envs=user_envs if user_envs else None
             )
             osb_backend = OpenSandboxBackend(
-                sandbox=sandbox, work_dir=adapter.get_work_dir(sandbox)
+                sandbox=cast(Any, sandbox), work_dir=adapter.get_work_dir(sandbox)
             )
             skills_backend = create_skills_backend(user_id=user_id)
             composite = CompositeBackend(default=osb_backend, routes={"/skills/": skills_backend})
             return composite, work_dir, adapter.get_sandbox_id(sandbox), sandbox
 
-        backend, work_dir, sandbox_id, provider_obj = await run_blocking_io(_sync_create)
         try:
-            await self._save_binding(user_id, sandbox_id, "running", is_new=True)
+            backend, work_dir, sandbox_id, provider_obj = await run_blocking_io(_sync_create)
+        except Exception as exc:
+            if binding and binding.get("node_id") and binding.get("reservation_id"):
+                from src.infra.sandbox.capacity_storage import OpenSandboxCapacityStorage
+
+                capacity = OpenSandboxCapacityStorage()
+                node_id = str(binding["node_id"])
+                reservation_id = str(binding["reservation_id"])
+                token = str(binding.get("allocation_token", ""))
+                status_code = getattr(exc, "status_code", None)
+                definitive_rejection = (
+                    isinstance(status_code, int)
+                    and 400 <= status_code < 500
+                    and status_code not in {408, 429}
+                ) or type(exc).__name__ == "InvalidArgumentException"
+                if definitive_rejection:
+                    await capacity.release_binding(
+                        user_id, node_id, reservation_id, token
+                    )
+                    await capacity.release(
+                        node_id, reservation_id, allocation_token=token
+                    )
+                else:
+                    await capacity.transition(
+                        node_id, reservation_id, token, "unknown"
+                    )
+                    await capacity.save_binding(
+                        user_id,
+                        allocation_token=token,
+                        provider="opensandbox",
+                        node_id=node_id,
+                        reservation_id=reservation_id,
+                        allocation_state="unknown",
+                        sandbox_state="unknown",
+                    )
+            raise SandboxCapacityUnavailable() from exc
+        try:
+            if binding and binding.get("node_id") and binding.get("reservation_id"):
+                from src.infra.sandbox.capacity_storage import OpenSandboxCapacityStorage
+
+                capacity = OpenSandboxCapacityStorage()
+                token = binding.get("allocation_token", "")
+                transitioned = await capacity.transition(
+                    binding["node_id"], binding["reservation_id"], token, "allocated",
+                    sandbox_id=sandbox_id, sandbox_state="running",
+                    lease_expires_at=utc_now() + timedelta(seconds=adapter._timeout),
+                )
+                persisted = await capacity.save_binding(
+                    user_id, allocation_token=token, node_id=binding["node_id"],
+                    reservation_id=binding["reservation_id"], sandbox_id=sandbox_id,
+                    allocation_state="allocated", sandbox_state="running",
+                    lease_expires_at=utc_now() + timedelta(seconds=adapter._timeout),
+                )
+                if not transitioned or not persisted:
+                    raise SandboxCapacityUnavailable()
+                await self._save_binding(
+                    user_id, sandbox_id, "running", is_new=True, allocation_token=token
+                )
+            else:
+                await self._save_binding(user_id, sandbox_id, "running", is_new=True)
         except Exception as e:
             logger.error(f"[OpenSandbox] Created {sandbox_id} but failed to save binding: {e}")
+            terminated = False
             try:
-                await run_blocking_io(self._opensandbox_adapter.stop_sandbox, provider_obj)
+                await run_blocking_io(adapter.kill_sandbox, provider_obj)
+                terminated = True
             except Exception:
                 pass
+            if binding and binding.get("node_id") and binding.get("reservation_id"):
+                from src.infra.sandbox.capacity_storage import OpenSandboxCapacityStorage
+
+                capacity = OpenSandboxCapacityStorage()
+                node_id = str(binding["node_id"])
+                reservation_id = str(binding["reservation_id"])
+                token = str(binding.get("allocation_token", ""))
+                if terminated:
+                    await capacity.release_binding(
+                        user_id, node_id, reservation_id, token
+                    )
+                    await capacity.release(
+                        node_id, reservation_id, allocation_token=token
+                    )
+                else:
+                    await capacity.transition(
+                        node_id,
+                        reservation_id,
+                        token,
+                        "unknown",
+                        sandbox_id=sandbox_id,
+                    )
+                    await capacity.save_binding(
+                        user_id,
+                        allocation_token=token,
+                        provider="opensandbox",
+                        node_id=node_id,
+                        reservation_id=reservation_id,
+                        sandbox_id=sandbox_id,
+                        allocation_state="unknown",
+                        sandbox_state="unknown",
+                    )
             raise
         self._cache[user_id] = (sandbox_id, backend, provider_obj)
+        if binding and binding.get("node_id"):
+            self._opensandbox_cache_nodes[user_id] = str(binding["node_id"])
         self._evict_if_needed()
         logger.info(
             f"[OpenSandbox] Created sandbox {sandbox_id} for user {user_id} (session={session_id})"
@@ -1106,16 +1509,18 @@ class SessionSandboxManager:
         return backend, work_dir
 
     def _build_composite_backend_opensandbox(
-        self, provider_obj: object, user_id: str
+        self, provider_obj: object, user_id: str,
+        adapter: OpenSandboxSandboxAdapter | None = None,
     ) -> CompositeBackend:
         from src.infra.backend.opensandbox import OpenSandboxBackend
 
+        effective_adapter = adapter or self._opensandbox_adapter
+        backend_adapter = cast(Any, effective_adapter)
         return CompositeBackend(
             default=OpenSandboxBackend(
-                sandbox=provider_obj,
-                work_dir=self._opensandbox_adapter.get_work_dir(provider_obj)
-                if self._opensandbox_adapter
-                else "/root",
+                sandbox=cast(Any, provider_obj),
+                work_dir=backend_adapter.get_work_dir(provider_obj)
+                if backend_adapter else "/root",
             ),
             routes={"/skills/": create_skills_backend(user_id=user_id)},
         )
@@ -1128,9 +1533,24 @@ class SessionSandboxManager:
                 sandbox_id, _, provider_obj = self._cache[user_id]
                 try:
                     # stop_sandbox 优先 pause（保留数据），失败则 kill
-                    await run_blocking_io(self._opensandbox_adapter.stop_sandbox, provider_obj)
+                    adapter: OpenSandboxSandboxAdapter | None = self._opensandbox_adapter
+                    cached_node_id = self._opensandbox_cache_nodes.get(user_id)
+                    if cached_node_id and adapter is not None:
+                        adapter = await adapter.for_node(cached_node_id)
+                    if adapter is None:
+                        raise SandboxCapacityUnavailable()
+                    await run_blocking_io(adapter.stop_sandbox, provider_obj)
                     self._cache.pop(user_id, None)
-                    await self._save_binding(user_id, sandbox_id, "paused")
+                    self._opensandbox_cache_nodes.pop(user_id, None)
+                    binding = (
+                        await self._get_binding(user_id) if cached_node_id else None
+                    )
+                    if binding and binding.get("allocation_token"):
+                        await self._sync_managed_allocation(
+                            user_id, "paused", binding=binding
+                        )
+                    else:
+                        await self._save_binding(user_id, sandbox_id, "paused")
                     logger.info(f"[OpenSandbox] Paused sandbox {sandbox_id} for user {user_id}")
                     return True
                 except Exception as e:
@@ -1141,6 +1561,7 @@ class SessionSandboxManager:
     def clear_cache(self, user_id: str) -> None:
         """清除内存缓存（用于测试或强制刷新）"""
         self._cache.pop(user_id, None)
+        self._opensandbox_cache_nodes.pop(user_id, None)
 
     def get_cached_backend(self, user_id: str):
         """Return the currently cached backend for a user, if one exists."""

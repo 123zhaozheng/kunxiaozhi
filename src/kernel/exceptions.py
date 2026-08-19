@@ -71,6 +71,13 @@ class SessionError(Exception):
     pass
 
 
+class SandboxCapacityUnavailable(Exception):  # noqa: N818
+    """No healthy OpenSandbox node can accept a managed sandbox."""
+
+    code = "sandbox_capacity_unavailable"
+    message = "当前用户太多，沙盒资源有限～请先切换到 Fast 模式继续聊，或稍后再试。"
+
+
 class EmailNotVerifiedError(Exception):
     """邮箱未验证错误"""
 

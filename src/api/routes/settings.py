@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from src.api.deps import get_current_user_required, require_permissions
 from src.infra.settings.service import SettingsService, get_settings_service
 from src.kernel.config import settings
+from src.kernel.schemas.opensandbox import OpenSandboxNodesUpdate
 from src.kernel.schemas.setting import (
     SettingItem,
     SettingResetResponse,
@@ -28,6 +29,101 @@ from src.kernel.schemas.wecom_network import (
 )
 
 router = APIRouter()
+
+
+@router.get("/opensandbox-nodes")
+async def get_opensandbox_nodes(
+    _: TokenPayload = Depends(require_permissions("settings:manage")),
+):
+    """Return managed OpenSandbox nodes with API keys redacted."""
+    from src.infra.sandbox.node_storage import get_opensandbox_node_storage
+
+    return (await get_opensandbox_node_storage().get_current()).to_response().model_dump(mode="json")
+
+
+@router.put("/opensandbox-nodes")
+async def update_opensandbox_nodes(
+    data: "OpenSandboxNodesUpdate",
+    user: TokenPayload = Depends(require_permissions("settings:manage")),
+):
+    """Replace the node list using optimistic revision concurrency."""
+    from src.infra.sandbox.node_storage import get_opensandbox_node_storage
+
+    try:
+        stored = await get_opensandbox_node_storage().save(data, updated_by=user.sub)
+    except ValueError as exc:
+        if "revision_conflict" in str(exc):
+            raise HTTPException(status_code=409, detail="opensandbox_nodes_revision_conflict") from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    from src.infra.sandbox.session_manager import reset_session_sandbox_manager
+
+    reset_session_sandbox_manager()
+    # Reuse the existing settings fan-out channel to reset manager caches on replicas.
+    await SettingsService._publish_change("OPENSANDBOX_NODES", stored.revision)
+    return stored.to_response().model_dump(mode="json")
+
+
+@router.post("/opensandbox-nodes/{node_id}/probe")
+async def probe_opensandbox_node(
+    node_id: str,
+    _: TokenPayload = Depends(require_permissions("settings:manage")),
+):
+    """Probe a node through its adapter without exposing credentials."""
+    from src.infra.sandbox.node_storage import get_opensandbox_node_storage
+    from src.infra.sandbox.session_manager import OpenSandboxSandboxAdapter
+
+    current = await get_opensandbox_node_storage().get_current()
+    node = next((item for item in current.nodes if item.get("id") == node_id), None)
+    if node is None:
+        raise HTTPException(status_code=404, detail="opensandbox_node_not_found")
+    try:
+        adapter = OpenSandboxSandboxAdapter(
+            domain=node["domain"], api_key=node.get("api_key", ""), image=node.get("image", "ubuntu"),
+            timeout=int(node.get("timeout", 3600)), work_dir=node.get("work_dir", "/root"),
+            use_server_proxy=bool(node.get("use_server_proxy", True)),
+        )
+        from src.infra.async_utils import run_blocking_io
+
+        latency_ms = await run_blocking_io(adapter.probe)
+        state = "healthy"
+        detail = None
+    except Exception as exc:
+        state = "unavailable"
+        detail = type(exc).__name__
+        latency_ms = None
+    try:
+        from src.infra.sandbox.capacity_storage import OpenSandboxCapacityStorage
+        from src.infra.utils.datetime import utc_now
+
+        await OpenSandboxCapacityStorage()._collection().update_one(
+            {"_id": node_id},
+            {
+                "$set": {
+                    "health_state": state,
+                    "last_health_at": utc_now(),
+                    "last_error": detail,
+                },
+                "$setOnInsert": {"reservations": [], "max_sandboxes": int(node.get("max_sandboxes", 1)), "enabled": bool(node.get("enabled", True))},
+            },
+            upsert=True,
+        )
+    except Exception:
+        # Probe result remains useful even if the observability write fails.
+        pass
+    return {"node_id": node_id, "health_state": state, "latency_ms": round(latency_ms, 2) if latency_ms is not None else None, "detail": detail}
+
+
+@router.post("/opensandbox-nodes/{node_id}/drain")
+async def drain_opensandbox_node(
+    node_id: str,
+    draining: bool = True,
+    _: TokenPayload = Depends(require_permissions("settings:manage")),
+):
+    from src.infra.sandbox.node_storage import get_opensandbox_node_storage
+
+    if not await get_opensandbox_node_storage().set_draining(node_id, draining):
+        raise HTTPException(status_code=404, detail="opensandbox_node_not_found")
+    return {"node_id": node_id, "draining": draining}
 
 
 @router.get("/", response_model=SettingsResponse)

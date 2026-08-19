@@ -686,6 +686,18 @@ class AgentFactory:
     _lock = asyncio.Lock()
 
     @classmethod
+    def get_class(cls, agent_id: str):
+        """Return the registered implementation class without initializing it."""
+        if agent_id not in _AGENT_REGISTRY:
+            try:
+                from src.agents import discover_agents
+
+                discover_agents()
+            except Exception:
+                return None
+        return _AGENT_REGISTRY.get(agent_id)
+
+    @classmethod
     async def get(cls, agent_id: str) -> BaseGraphAgent:
         """获取 Agent 实例（单例）"""
         if agent_id in cls._instances:

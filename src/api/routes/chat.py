@@ -36,6 +36,7 @@ from src.kernel.config import settings
 from src.kernel.exceptions import AuthorizationError, NotFoundError
 from src.kernel.schemas.agent import AgentRequest
 from src.kernel.schemas.model import ModelConfig
+from src.kernel.schemas.opensandbox import OpenSandboxCapacityUnavailable
 from src.kernel.schemas.user import TokenPayload
 
 router = APIRouter()
@@ -420,6 +421,24 @@ async def chat_stream(
             request.persona_snapshot.preferred_agent_id,
         )
     validate_team_agent_request(agent_id, request)
+
+    # Sandbox admission is intentionally before trace/task/session/message persistence.
+    # Resolve capability from the registered Agent implementation, never from UI labels.
+    try:
+        agent_cls = AgentFactory.get_class(agent_id) if hasattr(AgentFactory, "get_class") else None
+        supports_sandbox = bool(getattr(agent_cls, "_supports_sandbox", agent_id in {"search", "team"}))
+    except Exception:
+        supports_sandbox = agent_id in {"search", "team"}
+    if supports_sandbox and settings.SANDBOX_PLATFORM.lower() == "opensandbox":
+        try:
+            from src.infra.sandbox.session_manager import get_session_sandbox_manager
+
+            await get_session_sandbox_manager().admit(user.sub)
+        except OpenSandboxCapacityUnavailable as exc:
+            raise HTTPException(
+                status_code=503,
+                detail={"error": exc.code, "message": exc.message},
+            ) from exc
 
     # 生成 run_id（不管是否排队都需要唯一 ID）
     run_id = _generate_run_id()
