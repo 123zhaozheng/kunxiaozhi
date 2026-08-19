@@ -1,0 +1,15 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend quality-check entry point."}
+{"file":".trellis/spec/backend/sandbox-providers.md","reason":"Verify lifecycle and provider compatibility contracts."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Verify async, type, test and blocking-I/O quality."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Verify stable error boundaries and HTTP mappings."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Verify observability and no secret leakage."}
+{"file":".trellis/spec/backend/wecom-network-settings.md","reason":"Compare revision/encryption/reload behavior with the established precedent."}
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend quality-check entry point."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Verify responsive settings-panel conventions."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Verify accessibility, i18n, testing and build quality."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Verify API type fidelity and strict TypeScript."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Verify storage/API/UI round-trip consistency."}
+{"file":".trellis/tasks/08-18-investigate-opensandbox-operations-lifecycle/research/lambchat-sandbox-lifecycle.md","reason":"Check that current lifecycle semantics were preserved."}
+{"file":".trellis/tasks/08-18-investigate-opensandbox-operations-lifecycle/research/opensandbox-multinode-feasibility.md","reason":"Check implementation against approved scheduling and failure decisions."}
+{"file":".trellis/tasks/08-18-investigate-opensandbox-operations-lifecycle/research/opensandbox-multinode-implementation-map.md","reason":"Check affected-file coverage, tests and known risks."}
+{"file":".trellis/tasks/08-18-investigate-opensandbox-operations-lifecycle/research/opensandbox-capacity-ux-map.md","reason":"Check admission ordering, draft preservation, inventory polling and action contracts."}

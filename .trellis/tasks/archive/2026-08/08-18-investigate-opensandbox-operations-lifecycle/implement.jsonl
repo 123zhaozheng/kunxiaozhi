@@ -1,0 +1,16 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend guideline index and pre-development routing."}
+{"file":".trellis/spec/backend/sandbox-providers.md","reason":"Existing OpenSandbox adapter, lifecycle, sync SDK, reuse, hot-reload and compatibility contracts."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Backend async/blocking I/O and quality rules."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Domain-to-HTTP error mapping conventions for capacity, conflicts and unavailable nodes."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Logging and secret-safety conventions."}
+{"file":".trellis/spec/backend/wecom-network-settings.md","reason":"Closest revisioned encrypted Admin configuration and reload precedent."}
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend guideline index."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Settings panel component, styling and responsive layout conventions."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Frontend testing, accessibility, i18n and strict quality contracts."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Backend-mirroring API type conventions."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Cross-layer data contract checklist for Mongo/API/frontend flow."}
+{"file":".trellis/tasks/08-18-investigate-opensandbox-operations-lifecycle/research/lambchat-sandbox-lifecycle.md","reason":"Verified current lifecycle behavior that must remain compatible."}
+{"file":".trellis/tasks/08-18-investigate-opensandbox-operations-lifecycle/research/opensandbox-management-observability.md","reason":"Verified SDK/server capabilities and limitations."}
+{"file":".trellis/tasks/08-18-investigate-opensandbox-operations-lifecycle/research/opensandbox-multinode-feasibility.md","reason":"Approved multi-node scheduling, failure and Admin requirements."}
+{"file":".trellis/tasks/08-18-investigate-opensandbox-operations-lifecycle/research/opensandbox-multinode-implementation-map.md","reason":"Exact reuse points, affected modules, tests and implementation risks."}
+{"file":".trellis/tasks/08-18-investigate-opensandbox-operations-lifecycle/research/opensandbox-capacity-ux-map.md","reason":"Verified pre-persistence chat admission and frontend/Admin UX insertion points."}
