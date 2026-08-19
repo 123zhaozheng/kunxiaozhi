@@ -351,3 +351,141 @@ _SANDBOX_AFFECTED_SETTINGS.add("SANDBOX_IMAGE_DESCRIPTION")
 return (description or "").strip()
 # inject only if sandbox_backend and section non-empty; before SANDBOX_RUNTIME_SECTION
 ```
+
+---
+
+## Scenario: OpenSandbox multi-node admission and affinity
+
+### 1. Scope / Trigger
+
+- Applies when `opensandbox_node_config.mode == "multi_node"` and Web Chat resolves an
+  Agent whose registered class has `_supports_sandbox = True`.
+- The contract spans Mongo node/capacity/binding storage, Redis allocation leases,
+  OpenSandbox provider calls, the Web admission API, and the Admin settings UI.
+- WeCom admission and externally created sandboxes are out of scope for this version.
+
+### 2. Signatures
+
+```python
+class OpenSandboxNodeScheduler:
+    async def admit(self, user_id: str) -> dict[str, Any]: ...
+    async def provision(self, user_id: str, provisioner: Callable[..., Awaitable[Any]]) -> Any: ...
+
+class OpenSandboxCapacityStorage:
+    async def reserve(self, node_id: str, user_id: str, *, max_sandboxes: int | None = None) -> dict[str, Any] | None: ...
+    async def transition(self, node_id: str, reservation_id: str, allocation_token: str, state: str, **fields: Any) -> bool: ...
+    async def release(self, node_id: str, reservation_id: str, *, allocation_token: str | None = None) -> bool: ...
+```
+
+Durable identities and routes:
+
+```text
+binding:    (user_id, node_id, sandbox_id, reservation_id, allocation_token)
+reservation:(node_id, reservation_id, allocation_token, allocation_state)
+GET/PUT     /api/settings/opensandbox-nodes
+POST        /api/settings/opensandbox-nodes/{node_id}/probe
+GET         /api/opensandbox/sandboxes
+POST/DELETE /api/opensandbox/sandboxes/{node_id}/{sandbox_id}/...
+```
+
+### 3. Contracts
+
+- Dedicated node mode uses revisioned, encrypted node configuration. Responses expose
+  `has_api_key`, never plaintext credentials; blank input preserves a secret and explicit
+  `clear_api_key` removes it.
+- Every non-terminal reservation consumes capacity, including `creating`, `paused`, and
+  `unknown`. Redis lease expiry is not release evidence. Authoritative provider 404,
+  successful termination, or the conservative provider-TTL deadline may release a slot.
+- A token-owned renewable Redis lease serializes allocation for one user across replicas.
+  Mongo `allocation_token` predicates fence binding and reservation finalization; a
+  `creating` binding without a sandbox id fails closed instead of authorizing another create.
+- Node selection orders by occupancy ratio, priority, then stable node id and attempts one
+  atomic reservation at a time. Storage/Redis failures fail closed.
+- Recorded `(node_id, sandbox_id)` affinity applies to cache reuse, reconnect, resume,
+  renew, stop, and Admin actions. Only an SDK-confirmed 404 permits replacement; timeout,
+  authentication, and unreachable-node failures preserve the binding and reservation.
+- Legacy mode remains the scalar OpenSandbox path. When dedicated mode first encounters a
+  scalar binding, discovery uses non-mutating per-node reconnect under the allocation lease,
+  then backfills node/reservation/token state. Any ambiguous node failure aborts adoption.
+- Web Chat admission for sandbox-capable agents completes reconnect or provisioning before
+  run/task/session/message/trace/SSE durability. Fast Agent bypasses admission. WeCom
+  admission and delivery are intentionally unchanged.
+- Admin inventory is LambChat-managed only. OpenSandbox `0.1.14` has no node-wide list API,
+  so do not synthesize external rows or claim external discovery.
+  Legacy / single-node compatibility returns an empty inventory; multi-node lists only
+  bindings that already record a non-empty ``node_id``, then probes that node.
+- Web Chat capacity rejection must surface user-visible feedback: the chat submit path
+  preserves ``sandbox_capacity_unavailable`` through a duck-typed frontend check (not only
+  ``instanceof``), returns the send promise to ``ChatInput``, shows the capacity dialog,
+  and also emits a toast so the failure is never silent.
+- Inventory `actions` are the only frontend action authority and share one backend matrix
+  with lifecycle validation: running/started allow pause+renew+terminate; paused/stopped/
+  archived allow resume+renew+terminate; creating allows terminate only; unknown allows
+  renew+terminate; terminal or ID-less rows allow nothing.
+- Admin node health includes `last_health_at`; the UI renders a localized absolute value or
+  an explicit never-probed state. Inventory polling, manual refresh, probes, node actions,
+  and sandbox actions retain the selected page; changing a filter intentionally resets page 0.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+|---|---|
+| All eligible nodes are full, Mongo fails, or Redis lease cannot be acquired | Raise `sandbox_capacity_unavailable`; create no run/task/session/message/trace/SSE state. |
+| Existing binding's node times out, rejects auth, or is unreachable | Preserve binding and reservation; fail closed; do not create on another node. |
+| Provider reconnect returns an SDK-confirmed 404 | Token-fence and release the old allocation, then permit one fresh allocation. |
+| Binding is `creating` without `sandbox_id` | Current lease owner may finish provisioning; all other callers fail closed. |
+| Reservation transition or binding CAS loses its allocation token | Stale owner must not write or release; terminate any provider object it created when ownership is lost. |
+| Node capacity is reduced below occupancy | Keep existing reservations, report over-capacity, and reject new reservations. |
+| PUT removes an in-use node, changes an existing node ID, or switches to legacy while dedicated allocations exist | Reject with a stable conflict response. |
+| Admin renew succeeds | Provider, binding, and reservation expiry become `now + node.timeout`. |
+| Admin terminate succeeds | Provider is killed, binding becomes terminal, and the matching fenced reservation is released. |
+| Admin inventory refreshes while page N is selected | Request `skip=N*limit`; do not issue a second page-0 request unless a filter changed. |
+
+### 5. Good / Base / Bad Cases
+
+- **Good**: two replicas submit for the same new user; one renewable Redis lease spans
+  reservation through provider creation, and exactly one fenced binding becomes allocated.
+- **Base**: no dedicated config exists; scalar `OPENSANDBOX_*` settings and legacy bindings
+  retain their previous cache/reconnect/renew/stop behavior without capacity admission.
+- **Bad**: admission reserves capacity, releases Redis, then creates the provider later.
+  Another replica can acquire the lease and create a duplicate before the first finalizes.
+- **Bad**: treating every `connect()` exception as not-found releases capacity during a node
+  outage and silently moves the user to a fresh empty sandbox.
+
+### 6. Tests Required
+
+- Cross-replica same-user allocation, stale-token fencing, lease renewal, one-node-at-a-time
+  reservation, paused/unknown occupancy, and provider-TTL reconciliation.
+- Recorded-node 404 versus timeout/auth/outage, paused auto-resume, legacy discovery/adoption,
+  and failure compensation after create/finalize.
+- Web route rejection before run-id/durable side effects, exact structured 503, Fast bypass,
+  typed frontend error propagation, draft/attachment preservation, and a single capacity dialog.
+- Node revision/secret/remove/legacy-switch rules, real non-mutating probe, managed inventory,
+  token-fenced lifecycle actions, canonical state/action gates, health timestamp/never state,
+  page-preserving visible-only polling, and irreversible terminate confirmation.
+
+Assertion points must include provider create count, reservation count, final allocation token,
+absence of Web durability calls on 503, unchanged binding on outage, and both binding/reservation
+expiry after renew. Provider tests use fakes and must not contact a real OpenSandbox node.
+
+### 7. Wrong vs Correct
+
+#### Wrong: release coordination before provisioning
+
+```python
+async with user_lease(user_id):
+    binding = await scheduler.admit(user_id)
+# Lease ended: another replica can reserve/create now.
+provider = await adapter.create_sandbox(...)
+```
+
+#### Correct: keep renewable ownership through finalization
+
+```python
+async with renewable_user_lease(user_id) as lease:
+    binding = await scheduler.admit_under_lease(user_id, lease.token)
+    provider = await adapter.create_sandbox(...)
+    await scheduler.finalize_under_token(binding, provider.id, lease.token)
+```
+
+The Mongo `allocation_token`, not Redis expiry alone, is the final write-authority boundary.
