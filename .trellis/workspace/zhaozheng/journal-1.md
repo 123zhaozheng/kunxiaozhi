@@ -1241,3 +1241,24 @@ Fixed create-user password save failures so the modal stays open with localized 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 44: 将内置技能复制进用户技能空间
+
+**Date**: 2026-08-19
+**Task**: 将内置技能复制进用户技能空间
+**Branch**: `main`
+
+### Summary
+
+内置技能改为惰性复制进匹配用户的 skill_files：首次同名覆盖、之后当普通技能；Admin 删除按名清全站。去掉运行时投影，prompt/VFS 走同一用户目录。已更新 builtin-skills spec 并归档任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `afb467c0` | (see git log) |
+
+### Status
+
+[OK] **Completed**
