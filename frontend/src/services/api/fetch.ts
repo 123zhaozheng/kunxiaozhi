@@ -12,6 +12,40 @@ import {
 } from "./tokenManager";
 import { translateBackendError } from "../../utils/backendErrors";
 
+export class ApiRequestError extends Error {
+  status: number;
+  code?: string;
+  detail?: unknown;
+
+  constructor(message: string, status: number, code?: string, detail?: unknown) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.code = code;
+    this.detail = detail;
+  }
+}
+
+/** Duck-typed check so capacity UX still works across bundled module copies. */
+export function isSandboxCapacityError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as {
+    code?: unknown;
+    detail?: { error?: unknown } | unknown;
+    name?: unknown;
+  };
+  if (candidate.code === "sandbox_capacity_unavailable") return true;
+  if (
+    candidate.detail &&
+    typeof candidate.detail === "object" &&
+    (candidate.detail as { error?: unknown }).error ===
+      "sandbox_capacity_unavailable"
+  ) {
+    return true;
+  }
+  return false;
+}
+
 // ============================================
 // 带认证的 fetch 封装
 // ============================================
@@ -101,7 +135,15 @@ export async function authFetch<T>(
       errorMessage =
         errorData.detail || `Request failed: ${response.statusText}`;
     }
-    throw new Error(translateBackendError(errorMessage, i18n.t.bind(i18n)));
+    const code = typeof errorData.detail === "object" && errorData.detail !== null
+      ? errorData.detail.error
+      : errorData.error;
+    throw new ApiRequestError(
+      translateBackendError(errorMessage, i18n.t.bind(i18n)),
+      response.status,
+      typeof code === "string" ? code : undefined,
+      errorData.detail,
+    );
   }
 
   // 处理空响应

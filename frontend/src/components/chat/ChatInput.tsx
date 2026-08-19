@@ -4,7 +4,9 @@ import { Ban, Target } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ImageViewer } from "../common";
 import { ConfirmDialog } from "../common/ConfirmDialog";
+import { isSandboxCapacityError } from "../../services/api/fetch";
 import { ContactAdminDialog } from "../common/ContactAdminDialog";
+import { SandboxCapacityDialog } from "./SandboxCapacityDialog";
 import { useFileUpload } from "../../hooks/useFileUpload";
 import { useMentionState } from "../../hooks/useMentionState";
 import { useMentionSearch } from "../../hooks/useMentionSearch";
@@ -126,6 +128,8 @@ export const ChatInput = memo(function ChatInput({
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [stopConfirmOpen, setStopConfirmOpen] = useState(false);
   const [contactAdminOpen, setContactAdminOpen] = useState(false);
+  const [capacityModalOpen, setCapacityModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -423,20 +427,56 @@ export const ChatInput = memo(function ChatInput({
     [input, mention, onSelectTeam, resetMention, scheduleTextareaResize],
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSend || requiresTeamSelection) return;
     if (input.trim() && canSubmit) {
+      const draft = input;
       const trimmed = input.trim();
-      onSend(trimmed, agentOptionValues, attachments);
-      pushHistory(trimmed);
-      setInput("");
-      setAttachments([]);
-      requestAnimationFrame(() => {
-        if (textareaRef.current) {
-          textareaRef.current.style.height = "auto";
+      const draftAttachments = [...attachments];
+      let accepted = false;
+      const handleAccepted = () => {
+        if (accepted) return;
+        accepted = true;
+        pushHistory(trimmed);
+        setInput("");
+        setAttachments([]);
+        requestAnimationFrame(() => {
+          if (textareaRef.current) {
+            textareaRef.current.style.height = "auto";
+          }
+        });
+      };
+
+      setIsSubmitting(true);
+      try {
+        await onSend(
+          trimmed,
+          agentOptionValues,
+          draftAttachments,
+          handleAccepted,
+        );
+        // Preserve compatibility with callers that do not expose a separate
+        // admission boundary.
+        handleAccepted();
+      } catch (error) {
+        if (isSandboxCapacityError(error)) {
+          // Restore the exact submission even if a later stage reported the
+          // typed admission error after accepting the input callback.
+          setInput(draft);
+          setAttachments(draftAttachments);
+          setCapacityModalOpen(true);
+          requestAnimationFrame(() => {
+            const textarea = textareaRef.current;
+            if (!textarea) return;
+            textarea.focus();
+            textarea.selectionStart = textarea.selectionEnd = draft.length;
+            scheduleTextareaResize();
+          });
         }
-      });
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -539,6 +579,7 @@ export const ChatInput = memo(function ChatInput({
     hasContent &&
     canSend &&
     !isLoading &&
+    !isSubmitting &&
     !hasUploadingAttachment &&
     !requiresTeamSelection;
 
@@ -877,6 +918,20 @@ export const ChatInput = memo(function ChatInput({
         isOpen={contactAdminOpen}
         onClose={() => setContactAdminOpen(false)}
         reason="noPermission"
+      />
+
+      <SandboxCapacityDialog
+        isOpen={capacityModalOpen}
+        onClose={() => setCapacityModalOpen(false)}
+        title={t("chat.sandboxCapacityTitle", "太火热了")}
+        message={t(
+          "chat.sandboxCapacityMessage",
+          "现在有点太火热啦，沙盒资源暂满，请稍后重试。也可以先切换到 Fast 模式继续聊。",
+        )}
+        helpText={t(
+          "chat.sandboxCapacityHelp",
+          "如需协助，可反馈数据资产部赵正通",
+        )}
       />
     </div>
   );

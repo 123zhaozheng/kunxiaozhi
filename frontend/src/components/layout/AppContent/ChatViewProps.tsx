@@ -172,7 +172,11 @@ export interface ChatViewProps {
   approvalLoading: boolean;
   /** 最新 SOP 计划快照（DAG 卡片） */
   sopPlan: SopPlan | null;
-  onSendMessage: (content: string, attachments?: MessageAttachment[]) => void;
+  onSendMessage: (
+    content: string,
+    attachments?: MessageAttachment[],
+    onAccepted?: () => void,
+  ) => void | Promise<void>;
   onStopGeneration: () => void;
   activeGoal: ActiveGoalSpec | null;
   goalsByRunId: Record<string, ActiveGoalSpec>;

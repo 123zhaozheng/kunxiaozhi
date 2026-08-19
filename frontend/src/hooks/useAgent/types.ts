@@ -267,6 +267,7 @@ export interface UseAgentReturn {
     content: string,
     agentOptions?: Record<string, boolean | string | number>,
     attachments?: MessageAttachment[],
+    onAccepted?: () => void,
   ) => Promise<void>;
   clearActiveGoal: () => void;
   stopGeneration: () => Promise<void>;

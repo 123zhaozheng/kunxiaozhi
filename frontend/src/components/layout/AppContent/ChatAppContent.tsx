@@ -896,8 +896,8 @@ export function ChatAppContent({
           onRespondApproval={respondToApproval}
           approvalLoading={approvalLoading}
           sopPlan={sopPlan}
-          onSendMessage={(content, sendAttachments) =>
-            void sendMessage(content, undefined, sendAttachments)
+          onSendMessage={(content, sendAttachments, onAccepted) =>
+            sendMessage(content, undefined, sendAttachments, onAccepted)
           }
           onStopGeneration={stopGeneration}
           activeGoal={activeGoal}

@@ -9,6 +9,8 @@ import type {
   WeComNetworkConfig,
   WeComNetworkConfigUpdate,
   WeComNetworkOperationResponse,
+  OpenSandboxNodeInput,
+  OpenSandboxNodesResponse,
 } from "../../types";
 import { API_BASE } from "./config";
 import { authFetch } from "./fetch";
@@ -100,6 +102,35 @@ export const settingsApi = {
         method: "PUT",
         body: JSON.stringify(config),
       },
+    );
+  },
+
+  async getOpenSandboxNodes(): Promise<OpenSandboxNodesResponse> {
+    return authFetch<OpenSandboxNodesResponse>(`${API_BASE}/api/settings/opensandbox-nodes`);
+  },
+
+  async updateOpenSandboxNodes(
+    mode: "legacy" | "multi_node",
+    nodes: OpenSandboxNodeInput[],
+    expected_revision?: string,
+  ): Promise<OpenSandboxNodesResponse> {
+    return authFetch<OpenSandboxNodesResponse>(`${API_BASE}/api/settings/opensandbox-nodes`, {
+      method: "PUT",
+      body: JSON.stringify({ mode, nodes, expected_revision }),
+    });
+  },
+
+  async probeOpenSandboxNode(nodeId: string) {
+    return authFetch<{ node_id: string; health_state: string; latency_ms?: number; detail?: string | null }>(
+      `${API_BASE}/api/settings/opensandbox-nodes/${encodeURIComponent(nodeId)}/probe`,
+      { method: "POST" },
+    );
+  },
+
+  async drainOpenSandboxNode(nodeId: string, draining: boolean) {
+    return authFetch<{ node_id: string; draining: boolean }>(
+      `${API_BASE}/api/settings/opensandbox-nodes/${encodeURIComponent(nodeId)}/drain?draining=${draining ? "true" : "false"}`,
+      { method: "POST" },
     );
   },
 };

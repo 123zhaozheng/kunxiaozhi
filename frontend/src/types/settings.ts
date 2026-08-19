@@ -162,6 +162,59 @@ export interface WeComNetworkOperationResponse {
   detail?: string | null;
 }
 
+export interface OpenSandboxNode {
+  id: string;
+  domain: string;
+  has_api_key: boolean;
+  image: string;
+  timeout: number;
+  work_dir: string;
+  use_server_proxy: boolean;
+  max_sandboxes: number;
+  enabled: boolean;
+  priority: number;
+  draining: boolean;
+  health_state: string;
+  last_health_at?: string | null;
+  last_error?: string | null;
+  used_sandboxes: number;
+  over_capacity: boolean;
+}
+
+export interface OpenSandboxNodeInput extends Omit<OpenSandboxNode, "has_api_key" | "draining" | "health_state" | "last_error" | "used_sandboxes" | "over_capacity"> {
+  api_key?: string;
+  clear_api_key?: boolean;
+}
+
+export interface OpenSandboxNodesResponse {
+  revision: string;
+  mode: "legacy" | "multi_node";
+  nodes: OpenSandboxNode[];
+  updated_at?: string | null;
+  updated_by?: string | null;
+}
+
+export interface OpenSandboxInventoryItem {
+  node_id: string;
+  sandbox_id: string;
+  state: string;
+  managed: boolean;
+  user_id?: string | null;
+  username?: string | null;
+  binding_state?: string | null;
+  created_at?: string | null;
+  last_used_at?: string | null;
+  expires_at?: string | null;
+  actions: Record<string, boolean>;
+}
+
+export interface OpenSandboxInventoryResponse {
+  items: OpenSandboxInventoryItem[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
 // ============================================
 // Model Types
 // ============================================

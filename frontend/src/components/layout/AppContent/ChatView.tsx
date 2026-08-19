@@ -376,7 +376,10 @@ export function ChatView({
       content: string,
       _options?: Record<string, boolean | string | number>,
       sendAttachments?: MessageAttachment[],
-    ) => onSendMessage(content, sendAttachments),
+      onAccepted?: () => void,
+    ) => {
+      return onSendMessage(content, sendAttachments, onAccepted);
+    },
     onStop: onStopGeneration,
     isLoading: sessionRunning,
     canSend: canSendMessage,

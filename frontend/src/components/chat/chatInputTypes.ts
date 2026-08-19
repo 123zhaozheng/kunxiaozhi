@@ -17,7 +17,8 @@ export interface ChatInputProps {
     message: string,
     options?: Record<string, boolean | string | number>,
     attachments?: MessageAttachment[],
-  ) => void;
+    onAccepted?: () => void,
+  ) => void | Promise<void>;
   onStop: () => void;
   isLoading: boolean;
   disabled?: boolean;

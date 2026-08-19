@@ -23,6 +23,7 @@ import { useSettingsContext } from "../../contexts/SettingsContext";
 import { JsonSchemaEditor } from "./JsonSchemaEditor";
 import { SystemHealthSection } from "./SystemHealthSection";
 import { WeComNetworkSettings } from "./WeComNetworkSettings";
+import { OpenSandboxNodesPanel } from "./OpenSandboxNodesPanel";
 import { useAuth } from "../../hooks/useAuth";
 import { roleApi, agentApi, modelApi } from "../../services/api";
 import type { ModelOption } from "../../services/api/model";
@@ -672,6 +673,12 @@ export function SettingsPanel() {
           <div className="flex-1 overflow-y-auto py-2 sm:py-4 px-4">
             {/* System Health Monitor */}
             <SystemHealthSection />
+
+            {!searchQuery && activeCategory === "sandbox" && canManage && (
+              <div className="mb-5">
+                <OpenSandboxNodesPanel />
+              </div>
+            )}
 
             {!searchQuery && activeCategory === "wecom" && canManage ? (
               <WeComNetworkSettings canManage={canManage} />

@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { LoadingSpinner } from "./LoadingSpinner";
 
@@ -14,6 +14,8 @@ interface ConfirmDialogProps {
   onCancel: () => void;
   variant?: "danger" | "warning" | "info";
   loading?: boolean;
+  helpText?: string;
+  helpLabel?: string;
 }
 
 export function ConfirmDialog({
@@ -26,16 +28,20 @@ export function ConfirmDialog({
   onCancel,
   variant = "danger",
   loading = false,
+  helpText,
+  helpLabel = "?",
 }: ConfirmDialogProps) {
   const { t } = useTranslation();
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   // Use default values from translations if not provided
   const confirmLabel = confirmText || t("common.confirm");
-  const cancelLabel = cancelText || t("common.cancel");
+  const cancelLabel = cancelText ?? t("common.cancel");
 
   useEffect(() => {
     if (isOpen) {
+      setHelpOpen(false);
       // Focus the confirm button when dialog opens
       confirmButtonRef.current?.focus();
       // Prevent body scroll
@@ -77,7 +83,7 @@ export function ConfirmDialog({
     info: {
       icon: "text-[var(--theme-primary)]",
       confirmButton: "btn-primary shadow-sm",
-      confirmIcon: AlertTriangle,
+      confirmIcon: Info,
     },
   };
   const ConfirmIcon = variantStyles[variant].confirmIcon;
@@ -101,28 +107,46 @@ export function ConfirmDialog({
             <div
               className={`flex-shrink-0 mt-0.5 ${variantStyles[variant].icon}`}
             >
-              <AlertTriangle size={22} />
+              <ConfirmIcon size={22} />
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-base font-semibold text-stone-900 dark:text-stone-100">
                 {title}
               </h3>
-              <p className="mt-1.5 text-sm text-stone-600 dark:text-stone-400 leading-relaxed">
+              <p className="mt-1.5 whitespace-pre-line text-sm text-stone-600 dark:text-stone-400 leading-relaxed">
                 {message}
               </p>
+              {helpText && (
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-stone-400 text-xs font-semibold text-stone-700 dark:border-stone-500 dark:text-stone-200"
+                    aria-label={helpLabel}
+                    title={helpLabel}
+                    onClick={() => setHelpOpen((open) => !open)}
+                  >
+                    {helpLabel}
+                  </button>
+                  {helpOpen && (
+                    <p className="mt-2 text-sm text-stone-600 dark:text-stone-300">{helpText}</p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-2 px-5 py-3 bg-stone-50 dark:bg-stone-900/50 border-t border-stone-100 dark:border-stone-700">
-          <button
-            onClick={onCancel}
-            disabled={loading}
-            className="px-4 py-2 text-sm font-medium text-stone-700 dark:text-stone-300 bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-600 rounded-lg hover:bg-stone-50 dark:hover:bg-stone-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {cancelLabel}
-          </button>
+          {cancelLabel && (
+            <button
+              onClick={onCancel}
+              disabled={loading}
+              className="px-4 py-2 text-sm font-medium text-stone-700 dark:text-stone-300 bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-600 rounded-lg hover:bg-stone-50 dark:hover:bg-stone-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {cancelLabel}
+            </button>
+          )}
           <button
             ref={confirmButtonRef}
             onClick={onConfirm}

@@ -15,6 +15,7 @@ import type {
   MessageAttachment,
 } from "../types";
 import { sessionApi, type BackendSession } from "../services/api";
+import { isSandboxCapacityError } from "../services/api/fetch";
 import { authenticatedRequest } from "../services/api/authenticatedRequest";
 import { API_BASE } from "../services/api/config";
 import { feedbackApi } from "../services/api/feedback";
@@ -577,6 +578,7 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
       content: string,
       agentOptions?: Record<string, boolean | string | number>,
       attachments?: MessageAttachment[],
+      onAccepted?: () => void,
     ) => {
       if (!content.trim()) return;
       loadHistoryRequestIdRef.current += 1;
@@ -614,17 +616,13 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
       processedEventIdsRef.current.clear();
       lastHistoryTimestampRef.current = null;
 
-      const { messages: optimisticMessages, assistantMessageId } =
-        createOptimisticMessagesForSend({
-          previousMessages: messagesRef.current,
-          content,
-          attachments,
-        });
-
-      setMessages(optimisticMessages);
-      setIsLoading(true);
+      const previousMessages = messagesRef.current;
+      // Keep the welcome ChatInput mounted while admission is pending. If the
+      // server rejects capacity, its local draft and the lifted attachments
+      // remain available for the rejection modal.
       setError(null);
-      let finalAssistantMessageId = assistantMessageId;
+      let finalAssistantMessageId = "";
+      let paintedOptimisticMessages = false;
 
       try {
         // 用户发送消息时标记当前 session 为已读
@@ -673,6 +671,25 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
         const newSessionId = submitData.session_id;
         const newRunId = submitData.run_id;
         const projectId = pendingProjectIdRef.current;
+
+        // Let the input clear only after admission succeeds. This runs before
+        // the first-message view can unmount its welcome ChatInput.
+        onAccepted?.();
+
+        // The submit endpoint has accepted the run; now switch the empty view
+        // to its loading state and paint the optimistic rows.
+        setIsLoading(true);
+
+        const { messages: optimisticMessages, assistantMessageId } =
+          createOptimisticMessagesForSend({
+            previousMessages,
+            content,
+            attachments,
+            assistantMessageId: newRunId || undefined,
+          });
+        setMessages(optimisticMessages);
+        paintedOptimisticMessages = true;
+        finalAssistantMessageId = assistantMessageId;
 
         if (goalForRun) {
           const goalWithRunId = {
@@ -785,17 +802,6 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
         }
         if (newRunId) {
           setCurrentRunId(newRunId);
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? {
-                    ...m,
-                    id: newRunId,
-                    runId: newRunId,
-                  }
-                : m,
-            ),
-          );
         }
 
         const streamSessionId = newSessionId || sessionId;
@@ -818,23 +824,38 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
         if (err instanceof Error && err.name === "AbortError") {
           return;
         }
+        if (isSandboxCapacityError(err)) {
+          if (paintedOptimisticMessages) {
+            setMessages(previousMessages);
+          }
+          setError(null);
+          setConnectionStatus("disconnected");
+          setIsInitializingSandbox(false);
+          throw err instanceof Error
+            ? err
+            : Object.assign(new Error("sandbox_capacity_unavailable"), {
+                code: "sandbox_capacity_unavailable",
+              });
+        }
         const errorMessage =
           err instanceof Error
             ? translateBackendError(err.message, i18n.t.bind(i18n))
             : i18n.t("chat.unknownError");
         setError(errorMessage);
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === finalAssistantMessageId
-              ? {
-                  ...m,
-                  content: i18n.t("chat.errorPrefix", { error: errorMessage }),
-                  isStreaming: false,
-                  parts: clearAllLoadingStates(m.parts || []),
-                }
-              : m,
-          ),
-        );
+        if (paintedOptimisticMessages && finalAssistantMessageId) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === finalAssistantMessageId
+                ? {
+                    ...m,
+                    content: i18n.t("chat.errorPrefix", { error: errorMessage }),
+                    isStreaming: false,
+                    parts: clearAllLoadingStates(m.parts || []),
+                  }
+                : m,
+            ),
+          );
+        }
         setConnectionStatus("disconnected");
         setIsInitializingSandbox(false);
       } finally {

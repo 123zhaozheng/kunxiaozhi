@@ -8,6 +8,8 @@ interface CreateOptimisticMessagesForSendOptions {
   attachments?: MessageAttachment[];
   now?: Date;
   createId?: () => string;
+  /** Prefer the backend run id so SSE can attach without a rematch. */
+  assistantMessageId?: string;
 }
 
 interface CreateOptimisticMessagesForSendResult {
@@ -21,6 +23,7 @@ export function createOptimisticMessagesForSend({
   attachments,
   now = new Date(),
   createId = () => uuid(),
+  assistantMessageId,
 }: CreateOptimisticMessagesForSendOptions): CreateOptimisticMessagesForSendResult {
   const userMessage: Message = {
     id: createId(),
@@ -30,18 +33,20 @@ export function createOptimisticMessagesForSend({
     attachments,
   };
 
+  const resolvedAssistantId = assistantMessageId || createId();
   const assistantMessage: Message = {
-    id: createId(),
+    id: resolvedAssistantId,
     role: "assistant",
     content: "",
     timestamp: now,
     toolCalls: [],
     toolResults: [],
     isStreaming: true,
+    ...(assistantMessageId ? { runId: assistantMessageId } : {}),
   };
 
   return {
     messages: [...previousMessages, userMessage, assistantMessage],
-    assistantMessageId: assistantMessage.id,
+    assistantMessageId: resolvedAssistantId,
   };
 }
