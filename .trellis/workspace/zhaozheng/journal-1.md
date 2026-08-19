@@ -1197,3 +1197,26 @@ Fixed create-user password save failures so the modal stays open with localized 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 42: 完成 OpenSandbox 多节点调度与管理
+
+**Date**: 2026-08-19
+**Task**: 完成 OpenSandbox 多节点调度与管理
+**Branch**: `main`
+
+### Summary
+
+实现 OpenSandbox 多节点容量调度、粘性绑定、故障关闭、Admin 节点与托管沙箱管理、3600 秒 TTL 及容量满时草稿保留体验；补齐后端竞态/API 与前端回归测试并通过检查。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c5cc5321` | (see git log) |
+| `7272ba88` | (see git log) |
+| `22a57737` | (see git log) |
+
+### Status
+
+[OK] **Completed**
