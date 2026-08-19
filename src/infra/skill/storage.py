@@ -196,6 +196,15 @@ class SkillStorage:
         except Exception as e:
             logger.warning(f"Failed to delete S3 object {storage_key}: {e}")
 
+    @staticmethod
+    def _is_user_owned_storage_key(storage_key: str, user_id: str) -> bool:
+        """True when the binary lives under this user's skill prefix.
+
+        Marketplace/builtin copies may share a foreign ``_binary_ref``. Deleting
+        those objects would destroy central or marketplace files.
+        """
+        return bool(user_id) and storage_key.startswith(f"skills/{user_id}/")
+
     async def sync_skill_files(self, skill_name: str, files: dict[str, str], user_id: str) -> None:
         """批量同步文件（替换所有，但保留 __meta__）。支持文本和二进制引用。"""
         if not files:
@@ -282,13 +291,15 @@ class SkillStorage:
         """删除用户某个 Skill 的所有文件（包括 S3 二进制清理）"""
         collection = self._get_files_collection()
 
-        # 先收集所有二进制引用，清理 S3
+        # 先收集所有二进制引用，只清理该用户自己的 S3 对象
         async for doc in collection.find(
             {"skill_name": skill_name, "user_id": user_id, "file_path": {"$ne": "__meta__"}},
             {"content": 1},
         ):
             binary_ref = await parse_binary_ref_async(doc.get("content", ""))
-            if binary_ref:
+            if binary_ref and self._is_user_owned_storage_key(
+                binary_ref.storage_key, user_id
+            ):
                 await self._delete_s3_object(binary_ref.storage_key)
 
         await collection.delete_many(
@@ -800,13 +811,15 @@ class SkillStorage:
         """删除 Skill 所有文件（包括 __meta__ 和 S3 二进制文件）"""
         collection = self._get_files_collection()
 
-        # 先收集所有二进制引用，清理 S3
+        # 先收集所有二进制引用，只清理该用户自己的 S3 对象
         async for doc in collection.find(
             {"skill_name": skill_name, "user_id": user_id, "file_path": {"$ne": "__meta__"}},
             {"content": 1},
         ):
             binary_ref = await parse_binary_ref_async(doc.get("content", ""))
-            if binary_ref:
+            if binary_ref and self._is_user_owned_storage_key(
+                binary_ref.storage_key, user_id
+            ):
                 await self._delete_s3_object(binary_ref.storage_key)
 
         await collection.delete_many({"skill_name": skill_name, "user_id": user_id})
@@ -814,6 +827,41 @@ class SkillStorage:
     # ==========================================
     # 生效 Skills（供 DeepAgent 使用）
     # ==========================================
+
+    async def ensure_role_builtin_skills_copied(self, user_id: str) -> None:
+        """Best-effort lazy copy of role-eligible builtins into this user's skill_files."""
+        from src.infra.skill.builtin_copy import ensure_role_builtin_skills_copied
+
+        await ensure_role_builtin_skills_copied(user_id, storage=self)
+
+    async def iter_user_ids_for_skill_name(self, skill_name: str):
+        """Yield distinct user_ids that have files for ``skill_name``, in batches."""
+        from src.infra.skill.builtin_copy import USER_ID_SCAN_BATCH
+
+        collection = self._get_files_collection()
+        last_id = ""
+        while True:
+            match: dict[str, Any] = {"skill_name": skill_name}
+            if last_id:
+                match["user_id"] = {"$gt": last_id}
+            else:
+                match["user_id"] = {"$exists": True, "$nin": ["", None]}
+            pipeline: list[dict[str, Any]] = [
+                {"$match": match},
+                {"$group": {"_id": "$user_id"}},
+                {"$sort": {"_id": 1}},
+                {"$limit": USER_ID_SCAN_BATCH},
+            ]
+            batch = [
+                doc["_id"]
+                async for doc in collection.aggregate(pipeline)  # type: ignore[arg-type]
+                if isinstance(doc.get("_id"), str) and doc["_id"]
+            ]
+            if not batch:
+                break
+            for user_id in batch:
+                yield user_id
+            last_id = batch[-1]
 
     async def get_effective_skills(
         self,
@@ -829,8 +877,8 @@ class SkillStorage:
         Args:
             user_id: 用户 ID
             disabled_skills: 从用户 metadata 中获取的 disabled_skills 列表
-            user_roles: 用户角色列表；None 时内部解析（供 builtin 角色注入）
-            is_admin: 是否绕过 builtin 角色过滤（如 skill:admin）
+            user_roles: unused; kept for call-site compatibility
+            is_admin: unused; kept for call-site compatibility
 
         Returns:
             {
@@ -843,16 +891,25 @@ class SkillStorage:
             }
 
         Notes:
-            - Builtin skills matched by role are merged after user skills, filling
-              the remaining ``SKILL_EFFECTIVE_LOAD_LIMIT`` quota (user first).
-            - 缓存值携带 builtin 版本号；builtin 写操作 bump 版本即整体失效。
-            - 合并结果向前端/调用方保持与 user skill 相同的结构，不暴露 builtin 标记。
+            - Role-eligible builtins are copied into ``skill_files`` before read.
+            - Prompt and VFS both read user storage only (no runtime merge).
+            - Cache payload still carries ``_builtin_version`` as a harmless leftover.
         """
+        _ = user_roles, is_admin
         from src.infra.skill.constants import (
             BUILTIN_SKILLS_VERSION_KEY,
             SKILLS_CACHE_KEY_PREFIX,
             SKILLS_CACHE_TTL,
         )
+
+        try:
+            await self.ensure_role_builtin_skills_copied(user_id)
+        except Exception as e:
+            logger.warning(
+                "[Skills] Failed to copy builtin skills for user %s: %s",
+                user_id,
+                e,
+            )
 
         cache_key = f"{SKILLS_CACHE_KEY_PREFIX}{user_id}"
 
@@ -875,8 +932,6 @@ class SkillStorage:
             disabled_skills = await self._get_user_disabled_skills(user_id)
         disabled_skills = normalize_skill_name_list(disabled_skills)
 
-        # Keep all user names for shadowing: a disabled user Skill still owns its
-        # name and must prevent a same-name Builtin from leaking through.
         user_names = await self.get_all_user_skill_names(user_id)
         enabled_names = [
             name for name in user_names if name not in set(disabled_skills)
@@ -910,37 +965,6 @@ class SkillStorage:
                         "files": files,
                         "enabled": True,
                     }
-
-        # Builtin 注入：角色匹配、排除 disabled、填充剩余配额（user 优先）
-        try:
-            if user_roles is None:
-                user_roles, is_admin = await self._resolve_user_access(user_id)
-            disabled_builtin_skills = await self._get_user_disabled_builtin_skills(user_id)
-            try:
-                builtin_skills = await self._get_builtin_skills_for_user(
-                    user_roles=user_roles or [],
-                    is_admin=bool(is_admin),
-                    disabled_skills=disabled_builtin_skills,
-                    shadowed_names=set(user_names),
-                    remaining_quota=SKILL_EFFECTIVE_LOAD_LIMIT - len(result["skills"]),
-                )
-            except TypeError as exc:
-                # Keep lightweight test doubles and older integrations working
-                # while the effective-source contract rolls out.
-                if "shadowed_names" not in str(exc):
-                    raise
-                builtin_skills = await self._get_builtin_skills_for_user(
-                    user_roles=user_roles or [],
-                    is_admin=bool(is_admin),
-                    disabled_skills=disabled_builtin_skills,
-                    remaining_quota=SKILL_EFFECTIVE_LOAD_LIMIT - len(result["skills"]),
-                )
-            if builtin_skills:
-                result["skills"].update(builtin_skills)
-        except Exception as e:
-            logger.warning(
-                f"[Skills] Failed to merge builtin skills for user {user_id}: {e}"
-            )
 
         # 缓存（包含 builtin 版本号，便于全局失效）
         try:
@@ -983,104 +1007,6 @@ class SkillStorage:
             logger.warning(f"[Skills] Failed to resolve user access for {user_id}: {e}")
             return [], False
 
-    async def _get_builtin_skills_for_user(
-        self,
-        *,
-        user_roles: list[str],
-        is_admin: bool,
-        disabled_skills: list[str],
-        shadowed_names: set[str] | None = None,
-        include_disabled: bool = False,
-        remaining_quota: int,
-    ) -> dict[str, dict[str, Any]]:
-        """加载角色匹配的 builtin skills（注入用，可被子类/测试覆写）。
-
-        返回结构与 user skill 一致（``{name: {name, description, files, enabled}}``），
-        不暴露 builtin 标记。
-        """
-        if remaining_quota <= 0:
-            return {}
-
-        builtin_storage = self._get_builtin_storage()
-        builtin_names = await builtin_storage.list_builtin_skill_names_for_roles(
-            user_roles, is_admin
-        )
-        disabled_set = set(disabled_skills or [])
-        shadowed = shadowed_names or set()
-        builtin_names = [n for n in builtin_names if n not in shadowed]
-        if not include_disabled:
-            builtin_names = [n for n in builtin_names if n not in disabled_set]
-        builtin_names = builtin_names[: max(0, remaining_quota)]
-        if not builtin_names:
-            return {}
-
-        builtin_files = await builtin_storage.batch_get_builtin_skill_files(
-            builtin_names
-        )
-        merged: dict[str, dict[str, Any]] = {}
-        for name in builtin_names:
-            files = builtin_files.get(name, {})
-            if not files:
-                continue
-            description = ""
-            if "SKILL.md" in files:
-                try:
-                    _, parsed_desc, _ = await _parse_skill_md_offload(
-                        files["SKILL.md"]
-                    )
-                    if parsed_desc:
-                        description = parsed_desc
-                except Exception:
-                    pass
-            merged[name] = {
-                "name": name,
-                "description": description or f"Skill: {name}",
-                "files": files,
-                "enabled": name not in disabled_set,
-                "is_builtin": True,
-            }
-        return merged
-
-    async def list_builtin_skills_for_user(
-        self,
-        user_id: str,
-        *,
-        shadowed_names: set[str] | None = None,
-        disabled_skills: Optional[list[str]] = None,
-        remaining_quota: int = SKILL_EFFECTIVE_LOAD_LIMIT,
-    ) -> dict[str, dict[str, Any]]:
-        """Return role-visible Builtin Skills for the user's read-only catalog."""
-        if disabled_skills is None:
-            disabled_skills = await self._get_user_disabled_builtin_skills(user_id)
-        user_roles, is_admin = await self._resolve_user_access(user_id)
-        return await self._get_builtin_skills_for_user(
-            user_roles=user_roles,
-            is_admin=is_admin,
-            disabled_skills=normalize_skill_name_list(disabled_skills),
-            shadowed_names=shadowed_names,
-            include_disabled=True,
-            remaining_quota=remaining_quota,
-        )
-
-    async def get_builtin_skill_for_user(
-        self,
-        skill_name: str,
-        user_id: str,
-    ) -> Optional[dict[str, Any]]:
-        """Read one role-visible Builtin Skill without copying it to user storage."""
-        visible = await self.list_builtin_skills_for_user(
-            user_id,
-            shadowed_names=set(),
-            remaining_quota=SKILL_EFFECTIVE_LOAD_LIMIT,
-        )
-        return visible.get(skill_name)
-
-    def _get_builtin_storage(self):
-        """Lazy accessor for ``BuiltinSkillStorage``（可被测试覆写）。"""
-        from src.infra.skill.builtin import BuiltinSkillStorage
-
-        return BuiltinSkillStorage()
-
     async def _get_user_disabled_skills(self, user_id: str) -> list[str]:
         """Load disabled skills from user metadata for cache-safe default behavior."""
         try:
@@ -1092,25 +1018,6 @@ class SkillStorage:
                 return normalize_skill_name_list(user_doc.metadata.get("disabled_skills", []))
         except Exception as e:
             logger.warning(f"Failed to load disabled_skills for user {user_id}: {e}")
-        return []
-
-    async def _get_user_disabled_builtin_skills(self, user_id: str) -> list[str]:
-        """Load Builtin-only preferences without sharing the user Skill key."""
-        try:
-            from src.infra.user.storage import UserStorage
-
-            user_storage = UserStorage()
-            user_doc = await user_storage.get_by_id(user_id)
-            if user_doc and user_doc.metadata:
-                return normalize_skill_name_list(
-                    user_doc.metadata.get("disabled_builtin_skill_names", [])
-                )
-        except Exception as e:
-            logger.warning(
-                "Failed to load disabled_builtin_skill_names for user %s: %s",
-                user_id,
-                e,
-            )
         return []
 
     async def get_all_user_skill_names(

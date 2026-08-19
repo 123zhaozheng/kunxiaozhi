@@ -111,6 +111,19 @@ async def test_skills_store_backend_hides_disabled_skills_from_ls_and_read() -> 
     assert _field(hidden_dir, "entries") == []
 
 
+async def test_skills_store_backend_lists_and_reads_copied_builtin_like_user_skill() -> None:
+    storage = _FakeSkillStorage()
+    storage.files["planner"] = {"SKILL.md": "copied builtin skill"}
+    backend = SkillsStoreBackend(user_id="user-1", disabled_skills=[])
+    backend._storage = storage
+
+    result = await backend.als("/skills/")
+    assert "/planner/" in [_field(entry, "path") for entry in _field(result, "entries")]
+
+    skill_md = await backend.aread("/skills/planner/SKILL.md")
+    assert _field(skill_md, "file_data")["content"] == "copied builtin skill"
+
+
 async def test_skills_store_backend_hides_disabled_skills_from_grep_and_glob() -> None:
     backend = SkillsStoreBackend(user_id="user-1", disabled_skills=["hidden"])
     backend._storage = _FakeSkillStorage()

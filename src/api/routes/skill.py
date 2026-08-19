@@ -19,7 +19,6 @@ from src.infra.skill.binary import guess_mime_type, parse_binary_ref_async
 from src.infra.skill.marketplace import MarketplaceStorage
 from src.infra.skill.publication import SkillPublicationError, publish_user_skill
 from src.infra.skill.storage import SkillStorage, normalize_skill_name_list
-from src.infra.skill.storage_helpers import SKILL_EFFECTIVE_LOAD_LIMIT
 from src.infra.skill.types import (
     InstalledFrom,
     MarketplaceSkillResponse,
@@ -84,19 +83,24 @@ async def _ensure_user_skill_writable(
     *,
     allow_missing: bool = False,
 ) -> list[str]:
-    """Resolve user storage first and reject role-visible Builtin-only writes."""
+    """Resolve a persisted personal Skill. Copied builtins are normal user skills."""
     paths = await storage.list_skill_file_paths(skill_name, user_id)
     if paths:
         return paths
-    builtin = await storage.get_builtin_skill_for_user(skill_name, user_id)
-    if builtin:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Builtin skill '{skill_name}' is read-only",
-        )
     if allow_missing:
         return []
     raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
+
+
+async def _ensure_role_builtins_copied(storage: SkillStorage, user_id: str) -> None:
+    """Best-effort lazy copy; must not block list/chat if a single skill fails."""
+    ensure = getattr(storage, "ensure_role_builtin_skills_copied", None)
+    if ensure is None:
+        return
+    try:
+        await ensure(user_id)
+    except Exception as exc:
+        logger.warning("Failed to copy builtin skills for user %s: %s", user_id, exc)
 
 
 def _count_unique_skill_names(values: list[str]) -> int:
@@ -180,14 +184,7 @@ async def preview_zip_skills(
     existing_names = {s["skill_name"] for s in user_skills}
 
     for skill in skill_list:
-        if skill["name"] in existing_names:
-            skill["already_exists"] = True
-            continue
-        # A role-visible Builtin is a read-only source and cannot be replaced
-        # by creating a new personal Skill through this upload flow.
-        skill["already_exists"] = bool(
-            await storage.get_builtin_skill_for_user(skill["name"], user.sub)
-        )
+        skill["already_exists"] = skill["name"] in existing_names
 
     return {
         "skill_count": len(skill_list),
@@ -239,15 +236,6 @@ async def upload_skill_from_zip(
             errors.append({"name": skill_name, "reason": "already exists"})
             continue
 
-        if await storage.get_builtin_skill_for_user(skill_name, user.sub):
-            errors.append(
-                {
-                    "name": skill_name,
-                    "reason": "Builtin skill is read-only; choose a different name",
-                }
-            )
-            continue
-
         try:
             await storage.create_user_skill(
                 skill_name,
@@ -289,6 +277,8 @@ async def list_user_skills(
     marketplace: MarketplaceStorage = Depends(get_marketplace_storage),
 ):
     """列出用户安装的所有 Skills（含发布状态）"""
+    _ = include_builtin  # compatibility no-op; builtins are copied into skill_files
+    await _ensure_role_builtins_copied(storage, user.sub)
     # Get disabled_skills from user metadata
     user_storage = UserStorage()
     user_doc = await user_storage.get_by_id(user.sub)
@@ -305,13 +295,10 @@ async def list_user_skills(
         )
     available_tags = await storage.list_user_skill_tags(user.sub)
 
-    list_skip = 0 if include_builtin else skip
-    list_limit = SKILL_EFFECTIVE_LOAD_LIMIT if include_builtin else limit
-
     skills = await storage.list_user_skills(
         user.sub,
-        skip=list_skip,
-        limit=list_limit,
+        skip=skip,
+        limit=limit,
         disabled_skills=disabled_skills,
         pinned_skill_names=pinned_skill_names,
         favorite_skill_names=favorite_skill_names,
@@ -327,61 +314,7 @@ async def list_user_skills(
     )
     enabled_count = total - disabled_count
 
-    builtin_items: list[dict] = []
-    if include_builtin:
-        try:
-            personal_names = set(await storage.get_all_user_skill_names(user.sub))
-            personal_enabled_count = len(personal_names.difference(disabled_skills))
-            user_metadata = (user_doc.metadata if user_doc else {}) or {}
-            builtin_disabled = normalize_skill_name_list(
-                user_metadata.get("disabled_builtin_skill_names", [])
-            )
-            builtin_map = await storage.list_builtin_skills_for_user(
-                user.sub,
-                shadowed_names=personal_names,
-                disabled_skills=builtin_disabled,
-                remaining_quota=max(0, SKILL_EFFECTIVE_LOAD_LIMIT - personal_enabled_count),
-            )
-            query_lower = q.lower() if q else None
-            selected_tags = set(tags or [])
-            for name, builtin in builtin_map.items():
-                files = builtin.get("files", {})
-                skill_md = files.get("SKILL.md", "")
-                _, description, parsed_tags = await _parse_skill_md_offload(skill_md)
-                description = description or builtin.get("description", "")
-                if query_lower and not (
-                    query_lower in name.lower()
-                    or query_lower in description.lower()
-                    or any(query_lower in tag.lower() for tag in parsed_tags)
-                ):
-                    continue
-                if selected_tags and not selected_tags.issubset(set(parsed_tags)):
-                    continue
-                available_tags = sorted(set(available_tags).union(parsed_tags))
-                builtin_items.append(
-                    {
-                        "skill_name": name,
-                        "description": description,
-                        "tags": parsed_tags,
-                        "file_paths": list(files),
-                        "file_count": len(files),
-                        "enabled": bool(builtin.get("enabled", True)),
-                        "is_builtin": True,
-                        "installed_from": "builtin",
-                    }
-                )
-        except Exception as exc:
-            # Builtin projection is best-effort; personal Skills remain usable.
-            logger.warning("Failed to project Builtin Skills for user %s: %s", user.sub, exc)
-            builtin_items = []
-
-    all_skills = skills + builtin_items
-    if include_builtin:
-        total = len(all_skills)
-        enabled_count = sum(1 for s in all_skills if s.get("enabled", True))
-        all_skills = all_skills[skip : skip + limit]
-
-    if not all_skills:
+    if not skills:
         return UserSkillListResponse(
             skills=[],
             total=total,
@@ -391,7 +324,7 @@ async def list_user_skills(
             available_tags=available_tags,
         )
 
-    skill_names = [s["skill_name"] for s in all_skills if not s.get("is_builtin")]
+    skill_names = [s["skill_name"] for s in skills]
     # 批量查询当前页发布状态，避免按用户拉取全部发布记录
     published_map = (
         await marketplace.get_user_published_skills(user.sub, skill_names=skill_names)
@@ -412,21 +345,7 @@ async def list_user_skills(
                 tags_map[name] = parsed_tags
 
     items = []
-    for s in all_skills:
-        if s.get("is_builtin"):
-            items.append(
-                UserSkill(
-                    skill_name=s["skill_name"],
-                    description=s.get("description", ""),
-                    tags=s.get("tags", []),
-                    files=s.get("file_paths", []),
-                    enabled=s.get("enabled", True),
-                    file_count=s.get("file_count", 0),
-                    installed_from="builtin",
-                    is_builtin=True,
-                )
-            )
-            continue
+    for s in skills:
         items.append(
             UserSkill(
                 skill_name=s["skill_name"],
@@ -467,21 +386,7 @@ async def get_user_skill(
     """获取用户某个 Skill 的详细信息"""
     file_paths = await storage.list_skill_file_paths(name, user.sub)
     if not file_paths:
-        builtin = await storage.get_builtin_skill_for_user(name, user.sub)
-        if not builtin:
-            raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
-        files = builtin.get("files", {})
-        _, description, tags = await _parse_skill_md_offload(files.get("SKILL.md", ""))
-        return UserSkill(
-            skill_name=name,
-            description=description or builtin.get("description", ""),
-            tags=tags,
-            enabled=bool(builtin.get("enabled", True)),
-            files=list(files),
-            file_count=len(files),
-            installed_from="builtin",
-            is_builtin=True,
-        )
+        raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
 
     # Get disabled_skills from user metadata
     user_storage = UserStorage()
@@ -553,14 +458,7 @@ async def get_skill_file(
         raise HTTPException(status_code=400, detail="Invalid file path")
     content = await storage.get_skill_file(name, safe_path, user.sub)
     if content is None:
-        # A same-name personal Skill always owns reads, even when the
-        # requested path is missing; never fall through to Builtin content.
-        personal_paths = await storage.list_skill_file_paths(name, user.sub)
-        if not personal_paths:
-            builtin = await storage.get_builtin_skill_for_user(name, user.sub)
-            content = (builtin or {}).get("files", {}).get(safe_path)
-        if content is None:
-            raise HTTPException(status_code=404, detail="File not found")
+        raise HTTPException(status_code=404, detail="File not found")
 
     # 检查是否为二进制文件引用
     binary_ref = await parse_binary_ref_async(content)
@@ -863,20 +761,14 @@ async def toggle_user_skill(
     storage: SkillStorage = Depends(get_storage),
 ):
     """切换或设置 Skill 的启用状态"""
-    user_paths = await storage.list_skill_file_paths(name, user.sub)
-    is_builtin = False
-    if not user_paths:
-        builtin = await storage.get_builtin_skill_for_user(name, user.sub)
-        if not builtin:
-            raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
-        is_builtin = True
+    await _ensure_skill_exists(storage, name, user.sub)
 
-    # Builtin and personal Skill preferences are intentionally independent.
+    # Copied builtins use the same disabled_skills key as personal Skills.
     user_storage = UserStorage()
     user_doc = await user_storage.get_by_id(user.sub)
     if user_doc is None:
         raise HTTPException(status_code=404, detail="User not found")
-    disabled_key = "disabled_builtin_skill_names" if is_builtin else "disabled_skills"
+    disabled_key = "disabled_skills"
     current_disabled = normalize_skill_name_list(
         (user_doc.metadata or {}).get(disabled_key, [])
     )

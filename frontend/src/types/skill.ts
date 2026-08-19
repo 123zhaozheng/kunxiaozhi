@@ -37,6 +37,7 @@ export interface UserSkillDetail {
   tags?: string[];
   is_published?: boolean;
   marketplace_is_active?: boolean;
+  installed_from?: "manual" | "marketplace" | "builtin";
   is_builtin?: boolean;
   is_favorite?: boolean;
   is_pinned?: boolean;

@@ -10,7 +10,7 @@ test("buildSkillListUrl includes pagination and search params", () => {
   );
 });
 
-test("buildSkillListUrl requests the effective Builtin projection when enabled", () => {
+test("buildSkillListUrl still accepts includeBuiltin as a compatibility query", () => {
   assert.equal(
     buildSkillListUrl({ includeBuiltin: true }),
     "/api/skills/?include_builtin=true",

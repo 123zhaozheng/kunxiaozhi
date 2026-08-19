@@ -309,12 +309,26 @@ async def test_update_not_found_404() -> None:
 
 
 @pytest.mark.asyncio
-async def test_delete_skill_invalidates_cache() -> None:
+async def test_delete_skill_invalidates_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     storage = _FakeStorage()
+    storage.get_result = _skill("planner")
+    fanout: list[str] = []
+
+    async def _fanout(name: str, storage=None):
+        fanout.append(name)
+        return 2
+
+    async def _namespace(name: str):
+        fanout.append(f"s3:{name}")
+
+    monkeypatch.setattr(builtin_routes, "delete_skill_name_from_all_users", _fanout)
+    monkeypatch.setattr(builtin_routes, "delete_builtin_namespace_objects", _namespace)
     res = await builtin_routes.delete_builtin_skill(
         "planner", user=_admin(), builtin_storage=storage
     )
     assert storage.invalidated == 1
+    assert storage.deleted_name == "planner"
+    assert fanout == ["planner", "s3:planner"]
     assert "deleted" in res["message"]
 
 

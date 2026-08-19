@@ -289,12 +289,6 @@ async def install_marketplace_skill(
     if not marketplace_skill.is_active and marketplace_skill.created_by != user.sub:
         raise HTTPException(status_code=403, detail="This skill has been deactivated")
 
-    # Builtin Skills are centrally managed and read-only.  Do not materialize
-    # a writable personal copy through Marketplace installation.
-    if not await storage.list_skill_file_paths(name, user.sub):
-        if await storage.get_builtin_skill_for_user(name, user.sub):
-            raise HTTPException(status_code=403, detail="Builtin skill is read-only")
-
     # 2. 检查用户是否已安装（检查 __meta__ 或文件是否存在）
     existing_meta = await storage.get_skill_meta(name, user.sub)
     if existing_meta:

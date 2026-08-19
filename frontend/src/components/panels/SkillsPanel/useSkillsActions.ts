@@ -252,7 +252,7 @@ export function useSkillsActions() {
   };
 
   const handleSelectAll = () => {
-    const selectableSkills = filteredSkills.filter((skill) => !skill.is_builtin);
+    const selectableSkills = filteredSkills;
     if (selectedNames.size === selectableSkills.length) {
       setSelectedNames(new Set());
     } else {

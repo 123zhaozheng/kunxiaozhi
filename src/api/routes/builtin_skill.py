@@ -25,6 +25,10 @@ from src.api.routes.skill import (
 from src.api.routes.upload import _read_upload_file_limited
 from src.infra.async_utils import run_blocking_io
 from src.infra.skill.builtin import BuiltinSkillStorage
+from src.infra.skill.builtin_copy import (
+    delete_builtin_namespace_objects,
+    delete_skill_name_from_all_users,
+)
 from src.infra.skill.marketplace import MarketplaceStorage
 from src.infra.skill.types import (
     BuiltinSkill,
@@ -234,9 +238,14 @@ async def delete_builtin_skill(
     user: TokenPayload = Depends(require_permissions("manage_builtin_skills")),
     builtin_storage: BuiltinSkillStorage = Depends(get_builtin_storage),
 ):
-    """删除内置 Skill（元数据 + 文件）。"""
+    """删除内置 Skill（中央库 + 所有用户空间中的同名技能）。"""
+    existing = await builtin_storage.get_builtin_skill(name)
+    if existing is None:
+        raise HTTPException(status_code=404, detail=f"Builtin skill '{name}' not found")
+    await delete_skill_name_from_all_users(name)
     deleted = await builtin_storage.delete_builtin_skill(name)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Builtin skill '{name}' not found")
+    await delete_builtin_namespace_objects(name)
     await builtin_storage.invalidate_cache()
     return {"message": f"Builtin skill '{name}' deleted"}

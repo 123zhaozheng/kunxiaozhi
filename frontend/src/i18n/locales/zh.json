@@ -2639,7 +2639,7 @@
     "allowedRolesHint": "留空表示对所有角色生效",
     "allRoles": "所有角色",
     "confirmDelete": "删除内置技能",
-    "confirmDeleteMessage": "确定要删除内置技能「{{name}}」吗？删除后将不再注入到任何角色。",
+    "confirmDeleteMessage": "确定要删除内置技能「{{name}}」吗？将按技能名从所有用户空间删除，包括碰巧同名的个人技能。",
     "create": "创建",
     "createFailed": "创建内置技能失败",
     "createSuccess": "已创建 {{count}} 个内置技能",

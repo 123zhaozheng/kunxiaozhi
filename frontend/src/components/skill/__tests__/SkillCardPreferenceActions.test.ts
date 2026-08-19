@@ -18,15 +18,16 @@ test("skill cards expose pin and favorite banner actions", () => {
   assert.match(componentSource, /t\("personaPresets\.favorite", "收藏"\)/);
 });
 
-test("builtin skill cards are marked read-only and excluded from write actions", () => {
+test("copied builtin skill cards expose the same write actions as personal skills", () => {
   assert.match(componentSource, /builtin: <ShieldCheck/);
-  assert.match(componentSource, /onTogglePreference && !skill\.is_builtin/);
-  assert.match(componentSource, /!skill\.is_builtin && \(/);
-  assert.match(componentSource, /onSelect && !skill\.is_builtin/);
+  assert.match(componentSource, /onTogglePreference \? \(/);
+  assert.match(componentSource, /selectionMode=\{selectionMode\}/);
+  assert.match(componentSource, /onSelect=\{onSelect \? \(\) => onSelect\(skill\.name\) : undefined\}/);
+  assert.doesNotMatch(componentSource, /skill\.is_builtin \? \(/);
+  assert.doesNotMatch(componentSource, /!skill\.is_builtin &&/);
 });
 
-test("builtin skill cards keep a read-only file viewer entry point", () => {
-  assert.match(componentSource, /skill\.is_builtin \? \(/);
+test("skill cards keep an edit entry point for all sources", () => {
   assert.match(componentSource, /onEdit\(skill\)/);
-  assert.match(componentSource, /aria-label=.*View files/);
+  assert.match(componentSource, /t\("skills\.card\.edit"\)/);
 });

@@ -29,7 +29,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Sandbox Provider Integration](./sandbox-providers.md) | Pluggable sandbox provider kit (Daytona/E2B/OpenSandbox): backend+factory+adapter+dispatch, sync-SDK wrapping, cross-session reuse | Filled |
 | [Marketplace Skills in Sandboxes](./marketplace-sandbox-skills.md) | Runtime tool/prompt gating, real work-dir installation, S3 binary materialization, atomic completeness | Filled |
 | [Public Persona Marketplace Skills](./persona-marketplace-skills.md) | Exact-name Persona Harness hints resolved from active Marketplace metadata; no persistent materialization or runtime overlay | Filled |
-| [Builtin Skill Effective Projection](./builtin-skills.md) | Role-scoped read-only Builtin Skills, user-name shadowing, isolated preferences, and cache invalidation | Filled |
+| [Builtin Skill Materialization](./builtin-skills.md) | Role-matched lazy copy into user `skill_files`, copy-once skip, global delete-by-name | Filled |
 | [Tracing Provider Integration](./tracing-providers.md) | Mutually exclusive LangSmith/Phoenix selector, derived SDK env, Phoenix lifecycle, and admin settings contract | Filled |
 | [Agent Harness Localization](./agent-harness.md) | Default Chinese concise harness localization, model-view schema localization, dynamic task/todo contracts, import boundary | Filled |
 | [read_document Dispatch](./read-document-dispatch.md) | File-type dispatch (MinerU / plain-text / sandbox-guidance), charset-normalizer short-CJK gotcha | Filled |

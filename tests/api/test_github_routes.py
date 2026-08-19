@@ -222,7 +222,7 @@ async def test_install_github_skills_rejects_too_many_requested_names(
 
 
 @pytest.mark.asyncio
-async def test_install_github_skills_rejects_builtin_name(
+async def test_install_github_skills_allows_builtin_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def _scan(*args, **kwargs):
@@ -235,12 +235,19 @@ async def test_install_github_skills_rejects_builtin_name(
         async def get_skill_files(self, name: str, user_id: str):
             return {}
 
-        async def get_builtin_skill_for_user(self, name: str, user_id: str):
-            return {"name": name, "files": {"SKILL.md": "builtin"}}
+        async def create_user_skill(self, skill_name, files, user_id, **kwargs):
+            self.created = skill_name
 
+        async def delete_skill_files(self, skill_name, user_id):
+            return None
+
+        async def invalidate_user_cache(self, user_id: str):
+            return None
+
+    storage = _Storage()
     monkeypatch.setattr(github, "scan_for_skills", _scan)
     monkeypatch.setattr(github, "fetch_all_files_recursive", _files)
-    monkeypatch.setattr(github, "SkillStorage", _Storage)
+    monkeypatch.setattr(github, "SkillStorage", lambda: storage)
 
     result = await github.install_github_skills(
         github.GitHubInstallRequest(
@@ -250,5 +257,6 @@ async def test_install_github_skills_rejects_builtin_name(
         user=type("User", (), {"sub": "user-1"})(),
     )
 
-    assert result.installed == []
-    assert result.errors == ["Builtin skill 'builtin-planner' is read-only"]
+    assert result.installed == ["builtin-planner"]
+    assert result.errors == []
+    assert storage.created == "builtin-planner"

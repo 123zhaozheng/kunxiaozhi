@@ -2639,7 +2639,7 @@
     "allowedRolesHint": "Leave empty to inject for all roles",
     "allRoles": "All roles",
     "confirmDelete": "Delete Built-in Skill",
-    "confirmDeleteMessage": "Are you sure you want to delete built-in skill \"{{name}}\"? It will no longer be injected into any role.",
+    "confirmDeleteMessage": "Are you sure you want to delete built-in skill \"{{name}}\"? This removes that name from ALL user spaces, including coincidental personal skills with the same name.",
     "create": "Create",
     "createFailed": "Failed to create built-in skill",
     "createSuccess": "Created {{count}} built-in skill(s)",

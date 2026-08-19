@@ -77,25 +77,37 @@ async def test_create_marketplace_skill_rejects_total_file_content_before_sync(
 
 
 @pytest.mark.asyncio
-async def test_install_marketplace_skill_rejects_builtin_name() -> None:
+async def test_install_marketplace_skill_allows_builtin_name() -> None:
     class _Marketplace:
         async def get_marketplace_skill(self, name: str):
             return SimpleNamespace(is_active=True, created_by="other")
 
+        async def list_marketplace_file_paths(self, name: str):
+            return ["SKILL.md"]
+
+        async def iter_marketplace_file_batches(self, name: str):
+            yield {"SKILL.md": "marketplace"}
+
     class _Storage:
-        async def list_skill_file_paths(self, name: str, user_id: str):
-            return []
+        async def get_skill_meta(self, name: str, user_id: str):
+            return None
 
-        async def get_builtin_skill_for_user(self, name: str, user_id: str):
-            return {"name": name, "files": {"SKILL.md": "builtin"}}
+        async def set_skill_meta(self, name: str, user_id: str, **kwargs):
+            self.meta = kwargs
 
-    with pytest.raises(HTTPException) as exc:
-        await marketplace_routes.install_marketplace_skill(
-            "builtin-planner",
-            user=_publisher(),
-            marketplace=_Marketplace(),
-            storage=_Storage(),
-        )
+        async def upsert_skill_files_batch(self, name, files, user_id):
+            return len(files)
 
-    assert exc.value.status_code == 403
-    assert exc.value.detail == "Builtin skill is read-only"
+        async def invalidate_user_cache(self, user_id: str):
+            return None
+
+    storage = _Storage()
+    result = await marketplace_routes.install_marketplace_skill(
+        "builtin-planner",
+        user=_publisher(),
+        marketplace=_Marketplace(),
+        storage=storage,
+    )
+
+    assert result["skill_name"] == "builtin-planner"
+    assert result["file_count"] == 1

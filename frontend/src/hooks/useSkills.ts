@@ -223,7 +223,9 @@ export function useSkills(options?: {
             files: detail.files || [],
             enabled: detail.enabled ?? true,
             file_count: detail.files?.length || 0,
-            installed_from: detail.is_builtin ? "builtin" : "manual",
+            installed_from:
+              detail.installed_from ||
+              (detail.is_builtin ? "builtin" : "manual"),
             created_at: undefined,
             updated_at: undefined,
             is_published: detail.is_published || false,
@@ -284,7 +286,9 @@ export function useSkills(options?: {
             files: detail.files || [],
             enabled: detail.enabled ?? true,
             file_count: detail.files?.length || 0,
-            installed_from: detail.is_builtin ? "builtin" : "manual",
+            installed_from:
+              detail.installed_from ||
+              (detail.is_builtin ? "builtin" : "manual"),
             created_at: undefined,
             updated_at: undefined,
             is_published: detail.is_published || false,

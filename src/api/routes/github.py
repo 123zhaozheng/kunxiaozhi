@@ -499,10 +499,6 @@ async def install_github_skills(
                 errors.append(f"Skill '{skill_name}' already exists")
                 continue
 
-            if await storage.get_builtin_skill_for_user(skill_name, user.sub):
-                errors.append(f"Builtin skill '{skill_name}' is read-only")
-                continue
-
             # 保存文件
             try:
                 await storage.create_user_skill(

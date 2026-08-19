@@ -613,3 +613,95 @@ async def test_sync_skill_files_only_scans_removed_binary_refs_before_delete(
     ]
     assert len(collection.bulk_operations) == 2
     assert deleted_s3 == ["skills/user-1/planner/old.png"]
+
+
+class _DeleteSkillFilesCollection:
+    def __init__(self, docs: list[dict[str, Any]]) -> None:
+        self.docs = docs
+        self.delete_many_calls: list[dict[str, Any]] = []
+
+    def find(self, query: dict[str, Any], projection: dict[str, int] | None = None):
+        _ = query, projection
+        return _AsyncCursor(list(self.docs))
+
+    async def delete_many(self, query: dict[str, Any]):
+        self.delete_many_calls.append(query)
+
+
+@pytest.mark.asyncio
+async def test_delete_skill_files_skips_shared_marketplace_and_builtin_s3_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.infra.skill.binary import build_binary_ref_content
+
+    deleted_s3: list[str] = []
+    collection = _DeleteSkillFilesCollection(
+        [
+            {
+                "content": build_binary_ref_content(
+                    "skills/user-1/planner/own.png", "image/png", 4
+                )
+            },
+            {
+                "content": build_binary_ref_content(
+                    "skills/_builtin/planner/icon.png", "image/png", 4
+                )
+            },
+            {
+                "content": build_binary_ref_content(
+                    "skills/publisher/planner/shared.png", "image/png", 4
+                )
+            },
+        ]
+    )
+    storage = SkillStorage()
+    monkeypatch.setattr(storage, "_get_files_collection", lambda: collection)
+
+    async def fake_delete_s3_object(storage_key: str) -> None:
+        deleted_s3.append(storage_key)
+
+    monkeypatch.setattr(storage, "_delete_s3_object", fake_delete_s3_object)
+
+    await storage.delete_skill_files("planner", "user-1")
+
+    assert deleted_s3 == ["skills/user-1/planner/own.png"]
+    assert collection.delete_many_calls == [
+        {"skill_name": "planner", "user_id": "user-1"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_delete_skill_and_meta_skips_shared_marketplace_s3_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.infra.skill.binary import build_binary_ref_content
+
+    deleted_s3: list[str] = []
+    collection = _DeleteSkillFilesCollection(
+        [
+            {
+                "content": build_binary_ref_content(
+                    "skills/user-2/planner/own.png", "image/png", 4
+                )
+            },
+            {
+                "content": build_binary_ref_content(
+                    "skills/publisher/planner/shared.png", "image/png", 4
+                )
+            },
+        ]
+    )
+    storage = SkillStorage()
+    monkeypatch.setattr(storage, "_get_files_collection", lambda: collection)
+
+    async def fake_delete_s3_object(storage_key: str) -> None:
+        deleted_s3.append(storage_key)
+
+    monkeypatch.setattr(storage, "_delete_s3_object", fake_delete_s3_object)
+
+    await storage.delete_skill_and_meta("planner", "user-2")
+
+    assert deleted_s3 == ["skills/user-2/planner/own.png"]
+    assert collection.delete_many_calls == [
+        {"skill_name": "planner", "user_id": "user-2"}
+    ]
