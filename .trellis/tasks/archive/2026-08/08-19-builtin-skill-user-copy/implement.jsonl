@@ -1,0 +1,9 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/builtin-skills.md", "reason": "Current projection contract to replace with materialize-to-user-space"}
+{"file": ".trellis/tasks/08-19-builtin-skill-user-copy/prd.md", "reason": "Approved product contract: lazy copy-once, global delete-by-name"}
+{"file": ".trellis/tasks/08-19-builtin-skill-user-copy/design.md", "reason": "Copy/delete/VFS data flow and S3 clone rules"}
+{"file": ".trellis/tasks/08-19-builtin-skill-user-copy/research/current-injection-and-vfs.md", "reason": "Prompt vs /skills VFS gap"}
+{"file": ".trellis/tasks/08-19-builtin-skill-user-copy/research/delete-and-user-copy-paths.md", "reason": "Global delete, overwrite, binary-ref clone"}
+{"file": ".trellis/tasks/08-19-builtin-skill-user-copy/research/inject-timing-and-roles.md", "reason": "Lazy hooks, eligibility, quota, disable keys"}
+{"file": ".trellis/tasks/08-19-builtin-skill-user-copy/research/risks-and-objections.md", "reason": "Cache invalidation and leftover frontend projection"}
+{"file": ".trellis/tasks/08-19-builtin-skill-user-copy/implement.md", "reason": "Execution checklist and validation commands"}

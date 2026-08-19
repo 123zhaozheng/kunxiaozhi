@@ -1,0 +1,5 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/builtin-skills.md", "reason": "Verify new materialize contract against old projection tests"}
+{"file": ".trellis/tasks/08-19-builtin-skill-user-copy/prd.md", "reason": "Acceptance: copy-once, global delete, VFS parity"}
+{"file": ".trellis/tasks/08-19-builtin-skill-user-copy/design.md", "reason": "No shared S3 refs; skip installed_from=builtin; invalidate per user"}
+{"file": ".trellis/tasks/08-19-builtin-skill-user-copy/research/risks-and-objections.md", "reason": "Catch projection leftovers and cache misses"}
