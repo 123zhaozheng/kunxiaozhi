@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 42
+- **Total Sessions**: 43
 - **Last Active**: 2026-08-19
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1222 | Active |
+| `journal-1.md` | ~1243 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 43 | 2026-08-19 | 提交 Trellis Cursor 平台适配 | `3d517de9` | `main` |
 | 42 | 2026-08-19 | 完成 OpenSandbox 多节点调度与管理 | `c5cc5321`, `7272ba88`, `22a57737` | `main` |
 | 41 | 2026-08-18 | 完善密码设置提示与首次登录体验 | `b8877508`, `e0c15420`, `448d5e49` | `main` |
 | 40 | 2026-08-18 | Fix create-user password feedback | `e758013b`, `a88c4b1e`, `922c32fc` | `main` |

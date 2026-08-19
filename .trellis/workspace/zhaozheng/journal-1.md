@@ -1220,3 +1220,24 @@ Fixed create-user password save failures so the modal stays open with localized 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 43: 提交 Trellis Cursor 平台适配
+
+**Date**: 2026-08-19
+**Task**: 提交 Trellis Cursor 平台适配
+**Branch**: `main`
+
+### Summary
+
+提交 Trellis 0.6.12 生成的 Cursor hooks、commands、agents 和 skills；清理模板哈希中的私有运行时条目，并验证 52 个生成文件哈希、hook 引用及 Python 语法。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3d517de9` | (see git log) |
+
+### Status
+
+[OK] **Completed**
