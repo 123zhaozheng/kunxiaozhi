@@ -1262,3 +1262,37 @@ Fixed create-user password save failures so the modal stays open with localized 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 45: Redis Sentinel dual-mode
+
+**Date**: 2026-08-20
+**Task**: Redis Sentinel dual-mode
+**Branch**: `main`
+
+### Summary
+
+Optional Redis Sentinel via REDIS_SENTINEL_HOSTS/MASTER; empty fields keep REDIS_URL standalone. Check passed (28 pytest, ruff). Spec captured in redis-sentinel.md.
+
+### Main Changes
+
+- Factory and ARQ branch onto Sentinel.master_for when both sentinel fields are set
+- Partial sentinel config and ARQ distinct sentinel password fail closed
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `715de2a2` | (see git log) |
+
+### Testing
+
+- [OK] uv run pytest tests/infra/test_redis_storage.py tests/infra/task/test_arq_settings.py tests/infra/task/test_arq_runtime.py — 28 passed
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Production: set hosts+master, keep REDIS_URL path for db, restart; leave REDIS_SENTINEL_PASSWORD empty on arq 0.28 unless passwords match REDIS_PASSWORD
