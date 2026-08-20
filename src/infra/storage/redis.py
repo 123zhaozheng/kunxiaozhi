@@ -5,9 +5,11 @@ Redis 存储实现
 import json
 from functools import lru_cache
 from typing import Any, Optional
+from urllib.parse import unquote, urlparse
 
 import redis.asyncio as redis
 from redis.asyncio import Redis
+from redis.asyncio.sentinel import Sentinel
 
 from src.infra.async_utils import run_blocking_io
 from src.infra.logging import get_logger
@@ -39,6 +41,87 @@ def _parse_stream_read_result_sync(
     return [(stream_key, _parse_stream_entries_sync(entries)) for stream_key, entries in result]
 
 
+_PARTIAL_SENTINEL_CONFIG_ERROR = (
+    "Redis Sentinel is partially configured: set both REDIS_SENTINEL_HOSTS and "
+    "REDIS_SENTINEL_MASTER, or leave both empty to use REDIS_URL."
+)
+
+
+def _redis_settings(config: Any | None = None) -> Any:
+    return settings if config is None else config
+
+
+def _setting_text(config: Any, name: str) -> str:
+    return str(getattr(config, name, None) or "").strip()
+
+
+def sentinel_enabled(config: Any | None = None) -> bool:
+    """Return True when both Sentinel fields are set; raise if only one is set."""
+    config = _redis_settings(config)
+    hosts = _setting_text(config, "REDIS_SENTINEL_HOSTS")
+    master = _setting_text(config, "REDIS_SENTINEL_MASTER")
+    if hosts and master:
+        return True
+    if hosts or master:
+        raise ValueError(_PARTIAL_SENTINEL_CONFIG_ERROR)
+    return False
+
+
+def parse_sentinel_hosts(config: Any | None = None) -> list[tuple[str, int]]:
+    """Parse REDIS_SENTINEL_HOSTS as comma-separated host:port pairs."""
+    raw = _setting_text(_redis_settings(config), "REDIS_SENTINEL_HOSTS")
+    if not raw:
+        return []
+    hosts: list[tuple[str, int]] = []
+    for token in raw.split(","):
+        entry = token.strip()
+        if not entry:
+            raise ValueError("REDIS_SENTINEL_HOSTS contains an empty host entry")
+        host, sep, port = entry.rpartition(":")
+        if not sep or not host or not port:
+            raise ValueError(f"Invalid REDIS_SENTINEL_HOSTS entry {entry!r}; expected host:port")
+        try:
+            hosts.append((host, int(port)))
+        except ValueError as exc:
+            raise ValueError(f"Invalid REDIS_SENTINEL_HOSTS port in {entry!r}") from exc
+    return hosts
+
+
+def redis_db_index(config: Any | None = None) -> int:
+    """Return the Redis database index from REDIS_URL path."""
+    parsed = urlparse(_redis_settings(config).REDIS_URL)
+    if parsed.path and parsed.path != "/":
+        return int(parsed.path.lstrip("/"))
+    return 0
+
+
+def redis_node_password(config: Any | None = None) -> str | None:
+    """Return the data-node password, preferring REDIS_PASSWORD over REDIS_URL."""
+    config = _redis_settings(config)
+    if getattr(config, "REDIS_PASSWORD", None):
+        return str(config.REDIS_PASSWORD)
+    parsed = urlparse(config.REDIS_URL)
+    return unquote(parsed.password) if parsed.password else None
+
+
+def _sentinel_master_name(config: Any | None = None) -> str:
+    return _setting_text(_redis_settings(config), "REDIS_SENTINEL_MASTER")
+
+
+def _sentinel_process_kwargs(
+    config: Any | None = None,
+    *,
+    node_kwargs: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    password = _setting_text(_redis_settings(config), "REDIS_SENTINEL_PASSWORD")
+    if not password:
+        return None
+    source = node_kwargs if node_kwargs is not None else _redis_pool_kwargs()
+    kwargs = {key: value for key, value in source.items() if key.startswith("socket_")}
+    kwargs["password"] = password
+    return kwargs
+
+
 def _redis_pool_kwargs(*, socket_timeout: Any = _UNSET) -> dict[str, Any]:
     kwargs = {
         "encoding": "utf-8",
@@ -55,15 +138,52 @@ def _redis_pool_kwargs(*, socket_timeout: Any = _UNSET) -> dict[str, Any]:
     return kwargs
 
 
+def _sentinel_node_connection_kwargs(*, socket_timeout: Any = _UNSET) -> dict[str, Any]:
+    kwargs = _redis_pool_kwargs(socket_timeout=socket_timeout)
+    parsed = urlparse(settings.REDIS_URL)
+    kwargs["db"] = redis_db_index()
+    if parsed.scheme == "rediss":
+        kwargs["ssl"] = True
+    if parsed.username:
+        kwargs["username"] = unquote(parsed.username)
+    password = redis_node_password()
+    if password:
+        kwargs["password"] = password
+    else:
+        kwargs.pop("password", None)
+    return kwargs
+
+
+def _create_sentinel_master_client(
+    *,
+    socket_timeout: Any = _UNSET,
+    auto_close_connection_pool: bool = True,
+) -> Redis:
+    node_kwargs = _sentinel_node_connection_kwargs(socket_timeout=socket_timeout)
+    sentinel = Sentinel(
+        parse_sentinel_hosts(),
+        sentinel_kwargs=_sentinel_process_kwargs(node_kwargs=node_kwargs),
+        **node_kwargs,
+    )
+    client = sentinel.master_for(_sentinel_master_name())
+    client.auto_close_connection_pool = auto_close_connection_pool
+    return client
+
+
 @lru_cache
 def get_redis_connection_pool():
     """Get the shared Redis connection pool for this process."""
+    if sentinel_enabled():
+        client = _create_sentinel_master_client(auto_close_connection_pool=False)
+        return client.connection_pool
     return redis.ConnectionPool.from_url(settings.REDIS_URL, **_redis_pool_kwargs())
 
 
 def create_redis_client(*, isolated_pool: bool = False, socket_timeout: Any = _UNSET) -> Redis:
     """Create a Redis client with the project's standard connection settings."""
     if isolated_pool:
+        if sentinel_enabled():
+            return _create_sentinel_master_client(socket_timeout=socket_timeout)
         return Redis(
             connection_pool=redis.ConnectionPool.from_url(
                 settings.REDIS_URL,

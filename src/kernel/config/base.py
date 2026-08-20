@@ -166,6 +166,9 @@ class Settings(BaseSettings):
     # Redis Settings
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_PASSWORD: Optional[str] = None
+    REDIS_SENTINEL_HOSTS: str = ""
+    REDIS_SENTINEL_MASTER: str = ""
+    REDIS_SENTINEL_PASSWORD: Optional[str] = None
 
     # Task execution settings
     TASK_BACKEND: str = "arq"  # local | arq

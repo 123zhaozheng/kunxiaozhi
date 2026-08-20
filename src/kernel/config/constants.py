@@ -24,6 +24,9 @@ RESTART_REQUIRED_SETTINGS = {
     "MONGODB_DB",
     "REDIS_URL",
     "REDIS_PASSWORD",
+    "REDIS_SENTINEL_HOSTS",
+    "REDIS_SENTINEL_MASTER",
+    "REDIS_SENTINEL_PASSWORD",
     "JWT_SECRET_KEY",
     "WECOM_RUNTIME_MODE",
     # OTEL instrumentor / TracerProvider cannot be hot-swapped

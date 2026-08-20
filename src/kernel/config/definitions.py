@@ -972,6 +972,28 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "default": "",
         "is_sensitive": True,
     },
+    "REDIS_SENTINEL_HOSTS": {
+        "type": SettingType.STRING,
+        "category": SettingCategory.REDIS,
+        "subcategory": "connection",
+        "description": "settingDesc.REDIS_SENTINEL_HOSTS",
+        "default": "",
+    },
+    "REDIS_SENTINEL_MASTER": {
+        "type": SettingType.STRING,
+        "category": SettingCategory.REDIS,
+        "subcategory": "connection",
+        "description": "settingDesc.REDIS_SENTINEL_MASTER",
+        "default": "",
+    },
+    "REDIS_SENTINEL_PASSWORD": {
+        "type": SettingType.STRING,
+        "category": SettingCategory.REDIS,
+        "subcategory": "connection",
+        "description": "settingDesc.REDIS_SENTINEL_PASSWORD",
+        "default": "",
+        "is_sensitive": True,
+    },
     "TASK_BACKEND": {
         "type": SettingType.SELECT,
         "category": SettingCategory.REDIS,

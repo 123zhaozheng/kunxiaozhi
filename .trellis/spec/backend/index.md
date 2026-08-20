@@ -31,6 +31,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Public Persona Marketplace Skills](./persona-marketplace-skills.md) | Exact-name Persona Harness hints resolved from active Marketplace metadata; no persistent materialization or runtime overlay | Filled |
 | [Builtin Skill Materialization](./builtin-skills.md) | Role-matched lazy copy into user `skill_files`, copy-once skip, global delete-by-name | Filled |
 | [Tracing Provider Integration](./tracing-providers.md) | Mutually exclusive LangSmith/Phoenix selector, derived SDK env, Phoenix lifecycle, and admin settings contract | Filled |
+| [Redis Sentinel Dual Mode](./redis-sentinel.md) | Optional Sentinel vs standalone `REDIS_URL`; factory/ARQ fail-closed partial config | Filled |
 | [Agent Harness Localization](./agent-harness.md) | Default Chinese concise harness localization, model-view schema localization, dynamic task/todo contracts, import boundary | Filled |
 | [read_document Dispatch](./read-document-dispatch.md) | File-type dispatch (MinerU / plain-text / sandbox-guidance), charset-normalizer short-CJK gotcha | Filled |
 | [Idle Login Sessions](./auth-idle-sessions.md) | Redis-backed per-login idle timeout, JWT `sid`, atomic activity, refresh/HTTP/SSE/WebSocket enforcement | Filled |
