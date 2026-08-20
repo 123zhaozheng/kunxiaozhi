@@ -1329,3 +1329,39 @@ Optional Redis Sentinel via REDIS_SENTINEL_HOSTS/MASTER; empty fields keep REDIS
 ### Next Steps
 
 - 无；任务已归档
+
+
+## Session 47: 输入框 @ 角色修复与 / 技能强调
+
+**Date**: 2026-08-20
+**Task**: 输入框 @ 角色修复与 / 技能强调
+**Branch**: `main`
+
+### Summary
+
+修复欢迎页 @ 角色浮层；斜杠菜单强调已启用技能，发送后芯片清空，气泡隐藏 must-use 前缀。
+
+### Main Changes
+
+- 欢迎页 mention 激活即弹出角色浮层，不再只筛卡片
+- 斜杠菜单列出 /goal 与已启用技能；选中技能加芯片、去掉斜杠查询、不发送
+- 发送时在用户原文前注入 must-use 强调前缀；气泡只展示胶囊+原文，复制不含前缀
+- 发送成功后清空输入框芯片；沙箱容量失败还原输入、附件和芯片
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `65e9124c` | (see git log) |
+
+### Testing
+
+- [OK] npx tsx --test 相关 chat 测试通过；eslint/tsc 绿
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 无；任务已归档
