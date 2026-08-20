@@ -1,0 +1,5 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/08-20-login-announcement-popup/prd.md", "reason": "Acceptance: auto-open, snooze today, forever dismiss"}
+{"file": ".trellis/tasks/08-20-login-announcement-popup/design.md", "reason": "Legacy dismiss=forever; popup missing=false; limit=5 trap"}
+{"file": ".trellis/tasks/08-20-login-announcement-popup/research/current-notification-flow.md", "reason": "Must not hide snoozed items from /active"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "popup/should_popup contract across layers"}

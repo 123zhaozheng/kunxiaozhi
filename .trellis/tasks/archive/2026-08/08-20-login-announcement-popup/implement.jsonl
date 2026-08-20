@@ -1,0 +1,6 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/08-20-login-announcement-popup/prd.md", "reason": "Popup requirements and acceptance"}
+{"file": ".trellis/tasks/08-20-login-announcement-popup/design.md", "reason": "Schema, dismiss snooze, auto-open contract"}
+{"file": ".trellis/tasks/08-20-login-announcement-popup/implement.md", "reason": "Ordered checklist and validation"}
+{"file": ".trellis/tasks/08-20-login-announcement-popup/research/current-notification-flow.md", "reason": "Current silent announcement and forever-dismiss path"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Schema/API/frontend popup field must stay aligned"}
