@@ -6,6 +6,7 @@ interface ToolbarChipProps {
   label: string;
   onClick: () => void;
   onClear?: () => void;
+  clearLabel?: string;
 }
 
 export function ToolbarChip({
@@ -13,6 +14,7 @@ export function ToolbarChip({
   label,
   onClick,
   onClear,
+  clearLabel,
 }: ToolbarChipProps) {
   return (
     <button
@@ -29,6 +31,7 @@ export function ToolbarChip({
               <X
                 size={18}
                 className="absolute inset-0 m-auto opacity-0 transition-opacity group-hover:opacity-100"
+                aria-label={clearLabel}
                 onClick={(e) => {
                   e.stopPropagation();
                   onClear();

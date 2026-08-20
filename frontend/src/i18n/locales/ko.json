@@ -649,6 +649,11 @@
     "helpDocs": "도움말 문서",
     "keyboardShortcuts": "키보드 단축키",
     "mentionNoResults": "일치하는 페르소나가 없습니다",
+    "slashNoMatches": "일치하는 스킬이 없습니다",
+    "skillEmphasis": {
+      "mustUse": "{{names}} 스킬을 반드시 사용하세요.",
+      "remove": "스킬 {{name}} 제거"
+    },
     "mermaid": "Mermaid",
     "mermaidDiagram": "Mermaid 다이어그램",
     "message": {

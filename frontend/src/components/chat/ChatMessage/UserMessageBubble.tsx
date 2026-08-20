@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { clsx } from "clsx";
-import { Copy, Check, GitBranch } from "lucide-react";
+import { Copy, Check, GitBranch, Boxes } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { AttachmentCard, ImageViewer } from "../../common";
 import type { MessageAttachment } from "../../../types";
@@ -10,6 +10,7 @@ import { openAttachmentPreview } from "../attachmentPreviewStore";
 import { getUserMessageActionButtonVisibilityClass } from "./userMessageBubbleState";
 import { copyToClipboard } from "../../../utils/clipboard";
 import { useSessionImageGallery } from "./sessionImageGallery";
+import { parseEmphasizedUserMessage } from "../chatInputSkillEmphasis";
 
 // User message bubble component (with copy function, supports markdown rendering) - ChatGPT style
 export function UserMessageBubble({
@@ -28,9 +29,13 @@ export function UserMessageBubble({
   const [imageViewerSrc, setImageViewerSrc] = useState<string | null>(null);
   const sessionImageGallery = useSessionImageGallery();
 
+  const parsed = parseEmphasizedUserMessage(content ?? "");
+  const showSkillPill = parsed.skillNames.length > 0;
+  const visibleContent = showSkillPill ? parsed.visibleContent : content;
+
   const handleCopy = async () => {
-    if (!content) return;
-    await copyToClipboard(content);
+    if (!visibleContent) return;
+    await copyToClipboard(visibleContent);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -80,23 +85,48 @@ export function UserMessageBubble({
           {hasAttachments && renderAttachments()}
 
           {/* Message bubble */}
-          {hasContent && (
-            <div
-              className="rounded-3xl max-w-full px-5 py-2 shadow-sm border"
-              style={{
-                background:
-                  "linear-gradient(135deg, var(--theme-primary-light), var(--theme-bg))",
-                borderColor: "var(--theme-border)",
-              }}
-            >
+          {hasContent &&
+            (showSkillPill ? (
               <div
-                className="leading-relaxed text-[15px] sm:text-base"
-                style={{ color: "var(--theme-text)" }}
+                className="inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-full border px-3 py-1.5"
+                style={{
+                  backgroundColor: "var(--theme-bg-card)",
+                  borderColor: "var(--theme-border)",
+                }}
               >
-                <MarkdownContent content={content!} />
+                <Boxes
+                  size={14}
+                  className="shrink-0 text-blue-600 dark:text-blue-400"
+                />
+                <span className="font-semibold text-blue-600 dark:text-blue-400">
+                  {parsed.skillNames.join(" ")}
+                </span>
+                {parsed.visibleContent ? (
+                  <span
+                    className="min-w-0 whitespace-pre-wrap break-words text-[15px] sm:text-base"
+                    style={{ color: "var(--theme-text)" }}
+                  >
+                    {parsed.visibleContent}
+                  </span>
+                ) : null}
               </div>
-            </div>
-          )}
+            ) : (
+              <div
+                className="rounded-3xl max-w-full px-5 py-2 shadow-sm border"
+                style={{
+                  background:
+                    "linear-gradient(135deg, var(--theme-primary-light), var(--theme-bg))",
+                  borderColor: "var(--theme-border)",
+                }}
+              >
+                <div
+                  className="leading-relaxed text-[15px] sm:text-base"
+                  style={{ color: "var(--theme-text)" }}
+                >
+                  <MarkdownContent content={content!} />
+                </div>
+              </div>
+            ))}
 
           {/* Action buttons - show on hover */}
           <div className="flex justify-end mt-2 gap-1">

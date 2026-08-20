@@ -649,6 +649,11 @@
     "helpDocs": "ヘルプドキュメント",
     "keyboardShortcuts": "キーボードショートカット",
     "mentionNoResults": "一致するペルソナがありません",
+    "slashNoMatches": "一致するスキルがありません",
+    "skillEmphasis": {
+      "mustUse": "{{names}}スキルを必ず使用してください。",
+      "remove": "スキル {{name}} を削除"
+    },
     "mermaid": "Mermaid",
     "mermaidDiagram": "Mermaid 図",
     "message": {

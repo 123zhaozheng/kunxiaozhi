@@ -675,6 +675,11 @@
     "helpDocs": "Help Docs",
     "keyboardShortcuts": "Keyboard Shortcuts",
     "mentionNoResults": "No matching personas",
+    "slashNoMatches": "No matching skills",
+    "skillEmphasis": {
+      "mustUse": "You must use {{names}}.",
+      "remove": "Remove skill {{name}}"
+    },
     "mermaid": "Mermaid",
     "mermaidDiagram": "Mermaid Diagram",
     "message": {

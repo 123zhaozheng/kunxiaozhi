@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
 import toast from "react-hot-toast";
-import { Ban, Target } from "lucide-react";
+import { Ban, Sparkles, Target, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ImageViewer } from "../common";
 import { ConfirmDialog } from "../common/ConfirmDialog";
@@ -26,9 +26,13 @@ import { getMentionPopupFixedPlacement } from "./chatInputViewport";
 import { FILE_CATEGORY_PERMISSIONS } from "./chatInputConstants";
 import {
   applySlashCommandSelection,
-  getMatchingSlashCommands,
+  getMatchingSlashItems,
+  getSlashCommandQuery,
+  stripSlashCommandQuery,
   type ChatInputSlashCommand,
+  type ChatInputSlashListItem,
 } from "./chatInputSlashCommands";
+import { buildEmphasizedUserMessage } from "./chatInputSkillEmphasis";
 import {
   consumePendingSelectionActionPrompt,
   SELECTION_ACTION_EVENT,
@@ -91,6 +95,11 @@ export const ChatInput = memo(function ChatInput({
   attachments: externalAttachments,
   onAttachmentsChange: externalOnAttachmentsChange,
   onMentionQueryChange,
+  emphasizedSkillNames = [],
+  onEmphasizeSkill,
+  onRemoveEmphasizedSkill,
+  onClearEmphasizedSkills,
+  onRestoreEmphasizedSkills,
   pendingInput,
   onPendingInputConsumed,
   className,
@@ -130,11 +139,14 @@ export const ChatInput = memo(function ChatInput({
   const [contactAdminOpen, setContactAdminOpen] = useState(false);
   const [capacityModalOpen, setCapacityModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [slashHighlightIndex, setSlashHighlightIndex] = useState(0);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const slashMenuRef = useRef<HTMLDivElement>(null);
   const previousAgentRef = useRef(currentAgent);
   const [cursorPosition, setCursorPosition] = useState(0);
+  const [slashMenuDismissed, setSlashMenuDismissed] = useState(false);
   const [mentionPopupPlacement, setMentionPopupPlacement] =
     useState<ReturnType<typeof getMentionPopupFixedPlacement>>(null);
   const { hasPermission } = useAuth();
@@ -361,11 +373,33 @@ export const ChatInput = memo(function ChatInput({
     };
   }, [selectedPersonaPresetId, personaPresets]);
 
-  const matchingSlashCommands = useMemo(
-    () => getMatchingSlashCommands(input, cursorPosition),
-    [input, cursorPosition],
+  const slashItems = useMemo(
+    () => getMatchingSlashItems(input, cursorPosition, skills),
+    [input, cursorPosition, skills],
   );
-  const slashCommandOpen = matchingSlashCommands.length > 0;
+  const slashQuery = getSlashCommandQuery(input, cursorPosition);
+  const slashCommandOpen = slashQuery !== null && !slashMenuDismissed;
+
+  useEffect(() => {
+    setSlashHighlightIndex(0);
+  }, [slashQuery, slashItems.length]);
+
+  useEffect(() => {
+    setSlashMenuDismissed(false);
+  }, [slashQuery]);
+
+  useEffect(() => {
+    if (!slashCommandOpen) return;
+    const handleMouseDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (slashMenuRef.current?.contains(target)) return;
+      if (textareaRef.current?.contains(target)) return;
+      setSlashMenuDismissed(true);
+    };
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => document.removeEventListener("mousedown", handleMouseDown);
+  }, [slashCommandOpen]);
 
   const applySlashCommand = useCallback(
     (command: ChatInputSlashCommand) => {
@@ -381,6 +415,42 @@ export const ChatInput = memo(function ChatInput({
       });
     },
     [cursorPosition, input, scheduleTextareaResize],
+  );
+
+  const applySlashSkill = useCallback(
+    (skillName: string) => {
+      if (!emphasizedSkillNames.includes(skillName)) {
+        onEmphasizeSkill?.(skillName);
+      }
+      const next = stripSlashCommandQuery(input, cursorPosition);
+      setInput(next.input);
+      setCursorPosition(next.cursorPosition);
+      requestAnimationFrame(() => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        textarea.focus();
+        textarea.selectionStart = textarea.selectionEnd = next.cursorPosition;
+        scheduleTextareaResize();
+      });
+    },
+    [
+      cursorPosition,
+      emphasizedSkillNames,
+      input,
+      onEmphasizeSkill,
+      scheduleTextareaResize,
+    ],
+  );
+
+  const applySlashItem = useCallback(
+    (item: ChatInputSlashListItem) => {
+      if (item.kind === "command") {
+        applySlashCommand(item.command);
+        return;
+      }
+      applySlashSkill(item.name);
+    },
+    [applySlashCommand, applySlashSkill],
   );
 
   const applyMentionSelection = useCallback(
@@ -434,6 +504,7 @@ export const ChatInput = memo(function ChatInput({
       const draft = input;
       const trimmed = input.trim();
       const draftAttachments = [...attachments];
+      const draftSkills = [...emphasizedSkillNames];
       let accepted = false;
       const handleAccepted = () => {
         if (accepted) return;
@@ -441,6 +512,7 @@ export const ChatInput = memo(function ChatInput({
         pushHistory(trimmed);
         setInput("");
         setAttachments([]);
+        onClearEmphasizedSkills?.();
         requestAnimationFrame(() => {
           if (textareaRef.current) {
             textareaRef.current.style.height = "auto";
@@ -451,7 +523,15 @@ export const ChatInput = memo(function ChatInput({
       setIsSubmitting(true);
       try {
         await onSend(
-          trimmed,
+          buildEmphasizedUserMessage(
+            trimmed,
+            emphasizedSkillNames,
+            (names) =>
+              t("chat.skillEmphasis.mustUse", {
+                names,
+                defaultValue: "请必须使用{{names}}技能。",
+              }),
+          ),
           agentOptionValues,
           draftAttachments,
           handleAccepted,
@@ -465,6 +545,7 @@ export const ChatInput = memo(function ChatInput({
           // typed admission error after accepting the input callback.
           setInput(draft);
           setAttachments(draftAttachments);
+          onRestoreEmphasizedSkills?.(draftSkills);
           setCapacityModalOpen(true);
           requestAnimationFrame(() => {
             const textarea = textareaRef.current;
@@ -481,10 +562,33 @@ export const ChatInput = memo(function ChatInput({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    const isComposing =
+      e.nativeEvent.isComposing || e.key === "Process" || e.keyCode === 229;
+    if (isComposing) return;
+
     if (slashCommandOpen) {
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (slashItems.length > 0) {
+          setSlashHighlightIndex(
+            (index) => (index - 1 + slashItems.length) % slashItems.length,
+          );
+        }
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (slashItems.length > 0) {
+          setSlashHighlightIndex((index) => (index + 1) % slashItems.length);
+        }
+        return;
+      }
       if (e.key === "Enter" || e.key === "Tab") {
         e.preventDefault();
-        applySlashCommand(matchingSlashCommands[0]);
+        if (slashItems.length > 0) {
+          const item = slashItems[slashHighlightIndex] ?? slashItems[0];
+          if (item) applySlashItem(item);
+        }
         return;
       }
       if (e.key === "Escape") {
@@ -668,37 +772,33 @@ export const ChatInput = memo(function ChatInput({
             disabled={isLoading || !canSend}
             embedded
           />
-          {mention.isActive &&
-            !onMentionQueryChange &&
-            mentionMode === "persona" && (
-              <MentionPopup
-                presets={mentionSearch.presets}
-                highlightedIndex={mention.highlightedIndex}
-                selectedPresetId={selectedPersonaPresetId}
-                isLoading={mentionSearch.isLoading}
-                isLoadingMore={mentionSearch.isLoadingMore}
-                hasMore={mentionSearch.hasMore}
-                onSelect={applyMentionSelection}
-                onHover={setMentionHighlight}
-                onClose={dismissMention}
-                onLoadMore={mentionSearch.loadMore}
-                placement={mentionPopupPlacement ?? undefined}
-              />
-            )}
-          {mention.isActive &&
-            !onMentionQueryChange &&
-            mentionMode === "team" && (
-              <TeamMentionPopup
-                teams={teamMentionSearch.teams}
-                highlightedIndex={mention.highlightedIndex}
-                selectedTeamId={selectedTeamId}
-                isLoading={teamMentionSearch.isLoading}
-                onSelect={applyTeamMentionSelection}
-                onHover={setMentionHighlight}
-                onClose={dismissMention}
-                placement={mentionPopupPlacement ?? undefined}
-              />
-            )}
+          {mention.isActive && mentionMode === "persona" && (
+            <MentionPopup
+              presets={mentionSearch.presets}
+              highlightedIndex={mention.highlightedIndex}
+              selectedPresetId={selectedPersonaPresetId}
+              isLoading={mentionSearch.isLoading}
+              isLoadingMore={mentionSearch.isLoadingMore}
+              hasMore={mentionSearch.hasMore}
+              onSelect={applyMentionSelection}
+              onHover={setMentionHighlight}
+              onClose={dismissMention}
+              onLoadMore={mentionSearch.loadMore}
+              placement={mentionPopupPlacement ?? undefined}
+            />
+          )}
+          {mention.isActive && mentionMode === "team" && (
+            <TeamMentionPopup
+              teams={teamMentionSearch.teams}
+              highlightedIndex={mention.highlightedIndex}
+              selectedTeamId={selectedTeamId}
+              isLoading={teamMentionSearch.isLoading}
+              onSelect={applyTeamMentionSelection}
+              onHover={setMentionHighlight}
+              onClose={dismissMention}
+              placement={mentionPopupPlacement ?? undefined}
+            />
+          )}
 
           <ChatInputAttachments
             attachments={attachments}
@@ -708,6 +808,36 @@ export const ChatInput = memo(function ChatInput({
           />
 
           <div className="px-2.5 pt-1">
+            {emphasizedSkillNames.length > 0 && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 pt-2">
+                {emphasizedSkillNames.map((name) => (
+                  <span
+                    key={name}
+                    className="group inline-flex min-w-0 items-center gap-1.5"
+                  >
+                    <Sparkles
+                      size={14}
+                      className="shrink-0"
+                      style={{ color: "var(--theme-text-secondary)" }}
+                    />
+                    <span className="max-w-48 truncate text-sm font-semibold text-blue-600 dark:text-blue-400 font-serif">
+                      {name}
+                    </span>
+                    <button
+                      type="button"
+                      className="inline-flex rounded p-0.5 text-stone-400 opacity-0 transition-opacity group-hover:opacity-100 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300"
+                      aria-label={t("chat.skillEmphasis.remove", {
+                        name,
+                        defaultValue: "移除技能 {{name}}",
+                      })}
+                      onClick={() => onRemoveEmphasizedSkill?.(name)}
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
             <div className="relative">
               <textarea
                 ref={textareaRef}
@@ -744,47 +874,77 @@ export const ChatInput = memo(function ChatInput({
           </div>
           {slashCommandOpen && (
             <div
+              ref={slashMenuRef}
               role="listbox"
-              className="absolute bottom-full left-1 z-30 mb-2 w-56 overflow-hidden rounded-xl border shadow-lg"
+              className="absolute bottom-full left-1 z-30 mb-2 w-72 max-w-[calc(100%-0.5rem)] overflow-hidden rounded-xl border shadow-lg"
               style={{
                 backgroundColor: "var(--theme-bg-card)",
                 borderColor: "var(--theme-border)",
                 color: "var(--theme-text)",
               }}
             >
-              {matchingSlashCommands.map((command) => (
-                <button
-                  key={command.id}
-                  type="button"
-                  role="option"
-                  aria-selected="true"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    applySlashCommand(command);
-                  }}
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors"
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor =
-                      "var(--theme-bg-hover, rgba(128,128,128,0.08))";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = "transparent";
-                  }}
+              {slashItems.length === 0 ? (
+                <div
+                  className="px-3 py-2 text-sm"
+                  style={{ color: "var(--theme-text-secondary)" }}
                 >
-                  <Target
-                    size={15}
-                    className="shrink-0"
-                    style={{ color: "var(--theme-primary)" }}
-                  />
-                  <span className="font-mono text-xs">{command.command}</span>
-                  <span
-                    className="min-w-0 flex-1 truncate"
-                    style={{ color: "var(--theme-text-secondary)" }}
+                  {t("chat.slashNoMatches", "没有匹配的技能")}
+                </div>
+              ) : (
+                slashItems.map((item, index) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="option"
+                    aria-selected={index === slashHighlightIndex}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      applySlashItem(item);
+                    }}
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors"
+                    style={{
+                      backgroundColor:
+                        index === slashHighlightIndex
+                          ? "var(--theme-bg-hover, rgba(128,128,128,0.08))"
+                          : "transparent",
+                    }}
+                    onMouseEnter={() => setSlashHighlightIndex(index)}
                   >
-                    {t(command.labelKey, command.fallbackLabel)}
-                  </span>
-                </button>
-              ))}
+                    {item.kind === "command" ? (
+                      <Target
+                        size={15}
+                        className="shrink-0"
+                        style={{ color: "var(--theme-primary)" }}
+                      />
+                    ) : (
+                      <Sparkles
+                        size={15}
+                        className="shrink-0"
+                        style={{ color: "var(--theme-primary)" }}
+                      />
+                    )}
+                    <span
+                      className={
+                        item.kind === "command"
+                          ? "font-mono text-xs"
+                          : "truncate text-sm font-medium"
+                      }
+                    >
+                      {item.kind === "command"
+                        ? item.command.command
+                        : item.name}
+                    </span>
+                    <span
+                      className="min-w-0 flex-1 truncate"
+                      style={{ color: "var(--theme-text-secondary)" }}
+                    >
+                      {item.kind === "command"
+                        ? t(item.command.labelKey, item.command.fallbackLabel)
+                        : item.description}
+                    </span>
+                  </button>
+                ))
+              )}
             </div>
           )}
 

@@ -675,6 +675,11 @@
     "helpDocs": "帮助文档",
     "keyboardShortcuts": "键盘快捷键",
     "mentionNoResults": "没有匹配的角色",
+    "slashNoMatches": "没有匹配的技能",
+    "skillEmphasis": {
+      "mustUse": "请必须使用{{names}}技能。",
+      "remove": "移除技能 {{name}}"
+    },
     "mermaid": "Mermaid",
     "mermaidDiagram": "Mermaid 图表",
     "message": {

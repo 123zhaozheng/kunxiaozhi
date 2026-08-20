@@ -87,6 +87,11 @@ export interface ChatInputProps {
       | ((prev: MessageAttachment[]) => MessageAttachment[]),
   ) => void;
   onMentionQueryChange?: (query: string | null) => void;
+  emphasizedSkillNames?: string[];
+  onEmphasizeSkill?: (name: string) => void;
+  onRemoveEmphasizedSkill?: (name: string) => void;
+  onClearEmphasizedSkills?: () => void;
+  onRestoreEmphasizedSkills?: (names: string[]) => void;
   pendingInput?: string | null;
   onPendingInputConsumed?: () => void;
   className?: string;

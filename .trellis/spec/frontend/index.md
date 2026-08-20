@@ -28,6 +28,7 @@ This directory contains guidelines for frontend development. Fill in each file w
 | [Session History Cursor Pagination](../backend/session-history-pagination.md) | Shared backend/API/frontend history pagination, partial-failure, and cancellation contract | Filled |
 | [Announcement Login Popup](../backend/announcement-login-popup.md) | Auto-open from `getPopupEligible`, snooze on auto close only, forever dismiss without body | Filled |
 | [SOP History Restoration](./sop-history-restoration.md) | Latest-snapshot authority, approval-envelope metadata merge, canonical ordering, and live/history parity | Filled |
+| [Composer Mention and Slash Skills](./composer-mention-slash-skills.md) | Welcome `@` popup must not hide behind card filter; `/` prefixes must-use text without changing `enabled_skills` | Filled |
 
 ---
 

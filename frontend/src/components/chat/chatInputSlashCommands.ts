@@ -1,9 +1,22 @@
+import { skillMatchesQuery } from "../../utils/skillFilters";
+
 export interface ChatInputSlashCommand {
   id: "goal";
   command: "/goal";
   labelKey: string;
   fallbackLabel: string;
 }
+
+export interface SlashSkillCandidate {
+  name: string;
+  description: string;
+  tags: string[];
+  enabled: boolean;
+}
+
+export type ChatInputSlashListItem =
+  | { kind: "command"; id: string; command: ChatInputSlashCommand }
+  | { kind: "skill"; id: string; name: string; description: string };
 
 export const CHAT_INPUT_SLASH_COMMANDS: ChatInputSlashCommand[] = [
   {
@@ -35,6 +48,35 @@ export function getMatchingSlashCommands(
   );
 }
 
+export function getMatchingSlashItems(
+  input: string,
+  cursorPosition: number,
+  skills: SlashSkillCandidate[] = [],
+): ChatInputSlashListItem[] {
+  const query = getSlashCommandQuery(input, cursorPosition);
+  if (query === null) return [];
+
+  const commands: ChatInputSlashListItem[] = getMatchingSlashCommands(
+    input,
+    cursorPosition,
+  ).map((command) => ({
+    kind: "command",
+    id: `command:${command.id}`,
+    command,
+  }));
+
+  const skillItems: ChatInputSlashListItem[] = skills
+    .filter((skill) => skill.enabled && skillMatchesQuery(skill, query))
+    .map((skill) => ({
+      kind: "skill",
+      id: `skill:${skill.name}`,
+      name: skill.name,
+      description: skill.description,
+    }));
+
+  return [...commands, ...skillItems];
+}
+
 export function applySlashCommandSelection(
   input: string,
   cursorPosition: number,
@@ -48,4 +90,15 @@ export function applySlashCommandSelection(
   } ${afterCursor}`;
   const nextCursorPosition = commandStart + command.command.length + 1;
   return { input: nextInput, cursorPosition: nextCursorPosition };
+}
+
+export function stripSlashCommandQuery(
+  input: string,
+  cursorPosition: number,
+): { input: string; cursorPosition: number } {
+  if (getSlashCommandQuery(input, cursorPosition) === null) {
+    return { input, cursorPosition };
+  }
+  const afterCursor = input.slice(cursorPosition);
+  return { input: afterCursor, cursorPosition: 0 };
 }

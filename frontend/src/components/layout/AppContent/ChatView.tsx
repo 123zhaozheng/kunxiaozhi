@@ -145,6 +145,27 @@ export function ChatView({
     sessionId ?? "__new_session__",
   );
   const [visibleRange, setVisibleRange] = useState<ListRange | null>(null);
+  const [emphasizedSkillNames, setEmphasizedSkillNames] = useState<string[]>(
+    [],
+  );
+
+  const handleEmphasizeSkill = useCallback((name: string) => {
+    setEmphasizedSkillNames((prev) =>
+      prev.includes(name) ? prev : [...prev, name],
+    );
+  }, []);
+
+  const handleRemoveEmphasizedSkill = useCallback((name: string) => {
+    setEmphasizedSkillNames((prev) => prev.filter((item) => item !== name));
+  }, []);
+
+  const handleClearEmphasizedSkills = useCallback(() => {
+    setEmphasizedSkillNames([]);
+  }, []);
+
+  const handleRestoreEmphasizedSkills = useCallback((names: string[]) => {
+    setEmphasizedSkillNames(names);
+  }, []);
 
   const {
     messagesContainerRef,
@@ -428,6 +449,11 @@ export function ChatView({
     onOpenTeamBuilder,
     attachments,
     onAttachmentsChange,
+    emphasizedSkillNames,
+    onEmphasizeSkill: handleEmphasizeSkill,
+    onRemoveEmphasizedSkill: handleRemoveEmphasizedSkill,
+    onClearEmphasizedSkills: handleClearEmphasizedSkills,
+    onRestoreEmphasizedSkills: handleRestoreEmphasizedSkills,
   };
 
   return (

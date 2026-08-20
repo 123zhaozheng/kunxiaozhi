@@ -649,6 +649,11 @@
     "helpDocs": "Справка",
     "keyboardShortcuts": "Горячие клавиши",
     "mentionNoResults": "Нет подходящих персон",
+    "slashNoMatches": "Нет подходящих навыков",
+    "skillEmphasis": {
+      "mustUse": "Обязательно используйте {{names}}.",
+      "remove": "Убрать навык {{name}}"
+    },
     "mermaid": "Mermaid",
     "mermaidDiagram": "Диаграмма Mermaid",
     "message": {
