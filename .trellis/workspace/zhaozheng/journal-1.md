@@ -1296,3 +1296,36 @@ Optional Redis Sentinel via REDIS_SENTINEL_HOSTS/MASTER; empty fields keep REDIS
 ### Next Steps
 
 - Production: set hosts+master, keep REDIS_URL path for db, restart; leave REDIS_SENTINEL_PASSWORD empty on arq 0.28 unless passwords match REDIS_PASSWORD
+
+
+## Session 46: 登录弹出公告与提醒控制
+
+**Date**: 2026-08-20
+**Task**: 登录弹出公告与提醒控制
+**Branch**: `main`
+
+### Summary
+
+管理员可按条开启登录弹窗；用户进入应用时自动打开应弹出列表，支持今日推迟与永久关闭。
+
+### Main Changes
+
+- 新增 popup/should_popup、snooze dismiss、Header 自动弹窗与管理端开关
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3850de15` | (see git log) |
+
+### Testing
+
+- [OK] pytest tests/infra/test_notification_storage.py；loginPopup helper 测试；ruff
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 无；任务已归档
