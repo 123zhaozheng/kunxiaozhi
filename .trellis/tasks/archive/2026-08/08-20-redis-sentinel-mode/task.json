@@ -1,0 +1,28 @@
+{
+  "id": "redis-sentinel-mode",
+  "name": "redis-sentinel-mode",
+  "title": "Support Redis Sentinel mode",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "zhaozheng",
+  "assignee": "zhaozheng",
+  "createdAt": "2026-08-20",
+  "completedAt": "2026-08-20",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "description": "Allow Redis Sentinel while keeping REDIS_URL standalone fallback"
+  }
+}

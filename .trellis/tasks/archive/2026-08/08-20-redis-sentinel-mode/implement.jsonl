@@ -1,0 +1,7 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/08-20-redis-sentinel-mode/prd.md", "reason": "Dual-mode contract: standalone default, sentinel opt-in"}
+{"file": ".trellis/tasks/08-20-redis-sentinel-mode/design.md", "reason": "Factory/ARQ sentinel branch and fail-closed partial config"}
+{"file": ".trellis/tasks/08-20-redis-sentinel-mode/implement.md", "reason": "Ordered checklist and validation commands"}
+{"file": ".trellis/tasks/08-20-redis-sentinel-mode/research/current-redis-connection.md", "reason": "Current REDIS_URL factory and ARQ parse evidence"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Settings via settings object; no hardcoded config"}
+{"file": ".trellis/spec/backend/redis-sentinel.md", "reason": "Sentinel dual-mode factory/ARQ contract"}
