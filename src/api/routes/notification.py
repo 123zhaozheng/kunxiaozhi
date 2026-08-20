@@ -3,13 +3,15 @@
 from functools import lru_cache
 
 from bson.errors import InvalidId
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import ValidationError
 
 from src.api.deps import get_current_user_required, require_permissions
 from src.infra.notification.manager import NotificationManager
 from src.kernel.schemas.notification import (
     Notification,
     NotificationCreate,
+    NotificationDismiss,
     NotificationListResponse,
     NotificationUpdate,
 )
@@ -27,7 +29,10 @@ def get_notification_manager() -> NotificationManager:
 async def get_active_notifications(
     user: TokenPayload = Depends(get_current_user_required),
     manager: NotificationManager = Depends(get_notification_manager),
+    popup_eligible: bool = Query(False),
 ) -> list[Notification]:
+    if popup_eligible:
+        return await manager.get_popup_eligible_notifications(user.sub)
     return await manager.get_active_notifications(user.sub)
 
 
@@ -89,8 +94,20 @@ async def delete_notification(
 @router.post("/{notification_id}/dismiss")
 async def dismiss_notification(
     notification_id: str,
+    request: Request,
     user: TokenPayload = Depends(get_current_user_required),
     manager: NotificationManager = Depends(get_notification_manager),
 ) -> dict:
-    await manager.dismiss(notification_id, user.sub)
+    snooze_until = None
+    raw = await request.body()
+    if raw.strip():
+        try:
+            payload = NotificationDismiss.model_validate_json(raw)
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=exc.errors(),
+            ) from exc
+        snooze_until = payload.snooze_until
+    await manager.dismiss(notification_id, user.sub, snooze_until=snooze_until)
     return {"status": "dismissed"}

@@ -24,6 +24,7 @@ import { authApi } from "../../../services/api";
 import { notificationApi } from "../../../services/api/notification";
 import { useSessionTitle } from "../../../hooks/useSessionTitle";
 import { NotificationDialog } from "../../notification/NotificationDialog";
+import { shouldAutoOpenNotifications } from "../../notification/loginPopup";
 import { Permission } from "../../../types";
 import type { TabType } from "./types";
 import type { Project } from "../../../types";
@@ -74,7 +75,11 @@ export function Header({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [notifDialogOpen, setNotifDialogOpen] = useState(false);
+  const [notifDialogMode, setNotifDialogMode] = useState<"auto" | "manual">(
+    "manual",
+  );
   const [activeNotifCount, setActiveNotifCount] = useState(0);
+  const autoOpenAttemptedRef = useRef(false);
 
   const getMenuPosition = useCallback(() => {
     const rect = mobileMenuBtnRef.current?.getBoundingClientRect();
@@ -91,6 +96,20 @@ export function Header({
   useEffect(() => {
     refreshNotifCount();
   }, [refreshNotifCount]);
+
+  useEffect(() => {
+    let cancelled = false;
+    notificationApi.getPopupEligible().then((items) => {
+      if (cancelled || autoOpenAttemptedRef.current) return;
+      if (!shouldAutoOpenNotifications(items)) return;
+      autoOpenAttemptedRef.current = true;
+      setNotifDialogMode("auto");
+      setNotifDialogOpen(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const mobileMenuBtnRef = useRef<HTMLButtonElement>(null);
   const mobileMenuPanelRef = useRef<HTMLDivElement>(null);
 
@@ -278,6 +297,7 @@ export function Header({
                     )}
                     <button
                       onClick={() => {
+                        setNotifDialogMode("manual");
                         setNotifDialogOpen(true);
                         setMobileMenuOpen(false);
                       }}
@@ -412,6 +432,7 @@ export function Header({
 
       <NotificationDialog
         isOpen={notifDialogOpen}
+        mode={notifDialogMode}
         onClose={() => setNotifDialogOpen(false)}
         onDismissed={refreshNotifCount}
       />

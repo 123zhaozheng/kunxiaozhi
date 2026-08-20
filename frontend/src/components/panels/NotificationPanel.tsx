@@ -196,6 +196,7 @@ function NotificationFormModal({
     toDatetimeLocal(notification?.end_time ?? null),
   );
   const [isActive, setIsActive] = useState(notification?.is_active ?? true);
+  const [popup, setPopup] = useState(notification?.popup ?? false);
   const [notifType, setNotifType] = useState<string>(
     notification?.type ?? "info",
   );
@@ -211,6 +212,7 @@ function NotificationFormModal({
         start_time: fromDatetimeLocal(startTime),
         end_time: fromDatetimeLocal(endTime),
         is_active: isActive,
+        popup,
       };
       await onSave(data);
     } finally {
@@ -380,6 +382,28 @@ function NotificationFormModal({
                 <span
                   className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
                     isActive ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Popup on login toggle */}
+            <div className="flex items-center justify-between rounded-xl border border-stone-200 bg-stone-50 p-4 dark:border-stone-700 dark:bg-stone-900">
+              <div>
+                <p className="text-sm font-medium text-stone-700 dark:text-stone-300">
+                  {t("notification.popupOnLogin")}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPopup(!popup)}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-stone-500/20 ${
+                  popup ? "bg-emerald-500" : "bg-stone-300 dark:bg-stone-600"
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                    popup ? "translate-x-5" : "translate-x-0"
                   }`}
                 />
               </button>
@@ -650,8 +674,13 @@ export function NotificationPanel() {
                           {getLocalizedTitle(notification)}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <StatusBadge status={status} />
+                        {notification.popup && (
+                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                            {t("notification.popupOnLogin")}
+                          </span>
+                        )}
                       </div>
                       {schedule && (
                         <p className="text-xs text-stone-500 dark:text-stone-400 mb-2">

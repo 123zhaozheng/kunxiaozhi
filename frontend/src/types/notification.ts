@@ -16,6 +16,8 @@ export interface Notification {
   start_time: string | null;
   end_time: string | null;
   is_active: boolean;
+  popup: boolean;
+  should_popup?: boolean;
   created_at: string;
   updated_at: string;
   created_by: string;
@@ -28,6 +30,7 @@ export interface NotificationCreate {
   start_time: string | null;
   end_time: string | null;
   is_active: boolean;
+  popup?: boolean;
 }
 
 export interface NotificationUpdate {
@@ -37,6 +40,7 @@ export interface NotificationUpdate {
   start_time?: string | null;
   end_time?: string | null;
   is_active?: boolean;
+  popup?: boolean;
 }
 
 export interface NotificationListResponse {

@@ -18,9 +18,10 @@ def _notification_doc(
     title: str = "title",
     start_time: datetime | None = None,
     end_time: datetime | None = None,
+    popup: bool | None = None,
 ) -> dict[str, Any]:
     now = utc_now()
-    return {
+    doc = {
         "_id": notification_id,
         "title_i18n": {"en": title, "zh": title, "ja": title, "ko": title, "ru": title},
         "content_i18n": {"en": "body", "zh": "body", "ja": "body", "ko": "body", "ru": "body"},
@@ -32,6 +33,9 @@ def _notification_doc(
         "updated_at": now,
         "created_by": "admin",
     }
+    if popup is not None:
+        doc["popup"] = popup
+    return doc
 
 
 class _AggregateCursor:
@@ -104,6 +108,14 @@ class _DismissalCollection:
         raise AssertionError("get_active_notifications should not materialize all dismissals")
 
 
+class _DismissalWriteCollection:
+    def __init__(self) -> None:
+        self.calls: list[tuple[dict[str, Any], dict[str, Any], bool]] = []
+
+    async def update_one(self, filt: dict[str, Any], update: dict[str, Any], upsert: bool = False):
+        self.calls.append((filt, update, upsert))
+
+
 @pytest.mark.asyncio
 async def test_active_notifications_filters_in_mongo_without_distinct() -> None:
     storage = NotificationStorage()
@@ -142,7 +154,17 @@ async def test_active_notifications_filters_in_mongo_without_distinct() -> None:
     )
     assert pipeline[-1] == {"$limit": 3}
     assert any("$lookup" in stage for stage in pipeline)
-    assert any(stage == {"$match": {"dismissals": {"$eq": []}}} for stage in pipeline)
+    assert any(
+        stage.get("$match")
+        == {
+            "$or": [
+                {"dismissals": {"$eq": []}},
+                {"dismissals.0.forever": False},
+            ]
+        }
+        for stage in pipeline
+    )
+    assert {"$match": {"dismissals": {"$eq": []}}} not in pipeline
 
 
 @pytest.mark.asyncio
@@ -168,3 +190,163 @@ async def test_active_notifications_clamps_storage_limit() -> None:
 
     assert storage.collection.pipeline is not None
     assert storage.collection.pipeline[-1] == {"$limit": NOTIFICATION_LIST_LIMIT_MAX}
+
+
+@pytest.mark.asyncio
+async def test_missing_popup_defaults_to_false() -> None:
+    storage = NotificationStorage()
+    notification_id = ObjectId()
+    storage._collection = _NotificationCollection([_notification_doc(notification_id)])
+    storage._dismissal_collection = _DismissalCollection()
+
+    items = await storage.get_active_notifications("user-1", limit=3)
+
+    assert items[0].popup is False
+    assert items[0].should_popup is False
+
+
+@pytest.mark.asyncio
+async def test_popup_without_dismissal_sets_should_popup() -> None:
+    storage = NotificationStorage()
+    notification_id = ObjectId()
+    storage._collection = _NotificationCollection(
+        [_notification_doc(notification_id, popup=True)]
+    )
+    storage._dismissal_collection = _DismissalCollection()
+
+    items = await storage.get_active_notifications("user-1", limit=3)
+
+    assert items[0].popup is True
+    assert items[0].should_popup is True
+
+
+@pytest.mark.asyncio
+async def test_active_keeps_snooze_but_clears_should_popup() -> None:
+    storage = NotificationStorage()
+    notification_id = ObjectId()
+    now = utc_now()
+    doc = _notification_doc(notification_id, popup=True)
+    doc["dismissals"] = [
+        {"forever": False, "snooze_until": now + timedelta(hours=6)}
+    ]
+    storage._collection = _NotificationCollection([doc])
+    storage._dismissal_collection = _DismissalCollection()
+
+    items = await storage.get_active_notifications("user-1", limit=3)
+
+    assert [item.id for item in items] == [str(notification_id)]
+    assert items[0].popup is True
+    assert items[0].should_popup is False
+    pipeline = storage._collection.pipeline
+    assert pipeline is not None
+    assert {
+        "$match": {
+            "$or": [
+                {"dismissals": {"$eq": []}},
+                {"dismissals.0.forever": False},
+            ]
+        }
+    } in pipeline
+
+
+@pytest.mark.asyncio
+async def test_popup_eligible_query_not_capped_at_five() -> None:
+    storage = NotificationStorage()
+    storage._collection = _NotificationCollection(
+        [_notification_doc(ObjectId(), popup=True)]
+    )
+    storage._dismissal_collection = _DismissalCollection()
+
+    await storage.get_popup_eligible_notifications("user-1")
+
+    pipeline = storage.collection.pipeline
+    assert pipeline is not None
+    assert pipeline[0]["$match"]["popup"] is True
+    assert pipeline[-1] == {"$limit": NOTIFICATION_LIST_LIMIT_MAX}
+    assert pipeline[-1] != {"$limit": 5}
+
+
+@pytest.mark.asyncio
+async def test_dismiss_forever_default_and_snooze() -> None:
+    storage = NotificationStorage()
+    dismissals = _DismissalWriteCollection()
+    storage._dismissal_collection = dismissals
+
+    await storage.dismiss("n1", "user-1")
+    forever_filter, forever_update, forever_upsert = dismissals.calls[0]
+    assert forever_filter == {"notification_id": "n1", "user_id": "user-1"}
+    assert forever_update["$set"]["forever"] is True
+    assert forever_update["$set"]["snooze_until"] is None
+    assert forever_upsert is True
+
+    until = utc_now() + timedelta(hours=1)
+    await storage.dismiss("n1", "user-1", snooze_until=until)
+    _, snooze_update, snooze_upsert = dismissals.calls[1]
+    assert snooze_update["$set"]["forever"] is False
+    assert snooze_update["$set"]["snooze_until"] == until
+    assert snooze_upsert is True
+
+
+@pytest.mark.asyncio
+async def test_legacy_dismissal_hidden_from_active() -> None:
+    storage = NotificationStorage()
+    notification_id = ObjectId()
+    doc = _notification_doc(notification_id, popup=True)
+    doc["dismissals"] = [{"dismissed_at": utc_now()}]
+    storage._collection = _NotificationCollection([doc])
+    storage._dismissal_collection = _DismissalCollection()
+
+    items = await storage.get_active_notifications("user-1", limit=3)
+
+    assert items == []
+
+
+@pytest.mark.asyncio
+async def test_forever_true_hidden_from_active() -> None:
+    storage = NotificationStorage()
+    notification_id = ObjectId()
+    doc = _notification_doc(notification_id, popup=True)
+    doc["dismissals"] = [{"forever": True, "snooze_until": None}]
+    storage._collection = _NotificationCollection([doc])
+    storage._dismissal_collection = _DismissalCollection()
+
+    items = await storage.get_active_notifications("user-1", limit=3)
+
+    assert items == []
+
+
+@pytest.mark.asyncio
+async def test_expired_snooze_sets_should_popup() -> None:
+    storage = NotificationStorage()
+    notification_id = ObjectId()
+    now = utc_now()
+    doc = _notification_doc(notification_id, popup=True)
+    doc["dismissals"] = [
+        {"forever": False, "snooze_until": now - timedelta(hours=1)}
+    ]
+    storage._collection = _NotificationCollection([doc])
+    storage._dismissal_collection = _DismissalCollection()
+
+    items = await storage.get_active_notifications("user-1", limit=3)
+
+    assert [item.id for item in items] == [str(notification_id)]
+    assert items[0].should_popup is True
+
+
+@pytest.mark.asyncio
+async def test_popup_eligible_excludes_active_snooze() -> None:
+    storage = NotificationStorage()
+    now = utc_now()
+    doc = _notification_doc(ObjectId(), popup=True)
+    doc["dismissals"] = [
+        {"forever": False, "snooze_until": now + timedelta(hours=6)}
+    ]
+    storage._collection = _NotificationCollection([doc])
+    storage._dismissal_collection = _DismissalCollection()
+
+    items = await storage.get_popup_eligible_notifications("user-1")
+
+    assert items == []
+    pipeline = storage.collection.pipeline
+    assert pipeline is not None
+    assert any("dismissals.0.snooze_until" in str(stage) for stage in pipeline)

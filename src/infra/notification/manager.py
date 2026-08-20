@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 
 from src.infra.logging import get_logger
-from src.infra.notification.storage import NotificationStorage
+from src.infra.notification.storage import NOTIFICATION_LIST_LIMIT_MAX, NotificationStorage
 from src.kernel.schemas.notification import (
     Notification,
     NotificationCreate,
@@ -41,5 +42,15 @@ class NotificationManager:
     async def get_active_notifications(self, user_id: str, limit: int = 5) -> list[Notification]:
         return await self.storage.get_active_notifications(user_id, limit=limit)
 
-    async def dismiss(self, notification_id: str, user_id: str) -> bool:
-        return await self.storage.dismiss(notification_id, user_id)
+    async def get_popup_eligible_notifications(
+        self, user_id: str, limit: int = NOTIFICATION_LIST_LIMIT_MAX
+    ) -> list[Notification]:
+        return await self.storage.get_popup_eligible_notifications(user_id, limit=limit)
+
+    async def dismiss(
+        self,
+        notification_id: str,
+        user_id: str,
+        snooze_until: datetime | None = None,
+    ) -> bool:
+        return await self.storage.dismiss(notification_id, user_id, snooze_until=snooze_until)

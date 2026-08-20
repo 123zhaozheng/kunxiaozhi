@@ -33,6 +33,7 @@ class NotificationCreate(BaseModel):
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     is_active: bool = True
+    popup: bool = False
 
 
 class NotificationUpdate(BaseModel):
@@ -44,6 +45,13 @@ class NotificationUpdate(BaseModel):
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     is_active: Optional[bool] = None
+    popup: Optional[bool] = None
+
+
+class NotificationDismiss(BaseModel):
+    """关闭或今日推迟通知"""
+
+    snooze_until: Optional[datetime] = None
 
 
 class Notification(BaseModel):
@@ -56,6 +64,8 @@ class Notification(BaseModel):
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     is_active: bool
+    popup: bool = False
+    should_popup: bool = False
     created_at: datetime
     updated_at: datetime
     created_by: str

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -14,6 +14,11 @@ import { notificationApi } from "../../services/api/notification";
 import { surfaceAppAnnouncementNotifications } from "../../services/notifications/announcementNotifications";
 import type { Notification, NotificationType } from "../../types/notification";
 import { formatDateTimeShort } from "../../utils/datetime";
+import {
+  getIdsToSnooze,
+  getPopupEligibleItems,
+  localEndOfDayUtcIso,
+} from "./loginPopup";
 
 const TYPE_CONFIG: Record<
   NotificationType,
@@ -43,41 +48,88 @@ const TYPE_CONFIG: Record<
 
 interface NotificationDialogProps {
   isOpen: boolean;
+  mode?: "auto" | "manual";
   onClose: () => void;
   onDismissed: () => void;
 }
 
 export function NotificationDialog({
   isOpen,
+  mode = "manual",
   onClose,
   onDismissed,
 }: NotificationDialogProps) {
   const { t, i18n } = useTranslation();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [dismissingId, setDismissingId] = useState<string | null>(null);
+  const [snoozing, setSnoozing] = useState(false);
+  const loadedRef = useRef(false);
+  const snoozingRef = useRef(false);
+  const loadPromiseRef = useRef<Promise<Notification[]> | null>(null);
 
-  const fetchNotifications = useCallback(() => {
-    notificationApi.getActive().then((items) => {
-      setNotifications(items);
-      const lang = (i18n.language?.split("-")[0] ||
-        "en") as keyof Notification["title_i18n"];
-      surfaceAppAnnouncementNotifications(items, lang);
-    });
-  }, [i18n.language]);
+  const handleRequestClose = useCallback(async () => {
+    if (snoozingRef.current) return;
+    if (mode !== "auto") {
+      onClose();
+      return;
+    }
+    snoozingRef.current = true;
+    setSnoozing(true);
+    try {
+      let items = notifications;
+      if (!loadedRef.current && loadPromiseRef.current) {
+        items = await loadPromiseRef.current;
+      }
+      const ids = getIdsToSnooze(items);
+      const until = localEndOfDayUtcIso();
+      await Promise.all(
+        ids.map((id) => notificationApi.dismiss(id, until).catch(() => {})),
+      );
+    } finally {
+      snoozingRef.current = false;
+      setSnoozing(false);
+      onDismissed();
+      onClose();
+    }
+  }, [mode, notifications, onClose, onDismissed]);
 
   useEffect(() => {
     if (!isOpen) return;
-    fetchNotifications();
-  }, [isOpen, fetchNotifications]);
+    let cancelled = false;
+    loadedRef.current = false;
+    const pending = (
+      mode === "auto"
+        ? notificationApi.getPopupEligible()
+        : notificationApi.getActive()
+    )
+      .then((items) => {
+        const listed = mode === "auto" ? getPopupEligibleItems(items) : items;
+        if (!cancelled) {
+          loadedRef.current = true;
+          setNotifications(listed);
+          const lang = (i18n.language?.split("-")[0] ||
+            "en") as keyof Notification["title_i18n"];
+          surfaceAppAnnouncementNotifications(listed, lang);
+        }
+        return listed;
+      })
+      .catch(() => [] as Notification[]);
+    loadPromiseRef.current = pending;
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, mode, i18n.language]);
 
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        void handleRequestClose();
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isOpen, onClose]);
+  }, [isOpen, handleRequestClose]);
 
   const handleDismiss = async (id: string) => {
     setDismissingId(id);
@@ -100,7 +152,7 @@ export function NotificationDialog({
     <div
       data-yields-sidebar
       className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4"
-      onClick={onClose}
+      onClick={() => void handleRequestClose()}
     >
       <div
         className="w-full h-[60dvh] sm:h-[55dvh] sm:max-w-2xl flex flex-col rounded-t-2xl sm:rounded-2xl shadow-2xl"
@@ -133,7 +185,8 @@ export function NotificationDialog({
             </h2>
           </div>
           <button
-            onClick={onClose}
+            onClick={() => void handleRequestClose()}
+            disabled={snoozing}
             className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
             style={{ color: "var(--theme-text-secondary)" }}
             onMouseEnter={(e) => {
@@ -276,6 +329,25 @@ export function NotificationDialog({
             })
           )}
         </div>
+        {mode === "auto" && (
+          <div
+            className="shrink-0 border-t px-4 py-3 sm:px-5"
+            style={{ borderColor: "var(--theme-border)" }}
+          >
+            <button
+              onClick={() => void handleRequestClose()}
+              disabled={snoozing}
+              className="w-full rounded-xl px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+              style={{
+                backgroundColor: "var(--theme-bg-secondary, rgba(0,0,0,0.04))",
+                color: "var(--theme-text)",
+                border: "1px solid var(--theme-border)",
+              }}
+            >
+              {t("notification.dontRemindToday")}
+            </button>
+          </div>
+        )}
       </div>
     </div>,
     document.body,

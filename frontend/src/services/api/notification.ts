@@ -18,6 +18,16 @@ export const notificationApi = {
     }
   },
 
+  async getPopupEligible(): Promise<Notification[]> {
+    try {
+      return await authFetch<Notification[]>(
+        `${API_BASE}/api/notifications/active?popup_eligible=true`,
+      );
+    } catch {
+      return [];
+    }
+  },
+
   async list(
     skip: number = 0,
     limit: number = 50,
@@ -51,9 +61,12 @@ export const notificationApi = {
     });
   },
 
-  async dismiss(id: string): Promise<void> {
+  async dismiss(id: string, snoozeUntil?: string): Promise<void> {
     return authFetch(`${API_BASE}/api/notifications/${id}/dismiss`, {
       method: "POST",
+      ...(snoozeUntil
+        ? { body: JSON.stringify({ snooze_until: snoozeUntil }) }
+        : {}),
     });
   },
 };
