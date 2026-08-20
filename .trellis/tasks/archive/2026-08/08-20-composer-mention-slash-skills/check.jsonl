@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend guideline index for reviewing ChatInput changes"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Quality check for tests, i18n, and ChatInput regressions"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Verify slash, mention, and chip reuse instead of parallel pickers"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Confirm / does not alter enabled_skills or backend skill injection"}
+{"file": ".trellis/tasks/08-20-composer-mention-slash-skills/research/mature-slash-skill-picker.md", "reason": "Check emphasis-only slash behavior against the agreed product model"}

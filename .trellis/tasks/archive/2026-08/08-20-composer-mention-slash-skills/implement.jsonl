@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend guideline index for ChatInput/ChatView UI work"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Frontend test and quality bar for ChatInput changes"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse slash menu, skillMatchesQuery, ToolbarChip instead of new systems"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Emphasis prefix stays on the frontend send path; do not change enabled_skills"}
+{"file": ".trellis/tasks/08-20-composer-mention-slash-skills/research/mature-slash-skill-picker.md", "reason": "/ is prompt emphasis over already-injected skills, not mount-or-replace"}
