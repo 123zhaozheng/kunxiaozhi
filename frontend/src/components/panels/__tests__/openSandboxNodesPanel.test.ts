@@ -33,6 +33,28 @@ test("managed inventory renders identity, timestamps, filters, and state actions
   assert.match(source, /不可恢复，沙箱文件将永久丢失/);
   assert.match(source, /10_000/);
   assert.match(source, /visibilityState === "visible"/);
+  assert.match(source, /local_only/);
+  assert.match(source, /forceRemoveOpenSandboxNode/);
+  assert.match(source, /usesForceRemoveNode/);
+  assert.match(source, /canForgetLocalInventoryRow/);
+  assert.match(source, /x\/10/);
+  assert.match(source, /TTL 回收/);
+  assert.match(source, /单节点兼容/);
+  assert.match(source, /setConfirmForceRemove\(node\.id\)/);
+});
+
+test("destructive node actions stay separated and surface backend error codes", () => {
+  // Draft-only removal keeps the trash icon; force-remove is its own labelled button.
+  assert.match(source, /title=\{copy\.removeNodeHint\}/);
+  assert.match(source, /usesForceRemoveNode\(current\) && \(/);
+  assert.match(source, /serverMode === "multi_node" &&/);
+  assert.match(source, /\{copy\.forceRemove\}/);
+  assert.doesNotMatch(source, /\? copy\.forceRemoveHint/);
+  // Force-remove adopts the revision returned by the backend before reloading.
+  assert.match(source, /if \(next\) \{\n\s*setData\(next\);/);
+  assert.match(source, /draftInitialized\.current = false/);
+  assert.match(source, /describeActionError/);
+  assert.match(source, /loading=\{forceRemoveBusy\}/);
 });
 
 test("polling and manual refresh preserve the selected inventory page", () => {

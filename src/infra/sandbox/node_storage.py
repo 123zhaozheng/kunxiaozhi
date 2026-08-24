@@ -8,6 +8,10 @@ from typing import Any
 
 from src.infra.async_utils import run_blocking_io
 from src.infra.mcp.encryption import decrypt_value, encrypt_value
+from src.infra.sandbox.capacity_storage import (
+    TERMINAL_RESERVATION_STATES,
+    OpenSandboxCapacityStorage,
+)
 from src.infra.storage.mongodb import get_mongo_client
 from src.infra.utils.datetime import utc_now
 from src.kernel.config import settings
@@ -80,6 +84,40 @@ class OpenSandboxNodeStorage:
         client = get_mongo_client()
         return client[settings.MONGODB_DB][_COLLECTION]
 
+    def _capacity_collection(self):
+        if self._capacity_override is not None:
+            return self._capacity_override
+        return get_mongo_client()[settings.MONGODB_DB]["opensandbox_node_capacity"]
+
+    def _binding_collection(self):
+        if self._binding_override is not None:
+            return self._binding_override
+        return get_mongo_client()[settings.MONGODB_DB]["user_sandbox_bindings"]
+
+    def _capacity_storage(self) -> OpenSandboxCapacityStorage:
+        return OpenSandboxCapacityStorage(
+            collection=self._capacity_override,
+            binding_collection=self._binding_override,
+        )
+
+    @staticmethod
+    def _has_active_reservations(document: dict[str, Any] | None) -> bool:
+        if not document:
+            return False
+        return any(
+            str(reservation.get("allocation_state", "unknown")) not in TERMINAL_RESERVATION_STATES
+            for reservation in document.get("reservations") or []
+        )
+
+    async def _has_active_binding(self, node_id: str | list[str]) -> bool:
+        query: dict[str, Any]
+        if isinstance(node_id, list):
+            query = {"node_id": {"$in": node_id}}
+        else:
+            query = {"node_id": node_id}
+        query["sandbox_state"] = {"$nin": sorted(TERMINAL_RESERVATION_STATES)}
+        return bool(await self._binding_collection().find_one(query))
+
     async def get_current(self) -> StoredOpenSandboxNodes:
         doc = await self._collection().find_one({"_id": _CURRENT_ID})
         if not doc:
@@ -113,12 +151,11 @@ class OpenSandboxNodeStorage:
                 status = await capacity.find_one({"_id": node["id"]})
                 if not status:
                     continue
-                reservations = status.get("reservations") or []
                 used = sum(
                     1
-                    for reservation in reservations
-                    if reservation.get("allocation_state", "unknown")
-                    not in {"released", "terminated", "destroyed", "not_found"}
+                    for reservation in status.get("reservations") or []
+                    if str(reservation.get("allocation_state", "unknown"))
+                    not in TERMINAL_RESERVATION_STATES
                 )
                 node.update(
                     health_state=status.get("health_state", "unknown"),
@@ -142,43 +179,20 @@ class OpenSandboxNodeStorage:
             if old_domain and old_domain in requested_domains:
                 raise ValueError("opensandbox_node_id_immutable")
         if current.mode == OpenSandboxMode.MULTI_NODE and update.mode == OpenSandboxMode.LEGACY:
-            client = get_mongo_client()
-            db = client[settings.MONGODB_DB]
-            capacity = self._capacity_override or db["opensandbox_node_capacity"]
-            binding = self._binding_override or db["user_sandbox_bindings"]
+            capacity = self._capacity_collection()
             for node_id in existing:
                 cap = await capacity.find_one({"_id": node_id})
-                if cap and any(
-                    reservation.get("allocation_state", "unknown")
-                    not in {"released", "terminated", "destroyed", "not_found"}
-                    for reservation in cap.get("reservations") or []
-                ):
+                if self._has_active_reservations(cap):
                     raise ValueError("opensandbox_legacy_mode_in_use")
-            if await binding.find_one(
-                {
-                    "node_id": {"$in": list(existing)},
-                    "sandbox_state": {
-                        "$nin": ["terminated", "destroyed", "not_found", "released"]
-                    },
-                }
-            ):
+            if await self._has_active_binding(list(existing)):
                 raise ValueError("opensandbox_legacy_mode_in_use")
         if removed_ids:
-            client = get_mongo_client()
-            db = client[settings.MONGODB_DB]
-            capacity = self._capacity_override or db["opensandbox_node_capacity"]
-            binding = self._binding_override or db["user_sandbox_bindings"]
+            capacity = self._capacity_collection()
             for node_id in removed_ids:
                 cap = await capacity.find_one({"_id": node_id})
-                if cap and any(
-                    reservation.get("allocation_state", "unknown")
-                    not in {"released", "terminated", "destroyed", "not_found"}
-                    for reservation in cap.get("reservations") or []
-                ):
+                if self._has_active_reservations(cap):
                     raise ValueError("opensandbox_node_in_use")
-                if await binding.find_one(
-                    {"node_id": node_id, "sandbox_state": {"$nin": ["terminated", "destroyed", "not_found", "released"]}}
-                ):
+                if await self._has_active_binding(node_id):
                     raise ValueError("opensandbox_node_in_use")
         payload_nodes: list[dict[str, Any]] = []
         for node in update.nodes:
@@ -196,8 +210,7 @@ class OpenSandboxNodeStorage:
             raise ValueError("opensandbox_nodes_revision_conflict")
         capacity = self._capacity_override
         if capacity is None and self._collection_override is None:
-            client = get_mongo_client()
-            capacity = client[settings.MONGODB_DB]["opensandbox_node_capacity"]
+            capacity = self._capacity_collection()
         if capacity is not None:
             for node in update.nodes:
                 await capacity.update_one(
@@ -211,6 +224,8 @@ class OpenSandboxNodeStorage:
                     },
                     upsert=True,
                 )
+            for removed_id in removed_ids:
+                await capacity.delete_one({"_id": removed_id})
         return StoredOpenSandboxNodes(update.mode, [{**n, "api_key": (node.api_key or existing.get(node.id, {}).get("api_key", "")) if not node.clear_api_key else ""} for n, node in zip(payload_nodes, update.nodes)], revision, utc_now(), updated_by)
 
     async def set_draining(self, node_id: str, draining: bool) -> bool:
@@ -219,24 +234,72 @@ class OpenSandboxNodeStorage:
 
     async def remove(self, node_id: str) -> bool:
         """Remove only an unused node; callers must drain/disable first."""
-        client = get_mongo_client() if self._capacity_override is None or self._binding_override is None else None
-        db = client[settings.MONGODB_DB] if client is not None else None
-        if db is None:
-            assert self._capacity_override is not None and self._binding_override is not None
-        capacity = self._capacity_override or db["opensandbox_node_capacity"]  # type: ignore[index]
-        binding = self._binding_override or db["user_sandbox_bindings"]  # type: ignore[index]
+        capacity = self._capacity_collection()
         cap = await capacity.find_one({"_id": node_id})
-        if cap and cap.get("reservations"):
+        if self._has_active_reservations(cap):
             raise ValueError("opensandbox_node_in_use")
-        if await binding.find_one(
-            {
-                "node_id": node_id,
-                "sandbox_state": {"$nin": ["terminated", "destroyed", "not_found", "released"]},
-            }
-        ):
+        if await self._has_active_binding(node_id):
             raise ValueError("opensandbox_node_in_use")
         result = await self._collection().update_one({"_id": _CURRENT_ID, "nodes.id": node_id}, {"$pull": {"nodes": {"id": node_id}}})
+        if getattr(result, "modified_count", 0):
+            await capacity.delete_one({"_id": node_id})
         return bool(getattr(result, "modified_count", 0))
+
+    async def force_remove(
+        self,
+        node_id: str,
+        *,
+        expected_revision: str,
+        updated_by: str,
+    ) -> tuple[StoredOpenSandboxNodes, int, bool]:
+        """Purge occupancy and pull a node, switching to legacy when none remain."""
+        current = await self.get_current()
+        if expected_revision != current.revision:
+            raise ValueError("opensandbox_nodes_revision_conflict")
+        if current.mode == OpenSandboxMode.LEGACY:
+            # The legacy read model is synthesized from scalar settings, so
+            # there is no managed node document to purge or pull.
+            raise ValueError("opensandbox_node_not_found")
+        node = next((item for item in current.nodes if item.get("id") == node_id), None)
+        if node is None:
+            raise ValueError("opensandbox_node_not_found")
+        health_state = str(node.get("health_state") or "unknown").lower()
+        capacity = self._capacity_collection()
+        cap = await capacity.find_one({"_id": node_id})
+        occupied = self._has_active_reservations(cap) or await self._has_active_binding(node_id)
+        if health_state == "healthy" and occupied:
+            raise ValueError("opensandbox_node_in_use")
+        raw = await self._collection().find_one({"_id": _CURRENT_ID})
+        if not raw:
+            raise ValueError("opensandbox_nodes_revision_conflict")
+        # Rewrite the stored node dicts verbatim so encrypted_api_key survives;
+        # the decrypted read model must never be written back.
+        remaining = [dict(item) for item in raw.get("nodes") or [] if item.get("id") != node_id]
+        switched_to_legacy = not remaining
+        mode = OpenSandboxMode.LEGACY if switched_to_legacy else current.mode
+        revision = uuid.uuid4().hex
+        # Legacy mode is rejected above, so the stored revision is always a real
+        # CAS token here: no upsert, no synthesized-revision special case.
+        result = await self._collection().update_one(
+            {"_id": _CURRENT_ID, "revision": current.revision},
+            {
+                "$set": {
+                    "mode": mode.value,
+                    "nodes": remaining,
+                    "revision": revision,
+                    "updated_at": utc_now(),
+                    "updated_by": updated_by,
+                }
+            },
+        )
+        if not getattr(result, "acknowledged", True) or not getattr(result, "matched_count", 1):
+            raise ValueError("opensandbox_nodes_revision_conflict")
+        # The config CAS runs first: a lost race must not leave a still
+        # configured node whose occupancy ledger was already wiped.
+        released_count = await self._capacity_storage().purge_node_occupancy(node_id)
+        await self._capacity_storage().delete_node_capacity(node_id)
+        stored = await self.get_current()
+        return stored, released_count, switched_to_legacy
 
 
 _storage: OpenSandboxNodeStorage | None = None

@@ -8,10 +8,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.api.deps import require_permissions
-from src.kernel.schemas.opensandbox import OpenSandboxInventoryResponse
+from src.infra.logging import get_logger
+from src.kernel.schemas.opensandbox import OpenSandboxActionResponse, OpenSandboxInventoryResponse
 from src.kernel.schemas.user import TokenPayload
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 _ACTION_STATES = {
     "pause": {"running", "started"},
@@ -73,7 +75,11 @@ async def load_usernames(user_ids: list[str]) -> dict[str, str]:
             if user_id and username:
                 mapping[user_id] = username
         return mapping
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "[OpenSandbox] load usernames failed exc_type=%s",
+            type(exc).__name__,
+        )
         return {}
 
 
@@ -92,7 +98,11 @@ async def user_ids_matching_username(search: str) -> list[str]:
             .limit(50)
         )
         return [str(document.get("_id")) async for document in cursor if document.get("_id")]
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "[OpenSandbox] username search failed exc_type=%s",
+            type(exc).__name__,
+        )
         return []
 
 
@@ -110,7 +120,10 @@ async def _inventory(
     external sandboxes.
     """
     from src.infra.async_utils import run_blocking_io
-    from src.infra.sandbox.capacity_storage import OpenSandboxCapacityStorage
+    from src.infra.sandbox.capacity_storage import (
+        TERMINAL_RESERVATION_STATES,
+        OpenSandboxCapacityStorage,
+    )
     from src.infra.sandbox.node_storage import get_opensandbox_node_storage
     from src.infra.sandbox.session_manager import OpenSandboxSandboxAdapter
     from src.kernel.schemas.opensandbox import OpenSandboxMode
@@ -127,6 +140,8 @@ async def _inventory(
     )
     if state:
         query["sandbox_state"] = state
+    else:
+        query["sandbox_state"] = {"$nin": sorted(TERMINAL_RESERVATION_STATES)}
     if search:
         clauses: list[dict] = [
             {"sandbox_id": {"$regex": search, "$options": "i"}},
@@ -181,7 +196,13 @@ async def _inventory(
                             str(doc.get("reservation_id", "")),
                             allocation_token=str(doc.get("allocation_token", "")),
                         )
-            except Exception:
+            except Exception as exc:
+                logger.warning(
+                    "[OpenSandbox] inventory probe failed node_id=%s sandbox_id=%s exc_type=%s",
+                    doc.get("node_id", ""),
+                    sandbox_id,
+                    type(exc).__name__,
+                )
                 provider_state = "unknown"
         actions = available_actions(current_state, has_sandbox_id=bool(sandbox_id))
         user_id = str(doc.get("user_id") or "") or None
@@ -218,9 +239,19 @@ async def list_opensandbox_sandboxes(
     return OpenSandboxInventoryResponse(items=items, total=total, skip=skip, limit=limit)
 
 
-async def _action(node_id: str, sandbox_id: str, action: str) -> dict:
+async def _action(
+    node_id: str,
+    sandbox_id: str,
+    action: str,
+    *,
+    local_only: bool = False,
+    actor: str | None = None,
+) -> dict:
     from src.infra.async_utils import run_blocking_io
-    from src.infra.sandbox.capacity_storage import OpenSandboxCapacityStorage
+    from src.infra.sandbox.capacity_storage import (
+        TERMINAL_RESERVATION_STATES,
+        OpenSandboxCapacityStorage,
+    )
     from src.infra.sandbox.node_storage import get_opensandbox_node_storage
     from src.infra.sandbox.session_manager import OpenSandboxSandboxAdapter
 
@@ -240,6 +271,95 @@ async def _action(node_id: str, sandbox_id: str, action: str) -> dict:
     node = next((item for item in nodes.nodes if item.get("id") == node_id), None)
     if not node:
         raise HTTPException(status_code=404, detail="opensandbox_node_not_found")
+    if local_only:
+        if action != "terminate":
+            raise HTTPException(status_code=400, detail="opensandbox_action_not_allowed")
+        row_state = binding_state.lower()
+        node_health = str(node.get("health_state") or "unknown").lower()
+        if row_state not in {"unknown", "creating"} and node_health not in {
+            "unknown",
+            "unavailable",
+        }:
+            raise HTTPException(status_code=409, detail="opensandbox_local_forget_not_allowed")
+        reservation_id = str(binding.get("reservation_id") or "") or None
+        allocation_token = str(binding.get("allocation_token") or "") or None
+        binding_updated = await storage.admin_terminate_binding(
+            node_id,
+            sandbox_id,
+            reservation_id=reservation_id,
+            allocation_token=allocation_token,
+            user_id=str(binding.get("user_id") or "") or None,
+        )
+        if not binding_updated:
+            logger.error(
+                "[OpenSandbox] local forget binding failed node_id=%s sandbox_id=%s "
+                "actor=%s local_only=%s",
+                node_id,
+                sandbox_id,
+                actor or "",
+                True,
+            )
+            raise HTTPException(status_code=500, detail="opensandbox_bookkeeping_failed")
+        await storage.admin_pull_reservation(
+            node_id,
+            reservation_id=reservation_id,
+            sandbox_id=sandbox_id,
+            allocation_token=allocation_token,
+        )
+        if not allocation_token and sandbox_id:
+            # A tokenless binding has no fencing evidence, and the ledger skips
+            # sandbox-identity pulls while a reservation_id is supplied. Without
+            # this second pass, a tokenless ledger row survives and the leftover
+            # check below returns 500 for a purge no retry could ever complete.
+            await storage.admin_pull_reservation(node_id, sandbox_id=sandbox_id)
+        status = await storage.get_status(node_id)
+        leftover = [
+            item
+            for item in (status or {}).get("reservations") or []
+            if str(item.get("allocation_state", "unknown")) not in TERMINAL_RESERVATION_STATES
+            and (
+                (reservation_id and item.get("reservation_id") == reservation_id)
+                or (
+                    sandbox_id
+                    and item.get("sandbox_id") == sandbox_id
+                    and (
+                        not reservation_id
+                        or not item.get("reservation_id")
+                        or item.get("reservation_id") == reservation_id
+                    )
+                    and (
+                        not allocation_token
+                        or not str(item.get("allocation_token") or "").strip()
+                        or str(item.get("allocation_token") or "").strip()
+                        == allocation_token
+                    )
+                )
+            )
+        ]
+        if leftover:
+            logger.error(
+                "[OpenSandbox] local forget left reservations node_id=%s sandbox_id=%s "
+                "actor=%s leftover=%s",
+                node_id,
+                sandbox_id,
+                actor or "",
+                len(leftover),
+            )
+            raise HTTPException(status_code=500, detail="opensandbox_bookkeeping_failed")
+        logger.info(
+            "[OpenSandbox] local forget node_id=%s sandbox_id=%s actor=%s local_only=%s",
+            node_id,
+            sandbox_id,
+            actor or "",
+            True,
+        )
+        return {
+            "node_id": node_id,
+            "sandbox_id": sandbox_id,
+            "action": "forget_local",
+            "state": "terminated",
+            "local_only": True,
+        }
     adapter = OpenSandboxSandboxAdapter(
         domain=str(node.get("domain", "")),
         api_key=str(node.get("api_key", "")),
@@ -291,6 +411,13 @@ async def _action(node_id: str, sandbox_id: str, action: str) -> dict:
     except HTTPException:
         raise
     except Exception as exc:
+        logger.error(
+            "[OpenSandbox] provider action failed node_id=%s sandbox_id=%s action=%s exc_type=%s",
+            node_id,
+            sandbox_id,
+            action,
+            type(exc).__name__,
+        )
         raise HTTPException(status_code=502, detail="opensandbox_provider_action_failed") from exc
     reservation_id = str(binding.get("reservation_id", ""))
     allocation_token = str(binding.get("allocation_token", ""))
@@ -350,7 +477,13 @@ async def _action(node_id: str, sandbox_id: str, action: str) -> dict:
         "resume": "running",
         "renew": binding_state,
     }[action]
-    return {"node_id": node_id, "sandbox_id": sandbox_id, "action": action, "state": state}
+    return {
+        "node_id": node_id,
+        "sandbox_id": sandbox_id,
+        "action": action,
+        "state": state,
+        "local_only": False,
+    }
 
 
 @router.post("/sandboxes/{node_id}/{sandbox_id}/pause")
@@ -374,13 +507,16 @@ async def renew_sandbox(
     return await _action(node_id, sandbox_id, "renew")
 
 
-@router.delete("/sandboxes/{node_id}/{sandbox_id}")
+@router.delete("/sandboxes/{node_id}/{sandbox_id}", response_model=OpenSandboxActionResponse)
 async def terminate_sandbox(
     node_id: str,
     sandbox_id: str,
     confirm: bool = Query(False),
-    _: TokenPayload = Depends(require_permissions("settings:manage")),
+    local_only: bool = Query(False),
+    user: TokenPayload = Depends(require_permissions("settings:manage")),
 ):
     if not confirm:
         raise HTTPException(status_code=400, detail="opensandbox_terminate_confirmation_required")
-    return await _action(node_id, sandbox_id, "terminate")
+    return await _action(
+        node_id, sandbox_id, "terminate", local_only=local_only, actor=user.sub
+    )

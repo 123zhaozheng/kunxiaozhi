@@ -64,6 +64,38 @@ function statusTone(state?: string) {
   return "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300";
 }
 
+function usesForceRemoveNode(node?: Pick<OpenSandboxNode, "health_state">) {
+  if (!node) {
+    return false;
+  }
+  const health = node.health_state || "unknown";
+  return health === "unknown" || health === "unavailable";
+}
+
+function canForgetLocalInventoryRow(
+  item: Pick<OpenSandboxInventoryItem, "state" | "node_id">,
+  nodes: Array<Pick<OpenSandboxNode, "id" | "health_state">> | undefined,
+) {
+  if (item.state === "unknown" || item.state === "creating") {
+    return true;
+  }
+  const health = nodes?.find((node) => node.id === item.node_id)?.health_state;
+  return health === "unknown" || health === "unavailable";
+}
+
+/** Keep the stable backend error code visible (R4); duck-typed like isSandboxCapacityError. */
+function describeActionError(cause: unknown, fallback: string) {
+  const message = cause instanceof Error ? cause.message : fallback;
+  const code =
+    cause && typeof cause === "object" && "code" in cause
+      ? (cause as { code?: unknown }).code
+      : undefined;
+  if (typeof code !== "string" || !code || message.includes(code)) {
+    return message;
+  }
+  return `${message} (${code})`;
+}
+
 export function OpenSandboxNodesPanel() {
   const { t, i18n } = useTranslation();
   const copy = {
@@ -106,6 +138,11 @@ export function OpenSandboxNodesPanel() {
       "openSandboxAdmin.removeNodeHint",
       "移除节点（有绑定或占用时会被拒绝）",
     ),
+    forceRemove: t("openSandboxAdmin.forceRemove", "强制移除"),
+    forceRemoveHint: t(
+      "openSandboxAdmin.forceRemoveHint",
+      "强制移除：立即清理本地占用并删除节点（不经过保存）",
+    ),
     save: t("openSandboxAdmin.save", "保存节点配置"),
     inventory: t("openSandboxAdmin.inventory", "托管沙箱"),
     inventoryHint: t(
@@ -144,11 +181,27 @@ export function OpenSandboxNodesPanel() {
       "此操作不可恢复，沙箱文件将永久丢失，且可能中断正在执行的任务。",
     ),
     confirmTerminate: t("openSandboxAdmin.confirmTerminate", "确认终止"),
+    forgetLocalHint: t(
+      "openSandboxAdmin.forgetLocalHint",
+      "仅清理本地账本（不调用远端）",
+    ),
+    forgetLocalTitle: t("openSandboxAdmin.forgetLocalTitle", "仅清理本地账本"),
+    forgetLocalWarning: t(
+      "openSandboxAdmin.forgetLocalWarning",
+      "将清除本地占用，该节点容量 x/10 会立即下降。远端容器可能仍在，需等待 TTL 回收。此操作不可恢复。",
+    ),
+    confirmForgetLocal: t("openSandboxAdmin.confirmForgetLocal", "确认清理本地"),
     removeTitle: t("openSandboxAdmin.removeTitle", "移除节点"),
     removeWarning: t(
       "openSandboxAdmin.removeWarning",
       "仅未被使用的节点可以移除；保存配置后才会生效。",
     ),
+    forceRemoveTitle: t("openSandboxAdmin.forceRemoveTitle", "强制移除节点"),
+    forceRemoveWarning: t(
+      "openSandboxAdmin.forceRemoveWarning",
+      "将清除本地占用和容量 x/10。远端容器可能仍在，需等待 TTL 回收。若这是最后一个多节点，将切换到单节点兼容。此操作不可恢复。",
+    ),
+    confirmForceRemove: t("openSandboxAdmin.confirmForceRemove", "确认强制移除"),
     remove: t("openSandboxAdmin.remove", "移除"),
     providerBinding: t("openSandboxAdmin.providerBinding", "状态"),
   };
@@ -164,7 +217,15 @@ export function OpenSandboxNodesPanel() {
   const [error, setError] = useState<string | null>(null);
   const [confirmSandbox, setConfirmSandbox] =
     useState<OpenSandboxInventoryItem | null>(null);
+  const [confirmForget, setConfirmForget] =
+    useState<OpenSandboxInventoryItem | null>(null);
   const [confirmNode, setConfirmNode] = useState<string | null>(null);
+  const [confirmForceRemove, setConfirmForceRemove] = useState<string | null>(null);
+  const [forceRemoveBusy, setForceRemoveBusy] = useState(false);
+  // Persisted mode, unaffected by the unsaved mode dropdown: the backend rejects
+  // force-remove outright while the stored mode is still `legacy`.
+  const [serverMode, setServerMode] =
+    useState<OpenSandboxNodesResponse["mode"] | null>(null);
   const [actionKey, setActionKey] = useState<string | null>(null);
   const mounted = useRef(true);
   const translateRef = useRef(t);
@@ -203,6 +264,7 @@ export function OpenSandboxNodesPanel() {
               search: filters.search,
             });
       if (!mounted.current || requestId !== inventoryRequestRef.current) return;
+      setServerMode(next.mode);
       setData((current) =>
         draftDirty.current && current
           ? { ...next, mode: current.mode, revision: current.revision }
@@ -285,6 +347,7 @@ export function OpenSandboxNodesPanel() {
         data?.revision,
       );
       setData(next);
+      setServerMode(next.mode);
       setDraft(
         next.nodes.map((node) => ({
           id: node.id,
@@ -324,14 +387,26 @@ export function OpenSandboxNodesPanel() {
       }
       await load({ type: "refresh" });
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : t("common.error", "操作失败"),
-      );
+      setError(describeActionError(cause, t("common.error", "操作失败")));
     } finally {
       if (mounted.current) setActionKey(null);
       setConfirmSandbox(null);
+    }
+  };
+
+  const forgetLocal = async (item: OpenSandboxInventoryItem) => {
+    const key = `${item.node_id}:${item.sandbox_id}`;
+    setActionKey(key);
+    try {
+      await openSandboxApi.terminate(item.node_id, item.sandbox_id, {
+        local_only: true,
+      });
+      await load({ type: "refresh" });
+    } catch (cause) {
+      setError(describeActionError(cause, t("common.error", "操作失败")));
+    } finally {
+      if (mounted.current) setActionKey(null);
+      setConfirmForget(null);
     }
   };
 
@@ -339,6 +414,34 @@ export function OpenSandboxNodesPanel() {
     draftDirty.current = true;
     setDraft((current) => current.filter((node) => node.id !== nodeId));
     setConfirmNode(null);
+  };
+
+  const forceRemoveNode = async (nodeId: string) => {
+    setForceRemoveBusy(true);
+    try {
+      if (!data?.revision) {
+        throw new Error(t("common.error", "操作失败"));
+      }
+      const next = await settingsApi.forceRemoveOpenSandboxNode(nodeId, {
+        confirm: true,
+        expected_revision: data.revision,
+      });
+      draftDirty.current = false;
+      draftInitialized.current = false;
+      setConfirmForceRemove(null);
+      // Adopt the bumped revision (and possible legacy switch) right away so a
+      // second force-remove does not send a stale expected_revision.
+      if (next) {
+        setData(next);
+        setServerMode(next.mode);
+      }
+      await load({ type: "refresh" });
+    } catch (cause) {
+      setError(describeActionError(cause, t("common.error", "操作失败")));
+      setConfirmForceRemove(null);
+    } finally {
+      if (mounted.current) setForceRemoveBusy(false);
+    }
   };
 
   const probeNode = async (nodeId: string) => {
@@ -532,6 +635,18 @@ export function OpenSandboxNodesPanel() {
                     >
                       {current?.draining ? copy.undrain : copy.drain}
                     </button>
+                    {serverMode === "multi_node" &&
+                      usesForceRemoveNode(current) && (
+                        <button
+                          type="button"
+                          className="btn-secondary px-3 py-1.5 text-sm text-red-600 dark:text-red-400"
+                          title={copy.forceRemoveHint}
+                          aria-label={copy.forceRemoveHint}
+                          onClick={() => setConfirmForceRemove(node.id)}
+                        >
+                          {copy.forceRemove}
+                        </button>
+                      )}
                     <button
                       type="button"
                       className="btn-secondary px-3 py-1.5 text-sm text-red-600 dark:text-red-400"
@@ -852,6 +967,18 @@ export function OpenSandboxNodesPanel() {
                               <Trash2 size={15} />
                             </button>
                           )}
+                          {canForgetLocalInventoryRow(item, data?.nodes) && (
+                            <button
+                              type="button"
+                              className="rounded-lg px-1.5 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-40 dark:text-red-400 dark:hover:bg-red-950/40"
+                              disabled={busy}
+                              title={copy.forgetLocalHint}
+                              aria-label={copy.forgetLocalHint}
+                              onClick={() => setConfirmForget(item)}
+                            >
+                              {copy.forgetLocalHint}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -905,6 +1032,15 @@ export function OpenSandboxNodesPanel() {
         onCancel={() => setConfirmSandbox(null)}
       />
       <ConfirmDialog
+        isOpen={Boolean(confirmForget)}
+        title={copy.forgetLocalTitle}
+        message={copy.forgetLocalWarning}
+        variant="danger"
+        confirmText={copy.confirmForgetLocal}
+        onConfirm={() => confirmForget && void forgetLocal(confirmForget)}
+        onCancel={() => setConfirmForget(null)}
+      />
+      <ConfirmDialog
         isOpen={Boolean(confirmNode)}
         title={copy.removeTitle}
         message={copy.removeWarning}
@@ -912,6 +1048,18 @@ export function OpenSandboxNodesPanel() {
         confirmText={copy.remove}
         onConfirm={() => confirmNode && void removeNode(confirmNode)}
         onCancel={() => setConfirmNode(null)}
+      />
+      <ConfirmDialog
+        isOpen={Boolean(confirmForceRemove)}
+        title={copy.forceRemoveTitle}
+        message={copy.forceRemoveWarning}
+        variant="danger"
+        confirmText={copy.confirmForceRemove}
+        loading={forceRemoveBusy}
+        onConfirm={() =>
+          confirmForceRemove && void forceRemoveNode(confirmForceRemove)
+        }
+        onCancel={() => setConfirmForceRemove(null)}
       />
     </section>
   );

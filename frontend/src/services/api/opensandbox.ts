@@ -11,5 +11,9 @@ export const openSandboxApi = {
   pause(nodeId: string, sandboxId: string) { return authFetch(`${API_BASE}/api/opensandbox/sandboxes/${encodeURIComponent(nodeId)}/${encodeURIComponent(sandboxId)}/pause`, { method: "POST" }); },
   resume(nodeId: string, sandboxId: string) { return authFetch(`${API_BASE}/api/opensandbox/sandboxes/${encodeURIComponent(nodeId)}/${encodeURIComponent(sandboxId)}/resume`, { method: "POST" }); },
   renew(nodeId: string, sandboxId: string) { return authFetch(`${API_BASE}/api/opensandbox/sandboxes/${encodeURIComponent(nodeId)}/${encodeURIComponent(sandboxId)}/renew`, { method: "POST" }); },
-  terminate(nodeId: string, sandboxId: string) { return authFetch(`${API_BASE}/api/opensandbox/sandboxes/${encodeURIComponent(nodeId)}/${encodeURIComponent(sandboxId)}?confirm=true`, { method: "DELETE" }); },
+  terminate(nodeId: string, sandboxId: string, options?: { local_only?: boolean }) {
+    const query = new URLSearchParams({ confirm: "true" });
+    if (options?.local_only) query.set("local_only", "true");
+    return authFetch(`${API_BASE}/api/opensandbox/sandboxes/${encodeURIComponent(nodeId)}/${encodeURIComponent(sandboxId)}?${query.toString()}`, { method: "DELETE" });
+  },
 };

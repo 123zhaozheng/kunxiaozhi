@@ -130,3 +130,18 @@ class OpenSandboxInventoryResponse(BaseModel):
     total: int = 0
     skip: int = 0
     limit: int = 50
+
+
+class OpenSandboxActionResponse(BaseModel):
+    node_id: str
+    sandbox_id: str
+    action: str
+    state: str
+    local_only: bool = False
+
+
+class OpenSandboxForceRemoveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirm: bool = False
+    expected_revision: str = Field(min_length=1)

@@ -321,5 +321,155 @@ class OpenSandboxCapacityStorage:
         result = await self._bindings().update_one({"user_id": user_id, "node_id": node_id, "reservation_id": reservation_id, "allocation_token": allocation_token}, {"$set": {"allocation_state": "released", "sandbox_state": "terminated", "updated_at": utc_now()}})
         return bool(getattr(result, "modified_count", 0))
 
+    async def admin_terminate_binding(
+        self,
+        node_id: str,
+        sandbox_id: str,
+        *,
+        reservation_id: str | None = None,
+        allocation_token: str | None = None,
+        user_id: str | None = None,
+    ) -> bool:
+        """Mark a stored binding terminal without requiring a live user lease.
+
+        When ``allocation_token`` is present, a newer token is left intact.
+        A missing token still force-terminates that exact node_id+sandbox_id
+        document so broken historical rows can be recovered. A ``creating``
+        binding has no sandbox id yet, so ``user_id``/``reservation_id`` may
+        identify it instead; node_id alone is never enough.
+        """
+        if not (sandbox_id or reservation_id or user_id):
+            return False
+        query: dict[str, Any] = {"node_id": node_id}
+        if sandbox_id:
+            query["sandbox_id"] = sandbox_id
+        if user_id:
+            query["user_id"] = user_id
+        if reservation_id:
+            query["reservation_id"] = reservation_id
+        token = str(allocation_token or "").strip()
+        if token:
+            query["allocation_token"] = token
+        result = await self._bindings().update_one(
+            query,
+            {
+                "$set": {
+                    "allocation_state": "released",
+                    "sandbox_state": "terminated",
+                    "updated_at": utc_now(),
+                }
+            },
+        )
+        return bool(getattr(result, "modified_count", 0) or getattr(result, "matched_count", 0))
+
+    async def _pull_reservations(self, node_id: str, pull_match: dict[str, Any]) -> bool:
+        result = await self._collection().update_one(
+            {"_id": node_id},
+            {"$pull": {"reservations": pull_match}},
+        )
+        return bool(getattr(result, "modified_count", 0))
+
+    async def admin_pull_reservation(
+        self,
+        node_id: str,
+        *,
+        reservation_id: str | None = None,
+        sandbox_id: str | None = None,
+        allocation_token: str | None = None,
+    ) -> bool:
+        """Pull matching reservations from the node capacity ledger.
+
+        ``reservation_id`` identifies one slot, so it is pulled even when the
+        stored row never recorded ``allocation_token``. A newer token on a
+        different reservation is left intact.
+        """
+        token = str(allocation_token or "").strip()
+        pulled = False
+        if reservation_id:
+            pulled = await self._pull_reservations(
+                node_id, {"reservation_id": reservation_id}
+            )
+        if sandbox_id:
+            identity = {"sandbox_id": sandbox_id}
+            if token:
+                pulled = (
+                    await self._pull_reservations(
+                        node_id, {**identity, "allocation_token": token}
+                    )
+                    or pulled
+                )
+                pulled = (
+                    await self._pull_reservations(
+                        node_id, {**identity, "allocation_token": {"$exists": False}}
+                    )
+                    or pulled
+                )
+                pulled = (
+                    await self._pull_reservations(
+                        node_id, {**identity, "allocation_token": ""}
+                    )
+                    or pulled
+                )
+            elif not reservation_id:
+                pulled = await self._pull_reservations(node_id, identity) or pulled
+        return pulled
+
+    async def delete_node_capacity(self, node_id: str) -> bool:
+        """Delete the whole ``opensandbox_node_capacity`` document for a node."""
+        result = await self._collection().delete_one({"_id": node_id})
+        return bool(getattr(result, "deleted_count", 0))
+
+    async def _list_bindings(self, query: dict[str, Any]) -> list[dict[str, Any]]:
+        cursor = self._bindings().find(query)
+        if hasattr(cursor, "to_list"):
+            return await cursor.to_list(length=10_000)
+        documents: list[dict[str, Any]] = []
+        async for document in cursor:
+            documents.append(document)
+        return documents
+
+    async def purge_node_occupancy(self, node_id: str) -> int:
+        """Terminate non-terminal bindings and pull reservations for one node."""
+        released = 0
+        documents = await self._list_bindings(
+            {
+                "node_id": node_id,
+                "sandbox_state": {"$nin": sorted(TERMINAL_RESERVATION_STATES)},
+            }
+        )
+        for document in documents:
+            sandbox_id = str(document.get("sandbox_id") or "")
+            reservation_id = str(document.get("reservation_id") or "") or None
+            user_id = str(document.get("user_id") or "") or None
+            token = str(document.get("allocation_token") or "") or None
+            # A ``creating`` binding has no sandbox id yet; it must still be
+            # terminated or the user stays wedged on a deleted node.
+            if await self.admin_terminate_binding(
+                node_id,
+                sandbox_id,
+                reservation_id=reservation_id,
+                allocation_token=token,
+                user_id=None if sandbox_id else user_id,
+            ):
+                released += 1
+            if reservation_id or sandbox_id:
+                await self.admin_pull_reservation(
+                    node_id,
+                    reservation_id=reservation_id,
+                    sandbox_id=sandbox_id,
+                    allocation_token=token,
+                )
+        await self._collection().update_one(
+            {"_id": node_id},
+            {
+                "$pull": {
+                    "reservations": {
+                        "allocation_state": {"$nin": sorted(TERMINAL_RESERVATION_STATES)}
+                    }
+                }
+            },
+        )
+        return released
+
 
 CapacityStorage = OpenSandboxCapacityStorage

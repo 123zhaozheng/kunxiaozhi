@@ -9,9 +9,10 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 
 from src.api.deps import get_current_user_required, require_permissions
+from src.infra.logging import get_logger
 from src.infra.settings.service import SettingsService, get_settings_service
 from src.kernel.config import settings
-from src.kernel.schemas.opensandbox import OpenSandboxNodesUpdate
+from src.kernel.schemas.opensandbox import OpenSandboxForceRemoveRequest, OpenSandboxNodesUpdate
 from src.kernel.schemas.setting import (
     SettingItem,
     SettingResetResponse,
@@ -29,6 +30,7 @@ from src.kernel.schemas.wecom_network import (
 )
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 
 @router.get("/opensandbox-nodes")
@@ -52,9 +54,14 @@ async def update_opensandbox_nodes(
     try:
         stored = await get_opensandbox_node_storage().save(data, updated_by=user.sub)
     except ValueError as exc:
-        if "revision_conflict" in str(exc):
-            raise HTTPException(status_code=409, detail="opensandbox_nodes_revision_conflict") from exc
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        code = str(exc)
+        if code in {
+            "opensandbox_nodes_revision_conflict",
+            "opensandbox_node_in_use",
+            "opensandbox_legacy_mode_in_use",
+        }:
+            raise HTTPException(status_code=409, detail=code) from exc
+        raise HTTPException(status_code=400, detail=code) from exc
     from src.infra.sandbox.session_manager import reset_session_sandbox_manager
 
     reset_session_sandbox_manager()
@@ -91,6 +98,12 @@ async def probe_opensandbox_node(
         state = "unavailable"
         detail = type(exc).__name__
         latency_ms = None
+        logger.warning(
+            "[OpenSandbox] node probe failed node_id=%s exc_type=%s health_state=%s",
+            node_id,
+            type(exc).__name__,
+            state,
+        )
     try:
         from src.infra.sandbox.capacity_storage import OpenSandboxCapacityStorage
         from src.infra.utils.datetime import utc_now
@@ -107,9 +120,12 @@ async def probe_opensandbox_node(
             },
             upsert=True,
         )
-    except Exception:
-        # Probe result remains useful even if the observability write fails.
-        pass
+    except Exception as exc:
+        logger.warning(
+            "[OpenSandbox] probe status write failed node_id=%s exc_type=%s",
+            node_id,
+            type(exc).__name__,
+        )
     return {"node_id": node_id, "health_state": state, "latency_ms": round(latency_ms, 2) if latency_ms is not None else None, "detail": detail}
 
 
@@ -124,6 +140,45 @@ async def drain_opensandbox_node(
     if not await get_opensandbox_node_storage().set_draining(node_id, draining):
         raise HTTPException(status_code=404, detail="opensandbox_node_not_found")
     return {"node_id": node_id, "draining": draining}
+
+
+@router.post("/opensandbox-nodes/{node_id}/force-remove")
+async def force_remove_opensandbox_node(
+    node_id: str,
+    body: OpenSandboxForceRemoveRequest,
+    user: TokenPayload = Depends(require_permissions("settings:manage")),
+):
+    """Purge local occupancy and remove an unreachable or unknown node."""
+    if not body.confirm:
+        raise HTTPException(
+            status_code=400, detail="opensandbox_force_remove_confirmation_required"
+        )
+    from src.infra.sandbox.node_storage import get_opensandbox_node_storage
+    from src.infra.sandbox.session_manager import reset_session_sandbox_manager
+
+    try:
+        stored, released_count, switched_to_legacy = await get_opensandbox_node_storage().force_remove(
+            node_id,
+            expected_revision=body.expected_revision,
+            updated_by=user.sub,
+        )
+    except ValueError as exc:
+        code = str(exc)
+        if code in {"opensandbox_nodes_revision_conflict", "opensandbox_node_in_use"}:
+            raise HTTPException(status_code=409, detail=code) from exc
+        if code == "opensandbox_node_not_found":
+            raise HTTPException(status_code=404, detail=code) from exc
+        raise HTTPException(status_code=400, detail=code) from exc
+    logger.warning(
+        "[OpenSandbox] force-remove node_id=%s actor=%s released_count=%s switched_to_legacy=%s",
+        node_id,
+        user.sub,
+        released_count,
+        switched_to_legacy,
+    )
+    reset_session_sandbox_manager()
+    await SettingsService._publish_change("OPENSANDBOX_NODES", stored.revision)
+    return stored.to_response().model_dump(mode="json")
 
 
 @router.get("/", response_model=SettingsResponse)

@@ -1,0 +1,8 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/sandbox-providers.md", "reason": "OpenSandbox adapter/lifecycle contracts this hatch must not break"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Probe/terminate/forget must log with get_logger, never swallow"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Stable HTTP codes at the route boundary"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "No silent except Exception; Pydantic responses; storage-layer writes"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Panel named export, ConfirmDialog, Tailwind patterns"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "UI delete must sync binding, reservation, capacity, node config"}
+{"file": ".trellis/tasks/08-21-investigate-opensandbox-orphan-node-delete/research/production-orphan-delete-trap.md", "reason": "Production trap and decision A"}

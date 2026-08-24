@@ -133,6 +133,16 @@ export const settingsApi = {
       { method: "POST" },
     );
   },
+
+  async forceRemoveOpenSandboxNode(
+    nodeId: string,
+    body: { confirm: boolean; expected_revision: string },
+  ): Promise<OpenSandboxNodesResponse> {
+    return authFetch<OpenSandboxNodesResponse>(
+      `${API_BASE}/api/settings/opensandbox-nodes/${encodeURIComponent(nodeId)}/force-remove`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  },
 };
 
 export interface DifyKbDataset {

@@ -77,6 +77,22 @@ class FakeNodeStorage:
         self.draining.append((node_id, draining))
         return node_id == "node-a"
 
+    async def force_remove(
+        self, node_id: str, *, expected_revision: str, updated_by: str
+    ) -> tuple[StoredOpenSandboxNodes, int, bool]:
+        if expected_revision != self.current.revision:
+            raise ValueError("opensandbox_nodes_revision_conflict")
+        node = next((item for item in self.current.nodes if item["id"] == node_id), None)
+        if node is None:
+            raise ValueError("opensandbox_node_not_found")
+        if node.get("health_state") == "healthy" and int(node.get("used_sandboxes", 0) or 0) > 0:
+            raise ValueError("opensandbox_node_in_use")
+        remaining = [item for item in self.current.nodes if item["id"] != node_id]
+        switched = not remaining
+        mode = OpenSandboxMode.LEGACY if switched else self.current.mode
+        self.current = StoredOpenSandboxNodes(mode, remaining, "rev-2", updated_by=updated_by)
+        return self.current, 1, switched
+
 
 @pytest.mark.asyncio
 async def test_node_settings_require_settings_manage_permission() -> None:
@@ -218,3 +234,58 @@ async def test_probe_and_drain_return_stable_results(
     assert health_updates[0][1]["$set"]["health_state"] == "healthy"
     assert drain.status_code == 200
     assert storage.draining == [("node-a", True)]
+
+
+@pytest.mark.asyncio
+async def test_force_remove_requires_confirm_and_enforces_revision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage = FakeNodeStorage()
+    resets: list[str] = []
+    publications: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "src.infra.sandbox.node_storage.get_opensandbox_node_storage",
+        lambda: storage,
+    )
+    monkeypatch.setattr(
+        "src.infra.sandbox.session_manager.reset_session_sandbox_manager",
+        lambda: resets.append("reset"),
+    )
+
+    async def publish(key: str, revision: str) -> None:
+        publications.append((key, revision))
+
+    monkeypatch.setattr(settings_route.SettingsService, "_publish_change", publish)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=_app(_user(admin=True))),
+        base_url="http://testserver",
+    ) as client:
+        missing_confirm = await client.post(
+            "/api/settings/opensandbox-nodes/node-a/force-remove",
+            json={"confirm": False, "expected_revision": "rev-1"},
+        )
+        stale = await client.post(
+            "/api/settings/opensandbox-nodes/node-a/force-remove",
+            json={"confirm": True, "expected_revision": "stale"},
+        )
+        in_use = await client.post(
+            "/api/settings/opensandbox-nodes/node-a/force-remove",
+            json={"confirm": True, "expected_revision": "rev-1"},
+        )
+        storage.current.nodes[0]["health_state"] = "unknown"
+        removed = await client.post(
+            "/api/settings/opensandbox-nodes/node-a/force-remove",
+            json={"confirm": True, "expected_revision": "rev-1"},
+        )
+
+    assert missing_confirm.status_code == 400
+    assert stale.status_code == 409
+    assert stale.json()["detail"] == "opensandbox_nodes_revision_conflict"
+    assert in_use.status_code == 409
+    assert in_use.json()["detail"] == "opensandbox_node_in_use"
+    assert removed.status_code == 200
+    assert removed.json()["mode"] == "legacy"
+    assert removed.json()["revision"] == "rev-2"
+    assert resets == ["reset"]
+    assert publications == [("OPENSANDBOX_NODES", "rev-2")]

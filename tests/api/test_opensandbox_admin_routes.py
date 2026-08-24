@@ -59,27 +59,52 @@ class FakeBindings:
         self.last_query: dict[str, Any] | None = None
         self.updates: list[tuple[dict, dict]] = []
 
+    def _filtered(self, query: dict[str, Any]) -> list[dict[str, Any]]:
+        documents = self.documents
+        state = query.get("sandbox_state")
+        if isinstance(state, str):
+            documents = [item for item in documents if item.get("sandbox_state") == state]
+        elif isinstance(state, dict) and "$nin" in state:
+            documents = [
+                item for item in documents if item.get("sandbox_state") not in state["$nin"]
+            ]
+        return documents
+
     async def count_documents(self, query: dict[str, Any]) -> int:
         self.last_query = deepcopy(query)
-        return len(self.documents)
+        return len(self._filtered(query))
 
     def find(self, query: dict[str, Any]) -> FakeCursor:
         self.last_query = deepcopy(query)
-        return FakeCursor(self.documents)
+        return FakeCursor(self._filtered(query))
+
+    def _matches(self, item: dict[str, Any], query: dict[str, Any]) -> bool:
+        for key, value in query.items():
+            if item.get(key) != value:
+                return False
+        return True
 
     async def find_one(self, query: dict[str, Any]) -> dict[str, Any] | None:
         return next(
             (
                 deepcopy(item)
                 for item in self.documents
-                if item.get("node_id") == query.get("node_id")
-                and item.get("sandbox_id") == query.get("sandbox_id")
+                if self._matches(item, query)
+                or (
+                    item.get("node_id") == query.get("node_id")
+                    and item.get("sandbox_id") == query.get("sandbox_id")
+                    and "sandbox_id" in query
+                )
             ),
             None,
         )
 
     async def update_one(self, query: dict, update: dict) -> SimpleNamespace:
         self.updates.append((deepcopy(query), deepcopy(update)))
+        for item in self.documents:
+            if self._matches(item, query):
+                item.update(deepcopy(update.get("$set", {})))
+                return SimpleNamespace(modified_count=1, matched_count=1)
         return SimpleNamespace(modified_count=1, matched_count=1)
 
 
@@ -89,6 +114,8 @@ class FakeCapacity:
         self.transitions: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
         self.released_bindings: list[tuple[Any, ...]] = []
         self.released_reservations: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+        self.pulled_reservations: list[dict[str, Any]] = []
+        self.capacity_docs: dict[str, dict[str, Any]] = {}
 
     def _bindings(self) -> FakeBindings:
         return self.bindings
@@ -105,9 +132,72 @@ class FakeCapacity:
         self.released_reservations.append((args, kwargs))
         return True
 
+    async def admin_terminate_binding(
+        self,
+        node_id: str,
+        sandbox_id: str,
+        *,
+        reservation_id: str | None = None,
+        allocation_token: str | None = None,
+        user_id: str | None = None,
+    ) -> bool:
+        for document in self.bindings.documents:
+            if document.get("node_id") != node_id or document.get("sandbox_id") != sandbox_id:
+                continue
+            if user_id and document.get("user_id") != user_id:
+                continue
+            if reservation_id and document.get("reservation_id") != reservation_id:
+                continue
+            if allocation_token and document.get("allocation_token") != allocation_token:
+                continue
+            document["sandbox_state"] = "terminated"
+            document["allocation_state"] = "released"
+            return True
+        return False
+
+    async def admin_pull_reservation(self, node_id: str, **kwargs: Any) -> bool:
+        self.pulled_reservations.append({"node_id": node_id, **kwargs})
+        document = self.capacity_docs.get(node_id)
+        if document is None:
+            return False
+        reservation_id = kwargs.get("reservation_id")
+        sandbox_id = kwargs.get("sandbox_id")
+        token = str(kwargs.get("allocation_token") or "").strip()
+        remaining: list[dict[str, Any]] = []
+        pulled = False
+        for item in document.get("reservations") or []:
+            same_reservation = reservation_id and item.get("reservation_id") == reservation_id
+            same_sandbox = (
+                not reservation_id and sandbox_id and item.get("sandbox_id") == sandbox_id
+            )
+            item_token = str(item.get("allocation_token") or "").strip()
+            if same_reservation or (
+                same_sandbox and (not token or not item_token or item_token == token)
+            ):
+                pulled = True
+                continue
+            remaining.append(item)
+        document["reservations"] = remaining
+        return pulled
+
+    async def get_status(self, node_id: str) -> dict[str, Any] | None:
+        document = self.capacity_docs.get(node_id)
+        if document is None:
+            return None
+        used = sum(
+            1
+            for item in document.get("reservations") or []
+            if str(item.get("allocation_state", "unknown"))
+            not in {"released", "terminated", "destroyed", "not_found"}
+        )
+        status = dict(document)
+        status["used_sandboxes"] = used
+        return status
+
 
 class FakeNodeStorage:
     mode = OpenSandboxMode.MULTI_NODE
+    health_state = "healthy"
 
     async def get_current(self) -> StoredOpenSandboxNodes:
         return StoredOpenSandboxNodes(
@@ -122,6 +212,7 @@ class FakeNodeStorage:
                     "work_dir": "/root",
                     "use_server_proxy": True,
                     "max_sandboxes": 10,
+                    "health_state": self.health_state,
                 }
             ],
             "rev-1",
@@ -131,6 +222,7 @@ class FakeNodeStorage:
 class FakeAdapter:
     provider_state = "running"
     fail_action: str | None = None
+    raise_on_connect: BaseException | None = None
     calls: list[str] = []
 
     def __init__(self, **_kwargs: Any) -> None:
@@ -138,10 +230,14 @@ class FakeAdapter:
 
     def get_sandbox(self, _sandbox_id: str) -> object:
         self.calls.append("connect")
+        if self.raise_on_connect:
+            raise self.raise_on_connect
         return object()
 
     def get_sandbox_unchecked(self, _sandbox_id: str) -> object:
         self.calls.append("connect-unchecked")
+        if self.raise_on_connect:
+            raise self.raise_on_connect
         return object()
 
     def get_sandbox_info(self, _provider: object) -> dict[str, str]:
@@ -188,8 +284,10 @@ def _patch_services(
 ) -> None:
     FakeAdapter.calls = []
     FakeAdapter.fail_action = None
+    FakeAdapter.raise_on_connect = None
     FakeAdapter.provider_state = "running"
     FakeNodeStorage.mode = mode
+    FakeNodeStorage.health_state = "healthy"
     monkeypatch.setattr(
         "src.infra.sandbox.capacity_storage.OpenSandboxCapacityStorage",
         lambda: capacity,
@@ -337,6 +435,9 @@ async def test_inventory_joins_username_and_searches_by_employee_id(
     assert searched.json()["items"][0]["username"] == "zhangsan"
     assert bindings.last_query == {
         "node_id": {"$exists": True, "$nin": [None, ""]},
+        "sandbox_state": {
+            "$nin": ["destroyed", "not_found", "released", "terminated"]
+        },
         "$or": [
             {"sandbox_id": {"$regex": "zhang", "$options": "i"}},
             {"user_id": {"$regex": "zhang", "$options": "i"}},
@@ -438,3 +539,170 @@ async def test_disallowed_and_provider_failed_actions_do_not_change_bookkeeping(
     assert getattr(failed.value, "status_code", None) == 502
     assert bindings.updates == []
     assert capacity.transitions == []
+
+
+@pytest.mark.asyncio
+async def test_terminate_provider_timeout_leaves_occupancy_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bindings = FakeBindings([_binding("unknown")])
+    capacity = FakeCapacity(bindings)
+    _patch_services(monkeypatch, capacity)
+    FakeAdapter.raise_on_connect = TimeoutError("timed out")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=_app()), base_url="http://testserver"
+    ) as client:
+        response = await client.delete(
+            "/api/opensandbox/sandboxes/node-a/sandbox-a",
+            params={"confirm": "true"},
+        )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "opensandbox_provider_action_failed"
+    assert capacity.released_bindings == []
+    assert capacity.released_reservations == []
+    assert bindings.documents[0]["sandbox_state"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_local_only_forget_unknown_row_clears_occupancy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bindings = FakeBindings([_binding("unknown")])
+    capacity = FakeCapacity(bindings)
+    capacity.capacity_docs["node-a"] = {
+        "reservations": [
+            {
+                "reservation_id": "reservation-a",
+                "allocation_token": "token-a",
+                "sandbox_id": "sandbox-a",
+                "allocation_state": "allocated",
+            }
+        ]
+    }
+    _patch_services(monkeypatch, capacity)
+    FakeNodeStorage.health_state = "unavailable"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=_app()), base_url="http://testserver"
+    ) as client:
+        response = await client.delete(
+            "/api/opensandbox/sandboxes/node-a/sandbox-a",
+            params={"confirm": "true", "local_only": "true"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "node_id": "node-a",
+        "sandbox_id": "sandbox-a",
+        "action": "forget_local",
+        "state": "terminated",
+        "local_only": True,
+    }
+    assert FakeAdapter.calls == []
+    assert bindings.documents[0]["sandbox_state"] == "terminated"
+    assert bindings.documents[0]["allocation_state"] == "released"
+    assert capacity.capacity_docs["node-a"]["reservations"] == []
+    assert (await capacity.get_status("node-a"))["used_sandboxes"] == 0
+    assert capacity.pulled_reservations
+
+
+@pytest.mark.asyncio
+async def test_local_only_forget_tokenless_row_still_drops_reservation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    binding = _binding("unknown")
+    binding.pop("allocation_token")
+    bindings = FakeBindings([binding])
+    capacity = FakeCapacity(bindings)
+    # A broken historical row: the ledger entry kept neither reservation_id nor
+    # allocation_token, so only sandbox identity can release the slot.
+    capacity.capacity_docs["node-a"] = {
+        "reservations": [{"sandbox_id": "sandbox-a", "allocation_state": "unknown"}]
+    }
+    _patch_services(monkeypatch, capacity)
+    FakeNodeStorage.health_state = "unavailable"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=_app()), base_url="http://testserver"
+    ) as client:
+        response = await client.delete(
+            "/api/opensandbox/sandboxes/node-a/sandbox-a",
+            params={"confirm": "true", "local_only": "true"},
+        )
+
+    assert response.status_code == 200
+    assert capacity.capacity_docs["node-a"]["reservations"] == []
+    assert (await capacity.get_status("node-a"))["used_sandboxes"] == 0
+
+
+@pytest.mark.asyncio
+async def test_local_only_forget_healthy_running_node_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bindings = FakeBindings([_binding("running")])
+    capacity = FakeCapacity(bindings)
+    _patch_services(monkeypatch, capacity)
+    FakeNodeStorage.health_state = "healthy"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=_app()), base_url="http://testserver"
+    ) as client:
+        response = await client.delete(
+            "/api/opensandbox/sandboxes/node-a/sandbox-a",
+            params={"confirm": "true", "local_only": "true"},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "opensandbox_local_forget_not_allowed"
+    assert FakeAdapter.calls == []
+    assert bindings.documents[0]["sandbox_state"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_inventory_default_list_omits_terminal_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bindings = FakeBindings(
+        [_binding("running"), _binding("terminated", sandbox_id="sandbox-dead")]
+    )
+    capacity = FakeCapacity(bindings)
+    _patch_services(monkeypatch, capacity)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=_app()), base_url="http://testserver"
+    ) as client:
+        response = await client.get("/api/opensandbox/sandboxes")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert [item["sandbox_id"] for item in payload["items"]] == ["sandbox-a"]
+    assert bindings.last_query is not None
+    assert bindings.last_query["sandbox_state"] == {
+        "$nin": ["destroyed", "not_found", "released", "terminated"]
+    }
+
+
+@pytest.mark.asyncio
+async def test_inventory_probe_exception_is_logged_and_row_is_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    bindings = FakeBindings([_binding("running")])
+    capacity = FakeCapacity(bindings)
+    _patch_services(monkeypatch, capacity)
+    FakeAdapter.raise_on_connect = ConnectionError("node down")
+    caplog.set_level("WARNING", logger="src.api.routes.opensandbox_admin")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=_app()), base_url="http://testserver"
+    ) as client:
+        response = await client.get("/api/opensandbox/sandboxes")
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["state"] == "unknown"
+    assert "inventory probe failed" in caplog.text
+    assert "ConnectionError" in caplog.text
+    assert "node-a" in caplog.text

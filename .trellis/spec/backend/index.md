@@ -26,7 +26,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [WeCom Feedback Notification](./wecom-notification.md) | Persona like/dislike → Web + WeCom notify, bind command, `feedback_notify_targets`, segmented-reply feedback gap | Filled |
 | [Persona Preferred Agent](./persona-preferred-agent.md) | `preferred_agent_id` (fast/search/team), shared resolve, Web/WeCom parity | Filled |
 | [Analytics Persona & Lists](./analytics-persona-and-lists.md) | Dual-dimension lists/CSV, single-Persona analyze boundary, users `_id` join, trace persona merge | Filled |
-| [Sandbox Provider Integration](./sandbox-providers.md) | Pluggable sandbox provider kit (Daytona/E2B/OpenSandbox): backend+factory+adapter+dispatch, sync-SDK wrapping, cross-session reuse | Filled |
+| [Sandbox Provider Integration](./sandbox-providers.md) | Pluggable sandbox provider kit (Daytona/E2B/OpenSandbox): backend+factory+adapter+dispatch, sync-SDK wrapping, cross-session reuse, multi-node admission, Admin local-forget/force-remove | Filled |
 | [Marketplace Skills in Sandboxes](./marketplace-sandbox-skills.md) | Runtime tool/prompt gating, real work-dir installation, S3 binary materialization, atomic completeness | Filled |
 | [Public Persona Marketplace Skills](./persona-marketplace-skills.md) | Exact-name Persona Harness hints resolved from active Marketplace metadata; no persistent materialization or runtime overlay | Filled |
 | [Builtin Skill Materialization](./builtin-skills.md) | Role-matched lazy copy into user `skill_files`, copy-once skip, global delete-by-name | Filled |

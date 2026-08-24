@@ -384,8 +384,10 @@ binding:    (user_id, node_id, sandbox_id, reservation_id, allocation_token)
 reservation:(node_id, reservation_id, allocation_token, allocation_state)
 GET/PUT     /api/settings/opensandbox-nodes
 POST        /api/settings/opensandbox-nodes/{node_id}/probe
+POST        /api/settings/opensandbox-nodes/{node_id}/force-remove
 GET         /api/opensandbox/sandboxes
 POST/DELETE /api/opensandbox/sandboxes/{node_id}/{sandbox_id}/...
+            DELETE supports ?confirm=true&local_only=true
 ```
 
 ### 3. Contracts
@@ -402,8 +404,10 @@ POST/DELETE /api/opensandbox/sandboxes/{node_id}/{sandbox_id}/...
 - Node selection orders by occupancy ratio, priority, then stable node id and attempts one
   atomic reservation at a time. Storage/Redis failures fail closed.
 - Recorded `(node_id, sandbox_id)` affinity applies to cache reuse, reconnect, resume,
-  renew, stop, and Admin actions. Only an SDK-confirmed 404 permits replacement; timeout,
-  authentication, and unreachable-node failures preserve the binding and reservation.
+  renew, stop, and Admin provider actions. Only an SDK-confirmed 404 permits automatic
+  replacement; timeout, authentication, and unreachable-node failures preserve the
+  binding and reservation on the **user path**. Admin recovery is a separate confirmed
+  hatch (local-forget / force-remove) and must not be implied by a failed `connect()`.
 - Legacy mode remains the scalar OpenSandbox path. When dedicated mode first encounters a
   scalar binding, discovery uses non-mutating per-node reconnect under the allocation lease,
   then backfills node/reservation/token state. Any ambiguous node failure aborts adoption.
@@ -436,7 +440,7 @@ POST/DELETE /api/opensandbox/sandboxes/{node_id}/{sandbox_id}/...
 | Binding is `creating` without `sandbox_id` | Current lease owner may finish provisioning; all other callers fail closed. |
 | Reservation transition or binding CAS loses its allocation token | Stale owner must not write or release; terminate any provider object it created when ownership is lost. |
 | Node capacity is reduced below occupancy | Keep existing reservations, report over-capacity, and reject new reservations. |
-| PUT removes an in-use node, changes an existing node ID, or switches to legacy while dedicated allocations exist | Reject with a stable conflict response. |
+| PUT removes an in-use node, changes an existing node ID, or switches to legacy while dedicated allocations exist | Reject with a stable conflict response (`409 opensandbox_node_in_use` / `opensandbox_legacy_mode_in_use`). |
 | Admin renew succeeds | Provider, binding, and reservation expiry become `now + node.timeout`. |
 | Admin terminate succeeds | Provider is killed, binding becomes terminal, and the matching fenced reservation is released. |
 | Admin inventory refreshes while page N is selected | Request `skip=N*limit`; do not issue a second page-0 request unless a filter changed. |
@@ -489,3 +493,115 @@ async with renewable_user_lease(user_id) as lease:
 ```
 
 The Mongo `allocation_token`, not Redis expiry alone, is the final write-authority boundary.
+
+---
+
+## Scenario: OpenSandbox admin local-forget and force-remove
+
+### 1. Scope / Trigger
+
+- Trigger: Admin UI shows `unknown` occupancy, OpenSandbox is unreachable, and fail-closed
+  user-path rules would otherwise lock `x/10` and block switching back to `legacy`.
+- Applies only to LambChat-managed multi-node bindings/reservations and node config.
+  Does not reconstruct remote containers, Daytona/E2B, or WeCom admission.
+
+### 2. Signatures
+
+```python
+class OpenSandboxCapacityStorage:
+    async def purge_binding(self, node_id: str, sandbox_id: str, ...) -> int: ...
+    async def purge_node_occupancy(self, node_id: str) -> int: ...
+    async def delete_node_capacity(self, node_id: str) -> None: ...
+
+class OpenSandboxNodeStorage:
+    async def force_remove(self, node_id: str, *, expected_revision: str, updated_by: str) -> tuple[StoredOpenSandboxNodes, int, bool]: ...
+
+DELETE /api/opensandbox/sandboxes/{node_id}/{sandbox_id}?confirm=true&local_only=true
+POST   /api/settings/opensandbox-nodes/{node_id}/force-remove
+```
+
+Permission: `settings:manage`. Both hatches skip OpenSandbox create/connect/kill.
+
+### 3. Contracts
+
+- `local_only=true` is allowed when the row is `unknown`/`creating`, or the node's
+  `health_state` is `unknown`/`unavailable`. Healthy `running`/`paused` on a healthy node
+  returns `409 opensandbox_local_forget_not_allowed`.
+- Success body: `{ node_id, sandbox_id, action: "forget_local", state: "terminated", local_only: true }`.
+- Force-remove body: `{ "confirm": true, "expected_revision": "<rev>" }` (`extra=forbid`).
+- Force-remove of a `healthy` node that still has non-terminal occupancy returns
+  `409 opensandbox_node_in_use`. Never-probed `unknown` is allowed.
+- Purge uses the stored `reservation_id` / `allocation_token`. A newer token must not be
+  overwritten. Pull reservations by `reservation_id` (not token-only `$pull`) so tokenless
+  historical rows still drop `used_sandboxes`. Then `delete_one` the capacity document.
+- Last remaining managed node: stored `mode=legacy`, `nodes=[]`. `get_current()` synthesizes
+  `legacy-default` from scalar settings. Ordinary unused-node `save()` must also delete the
+  removed node's capacity document.
+- Default inventory omits terminal rows unless `state` is an explicit terminal filter.
+- Confirm copy must say occupancy and `x/10` are cleared locally and remote containers may
+  remain until OpenSandbox TTL. Never log API keys. Probe/terminate/forget failures log
+  `node_id`, `sandbox_id` (if any), and exception type via `get_logger(__name__)`.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+|---|---|
+| DELETE without `confirm=true` | `400 opensandbox_terminate_confirmation_required` |
+| `local_only=true` on healthy running/paused + healthy node | `409 opensandbox_local_forget_not_allowed` |
+| Provider terminate timeout/connection error (no `local_only`) | `502 opensandbox_provider_action_failed`; occupancy unchanged |
+| Provider terminate confirmed 404 | Reconcile locally (existing path) |
+| Local forget leaves a non-terminal reservation/binding | `500 opensandbox_bookkeeping_failed` |
+| Force-remove `confirm=false` | `400 opensandbox_force_remove_confirmation_required` |
+| Force-remove revision mismatch | `409 opensandbox_nodes_revision_conflict` |
+| Force-remove missing node | `404 opensandbox_node_not_found` |
+| Force-remove healthy + occupied | `409 opensandbox_node_in_use` |
+| Force-remove last node | Occupancy purged, capacity doc deleted, stored `mode=legacy` |
+| PUT removes unused node | Also `delete_one` that node's capacity document |
+
+### 5. Good / Base / Bad Cases
+
+- **Good**: unknown inventory row, `local_only=true`; binding terminal; reservation gone;
+  `used_sandboxes == 0`; row absent from default list.
+- **Base**: unused healthy node still uses draft-remove + PUT; occupied healthy node stays
+  fail-closed on both PUT and force-remove.
+- **Bad**: treating a failed `connect()` as not-found and auto-releasing slots.
+- **Bad**: `$pull` reservations only when `allocation_token` matches, leaving tokenless
+  `unknown` rows in `x/10`.
+- **Bad**: frontend trash on occupied/unknown nodes only edits the draft, so Mongo occupancy
+  never drops.
+
+### 6. Tests Required
+
+- Terminate without `local_only` still 502s on adapter timeout; occupancy unchanged.
+- `local_only=true` on unknown clears binding + reservation; used count 0.
+- `local_only=true` on healthy running + healthy node → 409.
+- Default inventory omits terminated/released rows; probe exceptions are logged (`caplog`).
+- Force-remove unknown occupied node: node gone, capacity doc gone, bindings terminal,
+  revision bumped; last node → stored `mode=legacy`.
+- Force-remove healthy in-use → 409; unused-node save deletes capacity doc; occupancy
+  cleared then `save(mode=legacy)` succeeds.
+- Panel source test matches `local_only` / `force-remove` and TTL confirm copy.
+
+Do not contact a real OpenSandbox node.
+
+### 7. Wrong vs Correct
+
+#### Wrong: Admin delete always talks to OpenSandbox
+
+```python
+provider = await run_blocking_io(adapter.get_sandbox, sandbox_id)
+await run_blocking_io(adapter.kill_sandbox, provider)
+await storage.release(...)
+```
+
+A timeout leaves Mongo occupancy in place, so `x/10` never drops and `legacy` stays blocked.
+
+#### Correct: confirmed local hatch skips the adapter
+
+```python
+if local_only:
+    released = await storage.purge_binding(node_id, sandbox_id)
+    if not released:
+        raise HTTPException(status_code=500, detail="opensandbox_bookkeeping_failed")
+    return {"action": "forget_local", "state": "terminated", "local_only": True}
+```
