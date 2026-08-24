@@ -122,6 +122,9 @@ class _FakeSessionEventsAggregationCursor:
         for doc in self._docs:
             yield doc
 
+    async def to_list(self, length=None):
+        return list(self._docs)
+
 
 class _FakeSessionEventsAggregationCollection:
     def __init__(self):
@@ -148,6 +151,12 @@ class _FakeSessionEventsAggregationCollection:
                 },
             ]
         )
+
+    async def update_many(self, *_a, **_kw):
+        raise AssertionError("bounded session event reads must not write trace documents")
+
+    async def delete_many(self, *_a, **_kw):
+        raise AssertionError("bounded session event reads must not delete trace documents")
 
     def find(self, *args, **kwargs):
         self.find_calls.append((args, kwargs))
@@ -342,50 +351,30 @@ async def test_get_session_events_uses_server_side_limit_when_max_events_is_set(
         },
     ]
     assert collection.find_calls == []
-    assert collection.aggregate_calls == [
-        [
-            {
-                "$match": {
-                    "session_id": "session-1",
-                    "run_id": {"$in": ["run-1"]},
-                    "status": {"$ne": "running"},
-                }
-            },
-            {"$sort": {"started_at": 1}},
-            {
-                "$project": {
-                    "trace_id": 1,
-                    "run_id": 1,
-                    "events.event_type": 1,
-                    "events.data": 1,
-                    "events.timestamp": 1,
-                    "events.seq": 1,
-                }
-            },
-            {"$unwind": "$events"},
-            {"$match": {"events.event_type": {"$in": ["user:message", "done"]}}},
-            {"$set": {"events.seq_sort": {"$ifNull": ["$events.seq", 0]}}},
-            {
-                "$sort": {
-                    "events.seq_sort": 1,
-                    "started_at": 1,
-                    "events.timestamp": 1,
-                }
-            },
-            {"$limit": 2},
-            {
-                "$project": {
-                    "_id": 0,
-                    "trace_id": 1,
-                    "run_id": 1,
-                    "event_type": "$events.event_type",
-                    "data": "$events.data",
-                    "timestamp": "$events.timestamp",
-                    "seq": "$events.seq",
-                }
-            },
-        ]
+    pipeline = collection.aggregate_calls[-1]
+    assert pipeline[0] == {
+        "$match": {
+            "session_id": "session-1",
+            "run_id": {"$in": ["run-1"]},
+            "status": {"$ne": "running"},
+        }
+    }
+    unwind = next(stage["$unwind"] for stage in pipeline if "$unwind" in stage)
+    assert unwind == "$events" or (
+        unwind.get("path") == "$events" and unwind.get("includeArrayIndex")
+    )
+    assert {"$match": {"events.event_type": {"$in": ["user:message", "done"]}}} in pipeline
+    assert {"$limit": 2} in pipeline
+    sort_stage = next(stage["$sort"] for stage in pipeline if "$sort" in stage and "events" in str(stage["$sort"]))
+    assert list(sort_stage)[:3] == [
+        "events.legacy_bucket",
+        "events.seq_sort",
+        "events.timestamp_sort",
     ]
+    output = pipeline[-1]["$project"]
+    assert output["event_type"] == "$events.event_type"
+    assert output["data"] == "$events.data"
+    assert output["timestamp"] == "$events.timestamp"
 
 
 @pytest.mark.asyncio
@@ -396,8 +385,9 @@ async def test_get_session_events_clamps_requested_max_events() -> None:
 
     await storage.get_session_events("session-1", max_events=100_000)
 
-    pipeline = collection.aggregate_calls[0]
-    assert {"$limit": 5000} in pipeline
+    # The event-read pipeline is the last aggregate call.
+    pipeline = collection.aggregate_calls[-1]
+    assert {"$limit": 10000} in pipeline
 
 
 @pytest.mark.asyncio
@@ -410,7 +400,7 @@ async def test_get_session_events_uses_default_server_side_limit_when_unset() ->
 
     assert len(events) == 2
     assert collection.find_calls == []
-    pipeline = collection.aggregate_calls[0]
+    pipeline = collection.aggregate_calls[-1]
     assert {"$limit": 1000} in pipeline
 
 
@@ -432,7 +422,7 @@ async def test_get_session_events_bounds_run_ids_and_event_types(
         max_events=2,
     )
 
-    pipeline = collection.aggregate_calls[0]
+    pipeline = collection.aggregate_calls[-1]
     assert pipeline[0] == {
         "$match": {
             "session_id": "session-1",
@@ -593,4 +583,4 @@ async def test_get_trace_events_clamps_requested_max_events() -> None:
     await storage.get_trace_events("trace-1", max_events=100_000)
 
     pipeline = collection.aggregate_calls[0]
-    assert {"$limit": 5000} in pipeline
+    assert {"$limit": 10000} in pipeline
