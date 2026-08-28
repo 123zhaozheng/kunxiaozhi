@@ -1484,3 +1484,56 @@ check 复核修 5 项：自定义按钮死 key、tooltip 英文硬编码、导�
 ### Next Steps
 
 - 子4：08-28-analytics-verification 全量验证与交付（含浏览器实测；顺带判定 /tokens/by-preset 与 /users/heatmap 删除、getOverview/getSessionsTrend 孤儿客户端方法）
+
+
+## Session 51: 全量验证与交付（analytics-verification）——父任务收官
+
+**Date**: 2026-08-28
+**Task**: 08-28-analytics-verification（父：08-28-analytics-dashboard-rebuild）
+**Branch**: `main`
+
+### Summary
+
+子4 全量验证与交付，父任务四个子任务全部完成并归档。
+
+- 跨层一致性测试补真实 MongoDB 集成：独立测试库 `lambchat_cross_consistency_test`
+  （5 会话 / 5 trace / 3 用户，含无消息会话与纯 token trace），monkeypatch
+  `get_mongo_client` 定向 + 禁用快照层直测实时聚合，锁定绝对数值
+  （messages=10 / tokens=730 / new=5 / active=4 / using=3），跑完删库；
+  每测试独立客户端规避 motor 单例跨事件循环复用问题；无本地库自动跳过
+- R3 存废判定并执行删除：`/users/heatmap`、`/tokens/by-preset`、`/tokens/trend`
+  三层 + Heatmap schema 全删（前端零调用，E1–E6 取证）；`/overview`、
+  `/sessions/trend` 端点保留（仓外调用方不可排除），仅删前端孤儿客户端方法
+  `getOverview` / `getSessionsTrend`
+- R1 全量验证：改动文件 ruff 零违规；mypy 仅 1 条既有错误；
+  tests/api+tests/infra 1647 passed（9 失败 + 1 收集错误均基线对照证明既有）；
+  analytics 专项 128 passed；前端 lint/build 通过、相关测试 31/31、
+  存量 44 条失败以 stash 基线证明既有
+- R4 交付 `manual-verification.md`（父任务目录，10 节 40+ 勾选项：等式核对、
+  删会话历史不变、浏览器时区改写、空态、CSV Excel、三视口、回归）
+- R5 spec 沉淀：端点清单同步、活跃用户（登录去重）/使用用户（发消息去重）
+  口径拆分与筛选降级规则、「会话/trace 硬删 → 历史数字不可重算 → 快照只冻结
+  一次」Gotcha、新增测试清单
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `41572309` | feat(analytics): 删除零调用端点并补齐跨层一致性测试 |
+| `3ccab819` | docs(spec): 沉淀端点删除、活跃/使用用户口径与硬删历史缩水 Gotcha |
+| 自动 chore | archive 08-28-analytics-verification / 08-28-analytics-dashboard-rebuild |
+
+### Testing
+
+- [OK] analytics 专项 15 文件 128 passed（含真实 MongoDB 集成 2 条）
+- [OK] tests/api + tests/infra 1647 passed（残留失败均既有，见验证日志基线对照）
+- [OK] pnpm lint + build、analytics 前端测试 31/31
+
+### Status
+
+[OK] **Completed**（子4 与父任务均已归档至 archive/2026-08/）
+
+### Next Steps
+
+- 用户按 `archive/2026-08/08-28-analytics-dashboard-rebuild/manual-verification.md` 做浏览器实测
+- 生产上线拉镜像重启即触发快照回填 worker；首日前历史区间走降级实时聚合
