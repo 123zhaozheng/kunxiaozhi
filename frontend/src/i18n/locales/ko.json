@@ -270,7 +270,6 @@
       "empty": "데이터 없음",
       "eventCount": "이벤트 수",
       "feedbackTitle": "피드백 상세",
-      "preset": "에이전트",
       "rating": "평가",
       "reason": "사유",
       "runId": "실행",
@@ -296,11 +295,23 @@
       "upCount": "긍정 평가 수",
       "upRate": "긍정률"
     },
+    "filters": {
+      "agent": "에이전트",
+      "all": "전체",
+      "persona": "페르소나",
+      "personaLocked": "현재 페르소나로 고정됨",
+      "sort": "정렬",
+      "sortFrequency": "사용 빈도",
+      "sortRecent": "최근 활동",
+      "userRole": "사용자 역할"
+    },
     "overview": {
       "activeUsers": "활성 사용자",
+      "sessions": "세션",
+      "activeSessions": "활성 {{count}}",
+      "userMessages": "사용자 메시지",
       "totalSessions": "총 세션 수",
-      "totalTokens": "총 토큰 수",
-      "upVoteRate": "긍정 비율"
+      "totalTokens": "총 토큰 수"
     },
     "preset": {
       "activeUsers": "활성 사용자 수",
@@ -309,17 +320,37 @@
       "noDownReasons": "부정 평가 사유 데이터 없음",
       "subtitle": "에이전트별 지표",
       "title": "에이전트 분석",
-      "totalMessages": "총 메시지 수",
+      "totalMessages": "사용자 메시지 수",
       "totalSessions": "총 세션 수",
       "totalTokens": "총 토큰 수",
       "upVoteRate": "긍정률"
     },
     "sessions": {
-      "messages": "메시지 수",
+      "messages": "사용자 메시지 수",
+      "userMessages": "사용자 메시지 수",
       "sessions": "세션 수",
       "title": "세션",
       "trend": "세션 및 메시지 추이",
       "trendHint": "선택한 기간의 일별 집계"
+    },
+    "usage": {
+      "title": "사용 내역",
+      "subtitle": "사용자 × 페르소나별 한 행. 사용 기록이 있는 사용자만 표시",
+      "exportCsv": "CSV 내보내기",
+      "exporting": "내보내는 중…",
+      "exportFailed": "내보내기 실패",
+      "empty": "사용 데이터가 없습니다",
+      "columns": {
+        "userId": "사번",
+        "name": "이름",
+        "role": "역할",
+        "persona": "페르소나",
+        "newSessions": "신규 세션",
+        "activeSessions": "활성 세션",
+        "userMessages": "사용자 메시지",
+        "tokens": "토큰",
+        "lastActive": "최근 활동"
+      }
     },
     "subtitle": "시스템 사용량과 토큰 지표",
     "timeRange": {

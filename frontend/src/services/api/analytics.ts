@@ -19,6 +19,11 @@ import type {
   SessionListResponse,
   SessionsTrendResponse,
   TrendResponse,
+  UsageByPersonaResponse,
+  UsageByUserResponse,
+  UsageFilters,
+  UsageSummaryResponse,
+  UsageTrendResponse,
 } from "../../types/analytics";
 
 const BASE = `${API_BASE}/api/analytics`;
@@ -29,6 +34,21 @@ function rangeQuery(start: string, end: string): string {
 
 function appendParam(query: string, key: string, value: string | number): string {
   return `${query}&${key}=${encodeURIComponent(String(value))}`;
+}
+
+/** Shared filter query for every usage report endpoint (summary/trend/by-persona/by-user/export). */
+function appendUsageFilters(query: string, filters?: UsageFilters): string {
+  let q = query;
+  if (filters?.personaPresetId) {
+    q = appendParam(q, "persona_preset_id", filters.personaPresetId);
+  }
+  if (filters?.agentId) {
+    q = appendParam(q, "agent_id", filters.agentId);
+  }
+  if (filters?.roleId) {
+    q = appendParam(q, "role_id", filters.roleId);
+  }
+  return q;
 }
 
 /** Shared filter query for list + CSV export. */
@@ -42,7 +62,7 @@ function appendListFilters(
 ): string {
   let q = query;
   const includePagination = opts?.includePagination ?? true;
-  const personaId = options?.personaPresetId || options?.presetId;
+  const personaId = options?.personaPresetId;
   if (personaId) {
     q = appendParam(q, "persona_preset_id", personaId);
   }
@@ -100,10 +120,10 @@ export const analyticsApi = {
   async getActiveUserTrend(
     start: string,
     end: string,
+    filters?: UsageFilters,
   ): Promise<TrendResponse> {
-    return authFetch<TrendResponse>(
-      `${BASE}/users/active${rangeQuery(start, end)}`,
-    );
+    const query = appendUsageFilters(rangeQuery(start, end), filters);
+    return authFetch<TrendResponse>(`${BASE}/users/active${query}`);
   },
 
   async getUsersHeatmap(
@@ -293,5 +313,63 @@ export const analyticsApi = {
     query = appendParam(query, "skip", options?.skip ?? 0);
     query = appendParam(query, "limit", options?.limit ?? 20);
     return authFetch<RunListResponse>(`${BASE}/runs/list${query}`);
+  },
+
+  // ── 使用情况报表（统一口径）─────────────────────────────────────────
+  // 五个出口共用同一套筛选参数，后端由同一查询构造层产出，数字天然一致。
+
+  async getUsageSummary(
+    start: string,
+    end: string,
+    filters?: UsageFilters,
+  ): Promise<UsageSummaryResponse> {
+    const query = appendUsageFilters(rangeQuery(start, end), filters);
+    return authFetch<UsageSummaryResponse>(`${BASE}/usage/summary${query}`);
+  },
+
+  async getUsageTrend(
+    start: string,
+    end: string,
+    filters?: UsageFilters,
+  ): Promise<UsageTrendResponse> {
+    const query = appendUsageFilters(rangeQuery(start, end), filters);
+    return authFetch<UsageTrendResponse>(`${BASE}/usage/trend${query}`);
+  },
+
+  async getUsageByPersona(
+    start: string,
+    end: string,
+    filters?: UsageFilters,
+  ): Promise<UsageByPersonaResponse> {
+    const query = appendUsageFilters(rangeQuery(start, end), filters);
+    return authFetch<UsageByPersonaResponse>(
+      `${BASE}/usage/by-persona${query}`,
+    );
+  },
+
+  /** One row per user × persona. */
+  async listUsageByUser(
+    start: string,
+    end: string,
+    filters?: UsageFilters,
+    pagination?: { skip?: number; limit?: number },
+  ): Promise<UsageByUserResponse> {
+    let query = appendUsageFilters(rangeQuery(start, end), filters);
+    query = appendParam(query, "skip", pagination?.skip ?? 0);
+    query = appendParam(query, "limit", pagination?.limit ?? 20);
+    return authFetch<UsageByUserResponse>(`${BASE}/usage/by-user${query}`);
+  },
+
+  /**
+   * Download the user × persona usage CSV for the current filters
+   * (full filtered set, server-capped; no skip/limit).
+   */
+  async exportUsageCsv(
+    start: string,
+    end: string,
+    filters?: UsageFilters,
+  ): Promise<void> {
+    const query = appendUsageFilters(rangeQuery(start, end), filters);
+    await downloadCsv(`${BASE}/usage/export.csv${query}`, "analytics-usage.csv");
   },
 };

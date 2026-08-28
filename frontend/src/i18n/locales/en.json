@@ -278,7 +278,6 @@
       "feedbackTitle": "Feedback details",
       "lastActive": "Last active",
       "persona": "Persona",
-      "preset": "Persona",
       "rating": "Rating",
       "reason": "Reason",
       "runId": "Run",
@@ -315,7 +314,6 @@
       "all": "All",
       "persona": "Persona",
       "personaLocked": "Locked to this persona",
-      "personaPlaceholder": "preset id",
       "sort": "Sort",
       "sortFrequency": "Frequency",
       "sortRecent": "Most recent",
@@ -323,9 +321,11 @@
     },
     "overview": {
       "activeUsers": "Active users",
+      "sessions": "Sessions",
+      "activeSessions": "Active {{count}}",
+      "userMessages": "User messages",
       "totalSessions": "Total sessions",
-      "totalTokens": "Total tokens",
-      "upVoteRate": "Positive rate"
+      "totalTokens": "Total tokens"
     },
     "preset": {
       "activeUsers": "Active users",
@@ -335,17 +335,37 @@
       "subtitle": "Per-persona metrics",
       "title": "Persona analytics",
       "titleNamed": "\"{{name}}\" analytics",
-      "totalMessages": "Total messages",
+      "totalMessages": "User messages",
       "totalSessions": "Total sessions",
       "totalTokens": "Total tokens",
       "upVoteRate": "Positive rate"
     },
     "sessions": {
-      "messages": "Messages",
+      "messages": "User messages",
+      "userMessages": "User messages",
       "sessions": "Sessions",
       "title": "Sessions",
       "trend": "Sessions & messages",
       "trendHint": "Counts per day across the time range"
+    },
+    "usage": {
+      "title": "Usage details",
+      "subtitle": "One row per user × Persona with usage activity",
+      "exportCsv": "Export CSV",
+      "exporting": "Exporting...",
+      "exportFailed": "Export failed",
+      "empty": "No usage data",
+      "columns": {
+        "userId": "Employee ID",
+        "name": "Name",
+        "role": "Role",
+        "persona": "Persona",
+        "newSessions": "New sessions",
+        "activeSessions": "Active sessions",
+        "userMessages": "User messages",
+        "tokens": "Tokens",
+        "lastActive": "Last active"
+      }
     },
     "subtitle": "System usage and token metrics",
     "timeRange": {

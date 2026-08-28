@@ -48,11 +48,12 @@ interface AnalyticsDrilldownListProps {
    * Input is read-only / hidden edit.
    */
   lockPersonaPresetId?: boolean;
+  personaOptions?: Array<{ id: string; name: string }>;
+  agentOptions?: string[];
   onBack: () => void;
 }
 
 const PAGE_SIZE = 20;
-const AGENT_OPTIONS = ["fast", "search", "team"] as const;
 
 function formatNumber(value: number): string {
   if (!Number.isFinite(value)) return "0";
@@ -74,6 +75,8 @@ export function AnalyticsDrilldownList({
   rating,
   initialFilters,
   lockPersonaPresetId = false,
+  personaOptions = [],
+  agentOptions = [],
   onBack,
 }: AnalyticsDrilldownListProps) {
   const { t } = useTranslation();
@@ -312,7 +315,7 @@ export function AnalyticsDrilldownList({
               onChange={(e) => setAgentId(e.target.value)}
             >
               <option value="">{t("analytics.filters.all", "全部")}</option>
-              {AGENT_OPTIONS.map((id) => (
+              {agentOptions.map((id) => (
                 <option key={id} value={id}>
                   {id}
                 </option>
@@ -321,31 +324,20 @@ export function AnalyticsDrilldownList({
           </label>
           <label className="flex flex-col gap-1 text-[10px] text-stone-500 dark:text-stone-400">
             {t("analytics.filters.persona", "Persona")}
-            <input
-              type="text"
-              className={`${selectClass}${
-                lockPersonaPresetId ? " opacity-70" : ""
-              }`}
-              placeholder={t(
-                "analytics.filters.personaPlaceholder",
-                "preset id",
-              )}
+            <select
+              className={`${selectClass}${lockPersonaPresetId ? " opacity-70" : ""}`}
               value={personaPresetId}
-              readOnly={lockPersonaPresetId}
               disabled={lockPersonaPresetId}
-              onChange={(e) => {
-                if (lockPersonaPresetId) return;
-                setPersonaPresetId(e.target.value.trim());
-              }}
-              title={
-                lockPersonaPresetId
-                  ? t(
-                      "analytics.filters.personaLocked",
-                      "已锁定为当前 Persona",
-                    )
-                  : undefined
-              }
-            />
+              onChange={(e) => setPersonaPresetId(e.target.value)}
+              title={lockPersonaPresetId ? t("analytics.filters.personaLocked") : undefined}
+            >
+              <option value="">{t("analytics.filters.all")}</option>
+              {personaOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="flex flex-col gap-1 text-[10px] text-stone-500 dark:text-stone-400">
             {t("analytics.filters.userRole", "用户角色")}

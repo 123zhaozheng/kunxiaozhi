@@ -270,7 +270,6 @@
       "empty": "データなし",
       "eventCount": "イベント数",
       "feedbackTitle": "フィードバック詳細",
-      "preset": "エージェント",
       "rating": "評価",
       "reason": "理由",
       "runId": "実行",
@@ -296,11 +295,23 @@
       "upCount": "高評価数",
       "upRate": "高評価率"
     },
+    "filters": {
+      "agent": "エージェント",
+      "all": "すべて",
+      "persona": "ペルソナ",
+      "personaLocked": "現在のペルソナに固定",
+      "sort": "並び順",
+      "sortFrequency": "利用回数",
+      "sortRecent": "最近の利用",
+      "userRole": "ユーザーロール"
+    },
     "overview": {
       "activeUsers": "アクティブユーザー",
+      "sessions": "セッション",
+      "activeSessions": "アクティブ {{count}}",
+      "userMessages": "ユーザーメッセージ",
       "totalSessions": "総セッション数",
-      "totalTokens": "総トークン数",
-      "upVoteRate": "高評価率"
+      "totalTokens": "総トークン数"
     },
     "preset": {
       "activeUsers": "アクティブユーザー数",
@@ -309,17 +320,37 @@
       "noDownReasons": "低評価理由のデータなし",
       "subtitle": "エージェント別指標",
       "title": "エージェント分析",
-      "totalMessages": "総メッセージ数",
+      "totalMessages": "ユーザーメッセージ数",
       "totalSessions": "総セッション数",
       "totalTokens": "総トークン数",
       "upVoteRate": "高評価率"
     },
     "sessions": {
-      "messages": "メッセージ数",
+      "messages": "ユーザーメッセージ数",
+      "userMessages": "ユーザーメッセージ数",
       "sessions": "セッション数",
       "title": "セッション",
       "trend": "セッションとメッセージの推移",
       "trendHint": "期間内の1日あたりの集計"
+    },
+    "usage": {
+      "title": "利用明細",
+      "subtitle": "ユーザー × ペルソナごとに1行。利用実績のあるユーザーのみ表示",
+      "exportCsv": "CSV エクスポート",
+      "exporting": "エクスポート中…",
+      "exportFailed": "エクスポートに失敗しました",
+      "empty": "利用データがありません",
+      "columns": {
+        "userId": "社員番号",
+        "name": "氏名",
+        "role": "ロール",
+        "persona": "ペルソナ",
+        "newSessions": "新規セッション",
+        "activeSessions": "アクティブセッション",
+        "userMessages": "ユーザーメッセージ",
+        "tokens": "トークン",
+        "lastActive": "最終利用"
+      }
     },
     "subtitle": "システム利用状況とトークン指標",
     "timeRange": {

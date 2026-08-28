@@ -382,6 +382,7 @@ export function PresetAnalyticsModal({
           rating={drilldown.rating}
           initialFilters={{ personaPresetId: personaId }}
           lockPersonaPresetId
+          personaOptions={[{ id: personaId, name: preset?.name || personaId }]}
           onBack={() => setDrilldown(null)}
         />
       ) : isLoading ? (
@@ -424,7 +425,7 @@ export function PresetAnalyticsModal({
                 className="text-stone-600 dark:text-stone-400"
               />
               <span className="text-sm font-medium text-stone-700 dark:text-stone-200">
-                {t("analytics.preset.totalMessages", "总消息数")}
+                {t("analytics.preset.totalMessages", "用户消息数")}
               </span>
               <span className="ml-auto text-lg font-bold text-stone-900 dark:text-stone-100">
                 {metrics ? formatNumber(metrics.total_messages) : "—"}

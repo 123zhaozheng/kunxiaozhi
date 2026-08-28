@@ -278,7 +278,6 @@
       "feedbackTitle": "反馈明细",
       "lastActive": "最近活跃",
       "persona": "Persona",
-      "preset": "Persona",
       "rating": "评分",
       "reason": "原因",
       "runId": "运行",
@@ -315,7 +314,6 @@
       "all": "全部",
       "persona": "Persona",
       "personaLocked": "已锁定为当前 Persona",
-      "personaPlaceholder": "preset id",
       "sort": "排序",
       "sortFrequency": "使用频次",
       "sortRecent": "最近活跃",
@@ -323,9 +321,11 @@
     },
     "overview": {
       "activeUsers": "活跃用户",
+      "sessions": "会话",
+      "activeSessions": "活跃 {{count}}",
+      "userMessages": "用户消息",
       "totalSessions": "总会话数",
-      "totalTokens": "总 token",
-      "upVoteRate": "点赞率"
+      "totalTokens": "总 token"
     },
     "preset": {
       "activeUsers": "活跃用户数",
@@ -335,17 +335,37 @@
       "subtitle": "单 Persona 指标",
       "title": "Persona 分析",
       "titleNamed": "「{{name}}」分析",
-      "totalMessages": "总消息数",
+      "totalMessages": "用户消息数",
       "totalSessions": "总会话数",
       "totalTokens": "token 消耗总计",
       "upVoteRate": "点赞率"
     },
     "sessions": {
-      "messages": "消息数",
+      "messages": "用户消息数",
+      "userMessages": "用户消息数",
       "sessions": "会话数",
       "title": "会话",
       "trend": "会话与消息趋势",
       "trendHint": "按天统计选定时间区间内的数据"
+    },
+    "usage": {
+      "title": "使用明细",
+      "subtitle": "按用户 × Persona 展示，有使用行为的用户各占一行",
+      "exportCsv": "导出 CSV",
+      "exporting": "导出中…",
+      "exportFailed": "导出失败",
+      "empty": "暂无使用数据",
+      "columns": {
+        "userId": "工号",
+        "name": "姓名",
+        "role": "角色",
+        "persona": "Persona",
+        "newSessions": "新建会话",
+        "activeSessions": "活跃会话",
+        "userMessages": "用户消息",
+        "tokens": "Token",
+        "lastActive": "最近活跃"
+      }
     },
     "subtitle": "系统使用情况与 token 指标",
     "timeRange": {

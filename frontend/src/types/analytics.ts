@@ -161,6 +161,67 @@ export interface AnalyticsListFilters {
   sort?: AnalyticsListSort;
   skip?: number;
   limit?: number;
-  /** @deprecated prefer personaPresetId */
-  presetId?: string;
 }
+
+// ── 使用情况报表（统一口径）─────────────────────────────────────────
+// Mirrors src/kernel/schemas/analytics.py Usage* models.
+// 「用户消息」= user:message 事件条数；「活跃」= 区间内发过消息。
+
+/** Filters shared by every usage report endpoint. */
+export interface UsageFilters {
+  personaPresetId?: string;
+  agentId?: string;
+  /** RBAC user role id */
+  roleId?: string;
+}
+
+export interface UsageSummaryResponse {
+  active_users: number;
+  new_sessions: number;
+  active_sessions: number;
+  user_messages: number;
+  total_tokens: number;
+}
+
+export interface UsageTrendPoint {
+  /** YYYY-MM-DD in Asia/Shanghai */
+  date: string;
+  new_sessions: number;
+  active_sessions: number;
+  user_messages: number;
+  total_tokens: number;
+}
+
+export interface UsageTrendResponse {
+  items: UsageTrendPoint[];
+}
+
+export interface UsageByPersonaItem {
+  persona_preset_id: string | null;
+  persona_preset_name: string;
+  active_users: number;
+  active_sessions: number;
+  user_messages: number;
+  total_tokens: number;
+}
+
+export interface UsageByPersonaResponse {
+  items: UsageByPersonaItem[];
+}
+
+/** One row per user × persona. */
+export interface UsageByUserItem {
+  user_id: string;
+  username: string;
+  display_name: string | null;
+  roles: string[];
+  persona_preset_id: string | null;
+  persona_preset_name: string;
+  new_sessions: number;
+  active_sessions: number;
+  user_messages: number;
+  total_tokens: number;
+  last_active_at: string | null;
+}
+
+export type UsageByUserResponse = AnalyticsListResponse<UsageByUserItem>;

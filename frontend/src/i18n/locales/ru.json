@@ -270,7 +270,6 @@
       "empty": "Нет данных",
       "eventCount": "События",
       "feedbackTitle": "Детали отзывов",
-      "preset": "Агент",
       "rating": "Оценка",
       "reason": "Причина",
       "runId": "Запуск",
@@ -296,11 +295,23 @@
       "upCount": "Положительных",
       "upRate": "Доля положительных"
     },
+    "filters": {
+      "agent": "Агент",
+      "all": "Все",
+      "persona": "Персона",
+      "personaLocked": "Закреплено за текущей персоной",
+      "sort": "Сортировка",
+      "sortFrequency": "По частоте",
+      "sortRecent": "По давности",
+      "userRole": "Роль пользователя"
+    },
     "overview": {
       "activeUsers": "Активные пользователи",
+      "sessions": "Сессии",
+      "activeSessions": "Активных {{count}}",
+      "userMessages": "Сообщения пользователей",
       "totalSessions": "Всего сессий",
-      "totalTokens": "Всего токенов",
-      "upVoteRate": "Положительных"
+      "totalTokens": "Всего токенов"
     },
     "preset": {
       "activeUsers": "Активные пользователи",
@@ -309,17 +320,37 @@
       "noDownReasons": "Нет данных о причинах",
       "subtitle": "Метрики по агенту",
       "title": "Аналитика агента",
-      "totalMessages": "Всего сообщений",
+      "totalMessages": "Сообщения пользователей",
       "totalSessions": "Всего сессий",
       "totalTokens": "Всего токенов",
       "upVoteRate": "Доля положительных"
     },
     "sessions": {
-      "messages": "Сообщения",
+      "messages": "Сообщения пользователей",
+      "userMessages": "Сообщения пользователей",
       "sessions": "Сессии",
       "title": "Сессии",
       "trend": "Динамика сессий и сообщений",
       "trendHint": "Ежедневная сводка за выбранный период"
+    },
+    "usage": {
+      "title": "Детали использования",
+      "subtitle": "Одна строка на пользователя × персону; только те, кто пользовался",
+      "exportCsv": "Экспорт CSV",
+      "exporting": "Экспорт…",
+      "exportFailed": "Не удалось экспортировать",
+      "empty": "Нет данных об использовании",
+      "columns": {
+        "userId": "Табельный номер",
+        "name": "Имя",
+        "role": "Роль",
+        "persona": "Персона",
+        "newSessions": "Новые сессии",
+        "activeSessions": "Активные сессии",
+        "userMessages": "Сообщения пользователей",
+        "tokens": "Токены",
+        "lastActive": "Последняя активность"
+      }
     },
     "subtitle": "Использование системы и показатели токенов",
     "timeRange": {

@@ -1,7 +1,8 @@
 /**
  * Analytics Panel - 全局统计看板
  *
- * 提供时间筛选器 + 4 个概览卡片 + 用户/会话/Token 三大板块图表。
+ * 时间 + Persona + 智能体 三个全局筛选，驱动概览卡片、趋势图、使用明细与导出。
+ * 「用户消息」= 用户实际发出的消息数；「活跃」= 区间内发过消息。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -13,6 +14,7 @@ import {
   ChevronDown,
   Clock,
   Cpu,
+  Download,
   Hash,
   MessageSquare,
   ThumbsDown,
@@ -37,16 +39,20 @@ import {
 } from "recharts";
 import { PanelHeader } from "../common/PanelHeader";
 import { PanelLoadingState } from "../common/PanelLoadingState";
+import { Pagination } from "../common/Pagination";
 import { analyticsApi } from "../../services/api/analytics";
+import { personaPresetApi } from "../../services/api/personaPreset";
 import type {
   AnalyticsRangePreset,
   ByLabelItem,
   ByPresetFeedbackItem,
   FeedbackSummaryResponse,
   HeatmapCell,
-  OverviewResponse,
-  SessionsTrendResponse,
   TrendDataPoint,
+  UsageByUserItem,
+  UsageFilters,
+  UsageSummaryResponse,
+  UsageTrendPoint,
 } from "../../types/analytics";
 import {
   AnalyticsDrilldownList,
@@ -68,6 +74,21 @@ const PIE_COLORS = [
 ];
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+const USAGE_PAGE_SIZE = 20;
+
+// Column order mirrors UsageByUserItem so the table and the CSV export match.
+const USAGE_COLUMN_KEYS = [
+  "userId",
+  "name",
+  "role",
+  "persona",
+  "newSessions",
+  "activeSessions",
+  "userMessages",
+  "tokens",
+  "lastActive",
+] as const;
 
 interface DateRange {
   start: Date;
@@ -118,15 +139,24 @@ function formatNumber(value: number): string {
   return value.toLocaleString();
 }
 
+function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString();
+}
+
 function StatsCard({
   icon: Icon,
   label,
   value,
+  hint,
   onClick,
 }: {
   icon: React.ElementType;
   label: string;
   value: string | number;
+  hint?: string;
   onClick?: () => void;
 }) {
   const className = [
@@ -154,6 +184,11 @@ function StatsCard({
         <p className="truncate text-lg font-bold text-stone-900 dark:text-stone-100 sm:text-xl">
           {value}
         </p>
+        {hint ? (
+          <p className="truncate text-[11px] text-stone-500 dark:text-stone-400">
+            {hint}
+          </p>
+        ) : null}
       </div>
     </>
   );
@@ -672,11 +707,20 @@ export function AnalyticsPanel() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
 
-  const [overview, setOverview] = useState<OverviewResponse | null>(null);
+  const [summary, setSummary] = useState<UsageSummaryResponse | null>(null);
   const [activeTrend, setActiveTrend] = useState<TrendDataPoint[]>([]);
   const [heatmap, setHeatmap] = useState<HeatmapCell[]>([]);
-  const [sessionsTrend, setSessionsTrend] =
-    useState<SessionsTrendResponse | null>(null);
+  const [usageTrend, setUsageTrend] = useState<UsageTrendPoint[]>([]);
+  const [usageRows, setUsageRows] = useState<UsageByUserItem[]>([]);
+  const [usageTotal, setUsageTotal] = useState(0);
+  const [usagePage, setUsagePage] = useState(1);
+  const [usageLoading, setUsageLoading] = useState(true);
+  const [usageError, setUsageError] = useState<string | null>(null);
+  const [isUsageExporting, setIsUsageExporting] = useState(false);
+  const [usageExportError, setUsageExportError] = useState<string | null>(null);
+  const [personaOptions, setPersonaOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [personaPresetId, setPersonaPresetId] = useState("");
+  const [agentId, setAgentId] = useState("");
   const [tokensByModel, setTokensByModel] = useState<ByLabelItem[]>([]);
   const [tokensByPreset, setTokensByPreset] = useState<ByLabelItem[]>([]);
   const [tokensTrend, setTokensTrend] = useState<TrendDataPoint[]>([]);
@@ -714,6 +758,41 @@ export function AnalyticsPanel() {
     [effectiveRange.start, effectiveRange.end],
   );
 
+  const usageFilters = useMemo<UsageFilters>(
+    () => ({
+      personaPresetId: personaPresetId || undefined,
+      agentId: agentId || undefined,
+    }),
+    [personaPresetId, agentId],
+  );
+
+  // Agent options come from the data itself, so a custom or "default" agent is selectable.
+  const agentOptions = useMemo(
+    () => sessionsByAgent.map((item) => item.label).filter(Boolean),
+    [sessionsByAgent],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    personaPresetApi
+      .list({ scope: "global", limit: 100 })
+      .then((response) => {
+        if (!cancelled) {
+          setPersonaOptions(
+            Array.isArray(response?.presets)
+              ? response.presets.map((preset) => ({ id: preset.id, name: preset.name }))
+              : [],
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPersonaOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -721,10 +800,10 @@ export function AnalyticsPanel() {
     const end = toIso(effectiveRange.end);
     try {
       const [
-        overviewData,
+        summaryData,
         activeData,
         heatmapData,
-        sessionsData,
+        usageTrendData,
         byModelData,
         byPresetData,
         tokensTrendData,
@@ -733,22 +812,22 @@ export function AnalyticsPanel() {
         byAgentData,
         byPersonaData,
       ] = await Promise.all([
-        analyticsApi.getOverview(start, end),
-        analyticsApi.getActiveUserTrend(start, end),
+        analyticsApi.getUsageSummary(start, end, usageFilters),
+        analyticsApi.getActiveUserTrend(start, end, usageFilters),
         analyticsApi.getUsersHeatmap(start, end),
-        analyticsApi.getSessionsTrend(start, end),
+        analyticsApi.getUsageTrend(start, end, usageFilters),
         analyticsApi.getTokensByModel(start, end),
         analyticsApi.getTokensByPreset(start, end, 10),
         analyticsApi.getTokensTrend(start, end),
         analyticsApi.getFeedbackSummary(start, end),
         analyticsApi.getFeedbackByPreset(start, end),
-        analyticsApi.getSessionsByAgent(start, end, 10),
+        analyticsApi.getSessionsByAgent(start, end, 100),
         analyticsApi.getSessionsByPersona(start, end, 10),
       ]);
-      setOverview(overviewData ?? null);
+      setSummary(summaryData ?? null);
       setActiveTrend(Array.isArray(activeData?.items) ? activeData.items : []);
       setHeatmap(Array.isArray(heatmapData?.cells) ? heatmapData.cells : []);
-      setSessionsTrend(sessionsData ?? null);
+      setUsageTrend(Array.isArray(usageTrendData?.items) ? usageTrendData.items : []);
       setTokensByModel(Array.isArray(byModelData?.items) ? byModelData.items : []);
       setTokensByPreset(
         Array.isArray(byPresetData?.items) ? byPresetData.items : [],
@@ -775,7 +854,60 @@ export function AnalyticsPanel() {
     } finally {
       setIsLoading(false);
     }
-  }, [effectiveRange.start, effectiveRange.end, t]);
+  }, [effectiveRange.start, effectiveRange.end, usageFilters, t]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const start = toIso(effectiveRange.start);
+    const end = toIso(effectiveRange.end);
+    setUsageLoading(true);
+    setUsageError(null);
+    analyticsApi
+      .listUsageByUser(start, end, usageFilters, {
+        skip: (usagePage - 1) * USAGE_PAGE_SIZE,
+        limit: USAGE_PAGE_SIZE,
+      })
+      .then((response) => {
+        if (cancelled) return;
+        setUsageRows(Array.isArray(response?.items) ? response.items : []);
+        setUsageTotal(response?.total ?? 0);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setUsageError(
+            err instanceof Error ? err.message : t("common.loadFailed", "Load failed"),
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setUsageLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveRange.start, effectiveRange.end, usageFilters, usagePage, t]);
+
+  useEffect(() => {
+    setUsagePage(1);
+  }, [effectiveRange.start, effectiveRange.end, usageFilters]);
+
+  const handleUsageExport = useCallback(async () => {
+    setIsUsageExporting(true);
+    setUsageExportError(null);
+    try {
+      await analyticsApi.exportUsageCsv(
+        toIso(effectiveRange.start),
+        toIso(effectiveRange.end),
+        usageFilters,
+      );
+    } catch (err) {
+      setUsageExportError(
+        err instanceof Error ? err.message : t("analytics.usage.exportFailed"),
+      );
+    } finally {
+      setIsUsageExporting(false);
+    }
+  }, [effectiveRange.start, effectiveRange.end, usageFilters, t]);
 
   useEffect(() => {
     fetchData();
@@ -893,6 +1025,39 @@ export function AnalyticsPanel() {
             />
           </div>
         </div>
+        {/* Persona and agent filters */}
+        <div className="mt-2 flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1 text-xs text-stone-500 dark:text-stone-400">
+            {t("analytics.filters.persona")}
+            <select
+              className="glass-input min-w-[10rem] px-2 py-1.5 text-sm"
+              value={personaPresetId}
+              onChange={(event) => setPersonaPresetId(event.target.value)}
+            >
+              <option value="">{t("analytics.filters.all")}</option>
+              {personaOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-stone-500 dark:text-stone-400">
+            {t("analytics.filters.agent")}
+            <select
+              className="glass-input min-w-[10rem] px-2 py-1.5 text-sm"
+              value={agentId}
+              onChange={(event) => setAgentId(event.target.value)}
+            >
+              <option value="">{t("analytics.filters.all")}</option>
+              {agentOptions.map((id) => (
+                <option key={id} value={id}>
+                  {id}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
 
       {error ? (
@@ -910,27 +1075,31 @@ export function AnalyticsPanel() {
           <StatsCard
             icon={Users}
             label={t("analytics.overview.activeUsers")}
-            value={overview ? formatNumber(overview.active_users) : "—"}
+            value={summary ? formatNumber(summary.active_users) : "—"}
             onClick={() => setDrilldown({ kind: "users" })}
           />
           <StatsCard
             icon={MessageSquare}
-            label={t("analytics.overview.totalSessions")}
-            value={overview ? formatNumber(overview.total_sessions) : "—"}
+            label={t("analytics.overview.sessions")}
+            value={summary ? formatNumber(summary.new_sessions) : "—"}
+            hint={
+              summary
+                ? t("analytics.overview.activeSessions", {
+                    count: formatNumber(summary.active_sessions),
+                  })
+                : undefined
+            }
             onClick={() => setDrilldown({ kind: "sessions" })}
           />
           <StatsCard
             icon={Hash}
-            label={t("analytics.overview.totalTokens")}
-            value={overview ? formatNumber(overview.total_tokens) : "—"}
+            label={t("analytics.overview.userMessages")}
+            value={summary ? formatNumber(summary.user_messages) : "—"}
           />
           <StatsCard
-            icon={ThumbsUp}
-            label={t("analytics.overview.upVoteRate")}
-            value={
-              overview ? `${overview.up_vote_rate.toFixed(1)}%` : "—"
-            }
-            onClick={() => setDrilldown({ kind: "feedback" })}
+            icon={Cpu}
+            label={t("analytics.overview.totalTokens")}
+            value={summary ? formatNumber(summary.total_tokens) : "—"}
           />
         </div>
 
@@ -995,11 +1164,7 @@ export function AnalyticsPanel() {
                 )}
                 icon={<MessageSquare size={16} aria-hidden />}
                 isLoading={isLoading}
-                isEmpty={
-                  !isLoading &&
-                  (sessionsTrend?.sessions.length ?? 0) === 0 &&
-                  (sessionsTrend?.messages.length ?? 0) === 0
-                }
+                isEmpty={!isLoading && usageTrend.length === 0}
               >
                 <LineTrend
                   series={[
@@ -1007,13 +1172,19 @@ export function AnalyticsPanel() {
                       key: "sessions",
                       color: "#6366f1",
                       label: t("analytics.sessions.sessions", "Sessions"),
-                      data: sessionsTrend?.sessions ?? [],
+                      data: usageTrend.map((point) => ({
+                        date: point.date,
+                        value: point.new_sessions,
+                      })),
                     },
                     {
                       key: "messages",
                       color: "#10b981",
-                      label: t("analytics.sessions.messages", "Messages"),
-                      data: sessionsTrend?.messages ?? [],
+                      label: t("analytics.sessions.userMessages"),
+                      data: usageTrend.map((point) => ({
+                        date: point.date,
+                        value: point.user_messages,
+                      })),
                     },
                   ]}
                 />
@@ -1133,6 +1304,112 @@ export function AnalyticsPanel() {
           </div>
         </section>
 
+        {/* Usage detail section */}
+        <section className="mt-4">
+          <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold tracking-wide text-stone-600 uppercase dark:text-stone-400">
+                {t("analytics.usage.title")}
+              </h2>
+              <p className="text-xs text-stone-500 dark:text-stone-400">
+                {t("analytics.usage.subtitle")}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleUsageExport}
+              disabled={isUsageExporting}
+              className="flex items-center gap-1 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-subtle)] px-2.5 py-1 text-xs text-stone-700 hover:bg-[var(--glass-bg)] disabled:opacity-50 dark:text-stone-200"
+            >
+              <Download size={14} aria-hidden />
+              <span>
+                {isUsageExporting
+                  ? t("analytics.usage.exporting")
+                  : t("analytics.usage.exportCsv")}
+              </span>
+            </button>
+          </div>
+
+          {usageExportError ? (
+            <div className="mb-2 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
+              {usageExportError}
+            </div>
+          ) : null}
+
+          <div className="glass-card rounded-xl p-4">
+            {usageError ? (
+              <div className="mb-2 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
+                {usageError}
+              </div>
+            ) : null}
+
+            {usageLoading ? (
+              <PanelLoadingState />
+            ) : usageRows.length === 0 ? (
+              <div className="py-8 text-center text-sm text-stone-500 dark:text-stone-400">
+                {t("analytics.usage.empty")}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px] text-left text-xs">
+                  <thead className="text-stone-500 dark:text-stone-400">
+                    <tr>
+                      {USAGE_COLUMN_KEYS.map((key) => (
+                        <th key={key} className="py-2 pr-3 font-medium">
+                          {t(`analytics.usage.columns.${key}`)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--glass-border)]">
+                    {usageRows.map((row) => (
+                      <tr
+                        key={`${row.user_id}-${row.persona_preset_id ?? "none"}`}
+                        className="text-stone-700 dark:text-stone-200"
+                      >
+                        <td className="py-2 pr-3">{row.username || "—"}</td>
+                        <td className="py-2 pr-3">
+                          {row.display_name || row.username || "—"}
+                        </td>
+                        <td className="py-2 pr-3">
+                          {row.roles.join(", ") || "—"}
+                        </td>
+                        <td className="py-2 pr-3">
+                          {row.persona_preset_name || "—"}
+                        </td>
+                        <td className="py-2 pr-3">
+                          {formatNumber(row.new_sessions)}
+                        </td>
+                        <td className="py-2 pr-3">
+                          {formatNumber(row.active_sessions)}
+                        </td>
+                        <td className="py-2 pr-3">
+                          {formatNumber(row.user_messages)}
+                        </td>
+                        <td className="py-2 pr-3">
+                          {formatNumber(row.total_tokens)}
+                        </td>
+                        <td className="py-2 pr-3 whitespace-nowrap">
+                          {formatDateTime(row.last_active_at)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="mt-3 flex justify-center">
+              <Pagination
+                page={usagePage}
+                pageSize={USAGE_PAGE_SIZE}
+                total={usageTotal}
+                onChange={setUsagePage}
+              />
+            </div>
+          </div>
+        </section>
+
         {/* Feedback section */}
         <section className="mt-4">
           <h2 className="mb-2 text-sm font-semibold tracking-wide text-stone-600 uppercase dark:text-stone-400">
@@ -1215,6 +1492,8 @@ export function AnalyticsPanel() {
             presetId={drilldown.presetId}
             rating={drilldown.rating}
             initialFilters={drilldown.initialFilters}
+            personaOptions={personaOptions}
+            agentOptions={agentOptions}
             onBack={() => setDrilldown(null)}
           />
         </div>
