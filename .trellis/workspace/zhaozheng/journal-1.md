@@ -1445,3 +1445,42 @@ _to_half_open 辅助。
 ### Next Steps
 
 - 下一子任务：08-28-analytics-dashboard-ui（看板版面重写），完成后删 /tokens/by-preset 与 /users/heatmap 判定
+
+
+## Session 50: 看板版面重写（analytics-dashboard-ui）
+
+**Date**: 2026-08-28
+**Task**: 08-28-analytics-dashboard-ui（父：08-28-analytics-dashboard-rebuild）
+**Branch**: `main`
+
+### Summary
+
+/analytics 版面按参考骨架重写：AnalyticsPanel 拆为 7 组件（唯一发请求处），
+筛选上提、八个 usage 请求共用 buildUsageQuery 纯日期参数。六张 KPI 卡
+（sparkline + 较上一区间，人均消息分母 using_users，除零显示 —）；核心趋势
+多指标同图（Token 右轴）；洞察栏接 /usage/insights（峰值/Token 大户/增长最快
+Persona/新增用户，各带点击行为）；三个 Top5 环图中心数字与 KPI 卡同源
+（analyticsKpi 访问器，会话卡取 new_sessions 的取舍已认可）；明细表搜索/导出/分页。
+删旧热力图与 by-preset 饼图（取证在任务 research/）。五语言 i18n 齐备。
+
+check 复核修 5 项：自定义按钮死 key、tooltip 英文硬编码、导出上限提示、
+孤儿 key、时间预设按钮改「今天」。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5d13fdbd` | feat(frontend): 统计看板版面重写——一屏看板、KPI 六卡、洞察栏与组件拆分 |
+
+### Testing
+
+- [OK] 前端契约/派生/同源/keys 测试 29 passed
+- [OK] pnpm lint + build（tsc）通过
+
+### Status
+
+[OK] **Completed**（已归档至 archive/2026-08/；浏览器实测留子4 全量验证）
+
+### Next Steps
+
+- 子4：08-28-analytics-verification 全量验证与交付（含浏览器实测；顺带判定 /tokens/by-preset 与 /users/heatmap 删除、getOverview/getSessionsTrend 孤儿客户端方法）
