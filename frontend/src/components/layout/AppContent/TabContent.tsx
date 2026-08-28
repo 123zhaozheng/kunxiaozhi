@@ -56,7 +56,7 @@ const TeamBuilderPanel = lazy(() =>
   })),
 );
 const AnalyticsPanel = lazy(() =>
-  import("../../panels/AnalyticsPanel").then((m) => ({
+  import("../../panels/analytics/AnalyticsPanel").then((m) => ({
     default: m.AnalyticsPanel,
   })),
 );

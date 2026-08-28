@@ -21,16 +21,6 @@ export interface TrendResponse {
   items: TrendDataPoint[];
 }
 
-export interface HeatmapCell {
-  weekday: number;
-  hour: number;
-  count: number;
-}
-
-export interface HeatmapResponse {
-  cells: HeatmapCell[];
-}
-
 export interface ByLabelItem {
   label: string;
   value: number;
@@ -49,6 +39,15 @@ export interface SessionsTrendResponse {
 }
 
 export type AnalyticsRangePreset = "1d" | "7d" | "30d" | "custom";
+
+/**
+ * Pure calendar date string `YYYY-MM-DD` (e.g. `2026-08-22`).
+ *
+ * Every analytics endpoint takes this shape for `start`/`end`; the backend
+ * expands it into a UTC+8 half-open interval. Never an ISO timestamp
+ * (no `T` / `Z`), and day boundaries are owned by the backend only.
+ */
+export type AnalyticsDate = string;
 
 // ── PR2: 单角色智能体 + 反馈 + 钻取明细 ─────────────────────────────
 
@@ -175,12 +174,60 @@ export interface UsageFilters {
   roleId?: string;
 }
 
-export interface UsageSummaryResponse {
+/** Previous equal-length period values for KPI ±% deltas (same fields, no `previous`). */
+export interface UsageSummaryPrevious {
   active_users: number;
+  using_users: number;
   new_sessions: number;
   active_sessions: number;
   user_messages: number;
   total_tokens: number;
+}
+
+export interface UsageSummaryResponse {
+  /** Unfiltered: distinct logged-in users; filtered: equals using_users */
+  active_users: number;
+  /** Distinct users that sent at least one message in range */
+  using_users: number;
+  new_sessions: number;
+  active_sessions: number;
+  user_messages: number;
+  total_tokens: number;
+  /** Immediately preceding equal-length period (same filters); null when unavailable */
+  previous: UsageSummaryPrevious | null;
+}
+
+/** Peak activity bucket (UTC+8) from user message times. */
+export interface UsageInsightsPeak {
+  /** 0=Sunday ... 6=Saturday */
+  weekday: number;
+  /** 0-23 */
+  hour: number;
+  user_messages: number;
+}
+
+export interface UsageInsightsTopTokenUser {
+  user_id: string;
+  username: string;
+  display_name: string | null;
+  tokens: number;
+}
+
+export interface UsageInsightsFastestGrowingPersona {
+  persona_preset_id: string;
+  persona_preset_name: string;
+  current: number;
+  previous: number;
+  /** Percentage growth vs previous period (can be negative) */
+  growth_pct: number;
+}
+
+/** The four insight-bar conclusions in one request (null / [] / 0 when data is insufficient). */
+export interface UsageInsightsResponse {
+  peak: UsageInsightsPeak | null;
+  top_token_users: UsageInsightsTopTokenUser[];
+  fastest_growing_persona: UsageInsightsFastestGrowingPersona | null;
+  new_users: number;
 }
 
 export interface UsageTrendPoint {

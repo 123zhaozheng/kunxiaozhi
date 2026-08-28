@@ -262,6 +262,13 @@
     }
   },
   "analytics": {
+    "dimensions": {
+      "agentTop5": "에이전트별 Top5",
+      "byAgentHint": "세션 수를 에이전트별로 집계",
+      "byPersonaHint": "세션 수를 페르소나별로 집계",
+      "modelTokenTop5": "모델별 토큰 Top5",
+      "personaTop5": "페르소나별 Top5"
+    },
     "drilldown": {
       "agent": "Agent",
       "back": "뒤로",
@@ -279,8 +286,17 @@
       "startedAt": "시작 시각",
       "status": "상태",
       "tokens": "토큰",
-      "user": "사용자"
+      "user": "사용자",
+      "exportCsv": "CSV 내보내기",
+      "exportFailed": "내보내기 실패",
+      "exportHint": "현재 필터의 전체 데이터를 내보내기 (이 페이지가 아닌, 최대 10000행)",
+      "exporting": "내보내는 중…",
+      "lastActive": "최근 활동",
+      "persona": "페르소나",
+      "sessionCount": "세션 수",
+      "usersTitle": "활성 사용자 상세"
     },
+    "empty": "데이터 없음",
     "feedback": {
       "byPreset": "에이전트별 피드백",
       "byPresetHint": "에이전트별 긍정/부정 평가",
@@ -305,13 +321,30 @@
       "sortRecent": "최근 활동",
       "userRole": "사용자 역할"
     },
+    "insights": {
+      "empty": "인사이트 데이터 없음",
+      "fastestGrowingPersona": "가장 빠르게 성장한 페르소나",
+      "newUsers": "이번 기간 신규 사용자",
+      "newUsersDrillHint": "사용자 목록 보기",
+      "peak": "활동 피크",
+      "peakValue": "{{weekday}} {{hour}}:00 · {{count}}건의 사용자 메시지",
+      "personaFilterHint": "상단 페르소나 필터로 설정",
+      "subtitle": "기간 내 하드 데이터 결론",
+      "title": "인사이트",
+      "topTokenUsers": "토큰 소비 상위 3명",
+      "userDrillHint": "사용 내역 보기"
+    },
     "overview": {
       "activeUsers": "활성 사용자",
-      "sessions": "세션",
       "activeSessions": "활성 {{count}}",
       "userMessages": "사용자 메시지",
-      "totalSessions": "총 세션 수",
-      "totalTokens": "총 토큰 수"
+      "totalTokens": "총 토큰 수",
+      "messagesPerUser": "1인당 메시지",
+      "messagesPerUserHint": "분모는 메시지를 보낸 사용자 수",
+      "tokensPerSession": "세션당 토큰",
+      "usingHint": "그중 {{count}}명 이용",
+      "usingUsers": "이용 사용자",
+      "vsPrev": "이전 기간 대비 {{pct}}"
     },
     "preset": {
       "activeUsers": "활성 사용자 수",
@@ -323,15 +356,12 @@
       "totalMessages": "사용자 메시지 수",
       "totalSessions": "총 세션 수",
       "totalTokens": "총 토큰 수",
-      "upVoteRate": "긍정률"
+      "upVoteRate": "긍정률",
+      "titleNamed": "\"{{name}}\" 분석"
     },
     "sessions": {
-      "messages": "사용자 메시지 수",
       "userMessages": "사용자 메시지 수",
-      "sessions": "세션 수",
-      "title": "세션",
-      "trend": "세션 및 메시지 추이",
-      "trendHint": "선택한 기간의 일별 집계"
+      "sessions": "세션 수"
     },
     "usage": {
       "title": "사용 내역",
@@ -339,6 +369,7 @@
       "exportCsv": "CSV 내보내기",
       "exporting": "내보내는 중…",
       "exportFailed": "내보내기 실패",
+      "exportHint": "현재 필터의 전체 데이터를 내보내기 (이 페이지가 아닌, 최대 10000행)",
       "empty": "사용 데이터가 없습니다",
       "columns": {
         "userId": "사번",
@@ -350,11 +381,16 @@
         "userMessages": "사용자 메시지",
         "tokens": "토큰",
         "lastActive": "최근 활동"
-      }
+      },
+      "loggedInCount": "총 {{count}}명 로그인",
+      "searchEmpty": "일치하는 레코드가 없습니다",
+      "searchHint": "현재 페이지만 필터링",
+      "searchPlaceholder": "사번 / 이름 / 페르소나 검색",
+      "usingCount": "{{count}}명 이용"
     },
     "subtitle": "시스템 사용량과 토큰 지표",
     "timeRange": {
-      "1d": "1일",
+      "1d": "오늘",
       "30d": "30일",
       "7d": "7일",
       "apply": "적용",
@@ -365,24 +401,16 @@
     },
     "title": "통계 대시보드",
     "tokens": {
-      "byModel": "모델별 토큰",
       "byModelHint": "모델별 총 토큰 수",
-      "byPreset": "Agent 타입별 토큰 (Top 10)",
-      "byPresetHint": "각 Agent 타입의 총 토큰 수",
-      "title": "토큰",
       "total": "총 토큰",
-      "trend": "토큰 사용 추이",
-      "trendHint": "일별 총 토큰 수",
       "unit": "tokens"
     },
-    "users": {
-      "active": "활성",
-      "activeTrend": "활성 사용자",
-      "activeTrendHint": "일별 고유 활성 사용자 수",
-      "heatmap": "활동 히트맵",
-      "heatmapHint": "요일 × 시간 (세션)",
-      "title": "사용자"
-    }
+    "trend": {
+      "activeUsers": "활성 사용자",
+      "hint": "세션·활성 사용자·사용자 메시지 일별 비교, 토큰은 우측 축",
+      "title": "핵심 추이"
+    },
+    "weekdays": ["일", "월", "화", "수", "목", "금", "토"]
   },
   "appName": "昆小智",
   "approvals": {

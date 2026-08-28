@@ -262,6 +262,13 @@
     }
   },
   "analytics": {
+    "dimensions": {
+      "agentTop5": "エージェント別 Top5",
+      "byAgentHint": "セッション数をエージェント別に集計",
+      "byPersonaHint": "セッション数をペルソナ別に集計",
+      "modelTokenTop5": "モデル別トークン Top5",
+      "personaTop5": "ペルソナ別 Top5"
+    },
     "drilldown": {
       "agent": "Agent",
       "back": "戻る",
@@ -279,8 +286,17 @@
       "startedAt": "開始日時",
       "status": "ステータス",
       "tokens": "トークン",
-      "user": "ユーザー"
+      "user": "ユーザー",
+      "exportCsv": "CSV エクスポート",
+      "exportFailed": "エクスポートに失敗しました",
+      "exportHint": "現在の絞り込みの全データをエクスポート（このページではなく、最大 10000 行）",
+      "exporting": "エクスポート中…",
+      "lastActive": "最終利用",
+      "persona": "ペルソナ",
+      "sessionCount": "セッション数",
+      "usersTitle": "アクティブユーザー詳細"
     },
+    "empty": "データなし",
     "feedback": {
       "byPreset": "エージェント別フィードバック",
       "byPresetHint": "エージェントごとの高評価/低評価",
@@ -305,13 +321,30 @@
       "sortRecent": "最近の利用",
       "userRole": "ユーザーロール"
     },
+    "insights": {
+      "empty": "インサイトデータなし",
+      "fastestGrowingPersona": "最も成長しているペルソナ",
+      "newUsers": "今期の新しい利用者",
+      "newUsersDrillHint": "ユーザー一覧を見る",
+      "peak": "アクティブピーク",
+      "peakValue": "{{weekday}} {{hour}}:00 · {{count}} 件のユーザーメッセージ",
+      "personaFilterHint": "上部のペルソナフィルターに設定",
+      "subtitle": "期間内のハードデータ結論",
+      "title": "インサイト",
+      "topTokenUsers": "トークン消費トップ3",
+      "userDrillHint": "利用明細を見る"
+    },
     "overview": {
       "activeUsers": "アクティブユーザー",
-      "sessions": "セッション",
       "activeSessions": "アクティブ {{count}}",
       "userMessages": "ユーザーメッセージ",
-      "totalSessions": "総セッション数",
-      "totalTokens": "総トークン数"
+      "totalTokens": "総トークン数",
+      "messagesPerUser": "1人あたりメッセージ",
+      "messagesPerUserHint": "分母はメッセージを送信した人数",
+      "tokensPerSession": "1セッションあたりトークン",
+      "usingHint": "うち {{count}} 名が利用",
+      "usingUsers": "利用ユーザー",
+      "vsPrev": "前期比 {{pct}}"
     },
     "preset": {
       "activeUsers": "アクティブユーザー数",
@@ -323,15 +356,12 @@
       "totalMessages": "ユーザーメッセージ数",
       "totalSessions": "総セッション数",
       "totalTokens": "総トークン数",
-      "upVoteRate": "高評価率"
+      "upVoteRate": "高評価率",
+      "titleNamed": "「{{name}}」の分析"
     },
     "sessions": {
-      "messages": "ユーザーメッセージ数",
       "userMessages": "ユーザーメッセージ数",
-      "sessions": "セッション数",
-      "title": "セッション",
-      "trend": "セッションとメッセージの推移",
-      "trendHint": "期間内の1日あたりの集計"
+      "sessions": "セッション数"
     },
     "usage": {
       "title": "利用明細",
@@ -339,6 +369,7 @@
       "exportCsv": "CSV エクスポート",
       "exporting": "エクスポート中…",
       "exportFailed": "エクスポートに失敗しました",
+      "exportHint": "現在の絞り込みの全データをエクスポート（このページではなく、最大 10000 行）",
       "empty": "利用データがありません",
       "columns": {
         "userId": "社員番号",
@@ -350,11 +381,16 @@
         "userMessages": "ユーザーメッセージ",
         "tokens": "トークン",
         "lastActive": "最終利用"
-      }
+      },
+      "loggedInCount": "合計 {{count}} 名がログイン",
+      "searchEmpty": "一致するレコードがありません",
+      "searchHint": "現在のページのみ絞り込み",
+      "searchPlaceholder": "社員番号 / 氏名 / ペルソナを検索",
+      "usingCount": "{{count}} 名が利用"
     },
     "subtitle": "システム利用状況とトークン指標",
     "timeRange": {
-      "1d": "1日",
+      "1d": "今日",
       "30d": "30日",
       "7d": "7日",
       "apply": "適用",
@@ -365,24 +401,16 @@
     },
     "title": "統計ダッシュボード",
     "tokens": {
-      "byModel": "モデル別トークン",
       "byModelHint": "モデルごとの総トークン数",
-      "byPreset": "Agent タイプ別トークン (Top 10)",
-      "byPresetHint": "各 Agent タイプの総トークン数",
-      "title": "トークン",
       "total": "総トークン",
-      "trend": "トークン消費の推移",
-      "trendHint": "1日あたりの総トークン数",
       "unit": "tokens"
     },
-    "users": {
-      "active": "アクティブ",
-      "activeTrend": "アクティブユーザー",
-      "activeTrendHint": "1日あたりのユニークユーザー数",
-      "heatmap": "アクティビティヒートマップ",
-      "heatmapHint": "曜日 × 時間（セッション）",
-      "title": "ユーザー"
-    }
+    "trend": {
+      "activeUsers": "アクティブユーザー",
+      "hint": "セッション・アクティブユーザー・ユーザーメッセージの日別比較、トークンは右軸",
+      "title": "コアトレンド"
+    },
+    "weekdays": ["日", "月", "火", "水", "木", "金", "土"]
   },
   "appName": "昆小智",
   "approvals": {

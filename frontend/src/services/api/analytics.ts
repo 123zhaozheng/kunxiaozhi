@@ -5,23 +5,24 @@
 import { authenticatedRequest } from "./authenticatedRequest";
 import { authFetch } from "./fetch";
 import { API_BASE } from "./config";
+import { appendParam, buildUsageQuery } from "./analyticsQuery";
 import type {
   ActiveUserListResponse,
+  AnalyticsDate,
   AnalyticsListFilters,
   ByLabelResponse,
   ByPresetFeedbackResponse,
   FeedbackListResponse,
   FeedbackSummaryResponse,
-  HeatmapResponse,
   OverviewResponse,
   PresetAnalyticsResponse,
   RunListResponse,
   SessionListResponse,
   SessionsTrendResponse,
   TrendResponse,
-  UsageByPersonaResponse,
   UsageByUserResponse,
   UsageFilters,
+  UsageInsightsResponse,
   UsageSummaryResponse,
   UsageTrendResponse,
 } from "../../types/analytics";
@@ -30,25 +31,6 @@ const BASE = `${API_BASE}/api/analytics`;
 
 function rangeQuery(start: string, end: string): string {
   return `?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
-}
-
-function appendParam(query: string, key: string, value: string | number): string {
-  return `${query}&${key}=${encodeURIComponent(String(value))}`;
-}
-
-/** Shared filter query for every usage report endpoint (summary/trend/by-persona/by-user/export). */
-function appendUsageFilters(query: string, filters?: UsageFilters): string {
-  let q = query;
-  if (filters?.personaPresetId) {
-    q = appendParam(q, "persona_preset_id", filters.personaPresetId);
-  }
-  if (filters?.agentId) {
-    q = appendParam(q, "agent_id", filters.agentId);
-  }
-  if (filters?.roleId) {
-    q = appendParam(q, "role_id", filters.roleId);
-  }
-  return q;
 }
 
 /** Shared filter query for list + CSV export. */
@@ -118,20 +100,12 @@ export const analyticsApi = {
   },
 
   async getActiveUserTrend(
-    start: string,
-    end: string,
+    start: AnalyticsDate,
+    end: AnalyticsDate,
     filters?: UsageFilters,
   ): Promise<TrendResponse> {
-    const query = appendUsageFilters(rangeQuery(start, end), filters);
-    return authFetch<TrendResponse>(`${BASE}/users/active${query}`);
-  },
-
-  async getUsersHeatmap(
-    start: string,
-    end: string,
-  ): Promise<HeatmapResponse> {
-    return authFetch<HeatmapResponse>(
-      `${BASE}/users/heatmap${rangeQuery(start, end)}`,
+    return authFetch<TrendResponse>(
+      `${BASE}/users/active${buildUsageQuery(start, end, filters)}`,
     );
   },
 
@@ -145,47 +119,34 @@ export const analyticsApi = {
   },
 
   async getTokensByModel(
-    start: string,
-    end: string,
+    start: AnalyticsDate,
+    end: AnalyticsDate,
+    filters?: UsageFilters,
   ): Promise<ByLabelResponse> {
     return authFetch<ByLabelResponse>(
-      `${BASE}/tokens/by-model${rangeQuery(start, end)}`,
-    );
-  },
-
-  async getTokensByPreset(
-    start: string,
-    end: string,
-    limit: number = 10,
-  ): Promise<ByLabelResponse> {
-    return authFetch<ByLabelResponse>(
-      `${BASE}/tokens/by-preset${rangeQuery(start, end)}&limit=${limit}`,
-    );
-  },
-
-  async getTokensTrend(start: string, end: string): Promise<TrendResponse> {
-    return authFetch<TrendResponse>(
-      `${BASE}/tokens/trend${rangeQuery(start, end)}`,
+      `${BASE}/tokens/by-model${buildUsageQuery(start, end, filters)}`,
     );
   },
 
   async getSessionsByAgent(
-    start: string,
-    end: string,
+    start: AnalyticsDate,
+    end: AnalyticsDate,
+    filters?: UsageFilters,
     limit: number = 10,
   ): Promise<ByLabelResponse> {
     return authFetch<ByLabelResponse>(
-      `${BASE}/sessions/by-agent${rangeQuery(start, end)}&limit=${limit}`,
+      `${BASE}/sessions/by-agent${buildUsageQuery(start, end, filters, { limit })}`,
     );
   },
 
   async getSessionsByPersona(
-    start: string,
-    end: string,
+    start: AnalyticsDate,
+    end: AnalyticsDate,
+    filters?: UsageFilters,
     limit: number = 10,
   ): Promise<ByLabelResponse> {
     return authFetch<ByLabelResponse>(
-      `${BASE}/sessions/by-persona${rangeQuery(start, end)}&limit=${limit}`,
+      `${BASE}/sessions/by-persona${buildUsageQuery(start, end, filters, { limit })}`,
     );
   },
 
@@ -316,47 +277,52 @@ export const analyticsApi = {
   },
 
   // ── 使用情况报表（统一口径）─────────────────────────────────────────
-  // 五个出口共用同一套筛选参数，后端由同一查询构造层产出，数字天然一致。
+  // 八个出口（summary / trend / insights / by-agent / by-persona / by-model /
+  // by-user / export）共用 buildUsageQuery 序列化筛选参数，保证任意筛选变化
+  // 时所有请求收到完全一致的 start / end / persona_preset_id / agent_id。
 
   async getUsageSummary(
-    start: string,
-    end: string,
+    start: AnalyticsDate,
+    end: AnalyticsDate,
     filters?: UsageFilters,
   ): Promise<UsageSummaryResponse> {
-    const query = appendUsageFilters(rangeQuery(start, end), filters);
-    return authFetch<UsageSummaryResponse>(`${BASE}/usage/summary${query}`);
+    return authFetch<UsageSummaryResponse>(
+      `${BASE}/usage/summary${buildUsageQuery(start, end, filters)}`,
+    );
   },
 
   async getUsageTrend(
-    start: string,
-    end: string,
+    start: AnalyticsDate,
+    end: AnalyticsDate,
     filters?: UsageFilters,
   ): Promise<UsageTrendResponse> {
-    const query = appendUsageFilters(rangeQuery(start, end), filters);
-    return authFetch<UsageTrendResponse>(`${BASE}/usage/trend${query}`);
+    return authFetch<UsageTrendResponse>(
+      `${BASE}/usage/trend${buildUsageQuery(start, end, filters)}`,
+    );
   },
 
-  async getUsageByPersona(
-    start: string,
-    end: string,
+  /** 洞察栏四条结论一次给全（峰值 / Top3 token 用户 / 增长最快 Persona / 新增用户）。 */
+  async getUsageInsights(
+    start: AnalyticsDate,
+    end: AnalyticsDate,
     filters?: UsageFilters,
-  ): Promise<UsageByPersonaResponse> {
-    const query = appendUsageFilters(rangeQuery(start, end), filters);
-    return authFetch<UsageByPersonaResponse>(
-      `${BASE}/usage/by-persona${query}`,
+  ): Promise<UsageInsightsResponse> {
+    return authFetch<UsageInsightsResponse>(
+      `${BASE}/usage/insights${buildUsageQuery(start, end, filters)}`,
     );
   },
 
   /** One row per user × persona. */
   async listUsageByUser(
-    start: string,
-    end: string,
+    start: AnalyticsDate,
+    end: AnalyticsDate,
     filters?: UsageFilters,
     pagination?: { skip?: number; limit?: number },
   ): Promise<UsageByUserResponse> {
-    let query = appendUsageFilters(rangeQuery(start, end), filters);
-    query = appendParam(query, "skip", pagination?.skip ?? 0);
-    query = appendParam(query, "limit", pagination?.limit ?? 20);
+    const query = buildUsageQuery(start, end, filters, {
+      skip: pagination?.skip ?? 0,
+      limit: pagination?.limit ?? 20,
+    });
     return authFetch<UsageByUserResponse>(`${BASE}/usage/by-user${query}`);
   },
 
@@ -365,11 +331,13 @@ export const analyticsApi = {
    * (full filtered set, server-capped; no skip/limit).
    */
   async exportUsageCsv(
-    start: string,
-    end: string,
+    start: AnalyticsDate,
+    end: AnalyticsDate,
     filters?: UsageFilters,
   ): Promise<void> {
-    const query = appendUsageFilters(rangeQuery(start, end), filters);
-    await downloadCsv(`${BASE}/usage/export.csv${query}`, "analytics-usage.csv");
+    await downloadCsv(
+      `${BASE}/usage/export.csv${buildUsageQuery(start, end, filters)}`,
+      "analytics-usage.csv",
+    );
   },
 };

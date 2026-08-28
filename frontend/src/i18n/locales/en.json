@@ -263,10 +263,11 @@
   },
   "analytics": {
     "dimensions": {
-      "byAgent": "By agent",
       "byAgentHint": "Session count by agent_id",
-      "byPersona": "By persona",
-      "byPersonaHint": "Session count by persona"
+      "byPersonaHint": "Session count by persona",
+      "agentTop5": "By agent Top 5",
+      "personaTop5": "By persona Top 5",
+      "modelTokenTop5": "Model tokens Top 5"
     },
     "drilldown": {
       "agent": "Agent",
@@ -295,6 +296,7 @@
       "exportFailed": "Export failed",
       "exportHint": "Exports full filtered set (not just this page; max 10000 rows)"
     },
+    "empty": "No data",
     "feedback": {
       "byPreset": "Feedback by persona",
       "byPresetHint": "Up/down votes per persona",
@@ -319,13 +321,30 @@
       "sortRecent": "Most recent",
       "userRole": "User role"
     },
+    "insights": {
+      "empty": "No insights yet",
+      "fastestGrowingPersona": "Fastest-growing persona",
+      "newUsers": "New users this period",
+      "newUsersDrillHint": "View user list",
+      "peak": "Peak activity",
+      "peakValue": "{{weekday}} {{hour}}:00 · {{count}} user messages",
+      "personaFilterHint": "Set as the persona filter",
+      "subtitle": "Hard data for the selected range",
+      "title": "Insights",
+      "topTokenUsers": "Top token users (Top 3)",
+      "userDrillHint": "View usage details"
+    },
     "overview": {
       "activeUsers": "Active users",
-      "sessions": "Sessions",
       "activeSessions": "Active {{count}}",
       "userMessages": "User messages",
-      "totalSessions": "Total sessions",
-      "totalTokens": "Total tokens"
+      "totalTokens": "Total tokens",
+      "messagesPerUser": "Messages per user",
+      "messagesPerUserHint": "Denominator: users who sent messages",
+      "tokensPerSession": "Tokens per session",
+      "usingHint": "of which {{count}} used",
+      "usingUsers": "Using users",
+      "vsPrev": "vs previous period {{pct}}"
     },
     "preset": {
       "activeUsers": "Active users",
@@ -341,12 +360,8 @@
       "upVoteRate": "Positive rate"
     },
     "sessions": {
-      "messages": "User messages",
       "userMessages": "User messages",
-      "sessions": "Sessions",
-      "title": "Sessions",
-      "trend": "Sessions & messages",
-      "trendHint": "Counts per day across the time range"
+      "sessions": "Sessions"
     },
     "usage": {
       "title": "Usage details",
@@ -354,6 +369,7 @@
       "exportCsv": "Export CSV",
       "exporting": "Exporting...",
       "exportFailed": "Export failed",
+      "exportHint": "Exports the full filtered set (not just this page; max 10000 rows)",
       "empty": "No usage data",
       "columns": {
         "userId": "Employee ID",
@@ -365,11 +381,16 @@
         "userMessages": "User messages",
         "tokens": "Tokens",
         "lastActive": "Last active"
-      }
+      },
+      "loggedInCount": "{{count}} logged in",
+      "searchEmpty": "No matching records",
+      "searchHint": "Filters only the current page",
+      "searchPlaceholder": "Search ID / name / persona",
+      "usingCount": "Used by {{count}}"
     },
     "subtitle": "System usage and token metrics",
     "timeRange": {
-      "1d": "1 day",
+      "1d": "Today",
       "30d": "30 days",
       "7d": "7 days",
       "apply": "Apply",
@@ -380,24 +401,16 @@
     },
     "title": "Analytics",
     "tokens": {
-      "byModel": "Tokens by model",
       "byModelHint": "Total tokens per model",
-      "byPreset": "Tokens by agent type (Top 10)",
-      "byPresetHint": "Total tokens per agent type",
-      "title": "Tokens",
       "total": "Total tokens",
-      "trend": "Token usage over time",
-      "trendHint": "Total tokens per day",
       "unit": "tokens"
     },
-    "users": {
-      "active": "Active",
-      "activeTrend": "Active users",
-      "activeTrendHint": "Distinct users active per day",
-      "heatmap": "Activity heatmap",
-      "heatmapHint": "Weekday × hour (sessions)",
-      "title": "Users"
-    }
+    "trend": {
+      "activeUsers": "Active users",
+      "hint": "Sessions, active users and user messages by day; tokens on the right axis",
+      "title": "Core trends"
+    },
+    "weekdays": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
   },
   "appName": "昆小智",
   "approvals": {

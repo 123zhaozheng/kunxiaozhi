@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const panel = readFileSync(join(here, "../AnalyticsPanel.tsx"), "utf8");
+const panel = readFileSync(join(here, "../analytics/AnalyticsPanel.tsx"), "utf8");
 const drilldown = readFileSync(join(here, "../AnalyticsDrilldownList.tsx"), "utf8");
 
 test("analytics panel uses the usage report APIs and filters", () => {

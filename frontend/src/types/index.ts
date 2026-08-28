@@ -289,8 +289,6 @@ export type {
   OverviewResponse,
   TrendDataPoint,
   TrendResponse,
-  HeatmapCell,
-  HeatmapResponse,
   ByLabelItem,
   ByLabelResponse,
   SessionsTrendResponse,

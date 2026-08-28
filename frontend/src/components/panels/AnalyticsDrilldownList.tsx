@@ -25,6 +25,7 @@ import type {
   SessionListResponse,
 } from "../../types/analytics";
 import type { Role } from "../../types";
+import { formatDateTime } from "./analytics/analyticsFormat";
 
 export type DrilldownKind = "sessions" | "users" | "feedback" | "runs";
 
@@ -58,13 +59,6 @@ const PAGE_SIZE = 20;
 function formatNumber(value: number): string {
   if (!Number.isFinite(value)) return "0";
   return value.toLocaleString();
-}
-
-function formatDateTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString();
 }
 
 export function AnalyticsDrilldownList({

@@ -263,10 +263,11 @@
   },
   "analytics": {
     "dimensions": {
-      "byAgent": "按智能体",
+      "agentTop5": "按智能体 Top5",
       "byAgentHint": "会话数按智能体 agent_id 聚合",
-      "byPersona": "按 Persona",
-      "byPersonaHint": "会话数按 Persona 聚合"
+      "byPersonaHint": "会话数按 Persona 聚合",
+      "modelTokenTop5": "模型 Token Top5",
+      "personaTop5": "按 Persona Top5"
     },
     "drilldown": {
       "agent": "智能体",
@@ -295,6 +296,7 @@
       "exportFailed": "导出失败",
       "exportHint": "导出当前筛选全量（非本页，最多 10000 行）"
     },
+    "empty": "暂无数据",
     "feedback": {
       "byPreset": "按 Persona 分反馈",
       "byPresetHint": "按 Persona 统计好评/差评",
@@ -319,13 +321,30 @@
       "sortRecent": "最近活跃",
       "userRole": "用户角色"
     },
+    "insights": {
+      "empty": "暂无洞察数据",
+      "fastestGrowingPersona": "增长最快 Persona",
+      "newUsers": "本期新增使用者",
+      "newUsersDrillHint": "查看用户列表",
+      "peak": "活跃高峰",
+      "peakValue": "{{weekday}} {{hour}}:00 · {{count}} 条用户消息",
+      "personaFilterHint": "设为顶部 Persona 筛选",
+      "subtitle": "区间内的硬数据结论",
+      "title": "洞察",
+      "topTokenUsers": "Token 大户 Top3",
+      "userDrillHint": "查看使用明细"
+    },
     "overview": {
       "activeUsers": "活跃用户",
-      "sessions": "会话",
       "activeSessions": "活跃 {{count}}",
+      "messagesPerUser": "人均消息",
+      "messagesPerUserHint": "分母为发过消息的人数",
+      "tokensPerSession": "会话均 Token",
       "userMessages": "用户消息",
-      "totalSessions": "总会话数",
-      "totalTokens": "总 token"
+      "totalTokens": "总 token",
+      "usingHint": "其中使用 {{count}} 人",
+      "usingUsers": "使用用户",
+      "vsPrev": "较上一区间 {{pct}}"
     },
     "preset": {
       "activeUsers": "活跃用户数",
@@ -341,12 +360,8 @@
       "upVoteRate": "点赞率"
     },
     "sessions": {
-      "messages": "用户消息数",
       "userMessages": "用户消息数",
-      "sessions": "会话数",
-      "title": "会话",
-      "trend": "会话与消息趋势",
-      "trendHint": "按天统计选定时间区间内的数据"
+      "sessions": "会话数"
     },
     "usage": {
       "title": "使用明细",
@@ -354,7 +369,13 @@
       "exportCsv": "导出 CSV",
       "exporting": "导出中…",
       "exportFailed": "导出失败",
+      "exportHint": "导出当前筛选全量（非本页，最多 10000 行）",
       "empty": "暂无使用数据",
+      "loggedInCount": "共 {{count}} 人登录",
+      "searchEmpty": "未找到匹配的记录",
+      "searchHint": "仅过滤当前页数据",
+      "searchPlaceholder": "搜索工号 / 姓名 / Persona",
+      "usingCount": "{{count}} 人使用",
       "columns": {
         "userId": "工号",
         "name": "姓名",
@@ -369,7 +390,7 @@
     },
     "subtitle": "系统使用情况与 token 指标",
     "timeRange": {
-      "1d": "1 天",
+      "1d": "今天",
       "30d": "30 天",
       "7d": "7 天",
       "apply": "应用",
@@ -380,24 +401,16 @@
     },
     "title": "统计看板",
     "tokens": {
-      "byModel": "按模型分 token",
       "byModelHint": "每个模型的总 token 数",
-      "byPreset": "按智能体类型分 token (Top 10)",
-      "byPresetHint": "每个智能体类型的总 token 数",
-      "title": "Token",
       "total": "总 token",
-      "trend": "Token 消耗趋势",
-      "trendHint": "每天的总 token 数",
       "unit": "tokens"
     },
-    "users": {
-      "active": "活跃",
-      "activeTrend": "活跃用户",
-      "activeTrendHint": "每天活跃的独立用户数",
-      "heatmap": "活跃热力图",
-      "heatmapHint": "星期 × 小时（按会话）",
-      "title": "用户"
-    }
+    "trend": {
+      "activeUsers": "活跃用户",
+      "hint": "会话、活跃用户、用户消息按天对比，Token 见右轴",
+      "title": "核心趋势"
+    },
+    "weekdays": ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
   },
   "appName": "昆小智",
   "approvals": {
