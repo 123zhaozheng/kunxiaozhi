@@ -1,0 +1,5 @@
+{"file": ".trellis/tasks/08-28-analytics-dashboard-rebuild/prd.md", "reason": "口径定义与跨子任务验收标准"}
+{"file": ".trellis/tasks/08-28-analytics-dashboard-rebuild/design.md", "reason": "端点契约与筛选时的活跃用户口径切换规则（§3.3、§3.4）"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量检查清单"}
+{"file": ".trellis/spec/backend/analytics-persona-and-lists.md", "reason": "核对导出约定与禁止第二套计数 pipeline"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "端点删除的跨层影响核对"}

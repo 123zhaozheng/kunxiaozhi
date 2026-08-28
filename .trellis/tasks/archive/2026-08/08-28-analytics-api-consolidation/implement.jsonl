@@ -1,0 +1,8 @@
+{"file": ".trellis/tasks/08-28-analytics-dashboard-rebuild/design.md", "reason": "父任务技术设计：日期参数、端点契约、洞察端点、清理清单（§3.2、§3.3、§3.4、§6）"}
+{"file": ".trellis/tasks/08-28-analytics-dashboard-rebuild/prd.md", "reason": "口径定义唯一真相表"}
+{"file": ".trellis/tasks/08-28-analytics-metrics-snapshot/prd.md", "reason": "子1 交付的 date_range / snapshot / activity_storage 接口，本任务直接调用"}
+{"file": ".trellis/tasks/08-28-analytics-dashboard-rebuild/research/backend-analytics-current-state.md", "reason": "现有端点清单与冗余候选的 file:line 证据，删除前必读"}
+{"file": ".trellis/spec/backend/index.md", "reason": "后端 spec 入口与开发前检查清单"}
+{"file": ".trellis/spec/backend/analytics-persona-and-lists.md", "reason": "端点签名清单、导出约定（BOM、10000 行上限、X-Export-Row-Cap）、权限 settings:manage"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "非法日期参数返回 400 的错误处理约定"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "路由与 schema 的放置约定"}
