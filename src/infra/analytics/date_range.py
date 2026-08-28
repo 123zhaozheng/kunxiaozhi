@@ -125,6 +125,31 @@ def previous_range(start: str, end: str) -> tuple[str, str]:
     return prev_start_date.strftime("%Y-%m-%d"), prev_end_date.strftime("%Y-%m-%d")
 
 
+def range_to_date_strings(start: datetime, end: datetime) -> tuple[str, str]:
+    """Convert a half-open datetime interval to inclusive YYYY-MM-DD strings (UTC+8).
+
+    Args:
+        start: Timezone-aware interval start (inclusive).
+        end: Timezone-aware exclusive upper bound.
+
+    Returns:
+        Tuple (start_date, end_date) as "YYYY-MM-DD" strings where end_date is
+        the last day included in the interval.
+
+    Notes:
+        Datetimes may have been normalized to UTC upstream; derivation must
+        happen in UTC+8 or the calendar day can shift by 8 hours. When end is
+        exactly midnight it is the exclusive bound, so step back one day.
+    """
+    start_cst = start.astimezone(CST)
+    end_cst = end.astimezone(CST)
+    start_str = start_cst.strftime("%Y-%m-%d")
+    end_inclusive_dt = end_cst.replace(hour=0, minute=0, second=0, microsecond=0)
+    if end_inclusive_dt >= end_cst:
+        end_inclusive_dt -= timedelta(days=1)
+    return start_str, end_inclusive_dt.strftime("%Y-%m-%d")
+
+
 def day_buckets(start: str, end: str) -> list[str]:
     """Generate every calendar day in a closed range.
 

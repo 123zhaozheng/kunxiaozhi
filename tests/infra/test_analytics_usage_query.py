@@ -154,7 +154,8 @@ def test_match_narrows_to_relevant_event_types():
     stages = usage_facts_stages(UsageFilters(start=start, end=end))
     match = stages[0]["$match"]
 
-    assert match["started_at"] == {"$gte": start, "$lte": end}
+    # 半开区间 [start, end)：end 为排他上界，避免相邻区间边界重复计数
+    assert match["started_at"] == {"$gte": start, "$lt": end}
     assert sorted(match["events.event_type"]["$in"]) == ["token:usage", "user:message"]
 
 
@@ -250,7 +251,7 @@ def test_new_sessions_match_uses_created_at_and_same_filters():
         )
     )
 
-    assert match["created_at"] == {"$gte": start, "$lte": end}
+    assert match["created_at"] == {"$gte": start, "$lt": end}
     assert match["metadata.persona_preset_id"] == "p1"
     assert match["agent_id"] == "fast"
     assert match["user_id"] == {"$in": ["u1"]}

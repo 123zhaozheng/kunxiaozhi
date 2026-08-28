@@ -95,8 +95,8 @@ async def test_export_sessions_csv_uses_same_filters_and_bom() -> None:
         response = await client.get(
             "/api/analytics/sessions/export.csv",
             params={
-                "start": "2026-07-01T00:00:00Z",
-                "end": "2026-07-17T00:00:00Z",
+                "start": "2026-07-01",
+                "end": "2026-07-16",
                 "agent_id": "fast",
                 "persona_preset_id": "p1",
                 "role_id": "role-a",
@@ -135,8 +135,8 @@ async def test_export_users_csv_filters_and_roles_joined() -> None:
         response = await client.get(
             "/api/analytics/users/export.csv",
             params={
-                "start": "2026-07-01T00:00:00Z",
-                "end": "2026-07-17T00:00:00Z",
+                "start": "2026-07-01",
+                "end": "2026-07-16",
                 "agent_id": "search",
                 "sort": "recent",
             },
@@ -163,8 +163,8 @@ async def test_export_sessions_csv_rejects_invalid_sort() -> None:
         response = await client.get(
             "/api/analytics/sessions/export.csv",
             params={
-                "start": "2026-07-01T00:00:00Z",
-                "end": "2026-07-17T00:00:00Z",
+                "start": "2026-07-01",
+                "end": "2026-07-16",
                 "sort": "invalid",
             },
         )
@@ -191,8 +191,8 @@ async def test_export_sessions_csv_requires_settings_manage() -> None:
         response = await client.get(
             "/api/analytics/sessions/export.csv",
             params={
-                "start": "2026-07-01T00:00:00Z",
-                "end": "2026-07-17T00:00:00Z",
+                "start": "2026-07-01",
+                "end": "2026-07-16",
             },
         )
     assert response.status_code == 403

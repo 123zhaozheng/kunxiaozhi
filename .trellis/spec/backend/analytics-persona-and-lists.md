@@ -212,3 +212,7 @@ bucketing: `resolve_range` / `previous_range` / `day_buckets`. `storage.py` impo
 > **Warning**: Adding a metric by writing a new aggregation pipeline is how the same Chinese label ended up meaning different numbers on the same page (概览卡 vs 钻取列表). Extend `usage_facts_stages()` and append your own `$group` instead.
 
 > **Warning**: All usage aggregation reads the `traces.events` array. Switching `TRACE_EVENT_WRITE_MODE` to `event_store` stops writing that array, which would zero out every usage metric (the pre-existing token aggregation has the same coupling). Check this before flipping the mode.
+
+> **Warning**: All analytics endpoints take `start`/`end` as `YYYY-MM-DD` strings (regex-validated, `end < start` → 400) expanded via `date_range.resolve_range` to `[start 00:00+08:00, end+1d 00:00+08:00)`. Every `$match` uses half-open `$lt` upper bounds — `$lte` reintroduces next-midnight double counting across day buckets.
+
+> **Warning**: Deleting an analytics endpoint requires grepping frontend service + call sites, not just backend. `/tokens/by-preset` looked superseded by `usage/by-persona` but `AnalyticsPanel.tsx` still renders it as a pie chart; it stays until the dashboard rewrite lands. Evidence goes in the task's `research/removal-evidence.md`.

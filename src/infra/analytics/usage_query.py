@@ -19,7 +19,7 @@ class UsageFilters:
 def usage_facts_stages(filters: UsageFilters) -> list[dict[str, Any]]:
     """Build the shared trace usage-facts pipeline."""
     match: dict[str, Any] = {
-        "started_at": {"$gte": filters.start, "$lte": filters.end},
+        "started_at": {"$gte": filters.start, "$lt": filters.end},
         "events.event_type": {"$in": ["user:message", "token:usage"]},
     }
     if filters.agent_id:
@@ -95,7 +95,7 @@ def usage_facts_stages(filters: UsageFilters) -> list[dict[str, Any]]:
 def new_sessions_match(filters: UsageFilters) -> dict[str, Any]:
     """Build the sessions query for newly created sessions."""
     match: dict[str, Any] = {
-        "created_at": {"$gte": filters.start, "$lte": filters.end}
+        "created_at": {"$gte": filters.start, "$lt": filters.end}
     }
     if filters.persona_preset_id:
         match["metadata.persona_preset_id"] = filters.persona_preset_id

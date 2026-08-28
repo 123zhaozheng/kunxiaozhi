@@ -39,7 +39,7 @@ class HeatmapCell(BaseModel):
 
     weekday: int = Field(..., description="星期 (0=周日, 6=周六)")
     hour: int = Field(..., description="小时 (0-23)")
-    count: int = Field(default=0, description="请求数")
+    count: int = Field(default=0, description="用户消息数")
 
 
 class HeatmapResponse(BaseModel):
@@ -124,6 +124,17 @@ class AnalyticsListMeta(BaseModel):
     has_more: bool = Field(default=False, description="是否还有更多数据")
 
 
+class UsageSummaryPrevious(BaseModel):
+    """上一等长周期的对比数值（与 UsageSummaryResponse 同字段，不含 previous）"""
+
+    active_users: int = Field(default=0, description="上一周期活跃用户去重数")
+    using_users: int = Field(default=0, description="上一周期发过消息的用户去重数")
+    new_sessions: int = Field(default=0, description="上一周期新建会话数")
+    active_sessions: int = Field(default=0, description="上一周期有消息往来的会话去重数")
+    user_messages: int = Field(default=0, description="上一周期用户消息数")
+    total_tokens: int = Field(default=0, description="上一周期 token 消耗合计")
+
+
 class UsageSummaryResponse(BaseModel):
     """使用情况汇总（统一口径）
 
@@ -136,6 +147,10 @@ class UsageSummaryResponse(BaseModel):
     active_sessions: int = Field(default=0, description="区间内有消息往来的会话去重数")
     user_messages: int = Field(default=0, description="用户发送的消息数")
     total_tokens: int = Field(default=0, description="token 消耗合计")
+    previous: Optional[UsageSummaryPrevious] = Field(
+        default=None,
+        description="紧邻的上一等长周期对比值（同筛选条件）",
+    )
 
 
 class UsageTrendPoint(BaseModel):
@@ -195,6 +210,50 @@ class UsageByUserResponse(AnalyticsListMeta):
     """使用明细分页响应"""
 
     items: list[UsageByUserItem] = Field(default_factory=list, description="使用明细行")
+
+
+class UsageInsightsPeak(BaseModel):
+    """峰值时段（按用户消息时间分桶，UTC+8）"""
+
+    weekday: int = Field(..., description="星期 (0=周日, 6=周六)")
+    hour: int = Field(..., description="小时 (0-23)")
+    user_messages: int = Field(default=0, description="该时段用户消息数")
+
+
+class UsageInsightsTopTokenUser(BaseModel):
+    """Token 消耗 Top 用户条目"""
+
+    user_id: str = Field(..., description="用户 ID")
+    username: str = Field(default="", description="用户名（工号）")
+    display_name: Optional[str] = Field(default=None, description="显示名")
+    tokens: int = Field(default=0, description="区间内 token 消耗")
+
+
+class UsageInsightsFastestGrowingPersona(BaseModel):
+    """增长最快的 Persona（按用户消息数环比）"""
+
+    persona_preset_id: str = Field(..., description="Persona preset ID")
+    persona_preset_name: str = Field(default="", description="Persona 名称")
+    current: int = Field(default=0, description="本期用户消息数")
+    previous: int = Field(default=0, description="上一等长周期用户消息数")
+    growth_pct: float = Field(default=0.0, description="环比增长率（百分比，可为负）")
+
+
+class UsageInsightsResponse(BaseModel):
+    """洞察栏一次给全的四个结论（数据不足时为 null / 空数组 / 0）"""
+
+    peak: Optional[UsageInsightsPeak] = Field(
+        default=None, description="用户消息峰值时段；无消息时为 null"
+    )
+    top_token_users: list[UsageInsightsTopTokenUser] = Field(
+        default_factory=list, description="Token 消耗 Top3 用户"
+    )
+    fastest_growing_persona: Optional[UsageInsightsFastestGrowingPersona] = Field(
+        default=None, description="环比增长最快的 Persona；本期无消息时为 null"
+    )
+    new_users: int = Field(
+        default=0, description="首次使用日落在本期的人数（以最早消息日为准）"
+    )
 
 
 class SessionListItem(BaseModel):

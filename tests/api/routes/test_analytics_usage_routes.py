@@ -16,6 +16,7 @@ from src.kernel.schemas.analytics import (
     UsageByPersonaItem,
     UsageByUserItem,
     UsageByUserResponse,
+    UsageSummaryPrevious,
     UsageSummaryResponse,
     UsageTrendPoint,
 )
@@ -73,6 +74,14 @@ class _FakeManager:
             active_sessions=40,
             user_messages=567,
             total_tokens=89_012,
+            previous=UsageSummaryPrevious(
+                active_users=10,
+                using_users=6,
+                new_sessions=30,
+                active_sessions=33,
+                user_messages=400,
+                total_tokens=60_000,
+            ),
         )
 
     async def get_usage_trend(self, filters: UsageFilters) -> list[UsageTrendPoint]:
@@ -137,7 +146,7 @@ def _app(fake: _FakeManager) -> FastAPI:
     return app
 
 
-_RANGE = {"start": "2026-07-01T00:00:00Z", "end": "2026-07-17T00:00:00Z"}
+_RANGE = {"start": "2026-07-01", "end": "2026-07-16"}
 _FILTERS = {"persona_preset_id": "p1", "agent_id": "fast", "role_id": "role-a"}
 
 
@@ -158,6 +167,14 @@ async def test_usage_summary_returns_five_metrics_and_passes_filters() -> None:
         "active_sessions": 40,
         "user_messages": 567,
         "total_tokens": 89_012,
+        "previous": {
+            "active_users": 10,
+            "using_users": 6,
+            "new_sessions": 30,
+            "active_sessions": 33,
+            "user_messages": 400,
+            "total_tokens": 60_000,
+        },
     }
     call = fake.filter_calls[0]
     assert call["persona_preset_id"] == "p1"
@@ -293,6 +310,130 @@ async def test_usage_summary_rejects_invalid_time() -> None:
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         response = await client.get(
             "/api/analytics/usage/summary",
-            params={"start": "not-a-date", "end": "2026-07-17T00:00:00Z"},
+            params={"start": "not-a-date", "end": "2026-07-16"},
         )
     assert response.status_code == 400
+
+
+# ── Storage 层：previous 等长前移 + 活跃/使用口径契约 ───────────────
+
+
+def _summary_result(
+    *, active_users: int, using_users: int, user_messages: int, tokens: int
+) -> dict[str, Any]:
+    return {
+        "total": {
+            "new_sessions": 3,
+            "active_sessions": 4,
+            "user_messages": user_messages,
+            "tokens": tokens,
+        },
+        "trend": [],
+        "by_persona": [],
+        "by_agent": [],
+        "by_user": [],
+        "active_users": active_users,
+        "using_users": using_users,
+    }
+
+
+@pytest.mark.asyncio
+async def test_summary_previous_is_equal_length_backward_shift(monkeypatch) -> None:
+    from src.infra.analytics import storage as storage_mod
+    from src.infra.analytics.date_range import CST
+    from src.infra.analytics.storage import AnalyticsStorage
+
+    main_start = datetime(2026, 8, 22, tzinfo=CST)
+    main_end = datetime(2026, 8, 29, tzinfo=CST)  # 2026-08-22..28，共 7 天
+    calls: list[UsageFilters] = []
+
+    async def _fake_read_or_freeze(filters, storage=None):
+        calls.append(filters)
+        if filters.start == main_start:
+            return _summary_result(active_users=9, using_users=7, user_messages=50, tokens=600)
+        return _summary_result(active_users=5, using_users=4, user_messages=30, tokens=400)
+
+    monkeypatch.setattr(storage_mod, "read_or_freeze", _fake_read_or_freeze)
+
+    store = AnalyticsStorage()
+    result = await store.get_usage_summary(UsageFilters(start=main_start, end=main_end))
+
+    # 主区间 + 上一周期各取一次
+    assert len(calls) == 2
+    assert calls[0].start == main_start
+    assert calls[0].end == main_end
+    # 上一周期：等长 7 天且紧邻前移 → 2026-08-15..2026-08-21
+    assert calls[1].start == datetime(2026, 8, 15, tzinfo=CST)
+    assert calls[1].end == datetime(2026, 8, 22, tzinfo=CST)
+
+    assert result.user_messages == 50
+    assert result.previous is not None
+    assert result.previous.user_messages == 30
+    assert result.previous.total_tokens == 400
+
+
+@pytest.mark.asyncio
+async def test_summary_previous_keeps_same_filters(monkeypatch) -> None:
+    from src.infra.analytics import storage as storage_mod
+    from src.infra.analytics.date_range import CST
+    from src.infra.analytics.storage import AnalyticsStorage
+
+    calls: list[UsageFilters] = []
+
+    async def _fake_read_or_freeze(filters, storage=None):
+        calls.append(filters)
+        return _summary_result(active_users=2, using_users=2, user_messages=10, tokens=100)
+
+    monkeypatch.setattr(storage_mod, "read_or_freeze", _fake_read_or_freeze)
+
+    store = AnalyticsStorage()
+    filters = UsageFilters(
+        start=datetime(2026, 8, 22, tzinfo=CST),
+        end=datetime(2026, 8, 24, tzinfo=CST),
+        persona_preset_id="p1",
+        agent_id="fast",
+        role_user_ids=["u1", "u2"],
+    )
+    await store.get_usage_summary(filters)
+
+    assert len(calls) == 2
+    prev = calls[1]
+    assert prev.persona_preset_id == "p1"
+    assert prev.agent_id == "fast"
+    assert prev.role_user_ids == ["u1", "u2"]
+
+
+@pytest.mark.asyncio
+async def test_summary_active_equals_using_under_persona_filter(monkeypatch) -> None:
+    from src.infra.analytics import storage as storage_mod
+    from src.infra.analytics.date_range import CST
+    from src.infra.analytics.storage import AnalyticsStorage
+
+    async def _fake_read_or_freeze(filters, storage=None):
+        return _summary_result(active_users=9, using_users=7, user_messages=50, tokens=600)
+
+    monkeypatch.setattr(storage_mod, "read_or_freeze", _fake_read_or_freeze)
+
+    store = AnalyticsStorage()
+
+    # 带 persona 筛选：活跃口径退化为使用口径（登录无 persona 归属）
+    result = await store.get_usage_summary(
+        UsageFilters(
+            start=datetime(2026, 8, 22, tzinfo=CST),
+            end=datetime(2026, 8, 29, tzinfo=CST),
+            persona_preset_id="p1",
+        )
+    )
+    assert result.active_users == result.using_users == 7
+    assert result.previous is not None
+    assert result.previous.active_users == result.previous.using_users == 7
+
+    # 无筛选：保留登录口径的活跃数
+    result = await store.get_usage_summary(
+        UsageFilters(
+            start=datetime(2026, 8, 22, tzinfo=CST),
+            end=datetime(2026, 8, 29, tzinfo=CST),
+        )
+    )
+    assert result.active_users == 9
+    assert result.using_users == 7

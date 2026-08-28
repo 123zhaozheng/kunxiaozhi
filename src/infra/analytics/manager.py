@@ -27,6 +27,7 @@ from src.kernel.schemas.analytics import (
     TrendDataPoint,
     UsageByPersonaItem,
     UsageByUserResponse,
+    UsageInsightsResponse,
     UsageSummaryResponse,
     UsageTrendPoint,
 )
@@ -104,7 +105,6 @@ class AnalyticsManager:
         self,
         start: datetime,
         end: datetime,
-        preset_id: Optional[str] = None,
         skip: int = 0,
         limit: int = 20,
         *,
@@ -116,7 +116,6 @@ class AnalyticsManager:
         return await self.storage.list_sessions(
             start,
             end,
-            preset_id=preset_id,
             skip=skip,
             limit=limit,
             agent_id=agent_id,
@@ -206,3 +205,6 @@ class AnalyticsManager:
         limit: int = 20,
     ) -> UsageByUserResponse:
         return await self.storage.list_usage_by_user(filters, skip=skip, limit=limit)
+
+    async def get_usage_insights(self, filters: UsageFilters) -> UsageInsightsResponse:
+        return await self.storage.get_usage_insights(filters)

@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 
 from src.api.deps import require_permissions
+from src.infra.analytics.date_range import resolve_range
 from src.infra.analytics.manager import AnalyticsManager
 from src.infra.logging import get_logger
 from src.kernel.schemas.analytics import (
@@ -33,6 +34,7 @@ from src.kernel.schemas.analytics import (
     TrendResponse,
     UsageByPersonaResponse,
     UsageByUserResponse,
+    UsageInsightsResponse,
     UsageSummaryResponse,
     UsageTrendResponse,
 )
@@ -52,25 +54,25 @@ def get_analytics_manager() -> AnalyticsManager:
     return AnalyticsManager()
 
 
-def _parse_iso_datetime(value: str, *, name: str) -> datetime:
-    """解析 ISO 8601 字符串为带 UTC 时区的 datetime。"""
+def _parse_range(start: str, end: str) -> tuple[datetime, datetime]:
+    """共用：解析 YYYY-MM-DD 的 start/end，展开为 UTC+8 半开区间。
+
+    返回 ``[start 00:00+08:00, end+1d 00:00+08:00)``。
+    非法日期格式（如 ``abc``、``2026-13-01``）或 ``end < start`` 一律 400。
+    """
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return resolve_range(start, end)
     except ValueError as e:
-        name_label = {"start": "开始", "end": "结束"}.get(name, name)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"无效的 {name_label} 时间: {value}",
+            detail=f"无效的日期参数: {e}",
         ) from e
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
 
 
 @router.get("/overview", response_model=OverviewResponse)
 async def get_overview(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
     agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
     role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
@@ -94,8 +96,8 @@ async def get_overview(
 
 @router.get("/users/active", response_model=TrendResponse)
 async def get_users_active_trend(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
     agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
     role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
@@ -117,24 +119,21 @@ async def get_users_active_trend(
 
 @router.get("/users/heatmap", response_model=HeatmapResponse)
 async def get_users_heatmap(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     _: None = Depends(require_permissions("settings:manage")),
     manager: AnalyticsManager = Depends(get_analytics_manager),
 ) -> HeatmapResponse:
-    """按星期×小时绘制的请求热力图。"""
-    s = _parse_iso_datetime(start, name="start")
-    e = _parse_iso_datetime(end, name="end")
-    if e < s:
-        e, s = s, e
+    """按星期×小时绘制的用户消息热力图（与 insights.peak 同口径）。"""
+    s, e = _parse_range(start, end)
     cells = await manager.get_users_heatmap(s, e)
     return HeatmapResponse(cells=cells)
 
 
 @router.get("/sessions/trend", response_model=SessionsTrendResponse)
 async def get_sessions_trend(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
     agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
     role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
@@ -155,8 +154,8 @@ async def get_sessions_trend(
 
 @router.get("/sessions/by-agent", response_model=ByLabelResponse)
 async def get_sessions_by_agent(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     limit: int = Query(10, ge=1, le=_MAX_TOP_PRESET_LIMIT, description="Top N"),
     _: None = Depends(require_permissions("settings:manage")),
     manager: AnalyticsManager = Depends(get_analytics_manager),
@@ -169,8 +168,8 @@ async def get_sessions_by_agent(
 
 @router.get("/sessions/by-persona", response_model=ByLabelResponse)
 async def get_sessions_by_persona(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     limit: int = Query(10, ge=1, le=_MAX_TOP_PRESET_LIMIT, description="Top N"),
     _: None = Depends(require_permissions("settings:manage")),
     manager: AnalyticsManager = Depends(get_analytics_manager),
@@ -183,24 +182,21 @@ async def get_sessions_by_persona(
 
 @router.get("/tokens/by-model", response_model=ByLabelResponse)
 async def get_tokens_by_model(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     _: None = Depends(require_permissions("settings:manage")),
     manager: AnalyticsManager = Depends(get_analytics_manager),
 ) -> ByLabelResponse:
     """按模型统计 token 消耗。"""
-    s = _parse_iso_datetime(start, name="start")
-    e = _parse_iso_datetime(end, name="end")
-    if e < s:
-        e, s = s, e
+    s, e = _parse_range(start, end)
     items = await manager.get_tokens_by_model(s, e)
     return ByLabelResponse(items=items)
 
 
 @router.get("/tokens/by-preset", response_model=ByLabelResponse)
 async def get_tokens_by_preset(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     limit: int = Query(10, ge=1, le=_MAX_TOP_PRESET_LIMIT, description="Top N"),
     _: None = Depends(require_permissions("settings:manage")),
     manager: AnalyticsManager = Depends(get_analytics_manager),
@@ -208,38 +204,24 @@ async def get_tokens_by_preset(
     """按 Agent 类型统计 Top N token 消耗。
 
     traces.agent_id 无法关联到 persona_presets，故按 Agent 类型聚合（路由路径保留不变）。
+    该端点仍被前端 AnalyticsPanel 活跃调用，待子3（UI 重构）切换后再删除。
     """
-    s = _parse_iso_datetime(start, name="start")
-    e = _parse_iso_datetime(end, name="end")
-    if e < s:
-        e, s = s, e
+    s, e = _parse_range(start, end)
     items = await manager.get_tokens_by_preset(s, e, limit=limit)
     return ByLabelResponse(items=items)
 
 
 @router.get("/tokens/trend", response_model=TrendResponse)
 async def get_tokens_trend(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     _: None = Depends(require_permissions("settings:manage")),
     manager: AnalyticsManager = Depends(get_analytics_manager),
 ) -> TrendResponse:
     """按天统计的 token 消耗折线图。"""
-    s = _parse_iso_datetime(start, name="start")
-    e = _parse_iso_datetime(end, name="end")
-    if e < s:
-        e, s = s, e
+    s, e = _parse_range(start, end)
     items = await manager.get_tokens_trend(s, e)
     return TrendResponse(items=items)
-
-
-def _parse_range(start: str, end: str) -> tuple[datetime, datetime]:
-    """共用：解析 start/end 并保证 e >= s。"""
-    s = _parse_iso_datetime(start, name="start")
-    e = _parse_iso_datetime(end, name="end")
-    if e < s:
-        e, s = s, e
-    return s, e
 
 
 def _parse_list_sort(sort: str | None, *, default: str) -> str:
@@ -288,8 +270,8 @@ def _csv_attachment(filename: str, headers: list[str], rows: list[list[Any]]) ->
 @router.get("/presets/{preset_id}", response_model=PresetAnalyticsResponse)
 async def get_preset_metrics(
     preset_id: str,
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     _: None = Depends(require_permissions("settings:manage")),
     manager: AnalyticsManager = Depends(get_analytics_manager),
 ) -> PresetAnalyticsResponse:
@@ -300,8 +282,8 @@ async def get_preset_metrics(
 
 @router.get("/usage/summary", response_model=UsageSummaryResponse)
 async def get_usage_summary(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
     agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
     role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
@@ -322,8 +304,8 @@ async def get_usage_summary(
 
 @router.get("/usage/trend", response_model=UsageTrendResponse)
 async def get_usage_trend(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
     agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
     role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
@@ -345,8 +327,8 @@ async def get_usage_trend(
 
 @router.get("/usage/by-persona", response_model=UsageByPersonaResponse)
 async def get_usage_by_persona(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
     agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
     role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
@@ -368,8 +350,8 @@ async def get_usage_by_persona(
 
 @router.get("/usage/by-user", response_model=UsageByUserResponse)
 async def list_usage_by_user(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
     agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
     role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
@@ -390,10 +372,35 @@ async def list_usage_by_user(
     return await manager.list_usage_by_user(filters, skip=skip, limit=limit)
 
 
+@router.get("/usage/insights", response_model=UsageInsightsResponse)
+async def get_usage_insights(
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
+    persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
+    agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
+    role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
+    _: None = Depends(require_permissions("settings:manage")),
+    manager: AnalyticsManager = Depends(get_analytics_manager),
+) -> UsageInsightsResponse:
+    """洞察栏：峰值时段 / Top3 token 用户 / 增长最快 Persona / 新增用户。
+
+    四项全部由现有数据计算，数据不足时返回 null / 空数组 / 0。
+    """
+    s, e = _parse_range(start, end)
+    filters = await manager.build_usage_filters(
+        s,
+        e,
+        persona_preset_id=persona_preset_id,
+        agent_id=agent_id,
+        role_id=role_id,
+    )
+    return await manager.get_usage_insights(filters)
+
+
 @router.get("/usage/export.csv")
 async def export_usage_csv(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
     agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
     role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
@@ -447,8 +454,8 @@ async def export_usage_csv(
 
 @router.get("/feedback/summary", response_model=FeedbackSummaryResponse)
 async def get_feedback_summary(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     _: None = Depends(require_permissions("settings:manage")),
     manager: AnalyticsManager = Depends(get_analytics_manager),
 ) -> FeedbackSummaryResponse:
@@ -459,8 +466,8 @@ async def get_feedback_summary(
 
 @router.get("/feedback/by-preset", response_model=ByPresetFeedbackResponse)
 async def get_feedback_by_preset(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     _: None = Depends(require_permissions("settings:manage")),
     manager: AnalyticsManager = Depends(get_analytics_manager),
 ) -> ByPresetFeedbackResponse:
@@ -471,11 +478,8 @@ async def get_feedback_by_preset(
 
 @router.get("/sessions/list", response_model=SessionListResponse)
 async def list_sessions(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
-    preset_id: Optional[str] = Query(
-        None, description="按角色智能体 ID 筛选（兼容旧参数，等价 persona_preset_id）"
-    ),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
     persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
     role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
@@ -497,7 +501,6 @@ async def list_sessions(
     return await manager.list_sessions(
         s,
         e,
-        preset_id=preset_id,
         skip=skip,
         limit=limit,
         agent_id=agent_id,
@@ -509,11 +512,8 @@ async def list_sessions(
 
 @router.get("/sessions/export.csv")
 async def export_sessions_csv(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
-    preset_id: Optional[str] = Query(
-        None, description="按角色智能体 ID 筛选（兼容旧参数，等价 persona_preset_id）"
-    ),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
     persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
     role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
@@ -533,7 +533,6 @@ async def export_sessions_csv(
     data = await manager.list_sessions(
         s,
         e,
-        preset_id=preset_id,
         skip=0,
         limit=_EXPORT_ROW_CAP,
         agent_id=agent_id,
@@ -577,8 +576,8 @@ async def export_sessions_csv(
 
 @router.get("/users/list", response_model=ActiveUserListResponse)
 async def list_active_users(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
     persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
     role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
@@ -611,8 +610,8 @@ async def list_active_users(
 
 @router.get("/users/export.csv")
 async def export_users_csv(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
     persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
     role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
@@ -663,8 +662,8 @@ async def export_users_csv(
 
 @router.get("/feedback/list", response_model=FeedbackListResponse)
 async def list_feedback(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     preset_id: Optional[str] = Query(None, description="按角色智能体 ID 筛选"),
     rating: Optional[str] = Query(None, description="按评分筛选: up 或 down"),
     skip: int = Query(0, ge=0, description="跳过条数"),
@@ -681,8 +680,8 @@ async def list_feedback(
 
 @router.get("/runs/list", response_model=RunListResponse)
 async def list_runs(
-    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
-    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
+    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     preset_id: Optional[str] = Query(None, description="按角色智能体 ID 筛选"),
     skip: int = Query(0, ge=0, description="跳过条数"),
     limit: int = Query(20, ge=1, le=_LIST_LIMIT_MAX, description="返回条数"),

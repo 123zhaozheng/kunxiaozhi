@@ -17,7 +17,12 @@ from typing import Any, Literal
 
 from bson import ObjectId
 
-from src.infra.analytics.date_range import CST, day_buckets, today_cst
+from src.infra.analytics.date_range import (
+    CST,
+    day_buckets,
+    range_to_date_strings,
+    today_cst,
+)
 from src.infra.logging import get_logger
 from src.infra.storage.redis import create_redis_client
 
@@ -74,21 +79,6 @@ def snapshot_group_stages(
     return [group_stage]
 
 
-def _to_half_open(match: dict[str, Any], field: str) -> dict[str, Any]:
-    """将 ``field`` 上的闭区间 ``$lte`` 改写成半开区间 ``$lt``。
-
-    日快照按 ``[date 00:00+08:00, date+1d 00:00+08:00)`` 切分，若保留 ``$lte``，
-    次日零点整的文档会同时落进相邻两天，导致边界重复计数。
-    """
-    cond = match.get(field)
-    if isinstance(cond, dict) and "$lte" in cond:
-        cond = dict(cond)
-        cond["$lt"] = cond.pop("$lte")
-        match = dict(match)
-        match[field] = cond
-    return match
-
-
 async def read_or_freeze(filters: Any, storage: Any | None = None) -> dict[str, Any]:
     """Read usage metrics with snapshot-first strategy.
 
@@ -122,13 +112,7 @@ async def read_or_freeze(filters: Any, storage: Any | None = None) -> dict[str, 
         )
 
     today = today_cst()
-    start_str = filters.start.strftime("%Y-%m-%d")
-    end_dt_for_buckets = filters.end.replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
-    if end_dt_for_buckets > filters.end:
-        end_dt_for_buckets -= timedelta(days=1)
-    end_inclusive = end_dt_for_buckets.strftime("%Y-%m-%d")
+    start_str, end_inclusive = range_to_date_strings(filters.start, filters.end)
 
     dates = day_buckets(start_str, end_inclusive)
 
@@ -265,18 +249,8 @@ end
             except Exception:
                 granular_docs = []
 
-            # Build new_sessions map from sessions collection with correct $lt boundary
+            # new_sessions_match 原生返回 [$gte, $lt) 半开区间
             session_match = new_sessions_match(date_filters)
-            # Fix: use $lt instead of $lte to avoid off-by-one at day boundary
-            created_at_match = session_match.get("created_at", {})
-            if isinstance(created_at_match, dict) and "$lte" in created_at_match:
-                lt_value = created_at_match["$lte"]
-                # Convert inclusive $lte to exclusive $lt
-                if hasattr(lt_value, "microsecond"):
-                    # For datetime, add 1 microsecond then use <
-                    created_at_match["$lt"] = lt_value.replace(microsecond=lt_value.microsecond + 1) if lt_value.microsecond < 999999 else lt_value.replace(microsecond=0) + timedelta(seconds=1)
-                else:
-                    created_at_match["$lt"] = lt_value
 
             try:
                 new_sessions_docs = await storage.sessions.aggregate([
@@ -380,16 +354,25 @@ async def _merge_results(storage: Any, filters: Any, dates: list[str]) -> dict[s
     }
 
     try:
+        # 每个 persona 的去重消息用户集合（历史快照 + 今日实时，供 active_users 回填）
+        persona_user_sets: dict[str | None, set[str]] = {}
+
         # Process historical dates from snapshots
         if historical_dates:
             snapshot_collection = storage.snapshot
 
+            base_match: list[dict[str, Any]] = [
+                {"$match": {"date": {"$in": historical_dates}}}
+            ]
+            if getattr(filters, "persona_preset_id", None):
+                base_match.append({"$match": {"persona_preset_id": filters.persona_preset_id}})
+            if getattr(filters, "agent_id", None):
+                base_match.append({"$match": {"agent_id": filters.agent_id}})
+            if getattr(filters, "role_user_ids", None) is not None:
+                base_match.append({"$match": {"user_id": {"$in": filters.role_user_ids}}})
+
             for dim_str in ("total", "day", "persona"):
-                pipeline: list[dict[str, Any]] = [{"$match": {"date": {"$in": historical_dates}}}]
-                if getattr(filters, "persona_preset_id", None):
-                    pipeline.append({"$match": {"persona_preset_id": filters.persona_preset_id}})
-                if getattr(filters, "agent_id", None):
-                    pipeline.append({"$match": {"agent_id": filters.agent_id}})
+                pipeline: list[dict[str, Any]] = list(base_match)
                 pipeline.extend(snapshot_group_stages(dim_str))  # type: ignore[arg-type]
 
                 try:
@@ -404,13 +387,57 @@ async def _merge_results(storage: Any, filters: Any, dates: list[str]) -> dict[s
                     result["total"]["user_messages"] = int(d.get("user_messages", 0) or 0)
                     result["total"]["tokens"] = int(d.get("tokens", 0) or 0)
                 elif dim_str == "day":
-                    result["trend"].extend([{"date": str(d.get("_id")), **{k: int(v or 0) for k, v in d.items() if k != "_id"}} for d in docs])
+                    # 只取计数字段：快照组里的 last_active_at 是 datetime，不能 int()
+                    result["trend"].extend([
+                        {
+                            "date": str(d.get("_id")),
+                            "new_sessions": int(d.get("new_sessions", 0) or 0),
+                            "active_sessions": int(d.get("active_sessions", 0) or 0),
+                            "user_messages": int(d.get("user_messages", 0) or 0),
+                            "tokens": int(d.get("tokens", 0) or 0),
+                        }
+                        for d in docs
+                    ])
                 elif dim_str == "persona":
-                    result["by_persona"].extend([{"persona_preset_id": str(d.get("_id")) if d.get("_id") else None, **{k: int(v or 0) for k, v in d.items() if k != "_id"}} for d in docs])
+                    result["by_persona"].extend([
+                        {
+                            "persona_preset_id": str(d.get("_id")) if d.get("_id") else None,
+                            "persona_preset_name": None,
+                            "new_sessions": int(d.get("new_sessions", 0) or 0),
+                            "active_sessions": int(d.get("active_sessions", 0) or 0),
+                            "user_messages": int(d.get("user_messages", 0) or 0),
+                            "tokens": int(d.get("tokens", 0) or 0),
+                        }
+                        for d in docs
+                    ])
+
+            # persona 维度的去重用户集合（快照行按 用户×persona 存储，可还原去重人数）
+            persona_users_pipeline = list(base_match) + [
+                {
+                    "$group": {
+                        "_id": "$persona_preset_id",
+                        "user_ids": {
+                            "$addToSet": {
+                                "$cond": [{"$gt": ["$user_messages", 0]}, "$user_id", None]
+                            }
+                        },
+                    }
+                }
+            ]
+            try:
+                persona_user_docs = await snapshot_collection.aggregate(
+                    persona_users_pipeline
+                ).to_list(length=None)
+                for d in persona_user_docs:
+                    pid = str(d.get("_id")) if d.get("_id") else None
+                    persona_user_sets.setdefault(pid, set()).update(
+                        {str(u) for u in (d.get("user_ids") or []) if u}
+                    )
+            except Exception:
+                pass
 
             # User dimension
-            user_pipeline = [
-                {"$match": {"date": {"$in": historical_dates}}},
+            user_pipeline = list(base_match) + [
                 {"$group": {"_id": "$user_id", "user_messages": {"$sum": "$user_messages"}, "tokens": {"$sum": "$tokens"}}},
             ]
             try:
@@ -471,15 +498,8 @@ async def _merge_results(storage: Any, filters: Any, dates: list[str]) -> dict[s
             today_tokens = int(fact_doc.get("tokens", 0) or 0)
             today_active_sessions = len({s for s in (fact_doc.get("active_session_ids") or []) if s})
 
-            # Get new sessions for today with correct $lt boundary
+            # new_sessions_match 原生返回 [$gte, $lt) 半开区间
             session_match = new_sessions_match(today_filters)
-            created_at_match = session_match.get("created_at", {})
-            if isinstance(created_at_match, dict) and "$lte" in created_at_match:
-                lt_value = created_at_match["$lte"]
-                if hasattr(lt_value, "microsecond"):
-                    created_at_match["$lt"] = lt_value.replace(microsecond=lt_value.microsecond + 1) if lt_value.microsecond < 999999 else lt_value.replace(microsecond=0) + timedelta(seconds=1)
-                else:
-                    created_at_match["$lt"] = lt_value
 
             try:
                 today_new_sessions = await storage.sessions.count_documents(session_match)
@@ -499,6 +519,109 @@ async def _merge_results(storage: Any, filters: Any, dates: list[str]) -> dict[s
             result["total"]["user_messages"] += today_user_messages
             result["total"]["tokens"] += today_tokens
 
+            # 今天的 persona 维度（快照不含今天，需实时计算并与历史行合并）
+            today_persona_stages = usage_facts_stages(today_filters) + [
+                {
+                    "$group": {
+                        "_id": "$persona_preset_id",
+                        "persona_preset_name": {"$first": "$persona_preset_name"},
+                        "user_messages": {"$sum": "$user_messages"},
+                        "tokens": {"$sum": "$tokens"},
+                        "active_session_ids": {
+                            "$addToSet": {
+                                "$cond": [{"$gt": ["$user_messages", 0]}, "$session_id", None]
+                            }
+                        },
+                        "active_user_ids": {
+                            "$addToSet": {
+                                "$cond": [{"$gt": ["$user_messages", 0]}, "$user_id", None]
+                            }
+                        },
+                    }
+                }
+            ]
+            try:
+                persona_docs = await storage.traces.aggregate(
+                    today_persona_stages
+                ).to_list(length=None)
+            except Exception as ex:
+                logger.warning("Real-time persona aggregate for today failed: %s", ex)
+                persona_docs = []
+
+            for pdoc in persona_docs:
+                pid = str(pdoc.get("_id")) if pdoc.get("_id") else None
+                active_user_ids = {str(u) for u in (pdoc.get("active_user_ids") or []) if u}
+                persona_user_sets.setdefault(pid, set()).update(active_user_ids)
+                result["by_persona"].append({
+                    "persona_preset_id": pid,
+                    "persona_preset_name": pdoc.get("persona_preset_name"),
+                    "new_sessions": 0,
+                    "active_sessions": len(
+                        {s for s in (pdoc.get("active_session_ids") or []) if s}
+                    ),
+                    "user_messages": int(pdoc.get("user_messages", 0) or 0),
+                    "tokens": int(pdoc.get("tokens", 0) or 0),
+                })
+
+            # 今天的用户维度
+            today_user_stages = usage_facts_stages(today_filters) + [
+                {
+                    "$group": {
+                        "_id": "$user_id",
+                        "user_messages": {"$sum": "$user_messages"},
+                        "tokens": {"$sum": "$tokens"},
+                    }
+                },
+                {"$match": {"_id": {"$nin": [None, ""]}}},
+            ]
+            try:
+                user_docs = await storage.traces.aggregate(
+                    today_user_stages
+                ).to_list(length=None)
+            except Exception as ex:
+                logger.warning("Real-time user aggregate for today failed: %s", ex)
+                user_docs = []
+
+            result["by_user"].extend([
+                {
+                    "user_id": str(udoc.get("_id")),
+                    "user_messages": int(udoc.get("user_messages", 0) or 0),
+                    "tokens": int(udoc.get("tokens", 0) or 0),
+                }
+                for udoc in user_docs
+                if udoc.get("_id")
+            ])
+
+        # 合并历史与今天中重复出现的 persona / 用户行（跨天求和）
+        merged_persona: dict[str | None, dict[str, Any]] = {}
+        for item in result["by_persona"]:
+            pid = item.get("persona_preset_id")
+            acc = merged_persona.get(pid)
+            if acc is None:
+                merged_persona[pid] = dict(item)
+                continue
+            if not acc.get("persona_preset_name") and item.get("persona_preset_name"):
+                acc["persona_preset_name"] = item.get("persona_preset_name")
+            for field in ("new_sessions", "active_sessions", "user_messages", "tokens"):
+                acc[field] = int(acc.get(field, 0) or 0) + int(item.get(field, 0) or 0)
+        result["by_persona"] = list(merged_persona.values())
+
+        merged_user: dict[str, dict[str, Any]] = {}
+        for item in result["by_user"]:
+            uid = item.get("user_id")
+            acc = merged_user.get(uid)
+            if acc is None:
+                merged_user[uid] = dict(item)
+                continue
+            for field in ("user_messages", "tokens"):
+                acc[field] = int(acc.get(field, 0) or 0) + int(item.get(field, 0) or 0)
+        result["by_user"] = list(merged_user.values())
+
+        # 回填 persona 维度 active_users（去重消息用户数；快照行不直接存该字段）
+        for item in result["by_persona"]:
+            pid = item.get("persona_preset_id")
+            item["active_users"] = len(persona_user_sets.get(pid, set()))
+
         # Active users / using_users from S2's activity_storage (may not exist yet)
         result["active_users"] = 0
         result["using_users"] = 0
@@ -506,8 +629,7 @@ async def _merge_results(storage: Any, filters: Any, dates: list[str]) -> dict[s
         try:
             from src.infra.analytics.activity_storage import ActivityStorage
             _activity_storage = ActivityStorage()
-            start_str = filters.start.strftime("%Y-%m-%d")
-            end_str = filters.end.strftime("%Y-%m-%d")
+            start_str, end_str = range_to_date_strings(filters.start, filters.end)
 
             # Get distinct users who sent messages
             using_users_list = await _activity_storage.distinct_users(start_str, end_str, source="message")

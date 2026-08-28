@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
 import pytest
@@ -55,7 +54,7 @@ async def test_get_preset_metrics_route_returns_response() -> None:
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         response = await client.get(
             "/api/analytics/presets/preset-abc",
-            params={"start": "2026-06-01T00:00:00Z", "end": "2026-06-18T00:00:00Z"},
+            params={"start": "2026-06-01", "end": "2026-06-17"},
         )
 
     assert response.status_code == 200
@@ -70,7 +69,7 @@ async def test_get_preset_metrics_route_returns_response() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_preset_metrics_route_swaps_inverted_range() -> None:
+async def test_get_preset_metrics_route_rejects_inverted_range() -> None:
     canned = PresetAnalyticsResponse()
     fake = _FakeManager(canned)
 
@@ -83,12 +82,12 @@ async def test_get_preset_metrics_route_swaps_inverted_range() -> None:
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         response = await client.get(
             "/api/analytics/presets/preset-abc",
-            params={"start": "2026-06-18T00:00:00Z", "end": "2026-06-01T00:00:00Z"},
+            params={"start": "2026-06-18", "end": "2026-06-01"},
         )
 
-    assert response.status_code == 200
-    call = fake.calls[0]
-    assert call["start"] <= call["end"]
+    # S1：end < start 一律 400，不再静默交换
+    assert response.status_code == 400
+    assert fake.calls == []
 
 
 @pytest.mark.asyncio
@@ -109,10 +108,7 @@ async def test_get_preset_metrics_route_rejects_missing_permissions() -> None:
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         response = await client.get(
             "/api/analytics/presets/preset-abc",
-            params={
-                "start": datetime(2026, 6, 1, tzinfo=timezone.utc).isoformat(),
-                "end": datetime(2026, 6, 18, tzinfo=timezone.utc).isoformat(),
-            },
+            params={"start": "2026-06-01", "end": "2026-06-17"},
         )
 
     assert response.status_code == 403
