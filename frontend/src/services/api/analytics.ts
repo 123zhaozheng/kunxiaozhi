@@ -14,11 +14,9 @@ import type {
   ByPresetFeedbackResponse,
   FeedbackListResponse,
   FeedbackSummaryResponse,
-  OverviewResponse,
   PresetAnalyticsResponse,
   RunListResponse,
   SessionListResponse,
-  SessionsTrendResponse,
   TrendResponse,
   UsageByUserResponse,
   UsageFilters,
@@ -95,10 +93,6 @@ async function downloadCsv(url: string, fallbackFilename: string): Promise<void>
 }
 
 export const analyticsApi = {
-  async getOverview(start: string, end: string): Promise<OverviewResponse> {
-    return authFetch<OverviewResponse>(`${BASE}/overview${rangeQuery(start, end)}`);
-  },
-
   async getActiveUserTrend(
     start: AnalyticsDate,
     end: AnalyticsDate,
@@ -106,15 +100,6 @@ export const analyticsApi = {
   ): Promise<TrendResponse> {
     return authFetch<TrendResponse>(
       `${BASE}/users/active${buildUsageQuery(start, end, filters)}`,
-    );
-  },
-
-  async getSessionsTrend(
-    start: string,
-    end: string,
-  ): Promise<SessionsTrendResponse> {
-    return authFetch<SessionsTrendResponse>(
-      `${BASE}/sessions/trend${rangeQuery(start, end)}`,
     );
   },
 

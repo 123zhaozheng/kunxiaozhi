@@ -25,7 +25,6 @@ from src.kernel.schemas.analytics import (
     ByPresetFeedbackResponse,
     FeedbackListResponse,
     FeedbackSummaryResponse,
-    HeatmapResponse,
     OverviewResponse,
     PresetAnalyticsResponse,
     RunListResponse,
@@ -117,19 +116,6 @@ async def get_users_active_trend(
     return TrendResponse(items=items)
 
 
-@router.get("/users/heatmap", response_model=HeatmapResponse)
-async def get_users_heatmap(
-    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
-    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
-    _: None = Depends(require_permissions("settings:manage")),
-    manager: AnalyticsManager = Depends(get_analytics_manager),
-) -> HeatmapResponse:
-    """按星期×小时绘制的用户消息热力图（与 insights.peak 同口径）。"""
-    s, e = _parse_range(start, end)
-    cells = await manager.get_users_heatmap(s, e)
-    return HeatmapResponse(cells=cells)
-
-
 @router.get("/sessions/trend", response_model=SessionsTrendResponse)
 async def get_sessions_trend(
     start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
@@ -191,37 +177,6 @@ async def get_tokens_by_model(
     s, e = _parse_range(start, end)
     items = await manager.get_tokens_by_model(s, e)
     return ByLabelResponse(items=items)
-
-
-@router.get("/tokens/by-preset", response_model=ByLabelResponse)
-async def get_tokens_by_preset(
-    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
-    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
-    limit: int = Query(10, ge=1, le=_MAX_TOP_PRESET_LIMIT, description="Top N"),
-    _: None = Depends(require_permissions("settings:manage")),
-    manager: AnalyticsManager = Depends(get_analytics_manager),
-) -> ByLabelResponse:
-    """按 Agent 类型统计 Top N token 消耗。
-
-    traces.agent_id 无法关联到 persona_presets，故按 Agent 类型聚合（路由路径保留不变）。
-    该端点仍被前端 AnalyticsPanel 活跃调用，待子3（UI 重构）切换后再删除。
-    """
-    s, e = _parse_range(start, end)
-    items = await manager.get_tokens_by_preset(s, e, limit=limit)
-    return ByLabelResponse(items=items)
-
-
-@router.get("/tokens/trend", response_model=TrendResponse)
-async def get_tokens_trend(
-    start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
-    end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
-    _: None = Depends(require_permissions("settings:manage")),
-    manager: AnalyticsManager = Depends(get_analytics_manager),
-) -> TrendResponse:
-    """按天统计的 token 消耗折线图。"""
-    s, e = _parse_range(start, end)
-    items = await manager.get_tokens_trend(s, e)
-    return TrendResponse(items=items)
 
 
 def _parse_list_sort(sort: str | None, *, default: str) -> str:

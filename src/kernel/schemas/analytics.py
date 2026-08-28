@@ -34,20 +34,6 @@ class TrendResponse(BaseModel):
     items: list[TrendDataPoint] = Field(default_factory=list, description="趋势数据点列表")
 
 
-class HeatmapCell(BaseModel):
-    """时段热力图单元格"""
-
-    weekday: int = Field(..., description="星期 (0=周日, 6=周六)")
-    hour: int = Field(..., description="小时 (0-23)")
-    count: int = Field(default=0, description="用户消息数")
-
-
-class HeatmapResponse(BaseModel):
-    """时段热力图响应"""
-
-    cells: list[HeatmapCell] = Field(default_factory=list, description="热力图单元格列表")
-
-
 class ByLabelItem(BaseModel):
     """分组聚合条目"""
 

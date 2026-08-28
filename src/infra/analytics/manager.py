@@ -18,7 +18,6 @@ from src.kernel.schemas.analytics import (
     ByPresetFeedbackResponse,
     FeedbackListResponse,
     FeedbackSummaryResponse,
-    HeatmapCell,
     OverviewResponse,
     PresetAnalyticsResponse,
     RunListResponse,
@@ -51,11 +50,6 @@ class AnalyticsManager:
     ) -> list[TrendDataPoint]:
         return await self.storage.get_active_users_trend(start, end, filters)
 
-    async def get_users_heatmap(
-        self, start: datetime, end: datetime
-    ) -> list[HeatmapCell]:
-        return await self.storage.get_users_heatmap(start, end)
-
     async def get_sessions_trend(
         self, start: datetime, end: datetime, filters: Optional[UsageFilters] = None
     ) -> SessionsTrendResponse:
@@ -66,11 +60,6 @@ class AnalyticsManager:
     ) -> list[ByLabelItem]:
         return await self.storage.get_tokens_by_model(start, end)
 
-    async def get_tokens_by_preset(
-        self, start: datetime, end: datetime, limit: Optional[int] = None
-    ) -> list[ByLabelItem]:
-        return await self.storage.get_tokens_by_preset(start, end, limit=limit or 10)
-
     async def get_sessions_by_agent(
         self, start: datetime, end: datetime, limit: int = 10
     ) -> list[ByLabelItem]:
@@ -80,11 +69,6 @@ class AnalyticsManager:
         self, start: datetime, end: datetime, limit: int = 10
     ) -> list[ByLabelItem]:
         return await self.storage.get_sessions_by_persona(start, end, limit=limit)
-
-    async def get_tokens_trend(
-        self, start: datetime, end: datetime
-    ) -> list[TrendDataPoint]:
-        return await self.storage.get_tokens_trend(start, end)
 
     async def get_preset_metrics(
         self, preset_id: str, start: datetime, end: datetime

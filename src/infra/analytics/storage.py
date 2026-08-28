@@ -34,7 +34,6 @@ from src.kernel.schemas.analytics import (
     FeedbackListItem,
     FeedbackListResponse,
     FeedbackSummaryResponse,
-    HeatmapCell,
     OverviewResponse,
     PresetAnalyticsResponse,
     RunListItem,
@@ -347,57 +346,6 @@ class AnalyticsStorage:
             filters or UsageFilters(start=s, end=e)
         )
 
-    async def get_users_heatmap(
-        self,
-        start: datetime,
-        end: datetime,
-    ) -> list[HeatmapCell]:
-        """星期 × 小时 热力图。
-
-        与 ``insights.peak`` 同口径：按用户消息时间（trace ``started_at``）分桶，
-        只统计有用户消息的 trace，时区统一 ``Asia/Shanghai``。
-        """
-        s = _ensure_datetime(start)
-        e = _ensure_datetime(end)
-        pipeline: list[dict[str, Any]] = usage_facts_stages(UsageFilters(start=s, end=e)) + [
-            {"$match": {"user_messages": {"$gt": 0}}},
-            {
-                "$group": {
-                    "_id": {
-                        "weekday": {
-                            "$subtract": [
-                                {
-                                    "$dayOfWeek": {
-                                        "date": "$started_at",
-                                        "timezone": _BUCKET_TZ,
-                                    }
-                                },
-                                1,
-                            ]
-                        },
-                        "hour": {
-                            "$hour": {
-                                "date": "$started_at",
-                                "timezone": _BUCKET_TZ,
-                            }
-                        },
-                    },
-                    "count": {"$sum": "$user_messages"},
-                }
-            },
-        ]
-        cells: list[HeatmapCell] = []
-        async for doc in self.traces.aggregate(pipeline):
-            key = doc.get("_id") or {}
-            cells.append(
-                HeatmapCell(
-                    weekday=int(key.get("weekday", 0) or 0),
-                    hour=int(key.get("hour", 0) or 0),
-                    count=int(doc.get("count", 0) or 0),
-                )
-            )
-        return cells
-
     async def get_sessions_trend(
         self,
         start: datetime,
@@ -468,53 +416,6 @@ class AnalyticsStorage:
             out.append(
                 ByLabelItem(
                     label=str(doc.get("label", "unknown")), value=float(doc.get("value", 0))
-                )
-            )
-        return out
-
-    async def get_tokens_by_preset(
-        self,
-        start: datetime,
-        end: datetime,
-        limit: int = _TOP_PRESET_LIMIT,
-    ) -> list[ByLabelItem]:
-        """按 Agent 类型聚合 token 消耗，Top N。
-
-        traces.agent_id 存的是 Agent factory ID（如 "search"/"fast"/"team"），
-        无法关联到 persona_presets（后者无 agent_id 字段），故降级为按 Agent 类型聚合。
-        label 直接用 agent_id 字符串。
-        """
-        s = _ensure_datetime(start)
-        e = _ensure_datetime(end)
-        pipeline: list[dict[str, Any]] = [
-            {
-                "$match": {
-                    "events.event_type": _TOKEN_USAGE_EVENT,
-                    "started_at": {"$gte": s, "$lt": e},
-                    "agent_id": {"$exists": True, "$ne": None},
-                }
-            },
-            {"$unwind": "$events"},
-            {"$match": {"events.event_type": _TOKEN_USAGE_EVENT}},
-            {
-                "$group": {
-                    "_id": "$agent_id",
-                    "value": {
-                        "$sum": {
-                            "$ifNull": ["$events.data.total_tokens", 0],
-                        }
-                    },
-                }
-            },
-            {"$project": {"_id": 0, "label": "$_id", "value": 1}},
-            {"$sort": {"value": -1}},
-            {"$limit": max(int(limit), 1)},
-        ]
-        out: list[ByLabelItem] = []
-        async for doc in self.traces.aggregate(pipeline):
-            out.append(
-                ByLabelItem(
-                    label=str(doc.get("label", "") or "—"), value=float(doc.get("value", 0))
                 )
             )
         return out
@@ -614,43 +515,6 @@ class AnalyticsStorage:
                 )
         except Exception as ex:
             logger.warning("get_sessions_by_persona failed: %s", ex)
-        return out
-
-    async def get_tokens_trend(
-        self,
-        start: datetime,
-        end: datetime,
-    ) -> list[TrendDataPoint]:
-        """按天统计 token 消耗。"""
-        s = _ensure_datetime(start)
-        e = _ensure_datetime(end)
-        pipeline: list[dict[str, Any]] = [
-            {
-                "$match": {
-                    "events.event_type": _TOKEN_USAGE_EVENT,
-                    "started_at": {"$gte": s, "$lt": e},
-                }
-            },
-            {"$unwind": "$events"},
-            {"$match": {"events.event_type": _TOKEN_USAGE_EVENT}},
-            {
-                "$group": {
-                    "_id": self._day_bucket_expr("$started_at"),
-                    "value": {
-                        "$sum": {"$ifNull": ["$events.data.total_tokens", 0]}
-                    },
-                }
-            },
-            {"$project": {"_id": 0, "date": "$_id", "value": 1}},
-            {"$sort": {"date": 1}},
-        ]
-        out: list[TrendDataPoint] = []
-        async for doc in self.traces.aggregate(pipeline):
-            out.append(
-                TrendDataPoint(
-                    date=str(doc.get("date", "")), value=float(doc.get("value", 0))
-                )
-            )
         return out
 
     # ── PR2: 按角色智能体 + 反馈 + 钻取明细 ─────────────────────────

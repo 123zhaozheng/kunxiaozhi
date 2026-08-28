@@ -15,8 +15,6 @@ from src.kernel.schemas.agent import (
 from src.kernel.schemas.analytics import (
     ByLabelItem,
     ByLabelResponse,
-    HeatmapCell,
-    HeatmapResponse,
     OverviewResponse,
     SessionsTrendResponse,
     TrendDataPoint,
@@ -143,8 +141,6 @@ __all__ = [
     "OverviewResponse",
     "TrendDataPoint",
     "TrendResponse",
-    "HeatmapCell",
-    "HeatmapResponse",
     "ByLabelItem",
     "ByLabelResponse",
     "SessionsTrendResponse",
