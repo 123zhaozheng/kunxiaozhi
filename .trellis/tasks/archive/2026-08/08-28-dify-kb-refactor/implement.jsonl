@@ -1,0 +1,26 @@
+[
+  {
+    "file": ".trellis/tasks/08-28-dify-kb-refactor/prd.md",
+    "reason": "Main requirements document defining what needs to be implemented"
+  },
+  {
+    "file": ".trellis/tasks/08-28-dify-kb-refactor/research/tool-pattern-analysis.md",
+    "reason": "Technical research on existing tool patterns and design decisions"
+  },
+  {
+    "file": ".trellis/spec/backend/persona-runtime-and-dify-kb.md",
+    "reason": "Persona binding contracts and dataset ID resolution patterns"
+  },
+  {
+    "file": ".trellis/spec/backend/error-handling.md",
+    "reason": "Error handling patterns for tool implementations"
+  },
+  {
+    "file": ".trellis/spec/backend/logging-guidelines.md",
+    "reason": "Logging conventions for tools (logger.warning with [tool_name] prefix)"
+  },
+  {
+    "file": ".trellis/spec/infra/tools/index.md",
+    "reason": "Tool implementation guidelines and conventions for the infra layer"
+  }
+]

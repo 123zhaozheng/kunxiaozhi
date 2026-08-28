@@ -1,0 +1,31 @@
+{
+  "id": "dify-kb-refactor",
+  "name": "dify-kb-refactor",
+  "title": "Refactor Dify KB retrieval tools - remove LLM rewrite logic",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "zhaozheng",
+  "assignee": "zhaozheng",
+  "createdAt": "2026-08-28",
+  "completedAt": "2026-08-28",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "src/infra/tool/dify_kb_tool.py",
+    "src/infra/tool/internal_registry.py",
+    "src/agents/core/harness_prompt_overrides.py",
+    "tests/infra/tool/test_dify_kb_new_tools.py"
+  ],
+  "notes": "All acceptance criteria verified. trellis-check passed. Tests passing (18/18). Ready for merge.",
+  "meta": {}
+}
