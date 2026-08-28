@@ -14,7 +14,31 @@
       "mcp__exa__web_search_exa",
       "PowerShell(cd D:\\\\code\\\\python\\\\LambChat\\\\frontend; npx ts-check-style 2>&1; echo \"EXITCODE: $LASTEXITCODE\")",
       "PowerShell(cd D:\\\\code\\\\python\\\\LambChat\\\\frontend; npx tsc --noEmit; echo \"EXITCODE: $LASTEXITCODE\")",
-      "mcp__codebase-memory-mcp__list_projects"
+      "mcp__codebase-memory-mcp__list_projects",
+      "mcp__________search_todo_userid",
+      "mcp__________create_todo",
+      "Bash(python ./.trellis/scripts/task.py current)",
+      "Bash(python ./.trellis/scripts/get_context.py --mode phase --step 2.2)",
+      "Bash(python ./.trellis/scripts/task.py list --mine)",
+      "Bash(python ./.trellis/scripts/task.py current --verbose)",
+      "Bash(python ./.trellis/scripts/get_context.py --mode packages)",
+      "Read(//d/code/python/LambChat/frontend/**)",
+      "Bash(node --import tsx --test src/components/panels/__tests__/openSandboxNodesPanel.test.ts)",
+      "Bash(npx eslint *)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(timeout 600 uv run --frozen python -m pytest tests/api/test_opensandbox_admin_routes.py tests/api/test_opensandbox_node_settings_routes.py tests/infra/session/test_trace_storage_token_usage.py -q)",
+      "Bash(uv run *)",
+      "Bash(python -c ' *)",
+      "Bash(grep -n 'aggregate\\(\\\\|$group\\\\|update_many\\\\|delete_many' src/infra/session/trace_storage.py)",
+      "Bash(git log *)",
+      "Bash(git hash-object *)",
+      "Bash(git rev-parse *)",
+      "Bash(echo \"--- crlf count ---\")",
+      "Bash(echo \"--- index blob crlf ---\")",
+      "Bash(timeout 15 curl -s -o /dev/null -w \"gateway_http=%{http_code} time=%{time_total}\\\\n\" http://127.0.0.1:8317/)",
+      "Bash(echo \"curl failed rc=$?\")",
+      "Bash(git stash *)"
     ]
   }
 }
