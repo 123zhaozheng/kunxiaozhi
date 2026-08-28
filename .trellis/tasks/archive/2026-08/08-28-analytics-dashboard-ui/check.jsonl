@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/08-28-analytics-dashboard-rebuild/prd.md", "reason": "目标版面、KPI 定义、验收标准"}
+{"file": ".trellis/tasks/08-28-analytics-dashboard-rebuild/design.md", "reason": "数字一致性契约（§5.4）——环图中心数字必须等于 KPI 卡"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量检查清单与 lint/build 命令"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "核对组件拆分是否合规、子组件是否自行发请求"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "核对类型安全"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "核对是否重复实现已有组件（时间范围按钮组、日期格式化）"}
