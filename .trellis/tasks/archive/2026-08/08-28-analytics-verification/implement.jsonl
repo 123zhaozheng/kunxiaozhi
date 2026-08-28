@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/08-28-analytics-dashboard-rebuild/prd.md", "reason": "跨子任务验收标准，逐条核对的清单来源"}
+{"file": ".trellis/tasks/08-28-analytics-dashboard-rebuild/design.md", "reason": "全部技术契约与不变量，跨层测试的断言依据"}
+{"file": ".trellis/spec/backend/analytics-persona-and-lists.md", "reason": "本任务要更新此文件：端点签名清单、口径表、新增 Gotcha"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量检查清单"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量检查清单"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨层一致性测试的设计思路"}
