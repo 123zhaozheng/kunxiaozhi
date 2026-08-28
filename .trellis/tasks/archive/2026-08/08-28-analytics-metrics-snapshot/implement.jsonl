@@ -1,0 +1,10 @@
+{"file": ".trellis/tasks/08-28-analytics-dashboard-rebuild/design.md", "reason": "父任务技术设计：快照层、日期工具、回填 worker 的完整方案（§2、§3.1、§3.2、§4）"}
+{"file": ".trellis/tasks/08-28-analytics-dashboard-rebuild/prd.md", "reason": "口径定义唯一真相表与跨子任务验收标准"}
+{"file": ".trellis/tasks/08-28-analytics-dashboard-rebuild/research/session-count-shrink-root-cause.md", "reason": "历史数字缩水的根因取证，含已排除的假设"}
+{"file": ".trellis/tasks/08-28-analytics-dashboard-rebuild/research/backend-analytics-current-state.md", "reason": "现有 analytics 后端端点与聚合方法的 file:line 地图"}
+{"file": ".trellis/spec/backend/index.md", "reason": "后端 spec 入口与开发前检查清单"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Storage 类约定、Pydantic schema Base/Create/Full 约定、新字段必须有默认值"}
+{"file": ".trellis/spec/backend/analytics-persona-and-lists.md", "reason": "analytics 现行契约：usage_facts_stages 是唯一口径来源，禁止新写第二套计数 pipeline"}
+{"file": ".trellis/spec/backend/trace-event-storage.md", "reason": "traces.events 数组与 TRACE_EVENT_WRITE_MODE 的耦合，影响实时聚合"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "尽力而为写入的异常处理约定"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "回填 worker 与活跃度写入的日志级别约定"}

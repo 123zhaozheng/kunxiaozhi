@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/08-28-analytics-dashboard-rebuild/prd.md", "reason": "口径定义唯一真相表，核对实现是否偏离"}
+{"file": ".trellis/tasks/08-28-analytics-dashboard-rebuild/design.md", "reason": "快照读取策略的不变量（同一历史日期两次查询必须相同）"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量检查清单"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "核对 Storage 与 schema 约定是否被遵守"}
+{"file": ".trellis/spec/backend/analytics-persona-and-lists.md", "reason": "核对是否新增了第二套计数 pipeline（本项目历史缺陷）"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨层一致性检查思路"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "核对是否重复实现已有能力（回填 worker 应照 session/backfill.py 形状）"}
