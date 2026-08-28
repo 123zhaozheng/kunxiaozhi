@@ -1405,3 +1405,43 @@ S5 收口（索引补齐、全量验证）。trellis-check 独立复核修掉 10
 
 - 08-24-usage-report-metrics：代码已随 a0ec122b/b7e7fd1b 提交，剩 S6 浏览器实测
 - 下一子任务：08-28-analytics-api-consolidation（统计接口整合）
+
+
+## Session 49: 统计接口整合（analytics-api-consolidation）
+
+**Date**: 2026-08-28
+**Task**: 08-28-analytics-api-consolidation（父：08-28-analytics-dashboard-rebuild）
+**Branch**: `main`
+
+### Summary
+
+analytics 对外契约收敛：全部端点 start/end 改 YYYY-MM-DD 纯日期（regex 校验、
+end<start 400、resolve_range 展开为 CST 半开区间，$lte 全清）；usage/summary 增
+previous 等长前推对比；新增 /usage/insights（peak 按用户消息时间、Top3 Token 用户、
+增长最快 Persona、new_users）。清理：删 sessions 列表 preset_id 兼容分支与
+users.updated_at 专用索引。/tokens/by-preset 因 AnalyticsPanel 饼图活跃引用保留，
+迁至新日期契约，留待子3 删除（取证在任务 research/removal-evidence.md）。
+
+第一个实现代理在 S4 中途达轮数上限且误删了 /tokens/by-preset 三层代码，
+第二个代理取证后全部恢复。check 复核顺带删除 snapshot.py 里已无用的
+_to_half_open 辅助。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9a219a96` | feat(analytics): 统计接口整合——日期参数改造、summary 对比、insights 端点与清理 |
+
+### Testing
+
+- [OK] analytics 14 个测试文件 119 passed
+- [OK] ruff/mypy 改动范围零问题
+- [OK] 全量 pytest 1638 passed，9 失败+1 收集错误均证明为存量（stash 后在 HEAD 复现）
+
+### Status
+
+[OK] **Completed**（已归档至 archive/2026-08/）
+
+### Next Steps
+
+- 下一子任务：08-28-analytics-dashboard-ui（看板版面重写），完成后删 /tokens/by-preset 与 /users/heatmap 判定
