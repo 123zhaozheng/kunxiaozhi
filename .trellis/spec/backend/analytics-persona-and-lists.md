@@ -10,9 +10,12 @@
 ### 2. Signatures
 
 ```http
-GET /api/analytics/overview?start&end
+GET /api/analytics/overview?start&end                    # 保留：无前端调用方，仓外调用不可排除
+GET /api/analytics/users/active?start&end&persona_preset_id&agent_id&role_id
+GET /api/analytics/sessions/trend?start&end&...same filters  # 保留：同上
 GET /api/analytics/sessions/by-agent?start&end&limit
 GET /api/analytics/sessions/by-persona?start&end&limit
+GET /api/analytics/tokens/by-model?start&end
 GET /api/analytics/sessions/list?start&end&agent_id&persona_preset_id&role_id&sort&skip&limit
 GET /api/analytics/users/list?start&end&agent_id&persona_preset_id&role_id&sort&skip&limit
 GET /api/analytics/sessions/export.csv?...same filters as list (no skip/limit)
@@ -20,10 +23,14 @@ GET /api/analytics/users/export.csv?...same filters as list (no skip/limit)
 GET /api/analytics/presets/{preset_id}?start&end   # single-Persona metrics
 GET /api/analytics/usage/summary?start&end&persona_preset_id&agent_id&role_id
 GET /api/analytics/usage/trend?...same filters
+GET /api/analytics/usage/insights?...same filters
 GET /api/analytics/usage/by-persona?...same filters
 GET /api/analytics/usage/by-user?...same filters&skip&limit
 GET /api/analytics/usage/export.csv?...same filters (no skip/limit)
 ```
+
+已删除（2026-08-28，前端零调用，取证见 08-28-analytics-verification 任务
+`research/removal-evidence.md`）：`/users/heatmap`、`/tokens/by-preset`、`/tokens/trend`。
 
 Auth: `settings:manage` (analytics routes).
 
@@ -62,7 +69,8 @@ session/message counting pipeline.
 | Metric | Definition |
 |--------|------------|
 | 用户消息数 user_messages | count of `user:message` events in range — NOT `traces.event_count` (that counts tool calls, stream chunks, token events too) |
-| 活跃用户 active_users | distinct `user_id` of traces with `user_messages > 0` — NOT `users.updated_at` in range |
+| 活跃用户 active_users | distinct users with **login activity** (`user_daily_activity`) ∪ message senders — the 「登录口径」. With persona/agent filters login activity cannot be attributed, so active_users degrades to using_users |
+| 使用用户 using_users | distinct `user_id` of traces with `user_messages > 0` — the 「发消息口径」; also the row-identity of `usage/by-user` (user × persona) |
 | 活跃会话 active_sessions | distinct `session_id` of traces with `user_messages > 0` |
 | 新建会话 new_sessions | `sessions.created_at` in range (the only metric not derived from usage facts) |
 | Token | sum of `token:usage` → `data.total_tokens` |
@@ -195,9 +203,12 @@ bucketing: `resolve_range` / `previous_range` / `day_buckets`. `storage.py` impo
 | Test | Guards |
 |------|--------|
 | `test_analytics_date_range` | CST boundaries, previous_range |
+| `test_analytics_date_params` | route-level YYYY-MM-DD validation: bad format / end<start → 400 |
 | `test_analytics_daily_activity` | record/distinct/first_message_date |
 | `test_analytics_snapshot_immutable` | freeze never overwrites; read_or_freeze fallback |
 | `test_analytics_backfill` | lock/batch/idempotent/cursor/exception-swallow |
+| `test_analytics_cross_consistency` | 5 cross-endpoint equalities under one filter (summary/by-persona/by-user/tokens-by-model/export.csv); real-MongoDB integration pins absolute numbers and skips cleanly when no local DB |
+| `test_analytics_insights_route` | insights filter passthrough + permission |
 
 ---
 
@@ -215,4 +226,6 @@ bucketing: `resolve_range` / `previous_range` / `day_buckets`. `storage.py` impo
 
 > **Warning**: All analytics endpoints take `start`/`end` as `YYYY-MM-DD` strings (regex-validated, `end < start` → 400) expanded via `date_range.resolve_range` to `[start 00:00+08:00, end+1d 00:00+08:00)`. Every `$match` uses half-open `$lt` upper bounds — `$lte` reintroduces next-midnight double counting across day buckets.
 
-> **Warning**: Deleting an analytics endpoint requires grepping frontend service + call sites, not just backend. `/tokens/by-preset` looked superseded by `usage/by-persona` but `AnalyticsPanel.tsx` still renders it as a pie chart; it stays until the dashboard rewrite lands. Evidence goes in the task's `research/removal-evidence.md`.
+> **Warning**: Sessions and traces are **hard-deleted** (`src/infra/session/manager.py` delete path, `src/infra/session/trace_storage.py:1704` bulk delete) — there is no soft-delete/audit copy. Historical usage numbers therefore can never be recomputed after the fact. This is the reason snapshots freeze once (`$setOnInsert` + unique index + Redis lock) and must never be recomputed from source, and why historical backfill sets `new_sessions=0`. Any feature that deletes sessions/traces silently shrinks all realtime historical aggregates — freeze the day into a snapshot before that becomes a problem.
+
+> **Warning**: Deleting an analytics endpoint requires grepping frontend service + call sites, not just backend. `/tokens/by-preset`, `/tokens/trend`, `/users/heatmap` were only removed on 2026-08-28 after the dashboard rewrite eliminated every caller, with grep evidence recorded in the verification task's `research/removal-evidence.md`. Backend endpoints with orphaned frontend client methods (`/overview`, `/sessions/trend`) are kept — out-of-repo callers cannot be ruled out — while the orphan client methods themselves are deleted.

@@ -65,6 +65,7 @@ change, every section sees the same parameter batch (`usageFilters` memo in the 
 > backend `/usage/by-user` has no search param. The UI explains this via
 > `analytics.usage.searchHint`; do not silently imply full-dataset search.
 
-> **Warning**: `getOverview` and `getSessionsTrend` client methods are orphaned
-> since the rewrite (backend endpoints still exist for other consumers to verify).
-> Check before reusing or deleting.
+> **Warning**: The orphan `getOverview`/`getSessionsTrend` client methods were
+> deleted on 2026-08-28 (no component caller). Backend `/overview` and
+> `/sessions/trend` endpoints still exist for out-of-repo consumers — do not
+> re-add frontend client wrappers without an actual call site.
