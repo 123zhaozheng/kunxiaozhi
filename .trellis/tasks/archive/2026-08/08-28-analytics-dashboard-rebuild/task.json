@@ -1,0 +1,31 @@
+{
+  "id": "analytics-dashboard-rebuild",
+  "name": "analytics-dashboard-rebuild",
+  "title": "\\u7edf\\u8ba1\\u770b\\u677f\\u91cd\\u6784",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "zhaozheng",
+  "assignee": "zhaozheng",
+  "createdAt": "2026-08-28",
+  "completedAt": "2026-08-28",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-28-analytics-metrics-snapshot",
+    "08-28-analytics-api-consolidation",
+    "08-28-analytics-dashboard-ui",
+    "08-28-analytics-verification"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

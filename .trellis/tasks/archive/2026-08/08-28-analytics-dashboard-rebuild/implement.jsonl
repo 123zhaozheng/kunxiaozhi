@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/08-28-analytics-dashboard-rebuild/research/session-count-shrink-root-cause.md", "reason": "历史数字缩水的根因取证"}
+{"file": ".trellis/tasks/08-28-analytics-dashboard-rebuild/research/backend-analytics-current-state.md", "reason": "后端现状地图"}
+{"file": ".trellis/tasks/08-28-analytics-dashboard-rebuild/research/frontend-analytics-current-state.md", "reason": "前端现状地图"}
+{"file": ".trellis/spec/backend/analytics-persona-and-lists.md", "reason": "analytics 现行契约"}
