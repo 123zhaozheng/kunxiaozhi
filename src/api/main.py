@@ -85,6 +85,7 @@ API_REQUEST_BODY_MAX_BYTES = 8 * 1024 * 1024
 API_MULTIPART_UPLOAD_PATHS = {"/api/upload/file", "/api/upload/avatar", "/upload/file"}
 _LIFESPAN_BACKGROUND_TASK_NAMES = (
     "session_search_backfill_task",
+    "analytics_backfill_task",
     "memory_monitor_startup_reset_task",
     "agent_discovery_task",
     "models_preload_task",
@@ -508,6 +509,25 @@ async def lifespan(app: FastAPI):
 
     _session_search_backfill_task = asyncio.create_task(_backfill_session_search())
     app.state.session_search_backfill_task = _session_search_backfill_task
+
+    # Backfill historical analytics activity & snapshots from traces.
+    async def _backfill_analytics():
+        from src.infra.analytics.backfill import AnalyticsBackfillWorker
+
+        worker = AnalyticsBackfillWorker()
+        try:
+            delay = getattr(settings, "ANALYTICS_BACKFILL_STARTUP_DELAY_SECONDS", 60.0)
+            if delay > 0:
+                await asyncio.sleep(delay)
+            total = await worker.run_until_complete()
+            logger.info("Analytics backfill finished, processed %d day-batches", total)
+        except Exception as e:
+            logger.warning("Analytics backfill failed: %s", e)
+        finally:
+            await worker.close()
+
+    _analytics_backfill_task = asyncio.create_task(_backfill_analytics())
+    app.state.analytics_backfill_task = _analytics_backfill_task
 
     # Start embedded WeCom in a background task. External/disabled modes never
     # import the SDK into the FastAPI process.

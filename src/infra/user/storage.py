@@ -18,6 +18,7 @@ from src.kernel.exceptions import NotFoundError, ValidationError
 from src.kernel.schemas.user import User, UserCreate, UserInDB, UserUpdate
 
 USER_LIST_LIMIT_MAX = 100
+logger = get_logger(__name__)
 
 
 def _escape_regex(text: str) -> str:
@@ -731,6 +732,16 @@ class UserStorage:
             {"_id": ObjectId(user_id)},
             {"$set": {"updated_at": utc_now()}},
         )
+
+        # 追加活跃度记录（login），失败不影响主流程
+        try:
+            from src.infra.analytics.activity_storage import ActivityStorage
+
+            activity_storage = ActivityStorage()
+            await activity_storage.record(user_id, "login")
+        except Exception as e:
+            logger.warning(f"Failed to record login activity for user={user_id}: {e}")
+
         return result.modified_count > 0
 
     async def set_reset_token(self, user_id: str, token: str, expires: datetime) -> bool:

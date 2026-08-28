@@ -124,6 +124,79 @@ class AnalyticsListMeta(BaseModel):
     has_more: bool = Field(default=False, description="是否还有更多数据")
 
 
+class UsageSummaryResponse(BaseModel):
+    """使用情况汇总（统一口径）
+
+    「活跃」= 区间内发过 user:message；「用户消息」= user:message 事件条数。
+    """
+
+    active_users: int = Field(default=0, description="活跃用户去重数（无筛选时为登录口径，有筛选时等于 using_users）")
+    using_users: int = Field(default=0, description="区间内发过消息的用户去重数")
+    new_sessions: int = Field(default=0, description="区间内新建的会话数")
+    active_sessions: int = Field(default=0, description="区间内有消息往来的会话去重数")
+    user_messages: int = Field(default=0, description="用户发送的消息数")
+    total_tokens: int = Field(default=0, description="token 消耗合计")
+
+
+class UsageTrendPoint(BaseModel):
+    """使用情况每日趋势点"""
+
+    date: str = Field(..., description="日期 (YYYY-MM-DD，Asia/Shanghai)")
+    new_sessions: int = Field(default=0, description="当日新建会话数")
+    active_sessions: int = Field(default=0, description="当日有消息往来的会话数")
+    user_messages: int = Field(default=0, description="当日用户消息数")
+    total_tokens: int = Field(default=0, description="当日 token 消耗")
+
+
+class UsageTrendResponse(BaseModel):
+    """使用情况趋势响应"""
+
+    items: list[UsageTrendPoint] = Field(default_factory=list, description="按天趋势点")
+
+
+class UsageByPersonaItem(BaseModel):
+    """按 Persona 汇总的使用情况条目"""
+
+    persona_preset_id: Optional[str] = Field(default=None, description="Persona preset ID")
+    persona_preset_name: str = Field(default="", description="Persona 名称")
+    active_users: int = Field(default=0, description="区间内发过消息的用户去重数")
+    active_sessions: int = Field(default=0, description="区间内有消息往来的会话去重数")
+    user_messages: int = Field(default=0, description="用户发送的消息数")
+    total_tokens: int = Field(default=0, description="token 消耗合计")
+
+
+class UsageByPersonaResponse(BaseModel):
+    """按 Persona 汇总的使用情况响应"""
+
+    items: list[UsageByPersonaItem] = Field(
+        default_factory=list, description="按 Persona 汇总条目"
+    )
+
+
+class UsageByUserItem(BaseModel):
+    """使用明细行，粒度为「用户 × Persona」"""
+
+    user_id: str = Field(..., description="用户 ID")
+    username: str = Field(default="", description="用户名（工号）")
+    display_name: Optional[str] = Field(default=None, description="显示名")
+    roles: list[str] = Field(default_factory=list, description="RBAC 角色 ID 列表")
+    persona_preset_id: Optional[str] = Field(default=None, description="Persona preset ID")
+    persona_preset_name: str = Field(default="", description="Persona 名称")
+    new_sessions: int = Field(default=0, description="区间内新建会话数")
+    active_sessions: int = Field(default=0, description="区间内有消息往来的会话数")
+    user_messages: int = Field(default=0, description="用户发送的消息数")
+    total_tokens: int = Field(default=0, description="token 消耗合计")
+    last_active_at: Optional[datetime] = Field(
+        default=None, description="区间内最近发消息时间"
+    )
+
+
+class UsageByUserResponse(AnalyticsListMeta):
+    """使用明细分页响应"""
+
+    items: list[UsageByUserItem] = Field(default_factory=list, description="使用明细行")
+
+
 class SessionListItem(BaseModel):
     """会话明细列表项（管理员钻取视图）"""
 

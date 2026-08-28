@@ -10,6 +10,13 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
+from src.infra.analytics.date_range import _BUCKET_TZ
+from src.infra.analytics.snapshot import SNAPSHOT_COLLECTION_NAME, read_or_freeze
+from src.infra.analytics.usage_query import (
+    UsageFilters,
+    new_sessions_match,
+    usage_facts_stages,
+)
 from src.infra.logging import get_logger
 from src.infra.storage.mongodb import get_mongo_client
 from src.kernel.config import settings
@@ -31,15 +38,17 @@ from src.kernel.schemas.analytics import (
     SessionListResponse,
     SessionsTrendResponse,
     TrendDataPoint,
+    UsageByPersonaItem,
+    UsageByUserItem,
+    UsageByUserResponse,
+    UsageSummaryResponse,
+    UsageTrendPoint,
 )
 
 logger = get_logger(__name__)
 
 _TOKEN_USAGE_EVENT = "token:usage"
 _TOP_PRESET_LIMIT = 10
-# 分桶时区：按东八区（Asia/Shanghai）日期聚合趋势/热力图。
-# 注意：仅用于 $dateToString/$dayOfWeek/$hour 分桶；$match 的 $gte/$lte 比较仍用 UTC 瞬时。
-_BUCKET_TZ = "Asia/Shanghai"
 
 
 def _ensure_datetime(value: datetime) -> datetime:
@@ -91,6 +100,8 @@ class AnalyticsStorage:
         self._feedback = None
         self._persona_presets = None
         self._trace_storage = None
+        self._snapshot = None
+        self._activity = None
 
     # ── Collection accessors ────────────────────────────────────────
 
@@ -138,6 +149,20 @@ class AnalyticsStorage:
             self._trace_storage = TraceStorage()
         return self._trace_storage
 
+    @property
+    def snapshot(self):
+        if self._snapshot is None:
+            db = get_mongo_client()[settings.MONGODB_DB]
+            self._snapshot = db[SNAPSHOT_COLLECTION_NAME]
+        return self._snapshot
+
+    @property
+    def activity(self):
+        if self._activity is None:
+            db = get_mongo_client()[settings.MONGODB_DB]
+            self._activity = db["user_daily_activity"]
+        return self._activity
+
     # ── Indexes ─────────────────────────────────────────────────────
 
     async def ensure_indexes(self) -> None:
@@ -184,6 +209,32 @@ class AnalyticsStorage:
                 background=True,
                 name="user_id_created_at_idx",
             )
+            # S3: 日快照层索引
+            await self.snapshot.create_index(
+                [("date", 1), ("user_id", 1), ("persona_preset_id", 1), ("agent_id", 1)],
+                unique=True,
+                background=True,
+            )
+            await self.snapshot.create_index(
+                [("date", 1), ("persona_preset_id", 1)], background=True
+            )
+            await self.snapshot.create_index(
+                [("date", 1), ("agent_id", 1)], background=True
+            )
+            # S2: 用户日活跃记录索引
+            await self.activity.create_index(
+                [("user_id", 1), ("date", 1)],
+                unique=True,
+                background=True,
+                name="user_id_date_unique",
+            )
+            await self.activity.create_index(
+                [("date", 1), ("user_id", 1)],
+                background=True,
+                name="date_user_id_idx",
+            )
+            # 使用情况报表依赖：traces 侧 events_event_type_ts_idx（上方）筛事件类型，
+            # sessions 侧 session_id_idx（SessionStorage 建）支撑 persona 归属 $lookup。
             logger.info("Analytics indexes ensured")
         except Exception as e:
             logger.warning("Failed to ensure analytics indexes: %s", e)
@@ -210,43 +261,17 @@ class AnalyticsStorage:
         self,
         start: datetime,
         end: datetime,
+        filters: UsageFilters | None = None,
     ) -> OverviewResponse:
-        """概览卡片数据（4 个指标）"""
+        """概览卡片数据（4 个指标）
+
+        active_users / total_sessions / total_tokens 三项走统一使用情况层，
+        与 /usage/summary、/users/list 同源；up_vote_rate 仍按反馈表独立统计。
+        """
         s = _ensure_datetime(start)
         e = _ensure_datetime(end)
+        usage_filters = filters or UsageFilters(start=s, end=e)
 
-        # Active users: count distinct user_id with updated_at in range
-        active_users_pipeline: list[dict[str, Any]] = [
-            {"$match": {"updated_at": {"$gte": s, "$lte": e}}},
-            {"$group": {"_id": "$_id"}},
-            {"$count": "value"},
-        ]
-        # Total sessions
-        total_sessions_pipeline: list[dict[str, Any]] = [
-            {"$match": self._date_range_query(s, e)},
-            {"$count": "value"},
-        ]
-        # Total tokens: unwind token events + sum total_tokens
-        total_tokens_pipeline: list[dict[str, Any]] = [
-            {
-                "$match": {
-                    "events.event_type": _TOKEN_USAGE_EVENT,
-                    "started_at": {"$gte": s, "$lte": e},
-                }
-            },
-            {"$unwind": "$events"},
-            {"$match": {"events.event_type": _TOKEN_USAGE_EVENT}},
-            {
-                "$group": {
-                    "_id": None,
-                    "value": {
-                        "$sum": {
-                            "$ifNull": ["$events.data.total_tokens", 0],
-                        }
-                    },
-                }
-            },
-        ]
         # Up vote rate: count rating in {up, down} only (never "like")
         feedback_stats_pipeline: list[dict[str, Any]] = [
             {
@@ -272,18 +297,11 @@ class AnalyticsStorage:
             },
         ]
 
-        active_users, sessions_count, tokens_count, feedback_stats = await self._fan_out(
-            [
-                (self.users, active_users_pipeline),
-                (self.sessions, total_sessions_pipeline),
-                (self.traces, total_tokens_pipeline),
-                (self.feedback, feedback_stats_pipeline),
-            ]
+        usage_summary, (feedback_stats,) = await asyncio.gather(
+            self.get_usage_summary(usage_filters),
+            self._fan_out([(self.feedback, feedback_stats_pipeline)]),
         )
 
-        active_users_total = active_users[0]["value"] if active_users else 0
-        sessions_total = sessions_count[0]["value"] if sessions_count else 0
-        tokens_total = int(tokens_count[0]["value"]) if tokens_count else 0
         if feedback_stats:
             up_fb = int(feedback_stats[0].get("up", 0) or 0)
             down_fb = int(feedback_stats[0].get("down", 0) or 0)
@@ -292,9 +310,9 @@ class AnalyticsStorage:
             up_rate = 0.0
 
         return OverviewResponse(
-            active_users=int(active_users_total),
-            total_sessions=int(sessions_total),
-            total_tokens=tokens_total,
+            active_users=usage_summary.active_users,
+            total_sessions=usage_summary.new_sessions,
+            total_tokens=usage_summary.total_tokens,
             up_vote_rate=up_rate,
         )
 
@@ -302,33 +320,14 @@ class AnalyticsStorage:
         self,
         start: datetime,
         end: datetime,
+        filters: UsageFilters | None = None,
     ) -> list[TrendDataPoint]:
-        """按天统计活跃用户数。基于用户的 updated_at。"""
+        """按天统计活跃用户数（区间内发过消息的用户）。"""
         s = _ensure_datetime(start)
         e = _ensure_datetime(end)
-        pipeline: list[dict[str, Any]] = [
-            {"$match": {"updated_at": {"$gte": s, "$lte": e}}},
-            {
-                "$group": {
-                    "_id": self._day_bucket_expr("$updated_at"),
-                    "value": {"$addToSet": "$_id"},
-                }
-            },
-            {
-                "$project": {
-                    "_id": 0,
-                    "date": "$_id",
-                    "value": {"$size": "$value"},
-                }
-            },
-            {"$sort": {"date": 1}},
-        ]
-        out: list[TrendDataPoint] = []
-        async for doc in self.users.aggregate(pipeline):
-            out.append(
-                TrendDataPoint(date=str(doc.get("date", "")), value=float(doc.get("value", 0)))
-            )
-        return out
+        return await self.get_active_users_by_day(
+            filters or UsageFilters(start=s, end=e)
+        )
 
     async def get_users_heatmap(
         self,
@@ -390,54 +389,23 @@ class AnalyticsStorage:
         self,
         start: datetime,
         end: datetime,
+        filters: UsageFilters | None = None,
     ) -> SessionsTrendResponse:
-        """会话/消息趋势：sessions 集合的创建数 + traces 的事件计数总量。"""
+        """会话/消息趋势。messages 为用户发送的消息数（user:message 事件）。"""
         s = _ensure_datetime(start)
         e = _ensure_datetime(end)
-        sessions_pipeline: list[dict[str, Any]] = [
-            {"$match": self._date_range_query(s, e)},
-            {
-                "$group": {
-                    "_id": self._day_bucket_expr("$created_at"),
-                    "value": {"$sum": 1},
-                }
-            },
-            {"$project": {"_id": 0, "date": "$_id", "value": 1}},
-            {"$sort": {"date": 1}},
-        ]
-        messages_pipeline: list[dict[str, Any]] = [
-            {
-                "$match": {
-                    "started_at": {"$gte": s, "$lte": e},
-                    "event_count": {"$exists": True, "$gt": 0},
-                }
-            },
-            {
-                "$group": {
-                    "_id": self._day_bucket_expr("$started_at"),
-                    "value": {"$sum": "$event_count"},
-                }
-            },
-            {"$project": {"_id": 0, "date": "$_id", "value": 1}},
-            {"$sort": {"date": 1}},
-        ]
-
-        sessions_docs, messages_docs = await self._fan_out(
-            [
-                (self.sessions, sessions_pipeline),
-                (self.traces, messages_pipeline),
-            ]
-        )
+        usage_filters = filters or UsageFilters(start=s, end=e)
+        trend = await self.get_usage_trend(usage_filters)
 
         sessions_trend = [
-            TrendDataPoint(date=str(d.get("date", "")), value=float(d.get("value", 0)))
-            for d in sessions_docs
+            TrendDataPoint(date=point.date, value=float(point.new_sessions))
+            for point in trend
         ]
         messages_trend = [
-            TrendDataPoint(date=str(d.get("date", "")), value=float(d.get("value", 0)))
-            for d in messages_docs
+            TrendDataPoint(date=point.date, value=float(point.user_messages))
+            for point in trend
         ]
-        total_sessions = sum(int(item.value) for item in sessions_trend)
+        total_sessions = sum(point.new_sessions for point in trend)
         return SessionsTrendResponse(
             sessions=sessions_trend,
             messages=messages_trend,
@@ -743,70 +711,15 @@ class AnalyticsStorage:
         start: datetime,
         end: datetime,
     ) -> PresetAnalyticsResponse:
-        """单角色智能体完整指标：基础 4 指标 + 点赞率 + 点踩原因分布。"""
+        """单角色智能体完整指标：基础 4 指标 + 点赞率 + 点踩原因分布。
+
+        基础指标走统一使用情况层，与 /usage/summary 对同一 persona 严格一致。
+        """
         s = _ensure_datetime(start)
         e = _ensure_datetime(end)
-        preset_match = {"metadata.persona_preset_id": preset_id}
-
-        # total_tokens（traces，E1 后）
-        total_tokens_pipeline: list[dict[str, Any]] = [
-            {
-                "$match": {
-                    **preset_match,
-                    "events.event_type": _TOKEN_USAGE_EVENT,
-                    "started_at": {"$gte": s, "$lte": e},
-                }
-            },
-            {"$unwind": "$events"},
-            {"$match": {"events.event_type": _TOKEN_USAGE_EVENT}},
-            {
-                "$group": {
-                    "_id": None,
-                    "value": {
-                        "$sum": {"$ifNull": ["$events.data.total_tokens", 0]}
-                    },
-                }
-            },
-        ]
-        # total_messages（traces，event_count 求和）
-        total_messages_pipeline: list[dict[str, Any]] = [
-            {
-                "$match": {
-                    **preset_match,
-                    "started_at": {"$gte": s, "$lte": e},
-                    "event_count": {"$exists": True, "$gt": 0},
-                }
-            },
-            {"$group": {"_id": None, "value": {"$sum": "$event_count"}}},
-        ]
-        # total_sessions + active_users（sessions，一次 $group 出两值）
-        sessions_pipeline: list[dict[str, Any]] = [
-            {"$match": {**preset_match, "created_at": {"$gte": s, "$lte": e}}},
-            {
-                "$group": {
-                    "_id": None,
-                    "total_sessions": {"$sum": 1},
-                    "active_user_ids": {"$addToSet": "$user_id"},
-                }
-            },
-        ]
-
-        tokens_docs, messages_docs, sessions_docs = await self._fan_out(
-            [
-                (self.traces, total_tokens_pipeline),
-                (self.traces, total_messages_pipeline),
-                (self.sessions, sessions_pipeline),
-            ]
+        usage = await self.get_usage_summary(
+            UsageFilters(start=s, end=e, persona_preset_id=preset_id)
         )
-
-        total_tokens = int(tokens_docs[0]["value"]) if tokens_docs else 0
-        total_messages = int(messages_docs[0]["value"]) if messages_docs else 0
-        total_sessions = 0
-        active_users = 0
-        if sessions_docs:
-            total_sessions = int(sessions_docs[0].get("total_sessions", 0) or 0)
-            active_user_ids = sessions_docs[0].get("active_user_ids") or []
-            active_users = len(active_user_ids)
 
         # 反馈：两步法（先取该 preset 的 session_ids，再聚合 feedback）
         session_ids = await self._preset_session_ids(preset_id, start, end)
@@ -845,10 +758,10 @@ class AnalyticsStorage:
         up_rate = _compute_up_vote_rate(up_count, down_total)
 
         return PresetAnalyticsResponse(
-            total_messages=total_messages,
-            total_sessions=total_sessions,
-            active_users=active_users,
-            total_tokens=total_tokens,
+            total_messages=usage.user_messages,
+            total_sessions=usage.new_sessions,
+            active_users=usage.active_users,
+            total_tokens=usage.total_tokens,
             up_vote_rate=up_rate,
             down_reasons=self._reason_distribution(reasons),
         )
@@ -1194,29 +1107,24 @@ class AnalyticsStorage:
         role_id: str | None = None,
         sort: str = "frequency",
     ) -> ActiveUserListResponse:
-        """活跃用户列表（按区间内会话聚合）。
+        """活跃用户列表。
 
-        活跃定义：区间内有会话记录的用户。
+        活跃定义：区间内发过 user:message 的用户，与 /overview 的 active_users
+        同源，因此本列表的 total 必然等于概览卡片数字。
+        session_count 为该用户在区间内有消息往来的会话去重数。
         sort:
           - frequency: 按会话数降序（默认）
-          - recent: 按最近会话时间降序
+          - recent: 按最近活跃时间降序
         """
         s = _ensure_datetime(start)
         e = _ensure_datetime(end)
-        role_user_ids: list[str] | None = None
-        if role_id:
-            role_user_ids = await self._session_user_ids_for_role(role_id, s, e)
-
-        match = self._build_session_query(
+        filters = await self.build_usage_filters(
             s,
             e,
             persona_preset_id=persona_preset_id,
             agent_id=agent_id,
-            role_user_ids=role_user_ids,
+            role_id=role_id,
         )
-        # 活跃用户必须有 user_id；角色过滤时已写入 $in
-        if "user_id" not in match:
-            match["user_id"] = {"$exists": True, "$nin": [None, ""]}
 
         sort_mode = (sort or "frequency").lower()
         sort_stage = (
@@ -1224,13 +1132,18 @@ class AnalyticsStorage:
             if sort_mode == "recent"
             else {"$sort": {"session_count": -1, "last_active_at": -1}}
         )
-        pipeline: list[dict[str, Any]] = [
-            {"$match": match},
+        pipeline = usage_facts_stages(filters) + [
+            {"$match": {"user_messages": {"$gt": 0}, "user_id": {"$nin": [None, ""]}}},
             {
                 "$group": {
                     "_id": "$user_id",
-                    "session_count": {"$sum": 1},
-                    "last_active_at": {"$max": "$created_at"},
+                    "active_session_ids": {"$addToSet": "$session_id"},
+                    "last_active_at": {"$max": "$started_at"},
+                }
+            },
+            {
+                "$addFields": {
+                    "session_count": {"$size": "$active_session_ids"},
                 }
             },
             {
@@ -1245,7 +1158,7 @@ class AnalyticsStorage:
             },
         ]
         try:
-            facet_docs = await self.sessions.aggregate(pipeline).to_list(length=1)
+            facet_docs = await self.traces.aggregate(pipeline).to_list(length=1)
         except Exception as ex:
             logger.warning("list active users failed: %s", ex)
             return ActiveUserListResponse(total=0, skip=skip, limit=limit, has_more=False)
@@ -1429,6 +1342,414 @@ class AnalyticsStorage:
         return RunListResponse(
             items=items, total=total, skip=skip, limit=limit, has_more=has_more
         )
+
+    # ── 使用情况报表（统一口径）─────────────────────────────────────
+
+    async def build_usage_filters(
+        self,
+        start: datetime,
+        end: datetime,
+        *,
+        persona_preset_id: str | None = None,
+        agent_id: str | None = None,
+        role_id: str | None = None,
+    ) -> UsageFilters:
+        """把路由层参数解析为 UsageFilters（role_id 需要一次用户表查询）。"""
+        s = _ensure_datetime(start)
+        e = _ensure_datetime(end)
+        role_user_ids: list[str] | None = None
+        if role_id:
+            role_user_ids = await self._session_user_ids_for_role(role_id, s, e)
+        return UsageFilters(
+            start=s,
+            end=e,
+            persona_preset_id=persona_preset_id or None,
+            agent_id=agent_id or None,
+            role_user_ids=role_user_ids,
+        )
+
+    @staticmethod
+    def _active_set_expr(field: str) -> dict[str, Any]:
+        """仅把发过用户消息的 trace 计入去重集合；其余产出 null，Python 侧过滤。"""
+        return {"$addToSet": {"$cond": [{"$gt": ["$user_messages", 0]}, field, None]}}
+
+    @staticmethod
+    def _count_active(values: Any) -> int:
+        return len({v for v in (values or []) if v})
+
+    async def get_usage_summary(self, filters: UsageFilters) -> UsageSummaryResponse:
+        """使用情况汇总：活跃用户 / 新建会话 / 活跃会话 / 用户消息 / token。"""
+        try:
+            result = await read_or_freeze(filters, storage=self)
+
+            # Extract metrics from merge result
+            total = result.get("total", {})
+            active_users = result.get("active_users", 0)
+            using_users = result.get("using_users", 0)
+
+            summary = UsageSummaryResponse(
+                active_users=active_users,
+                using_users=using_users,
+                new_sessions=int(total.get("new_sessions", 0)),
+                active_sessions=int(total.get("active_sessions", 0)),
+                user_messages=int(total.get("user_messages", 0)),
+                total_tokens=int(total.get("tokens", 0)),
+            )
+            # If snapshot layer returned all zeros, it may have failed silently.
+            # Fall through to direct real-time computation as safety net.
+            if summary.user_messages == 0 and summary.total_tokens == 0 and summary.new_sessions == 0:
+                raise ValueError("Snapshot layer returned empty result, falling back to real-time")
+            return summary
+        except Exception as ex:
+            logger.warning("get_usage_summary from snapshot failed: %s", ex)
+            # Fallback to real-time computation
+            pipeline = usage_facts_stages(filters) + [
+                {
+                    "$group": {
+                        "_id": None,
+                        "user_messages": {"$sum": "$user_messages"},
+                        "total_tokens": {"$sum": "$tokens"},
+                        "active_user_ids": self._active_set_expr("$user_id"),
+                        "active_session_ids": self._active_set_expr("$session_id"),
+                    }
+                },
+            ]
+            try:
+                docs, new_sessions = await asyncio.gather(
+                    self.traces.aggregate(pipeline).to_list(length=1),
+                    self.sessions.count_documents(new_sessions_match(filters)),
+                )
+            except Exception as ex2:
+                logger.warning("get_usage_summary fallback failed: %s", ex2)
+                return UsageSummaryResponse()
+
+            doc = docs[0] if docs else {}
+            return UsageSummaryResponse(
+                active_users=self._count_active(doc.get("active_user_ids")),
+                new_sessions=int(new_sessions or 0),
+                active_sessions=self._count_active(doc.get("active_session_ids")),
+                user_messages=int(doc.get("user_messages", 0) or 0),
+                total_tokens=int(doc.get("total_tokens", 0) or 0),
+            )
+
+    async def get_usage_trend(self, filters: UsageFilters) -> list[UsageTrendPoint]:
+        """使用情况按天趋势。新建会话来自 sessions，其余来自 usage facts。"""
+        try:
+            result = await read_or_freeze(filters, storage=self)
+            trend_data = result.get("trend", [])
+            return [
+                UsageTrendPoint(
+                    date=point.get("date", ""),
+                    new_sessions=int(point.get("new_sessions", 0)),
+                    active_sessions=int(point.get("active_sessions", 0)),
+                    user_messages=int(point.get("user_messages", 0)),
+                    total_tokens=int(point.get("tokens", 0)),
+                )
+                for point in trend_data
+            ]
+        except Exception as ex:
+            logger.warning("get_usage_trend from snapshot failed: %s", ex)
+            # Fallback to real-time computation
+            return await self._get_usage_trend_realtime(filters)
+
+    async def _get_usage_trend_realtime(self, filters: UsageFilters) -> list[UsageTrendPoint]:
+        """Real-time fallback for get_usage_trend."""
+        facts_pipeline = usage_facts_stages(filters) + [
+            {
+                "$group": {
+                    "_id": self._day_bucket_expr("$started_at"),
+                    "user_messages": {"$sum": "$user_messages"},
+                    "total_tokens": {"$sum": "$tokens"},
+                    "active_session_ids": self._active_set_expr("$session_id"),
+                }
+            },
+        ]
+        sessions_pipeline: list[dict[str, Any]] = [
+            {"$match": new_sessions_match(filters)},
+            {
+                "$group": {
+                    "_id": self._day_bucket_expr("$created_at"),
+                    "new_sessions": {"$sum": 1},
+                }
+            },
+        ]
+
+        facts_docs, sessions_docs = await self._fan_out(
+            [
+                (self.traces, facts_pipeline),
+                (self.sessions, sessions_pipeline),
+            ]
+        )
+
+        by_date: dict[str, dict[str, int]] = {}
+        for doc in facts_docs:
+            date = str(doc.get("_id") or "")
+            if not date:
+                continue
+            bucket = by_date.setdefault(date, {})
+            bucket["user_messages"] = int(doc.get("user_messages", 0) or 0)
+            bucket["total_tokens"] = int(doc.get("total_tokens", 0) or 0)
+            bucket["active_sessions"] = self._count_active(doc.get("active_session_ids"))
+        for doc in sessions_docs:
+            date = str(doc.get("_id") or "")
+            if not date:
+                continue
+            by_date.setdefault(date, {})["new_sessions"] = int(
+                doc.get("new_sessions", 0) or 0
+            )
+
+        return [
+            UsageTrendPoint(
+                date=date,
+                new_sessions=values.get("new_sessions", 0),
+                active_sessions=values.get("active_sessions", 0),
+                user_messages=values.get("user_messages", 0),
+                total_tokens=values.get("total_tokens", 0),
+            )
+            for date, values in sorted(by_date.items())
+        ]
+
+    async def get_usage_by_persona(
+        self, filters: UsageFilters
+    ) -> list[UsageByPersonaItem]:
+        """使用情况按 Persona 分组。名称缺失时回查 persona_presets。"""
+        try:
+            result = await read_or_freeze(filters, storage=self)
+            raw_items = result.get("by_persona", [])
+
+            # Build names lookup (same pattern as real-time path)
+            missing_name_ids = [
+                item["persona_preset_id"]
+                for item in raw_items
+                if item.get("persona_preset_id") and not item.get("persona_preset_name")
+            ]
+            names = await self._preset_names(missing_name_ids)
+
+            items: list[UsageByPersonaItem] = []
+            for item in raw_items:
+                preset_id = item.get("persona_preset_id")
+                preset_id_str = str(preset_id) if preset_id else None
+                name = str(item.get("persona_preset_name") or "")
+                if not name and preset_id_str:
+                    name = names.get(preset_id_str, "")
+                items.append(
+                    UsageByPersonaItem(
+                        persona_preset_id=preset_id_str,
+                        persona_preset_name=name,
+                        active_users=item.get("active_users", 0),
+                        active_sessions=item.get("active_sessions", 0),
+                        user_messages=item.get("user_messages", 0),
+                        total_tokens=item.get("tokens", 0),
+                    )
+                )
+            return items
+        except Exception as ex:
+            logger.warning("get_usage_by_persona from snapshot failed: %s", ex)
+            # Fallback to real-time computation
+            return await self._get_usage_by_persona_realtime(filters)
+
+    async def _get_usage_by_persona_realtime(
+        self, filters: UsageFilters
+    ) -> list[UsageByPersonaItem]:
+        """Real-time fallback for get_usage_by_persona."""
+        pipeline = usage_facts_stages(filters) + [
+            {
+                "$group": {
+                    "_id": "$persona_preset_id",
+                    "persona_preset_name": {"$first": "$persona_preset_name"},
+                    "user_messages": {"$sum": "$user_messages"},
+                    "total_tokens": {"$sum": "$tokens"},
+                    "active_user_ids": self._active_set_expr("$user_id"),
+                    "active_session_ids": self._active_set_expr("$session_id"),
+                }
+            },
+            {"$sort": {"user_messages": -1}},
+        ]
+        try:
+            docs = await self.traces.aggregate(pipeline).to_list(length=None)
+        except Exception as ex:
+            logger.warning("get_usage_by_persona realtime failed: %s", ex)
+            return []
+
+        missing_name_ids = [
+            str(doc["_id"])
+            for doc in docs
+            if doc.get("_id") and not doc.get("persona_preset_name")
+        ]
+        names = await self._preset_names(missing_name_ids)
+
+        items: list[UsageByPersonaItem] = []
+        for doc in docs:
+            preset_id = doc.get("_id")
+            preset_id_str = str(preset_id) if preset_id else None
+            name = str(doc.get("persona_preset_name") or "")
+            if not name and preset_id_str:
+                name = names.get(preset_id_str, "")
+            items.append(
+                UsageByPersonaItem(
+                    persona_preset_id=preset_id_str,
+                    persona_preset_name=name,
+                    active_users=self._count_active(doc.get("active_user_ids")),
+                    active_sessions=self._count_active(doc.get("active_session_ids")),
+                    user_messages=int(doc.get("user_messages", 0) or 0),
+                    total_tokens=int(doc.get("total_tokens", 0) or 0),
+                )
+            )
+        return items
+
+    async def list_usage_by_user(
+        self,
+        filters: UsageFilters,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> UsageByUserResponse:
+        """使用明细，行粒度为「用户 × Persona」，仅含区间内发过消息的用户。"""
+        # Note: Snapshot layer does not yet support list-level pagination.
+        # This remains a real-time query path. Will be integrated in future iteration
+        # when snapshot supports granular user-level filtering with pagination.
+
+        facts_pipeline = usage_facts_stages(filters) + [
+            {
+                "$group": {
+                    "_id": {
+                        "user_id": "$user_id",
+                        "persona_preset_id": "$persona_preset_id",
+                    },
+                    "persona_preset_name": {"$first": "$persona_preset_name"},
+                    "user_messages": {"$sum": "$user_messages"},
+                    "total_tokens": {"$sum": "$tokens"},
+                    "active_session_ids": self._active_set_expr("$session_id"),
+                    "last_active_at": {"$max": "$started_at"},
+                }
+            },
+            {"$match": {"user_messages": {"$gt": 0}, "_id.user_id": {"$nin": [None, ""]}}},
+            {
+                "$facet": {
+                    "total": [{"$count": "count"}],
+                    "items": [
+                        {"$sort": {"user_messages": -1, "last_active_at": -1}},
+                        {"$skip": skip},
+                        {"$limit": limit},
+                    ],
+                }
+            },
+        ]
+        new_sessions_pipeline: list[dict[str, Any]] = [
+            {"$match": new_sessions_match(filters)},
+            {
+                "$group": {
+                    "_id": {
+                        "user_id": "$user_id",
+                        "persona_preset_id": "$metadata.persona_preset_id",
+                    },
+                    "new_sessions": {"$sum": 1},
+                }
+            },
+        ]
+
+        facts_docs, new_sessions_docs = await self._fan_out(
+            [
+                (self.traces, facts_pipeline),
+                (self.sessions, new_sessions_pipeline),
+            ]
+        )
+
+        facet = facts_docs[0] if facts_docs else {}
+        total_arr = facet.get("total") or []
+        total = int(total_arr[0].get("count", 0)) if total_arr else 0
+        raw_items = facet.get("items") or []
+
+        new_sessions_by_key: dict[tuple[str, str], int] = {}
+        for doc in new_sessions_docs:
+            key = doc.get("_id") or {}
+            new_sessions_by_key[
+                (str(key.get("user_id") or ""), str(key.get("persona_preset_id") or ""))
+            ] = int(doc.get("new_sessions", 0) or 0)
+
+        user_ids = [
+            str((doc.get("_id") or {}).get("user_id"))
+            for doc in raw_items
+            if (doc.get("_id") or {}).get("user_id")
+        ]
+        user_meta: dict[str, dict[str, Any]] = {}
+        object_ids = _user_object_ids(user_ids)
+        if object_ids:
+            try:
+                cursor = self.users.find(
+                    {"_id": {"$in": object_ids}},
+                    {"_id": 1, "username": 1, "display_name": 1, "roles": 1},
+                )
+                async for udoc in cursor:
+                    uid = str(udoc.get("_id") or "")
+                    if uid:
+                        user_meta[uid] = udoc
+            except Exception as ex:
+                logger.warning("list_usage_by_user user lookup failed: %s", ex)
+
+        missing_name_ids = [
+            str((doc.get("_id") or {}).get("persona_preset_id"))
+            for doc in raw_items
+            if (doc.get("_id") or {}).get("persona_preset_id")
+            and not doc.get("persona_preset_name")
+        ]
+        names = await self._preset_names(missing_name_ids)
+
+        items: list[UsageByUserItem] = []
+        for doc in raw_items:
+            key = doc.get("_id") or {}
+            uid = str(key.get("user_id") or "")
+            preset_id = key.get("persona_preset_id")
+            preset_id_str = str(preset_id) if preset_id else None
+            name = str(doc.get("persona_preset_name") or "")
+            if not name and preset_id_str:
+                name = names.get(preset_id_str, "")
+            meta = user_meta.get(uid) or {}
+            roles = [str(r) for r in (meta.get("roles") or []) if r]
+            items.append(
+                UsageByUserItem(
+                    user_id=uid,
+                    username=str(meta.get("username") or ""),
+                    display_name=meta.get("display_name"),
+                    roles=roles,
+                    persona_preset_id=preset_id_str,
+                    persona_preset_name=name,
+                    new_sessions=new_sessions_by_key.get((uid, preset_id_str or ""), 0),
+                    active_sessions=self._count_active(doc.get("active_session_ids")),
+                    user_messages=int(doc.get("user_messages", 0) or 0),
+                    total_tokens=int(doc.get("total_tokens", 0) or 0),
+                    last_active_at=doc.get("last_active_at"),
+                )
+            )
+
+        has_more = (skip + len(items)) < total
+        return UsageByUserResponse(
+            items=items, total=total, skip=skip, limit=limit, has_more=has_more
+        )
+
+    async def get_active_users_by_day(self, filters: UsageFilters) -> list[TrendDataPoint]:
+        """按天统计活跃用户（区间内发过消息的用户），与概览卡同源。"""
+        pipeline = usage_facts_stages(filters) + [
+            {
+                "$group": {
+                    "_id": self._day_bucket_expr("$started_at"),
+                    "active_user_ids": self._active_set_expr("$user_id"),
+                }
+            },
+            {"$sort": {"_id": 1}},
+        ]
+        try:
+            docs = await self.traces.aggregate(pipeline).to_list(length=None)
+        except Exception as ex:
+            logger.warning("get_active_users_by_day failed: %s", ex)
+            return []
+        return [
+            TrendDataPoint(
+                date=str(doc.get("_id") or ""),
+                value=float(self._count_active(doc.get("active_user_ids"))),
+            )
+            for doc in docs
+            if doc.get("_id")
+        ]
 
     # ── Internals ────────────────────────────────────────────────
 

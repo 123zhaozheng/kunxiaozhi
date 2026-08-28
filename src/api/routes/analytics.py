@@ -31,6 +31,10 @@ from src.kernel.schemas.analytics import (
     SessionListResponse,
     SessionsTrendResponse,
     TrendResponse,
+    UsageByPersonaResponse,
+    UsageByUserResponse,
+    UsageSummaryResponse,
+    UsageTrendResponse,
 )
 
 router = APIRouter()
@@ -67,30 +71,47 @@ def _parse_iso_datetime(value: str, *, name: str) -> datetime:
 async def get_overview(
     start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
     end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
+    agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
+    role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
     _: None = Depends(require_permissions("settings:manage")),
     manager: AnalyticsManager = Depends(get_analytics_manager),
 ) -> OverviewResponse:
-    """概览卡片：活跃用户 / 总会话 / 总 token / 点赞率。"""
-    s = _parse_iso_datetime(start, name="start")
-    e = _parse_iso_datetime(end, name="end")
-    if e < s:
-        e, s = s, e
-    return await manager.get_overview(s, e)
+    """概览卡片：活跃用户 / 总会话 / 总 token / 点赞率。
+
+    活跃用户 = 区间内发过消息的用户，与 /usage/summary、/users/list 同源。
+    """
+    s, e = _parse_range(start, end)
+    filters = await manager.build_usage_filters(
+        s,
+        e,
+        persona_preset_id=persona_preset_id,
+        agent_id=agent_id,
+        role_id=role_id,
+    )
+    return await manager.get_overview(s, e, filters)
 
 
 @router.get("/users/active", response_model=TrendResponse)
 async def get_users_active_trend(
     start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
     end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
+    agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
+    role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
     _: None = Depends(require_permissions("settings:manage")),
     manager: AnalyticsManager = Depends(get_analytics_manager),
 ) -> TrendResponse:
-    """按天统计的活跃用户折线图。"""
-    s = _parse_iso_datetime(start, name="start")
-    e = _parse_iso_datetime(end, name="end")
-    if e < s:
-        e, s = s, e
-    items = await manager.get_active_users_trend(s, e)
+    """按天统计的活跃用户折线图（区间内发过消息的用户）。"""
+    s, e = _parse_range(start, end)
+    filters = await manager.build_usage_filters(
+        s,
+        e,
+        persona_preset_id=persona_preset_id,
+        agent_id=agent_id,
+        role_id=role_id,
+    )
+    items = await manager.get_active_users_trend(s, e, filters)
     return TrendResponse(items=items)
 
 
@@ -114,15 +135,22 @@ async def get_users_heatmap(
 async def get_sessions_trend(
     start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
     end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
+    agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
+    role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
     _: None = Depends(require_permissions("settings:manage")),
     manager: AnalyticsManager = Depends(get_analytics_manager),
 ) -> SessionsTrendResponse:
-    """会话 + 消息趋势。"""
-    s = _parse_iso_datetime(start, name="start")
-    e = _parse_iso_datetime(end, name="end")
-    if e < s:
-        e, s = s, e
-    return await manager.get_sessions_trend(s, e)
+    """会话 + 消息趋势。messages 为用户发送的消息数。"""
+    s, e = _parse_range(start, end)
+    filters = await manager.build_usage_filters(
+        s,
+        e,
+        persona_preset_id=persona_preset_id,
+        agent_id=agent_id,
+        role_id=role_id,
+    )
+    return await manager.get_sessions_trend(s, e, filters)
 
 
 @router.get("/sessions/by-agent", response_model=ByLabelResponse)
@@ -268,6 +296,153 @@ async def get_preset_metrics(
     """单角色智能体完整指标：基础 4 指标 + 点赞率 + 点踩原因分布。"""
     s, e = _parse_range(start, end)
     return await manager.get_preset_metrics(preset_id, s, e)
+
+
+@router.get("/usage/summary", response_model=UsageSummaryResponse)
+async def get_usage_summary(
+    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
+    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
+    agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
+    role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
+    _: None = Depends(require_permissions("settings:manage")),
+    manager: AnalyticsManager = Depends(get_analytics_manager),
+) -> UsageSummaryResponse:
+    """使用情况汇总：活跃用户 / 新建会话 / 活跃会话 / 用户消息 / token。"""
+    s, e = _parse_range(start, end)
+    filters = await manager.build_usage_filters(
+        s,
+        e,
+        persona_preset_id=persona_preset_id,
+        agent_id=agent_id,
+        role_id=role_id,
+    )
+    return await manager.get_usage_summary(filters)
+
+
+@router.get("/usage/trend", response_model=UsageTrendResponse)
+async def get_usage_trend(
+    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
+    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
+    agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
+    role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
+    _: None = Depends(require_permissions("settings:manage")),
+    manager: AnalyticsManager = Depends(get_analytics_manager),
+) -> UsageTrendResponse:
+    """使用情况按天趋势（与 /usage/summary 同一口径）。"""
+    s, e = _parse_range(start, end)
+    filters = await manager.build_usage_filters(
+        s,
+        e,
+        persona_preset_id=persona_preset_id,
+        agent_id=agent_id,
+        role_id=role_id,
+    )
+    items = await manager.get_usage_trend(filters)
+    return UsageTrendResponse(items=items)
+
+
+@router.get("/usage/by-persona", response_model=UsageByPersonaResponse)
+async def get_usage_by_persona(
+    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
+    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
+    agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
+    role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
+    _: None = Depends(require_permissions("settings:manage")),
+    manager: AnalyticsManager = Depends(get_analytics_manager),
+) -> UsageByPersonaResponse:
+    """使用情况按 Persona 分组（与 /usage/summary 同一口径）。"""
+    s, e = _parse_range(start, end)
+    filters = await manager.build_usage_filters(
+        s,
+        e,
+        persona_preset_id=persona_preset_id,
+        agent_id=agent_id,
+        role_id=role_id,
+    )
+    items = await manager.get_usage_by_persona(filters)
+    return UsageByPersonaResponse(items=items)
+
+
+@router.get("/usage/by-user", response_model=UsageByUserResponse)
+async def list_usage_by_user(
+    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
+    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
+    agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
+    role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
+    skip: int = Query(0, ge=0, description="跳过条数"),
+    limit: int = Query(20, ge=1, le=_LIST_LIMIT_MAX, description="返回条数"),
+    _: None = Depends(require_permissions("settings:manage")),
+    manager: AnalyticsManager = Depends(get_analytics_manager),
+) -> UsageByUserResponse:
+    """使用明细，行粒度为「用户 × Persona」，仅含区间内发过消息的用户。"""
+    s, e = _parse_range(start, end)
+    filters = await manager.build_usage_filters(
+        s,
+        e,
+        persona_preset_id=persona_preset_id,
+        agent_id=agent_id,
+        role_id=role_id,
+    )
+    return await manager.list_usage_by_user(filters, skip=skip, limit=limit)
+
+
+@router.get("/usage/export.csv")
+async def export_usage_csv(
+    start: str = Query(..., description="起始时间 ISO 8601 (UTC)"),
+    end: str = Query(..., description="结束时间 ISO 8601 (UTC)"),
+    persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
+    agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
+    role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
+    _: None = Depends(require_permissions("settings:manage")),
+    manager: AnalyticsManager = Depends(get_analytics_manager),
+) -> Response:
+    """导出使用明细 CSV（全量，最多 _EXPORT_ROW_CAP 行）。
+
+    查询参数与 `/usage/by-user` 一致（不含 skip/limit）。UTF-8 + BOM。
+    """
+    s, e = _parse_range(start, end)
+    filters = await manager.build_usage_filters(
+        s,
+        e,
+        persona_preset_id=persona_preset_id,
+        agent_id=agent_id,
+        role_id=role_id,
+    )
+    data = await manager.list_usage_by_user(filters, skip=0, limit=_EXPORT_ROW_CAP)
+    headers = [
+        "user_id",
+        "username",
+        "display_name",
+        "roles",
+        "persona_preset_id",
+        "persona_preset_name",
+        "new_sessions",
+        "active_sessions",
+        "user_messages",
+        "total_tokens",
+        "last_active_at",
+    ]
+    rows = [
+        [
+            item.user_id,
+            item.username,
+            item.display_name,
+            item.roles,
+            item.persona_preset_id,
+            item.persona_preset_name,
+            item.new_sessions,
+            item.active_sessions,
+            item.user_messages,
+            item.total_tokens,
+            item.last_active_at,
+        ]
+        for item in data.items
+    ]
+    return _csv_attachment("analytics-usage.csv", headers, rows)
 
 
 @router.get("/feedback/summary", response_model=FeedbackSummaryResponse)

@@ -292,11 +292,12 @@ async def test_list_sessions_frequency_sort_uses_legal_projection():
 
 @pytest.mark.asyncio
 async def test_list_active_users_frequency_sort_and_filters():
+    """活跃用户改为按 user:message 归因，因此聚合源是 traces 而非 sessions。"""
     storage = AnalyticsStorage()
     user_oid = ObjectId()
     user_id = str(user_oid)
-    sessions = MagicMock()
-    sessions.aggregate = MagicMock(
+    traces = MagicMock()
+    traces.aggregate = MagicMock(
         return_value=_FakeCursor(
             [
                 {
@@ -327,7 +328,7 @@ async def test_list_active_users_frequency_sort_and_filters():
             ]
         )
     )
-    storage._sessions = sessions
+    storage._traces = traces
     storage._users = users
 
     start, end = _range()
@@ -346,11 +347,15 @@ async def test_list_active_users_frequency_sort_and_filters():
     assert result.items[0].session_count == 3
     assert result.items[0].roles == ["role-a"]
 
-    pipeline = sessions.aggregate.call_args[0][0]
+    pipeline = traces.aggregate.call_args[0][0]
     match = pipeline[0]["$match"]
     assert match["agent_id"] == "search"
-    facet_items = pipeline[2]["$facet"]["items"]
-    sort_stage = next(s for s in facet_items if "$sort" in s)
+    # 只有发过用户消息的 trace 参与活跃判定
+    assert {"user_messages": {"$gt": 0}, "user_id": {"$nin": [None, ""]}} in [
+        stage.get("$match") for stage in pipeline if "$match" in stage
+    ]
+    facet_stage = next(s["$facet"] for s in pipeline if "$facet" in s)
+    sort_stage = next(s for s in facet_stage["items"] if "$sort" in s)
     assert sort_stage["$sort"]["session_count"] == -1
     user_query = users.find.call_args[0][0]
     assert user_query["_id"]["$in"] == [user_oid]
