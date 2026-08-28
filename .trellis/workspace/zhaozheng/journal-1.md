@@ -1365,3 +1365,43 @@ Optional Redis Sentinel via REDIS_SENTINEL_HOSTS/MASTER; empty fields keep REDIS
 ### Next Steps
 
 - 无；任务已归档
+
+
+## Session 48: 口径与日快照层（analytics-metrics-snapshot）收尾提交
+
+**Date**: 2026-08-28
+**Task**: 08-28-analytics-metrics-snapshot（父：08-28-analytics-dashboard-rebuild）
+**Branch**: `main`
+
+### Summary
+
+恢复现场：S1–S3 已在前序会话落地（日期区间、日活跃记录、日快照层）。本次派
+trellis-implement 完成 S4 回填 worker（AnalyticsBackfillWorker：Redis 锁/分批/续锁/
+幂等 $setOnInsert，进度集合 analytics_backfill_state，main.py lifespan 挂载），
+S5 收口（索引补齐、全量验证）。trellis-check 独立复核修掉 10 项问题
+（read_or_freeze 注入 storage、Redis 降级、快照全零回退实时、测试 mock 修复等）。
+
+历史回填保守口径：new_sessions=0（会话可能硬删）、只回填 source=message。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a0ec122b` | feat(analytics): 使用情况报表统一口径 + 日快照/日活跃/回填层 |
+| `b7e7fd1b` | feat(frontend): 统计看板接入使用情况报表 |
+| `18f782bf` | docs(spec): analytics 规范补充 usage 口径与快照层契约 |
+
+### Testing
+
+- [OK] uv run pytest analytics 全量 86 passed（含 7 个新回填测试）
+- [OK] ruff / mypy 范围内零新增问题
+- [OK] frontend pnpm build + analyticsUsageSection/usageReportKeys 测试通过
+
+### Status
+
+[OK] **Completed**（已归档至 archive/2026-08/）
+
+### Next Steps
+
+- 08-24-usage-report-metrics：代码已随 a0ec122b/b7e7fd1b 提交，剩 S6 浏览器实测
+- 下一子任务：08-28-analytics-api-consolidation（统计接口整合）
