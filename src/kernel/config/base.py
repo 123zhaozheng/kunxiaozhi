@@ -427,7 +427,6 @@ class Settings(BaseSettings):
     DIFY_KB_ENABLED: bool = False
     DIFY_KB_BASE_URL: str = ""
     DIFY_KB_API_KEY: str = ""
-    DIFY_KB_LLM_MODEL_ID: str = ""
     DIFY_KB_RERANK_MODEL_ID: str = ""
     DIFY_KB_SEARCH_METHOD: str = "hybrid_search"
     DIFY_KB_TOP_K: int = 10

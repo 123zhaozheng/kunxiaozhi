@@ -1,6 +1,7 @@
 # Persona Runtime and Dify Knowledge Base
 
-> Executable contracts for persona-bound tool context and the `dify_kb_retrieve` built-in tool.
+> Executable contracts for persona-bound tool context and the Dify KB built-in tools
+> (`list_dify_knowledge_bases` / `query_dify_knowledge_base`).
 
 ---
 
@@ -9,7 +10,7 @@
 ### 1. Scope / Trigger
 
 - Persona presets store optional `dify_kb_dataset_ids` on `PersonaPreset` / `PersonaPresetSnapshot`.
-- The `dify_kb_retrieve` tool does **not** read `persona_snapshot` or `persona_preset_id` at runtime.
+- The Dify KB tools do **not** read `persona_snapshot` or `persona_preset_id` at runtime.
 - Any channel (Web chat, WeCom, future gateways) must inject resolved dataset IDs into `agent_options` before `AgentFactory` / `task_manager.submit`.
 
 ### 2. Signatures
@@ -34,7 +35,8 @@ def _persona_dataset_ids(runtime: ToolRuntime) -> list[str]:
 
 ```python
 # Built-in tool exposure (src/infra/tool/internal_registry.py)
-# append get_dify_kb_retrieve_tool() only when settings gating is complete
+# append get_list_dify_knowledge_bases_tool() + get_query_dify_knowledge_base_tool()
+# only when settings gating is complete
 ```
 
 ### 3. Contracts
@@ -44,7 +46,7 @@ def _persona_dataset_ids(runtime: ToolRuntime) -> list[str]:
 | `PersonaPreset.dify_kb_dataset_ids` | `list[str]` | Persisted; default `[]` |
 | `agent_options["dify_kb_dataset_ids"]` | `list[str]` | Runtime only; set when resolved list non-empty |
 | `settings.DIFY_KB_DEFAULT_DATASET_IDS` | `list[str]` | Fallback when persona has no ids (Web/WeCom shared helper) |
-| `settings.DIFY_KB_*` | various | Tool gating: `ENABLED`, `BASE_URL`, `API_KEY`, `LLM_MODEL_ID`, `RERANK_MODEL_ID` |
+| `settings.DIFY_KB_*` | various | Tool gating: `ENABLED`, `BASE_URL`, `API_KEY`, `RERANK_MODEL_ID` |
 
 Resolution order (shared helper):
 
@@ -58,8 +60,9 @@ LangGraph: `agent_options` must appear on `config["configurable"]["agent_options
 
 | Condition | Behavior |
 |-----------|----------|
-| Dify settings incomplete | Tool not in `build_internal_tools()` |
-| Tool called, `dify_kb_dataset_ids` missing/empty | Return `{success: false, reason: "..."}` JSON string, no exception |
+| Dify settings incomplete | Tools not in `build_internal_tools()` |
+| `list_dify_knowledge_bases` called, `dify_kb_dataset_ids` missing/empty and no system default | Return `{success: true, knowledge_bases: [], reason: "..."}` JSON string, no exception |
+| `query_dify_knowledge_base` called with a `dataset_id` outside persona ids / system defaults | Return `{success: false, error: "Invalid dataset_id ...", records: []}`; never query the dataset |
 | Persona has ids, channel omitted `agent_options` injection | Same as empty scope (bug — fix channel, not tool) |
 | `GET /api/settings/dify-kb/datasets` when Dify disabled | HTTP 400 |
 
@@ -76,7 +79,7 @@ LangGraph: `agent_options` must appear on `config["configurable"]["agent_options
 |------|-----------|
 | `tests/infra/persona_preset/test_dify_kb_agent_options.py` | Persona ids win; default fallback; empty → key absent |
 | `tests/infra/agent/test_wecom_dify_kb_agent_options.py` | `submit` receives `agent_options` with ids from snapshot |
-| `tests/infra/tool/test_dify_kb_tool.py` | Gating, empty scope, retrieve/rerank degrade paths |
+| `tests/infra/tool/test_dify_kb_new_tools.py` | Gating, empty scope, dataset_id validation, no query rewrite, rerank degrade paths |
 
 ### 7. Wrong vs Correct
 
@@ -105,3 +108,11 @@ await task_manager.submit(..., agent_options=wecom_agent_options or None, ...)
 - **Scope**: persona (or system default) via `agent_options["dify_kb_dataset_ids"]` only.
 
 Do not assume binding a persona to a channel (e.g. WeCom `aibotid → preset_id`) automatically wires Dify scope; always call the shared `apply_dify_kb_*` helper after `resolve_persona_request`.
+
+---
+
+## Gotchas
+
+> **Warning**: Retrieval must not rewrite the agent's query. An internal LLM rewrite gate (`_llm_decide_retrieval`) previously swallowed the agent's intent: on an empty result the agent could not tell "searched, nothing there" from "should search differently", retried forever, and hit `recursion_limit`. Tools expose the scope (`list_dify_knowledge_bases`) and take the raw query (`query_dify_knowledge_base`); query strategy belongs to the agent.
+
+> **Warning**: `query_dify_knowledge_base` must validate `dataset_id` against persona-bound ids or system defaults before calling Dify. Without it, an agent can read any dataset on the Dify instance, bypassing persona scope.

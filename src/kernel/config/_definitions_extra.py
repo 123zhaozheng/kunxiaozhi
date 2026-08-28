@@ -848,15 +848,6 @@ EXTRA_SETTING_DEFINITIONS: dict[str, dict] = {
         "depends_on": "DIFY_KB_ENABLED",
         "is_sensitive": True,
     },
-    "DIFY_KB_LLM_MODEL_ID": {
-        "type": SettingType.STRING,
-        "category": SettingCategory.DIFY,
-        "subcategory": "models",
-        "description": "settingDesc.DIFY_KB_LLM_MODEL_ID",
-        "default": "",
-        "depends_on": "DIFY_KB_ENABLED",
-        "frontend_visible": True,
-    },
     "DIFY_KB_RERANK_MODEL_ID": {
         "type": SettingType.STRING,
         "category": SettingCategory.DIFY,
