@@ -3,7 +3,7 @@
  *
  * Four conclusions from `/usage/insights` with their click behaviors
  * (PRD 洞察栏四条):
- *   - 活跃高峰: plain text, no click
+ *   - 活跃高峰: click → open the usage drilldown
  *   - Token 大户 Top3: click a user → drill into the usage detail filtered
  *     by that user (parent sets the table search)
  *   - 增长最快 Persona: click → set the top-level persona filter
@@ -53,6 +53,9 @@ export interface AnalyticsInsightPanelProps {
   onUserDrilldown: (user: UsageInsightsTopTokenUser) => void;
   /** Drill into the user list (new users of this period). */
   onNewUsersDrilldown: () => void;
+  /** Drill into the users contributing to the peak activity bucket. */
+  onPeakDrilldown: () => void;
+  error?: string | null;
 }
 
 export function AnalyticsInsightPanel({
@@ -61,6 +64,8 @@ export function AnalyticsInsightPanel({
   onPersonaSelect,
   onUserDrilldown,
   onNewUsersDrilldown,
+  onPeakDrilldown,
+  error,
 }: AnalyticsInsightPanelProps) {
   const { t } = useTranslation();
   const isEmpty =
@@ -80,6 +85,7 @@ export function AnalyticsInsightPanel({
       subtitle={t("analytics.insights.subtitle", "区间内的硬数据结论")}
       icon={<Lightbulb size={16} aria-hidden />}
       isLoading={isLoading}
+      error={error}
       isEmpty={isEmpty}
       emptyText={t("analytics.insights.empty", "暂无洞察数据")}
     >
@@ -89,19 +95,28 @@ export function AnalyticsInsightPanel({
             <span className="text-stone-500 dark:text-stone-400">
               {t("analytics.insights.peak", "活跃高峰")}
             </span>
-            <span className="text-right font-medium text-stone-800 dark:text-stone-100">
-              {insights.peak
-                ? t("analytics.insights.peakValue", {
-                    weekday: t(
-                      `analytics.weekdays.${insights.peak.weekday % 7}`,
-                      WEEKDAY_LABELS[insights.peak.weekday % 7],
-                    ),
-                    hour: insights.peak.hour,
-                    count: formatNumber(insights.peak.user_messages),
-                    defaultValue: "{{weekday}} {{hour}}:00 · {{count}}",
-                  })
-                : "—"}
-            </span>
+            {insights.peak ? (
+              <button
+                type="button"
+                onClick={onPeakDrilldown}
+                title={t("analytics.insights.peakDrillHint", "查看活跃用户")}
+                className={`${linkClass} px-1 py-0.5 text-right font-medium text-stone-800 dark:text-stone-100`}
+              >
+                {t("analytics.insights.peakValue", {
+                  weekday: t(
+                    `analytics.weekdays.${insights.peak.weekday % 7}`,
+                    WEEKDAY_LABELS[insights.peak.weekday % 7],
+                  ),
+                  hour: insights.peak.hour,
+                  count: formatNumber(insights.peak.user_messages),
+                  defaultValue: "{{weekday}} {{hour}}:00 · {{count}}",
+                })}
+              </button>
+            ) : (
+              <span className="text-right font-medium text-stone-800 dark:text-stone-100">
+                —
+              </span>
+            )}
           </li>
           <li className="flex flex-col gap-1">
             <span className="text-stone-500 dark:text-stone-400">

@@ -541,6 +541,9 @@ async def chat_stream(
             if request.attachments
             else None,
         )
+        from src.infra.analytics.activity_storage import record_message_activity
+
+        await record_message_activity(user.sub)
 
         # Mark user message as already written so executor skips re-emitting
         task_manager._run_info[run_id] = {

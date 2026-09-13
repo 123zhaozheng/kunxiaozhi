@@ -144,6 +144,9 @@ class BackgroundTaskManager:
         )
         await presenter._ensure_trace()
         await presenter.emit_user_message(display_message or message, attachments=attachments)
+        from src.infra.analytics.activity_storage import record_message_activity
+
+        await record_message_activity(user_id)
         return presenter.trace_id
 
     def _status_queries(self) -> TaskStatusQueries:

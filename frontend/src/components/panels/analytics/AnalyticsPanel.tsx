@@ -38,12 +38,53 @@ import { AnalyticsTopRow } from "./AnalyticsTopRow";
 import { AnalyticsTrendChart } from "./AnalyticsTrendChart";
 import { AnalyticsUsageTable } from "./AnalyticsUsageTable";
 import {
+  addDaysString,
   effectiveRangeFor,
+  todayString,
   type AnalyticsDateRange,
   type FixedRangePreset,
 } from "./analyticsDates";
 
 const USAGE_PAGE_SIZE = 20;
+
+interface AnalyticsSectionErrors {
+  summary: string | null;
+  insights: string | null;
+  usageTrend: string | null;
+  activeTrend: string | null;
+  sessionsByAgent: string | null;
+  sessionsByPersona: string | null;
+  tokensByModel: string | null;
+  feedbackSummary: string | null;
+  feedbackByPreset: string | null;
+}
+
+const EMPTY_SECTION_ERRORS: AnalyticsSectionErrors = {
+  summary: null,
+  insights: null,
+  usageTrend: null,
+  activeTrend: null,
+  sessionsByAgent: null,
+  sessionsByPersona: null,
+  tokensByModel: null,
+  feedbackSummary: null,
+  feedbackByPreset: null,
+};
+
+function settledError(
+  result: PromiseSettledResult<unknown>,
+  fallback: string,
+): string | null {
+  return result.status === "rejected"
+    ? result.reason instanceof Error
+      ? result.reason.message
+      : fallback
+    : null;
+}
+
+function safeRequest<T>(request: () => Promise<T>): Promise<T> {
+  return Promise.resolve().then(request);
+}
 
 export function AnalyticsPanel() {
   const { t } = useTranslation();
@@ -53,10 +94,15 @@ export function AnalyticsPanel() {
   const [customRange, setCustomRange] = useState<AnalyticsDateRange | null>(null);
   const [personaPresetId, setPersonaPresetId] = useState("");
   const [agentId, setAgentId] = useState("");
+  const [analyticsToday, setAnalyticsToday] = useState(() => todayString());
+  const analyticsNow = useMemo(
+    () => new Date(`${analyticsToday}T12:00:00+08:00`),
+    [analyticsToday],
+  );
 
   const effectiveRange = useMemo(
-    () => effectiveRangeFor(preset, customRange),
-    [preset, customRange],
+    () => effectiveRangeFor(preset, customRange, analyticsNow),
+    [preset, customRange, analyticsNow],
   );
 
   const usageFilters = useMemo<UsageFilters>(
@@ -66,6 +112,10 @@ export function AnalyticsPanel() {
     }),
     [personaPresetId, agentId],
   );
+
+  // Login activity has no persona/agent dimension, so a dimensional filter
+  // switches the first KPI card to the using-user metric (PRD R4).
+  const isFiltered = Boolean(personaPresetId || agentId);
 
   // ── Data state ────────────────────────────────────────────────────────
   const [summary, setSummary] = useState<UsageSummaryResponse | null>(null);
@@ -101,7 +151,9 @@ export function AnalyticsPanel() {
   } | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [sectionErrors, setSectionErrors] =
+    useState<AnalyticsSectionErrors>(EMPTY_SECTION_ERRORS);
+  const requestIdRef = useRef(0);
 
   // Agent options come from the data itself, so a custom or "default" agent is selectable.
   const agentOptions = useMemo(
@@ -130,57 +182,107 @@ export function AnalyticsPanel() {
     };
   }, []);
 
+  // Fixed presets are anchored to the UTC+8 day, not the browser's local day.
+  // Schedule the next boundary so an open dashboard rolls over without a reload.
+  useEffect(() => {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const scheduleNextBoundary = () => {
+      const current = todayString();
+      setAnalyticsToday((previous) => (previous === current ? previous : current));
+      const next = addDaysString(current, 1);
+      const nextBoundary = Date.parse(`${next}T00:00:00+08:00`);
+      timeout = setTimeout(
+        scheduleNextBoundary,
+        Math.max(nextBoundary - Date.now(), 1_000),
+      );
+    };
+    scheduleNextBoundary();
+    return () => {
+      if (timeout) clearTimeout(timeout);
+    };
+  }, []);
+
   // ── Data orchestration: one batch of requests per filter change ──────
   const fetchData = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
-    setError(null);
+    setSectionErrors(EMPTY_SECTION_ERRORS);
     const { start, end } = effectiveRange;
-    try {
-      const [
-        summaryData,
-        insightsData,
-        usageTrendData,
-        activeData,
-        byAgentData,
-        byPersonaData,
-        byModelData,
-        feedbackSummaryData,
-        feedbackByPresetData,
-      ] = await Promise.all([
-        analyticsApi.getUsageSummary(start, end, usageFilters),
-        analyticsApi.getUsageInsights(start, end, usageFilters),
-        analyticsApi.getUsageTrend(start, end, usageFilters),
-        analyticsApi.getActiveUserTrend(start, end, usageFilters),
-        analyticsApi.getSessionsByAgent(start, end, usageFilters, 100),
-        analyticsApi.getSessionsByPersona(start, end, usageFilters, 10),
-        analyticsApi.getTokensByModel(start, end, usageFilters),
-        analyticsApi.getFeedbackSummary(start, end),
-        analyticsApi.getFeedbackByPreset(start, end),
-      ]);
-      setSummary(summaryData ?? null);
-      setInsights(insightsData ?? null);
-      setUsageTrend(Array.isArray(usageTrendData?.items) ? usageTrendData.items : []);
-      setActiveTrend(Array.isArray(activeData?.items) ? activeData.items : []);
-      setSessionsByAgent(
-        Array.isArray(byAgentData?.items) ? byAgentData.items : [],
-      );
-      setSessionsByPersona(
-        Array.isArray(byPersonaData?.items) ? byPersonaData.items : [],
-      );
-      setTokensByModel(Array.isArray(byModelData?.items) ? byModelData.items : []);
-      setFeedbackSummary(feedbackSummaryData ?? null);
-      setFeedbackByPreset(
-        Array.isArray(feedbackByPresetData?.items)
-          ? feedbackByPresetData.items
-          : [],
-      );
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : t("common.loadFailed", "Load failed");
-      setError(message);
-    } finally {
-      setIsLoading(false);
-    }
+    const results = await Promise.allSettled([
+      safeRequest(() => analyticsApi.getUsageSummary(start, end, usageFilters)),
+      safeRequest(() => analyticsApi.getUsageInsights(start, end, usageFilters)),
+      safeRequest(() => analyticsApi.getUsageTrend(start, end, usageFilters)),
+      safeRequest(() => analyticsApi.getActiveUserTrend(start, end, usageFilters)),
+      safeRequest(() => analyticsApi.getSessionsByAgent(start, end, usageFilters, 100)),
+      safeRequest(() => analyticsApi.getSessionsByPersona(start, end, usageFilters, 10)),
+      safeRequest(() => analyticsApi.getTokensByModel(start, end, usageFilters)),
+      safeRequest(() => analyticsApi.getFeedbackSummary(start, end)),
+      safeRequest(() => analyticsApi.getFeedbackByPreset(start, end)),
+    ]);
+    if (requestId !== requestIdRef.current) return;
+
+    const [
+      summaryResult,
+      insightsResult,
+      usageTrendResult,
+      activeTrendResult,
+      byAgentResult,
+      byPersonaResult,
+      byModelResult,
+      feedbackSummaryResult,
+      feedbackByPresetResult,
+    ] = results;
+    const errorMessage = t("common.loadFailed", "Load failed");
+    setSummary(summaryResult.status === "fulfilled" ? summaryResult.value ?? null : null);
+    setInsights(insightsResult.status === "fulfilled" ? insightsResult.value ?? null : null);
+    setUsageTrend(
+      usageTrendResult.status === "fulfilled" && Array.isArray(usageTrendResult.value?.items)
+        ? usageTrendResult.value.items
+        : [],
+    );
+    setActiveTrend(
+      activeTrendResult.status === "fulfilled" && Array.isArray(activeTrendResult.value?.items)
+        ? activeTrendResult.value.items
+        : [],
+    );
+    setSessionsByAgent(
+      byAgentResult.status === "fulfilled" && Array.isArray(byAgentResult.value?.items)
+        ? byAgentResult.value.items
+        : [],
+    );
+    setSessionsByPersona(
+      byPersonaResult.status === "fulfilled" && Array.isArray(byPersonaResult.value?.items)
+        ? byPersonaResult.value.items
+        : [],
+    );
+    setTokensByModel(
+      byModelResult.status === "fulfilled" && Array.isArray(byModelResult.value?.items)
+        ? byModelResult.value.items
+        : [],
+    );
+    setFeedbackSummary(
+      feedbackSummaryResult.status === "fulfilled"
+        ? feedbackSummaryResult.value ?? null
+        : null,
+    );
+    setFeedbackByPreset(
+      feedbackByPresetResult.status === "fulfilled" &&
+        Array.isArray(feedbackByPresetResult.value?.items)
+        ? feedbackByPresetResult.value.items
+        : [],
+    );
+    setSectionErrors({
+      summary: settledError(summaryResult, errorMessage),
+      insights: settledError(insightsResult, errorMessage),
+      usageTrend: settledError(usageTrendResult, errorMessage),
+      activeTrend: settledError(activeTrendResult, errorMessage),
+      sessionsByAgent: settledError(byAgentResult, errorMessage),
+      sessionsByPersona: settledError(byPersonaResult, errorMessage),
+      tokensByModel: settledError(byModelResult, errorMessage),
+      feedbackSummary: settledError(feedbackSummaryResult, errorMessage),
+      feedbackByPreset: settledError(feedbackByPresetResult, errorMessage),
+    });
+    setIsLoading(false);
   }, [effectiveRange, usageFilters, t]);
 
   useEffect(() => {
@@ -248,9 +350,6 @@ export function AnalyticsPanel() {
     setPreset("custom");
   }, []);
 
-  // A persona/agent filter switches the first KPI card to 使用用户 (using_users).
-  const isFiltered = Boolean(personaPresetId || agentId);
-
   // Insight "Token 大户" click → filter the usage detail by that user and reveal it.
   const handleInsightUserDrilldown = useCallback(
     (user: UsageInsightsTopTokenUser) => {
@@ -288,14 +387,6 @@ export function AnalyticsPanel() {
         onAgentChange={setAgentId}
       />
 
-      {error ? (
-        <div className="px-4 sm:px-6">
-          <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
-            {error}
-          </div>
-        </div>
-      ) : null}
-
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 pb-6 sm:px-6">
         {/* KPI row */}
@@ -304,6 +395,8 @@ export function AnalyticsPanel() {
           usageTrend={usageTrend}
           activeTrend={activeTrend}
           isFiltered={isFiltered}
+          isLoading={isLoading}
+          error={sectionErrors.summary}
           onUsersDrilldown={() => setDrilldown({ kind: "users" })}
           onSessionsDrilldown={() => setDrilldown({ kind: "sessions" })}
         />
@@ -315,14 +408,19 @@ export function AnalyticsPanel() {
               usageTrend={usageTrend}
               activeTrend={activeTrend}
               isLoading={isLoading}
+              error={sectionErrors.usageTrend || sectionErrors.activeTrend}
             />
           </div>
           <AnalyticsInsightPanel
             insights={insights}
             isLoading={isLoading}
+            error={sectionErrors.insights}
             onPersonaSelect={setPersonaPresetId}
             onUserDrilldown={handleInsightUserDrilldown}
-            onNewUsersDrilldown={() => setDrilldown({ kind: "users" })}
+            onPeakDrilldown={() => setDrilldown({ kind: "users" })}
+            onNewUsersDrilldown={() =>
+              setDrilldown({ kind: "users", initialFilters: { firstUse: true } })
+            }
           />
         </div>
 
@@ -335,6 +433,7 @@ export function AnalyticsPanel() {
           feedbackSummary={feedbackSummary}
           feedbackByPreset={feedbackByPreset}
           isLoading={isLoading}
+          errors={sectionErrors}
           onAgentSliceClick={(entry) =>
             setDrilldown({
               kind: "sessions",
@@ -349,7 +448,12 @@ export function AnalyticsPanel() {
               },
             })
           }
-          onModelSliceClick={() => setDrilldown({ kind: "runs" })}
+          onModelSliceClick={(entry) =>
+            setDrilldown({
+              kind: "runs",
+              initialFilters: { model: entry.label },
+            })
+          }
           onFeedbackPresetClick={(entry) =>
             setDrilldown({ kind: "feedback", presetId: entry.preset_id })
           }
@@ -379,6 +483,7 @@ export function AnalyticsPanel() {
       {drilldown ? (
         <div className="px-4 pb-6 sm:px-6">
           <AnalyticsDrilldownList
+            key={`${drilldown.kind}-${drilldown.presetId ?? ""}-${drilldown.rating ?? ""}-${JSON.stringify(drilldown.initialFilters ?? {})}`}
             kind={drilldown.kind}
             start={effectiveRange.start}
             end={effectiveRange.end}

@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.infra.analytics.date_range import CST, day_buckets, today_cst
+from src.infra.analytics.date_range import CST, today_cst
 from src.infra.analytics.snapshot import (
     snapshot_group_stages,
 )
@@ -147,61 +147,139 @@ def test_freeze_uses_setoninsert_code_pattern() -> None:
 
 @pytest.mark.asyncio
 async def test_historical_date_unchanged_after_data_deletion() -> None:
-    """核心测试：历史日期的数字在删除会话及 traces 后保持不变。"""
-    from src.infra.analytics.snapshot import _merge_results
+    """真实走查询→冻结→删除底层数据→再次查询流程。"""
+    from src.infra.analytics import snapshot as snapshot_module
+    from src.infra.analytics.snapshot import read_or_freeze
 
-    # Pre-frozen snapshot document (already written before deletion)
     history_date = (datetime.now(CST) - timedelta(days=2)).strftime("%Y-%m-%d")
-    expected_messages = 9
-    expected_tokens = 6000
+    frozen_docs: list[dict[str, Any]] = []
 
-    frozen_doc = {
-        "date": history_date,
-        "user_id": "u_test_invariant",
-        "persona_preset_id": None,
-        "agent_id": "a_test_agent",
-        "new_sessions": 3,
-        "active_sessions": 3,
-        "user_messages": expected_messages,
-        "tokens": expected_tokens,
-        "last_active_at": datetime.now(timezone.utc),
-        "frozen_at": datetime.now(timezone.utc),
-    }
+    class _SnapshotCollection:
+        """Minimal fake that aggregates over really-stored rows.
 
-    # Verify no content fields
-    forbidden_fields = ["title", "messages", "content", "text", "body"]
-    for field in forbidden_fields:
-        assert field not in frozen_doc, f"Frozen snapshot must not contain content field: {field}"
+        Returning canned values here would make the test pass even when the
+        freeze path writes nothing, which is what the previous version did.
+        """
 
-    # Mock storage that returns the pre-frozen doc for historical dates
+        def find(self, query, projection=None):
+            matched = [doc for doc in frozen_docs if doc["date"] in query["date"]["$in"]]
+            user_filter = query.get("user_id")
+            if isinstance(user_filter, str):
+                matched = [doc for doc in matched if doc.get("user_id") == user_filter]
+            elif isinstance(user_filter, dict) and "$ne" in user_filter:
+                matched = [doc for doc in matched if doc.get("user_id") != user_filter["$ne"]]
+            return _FakeCursor(matched)
+
+        def _upsert(self, key: dict[str, Any], doc: dict[str, Any]) -> None:
+            if not any(
+                all(existing.get(field) == value for field, value in key.items())
+                for existing in frozen_docs
+            ):
+                frozen_docs.append(dict(doc))
+
+        async def bulk_write(self, operations, ordered=False):
+            for operation in operations:
+                update = operation["updateOne"]
+                self._upsert(update["filter"], update["update"]["$setOnInsert"])
+
+        async def update_one(self, query, update, upsert=False):
+            self._upsert(query, update["$setOnInsert"])
+
+        def aggregate(self, pipeline):
+            match = pipeline[0]["$match"]
+            rows = [doc for doc in frozen_docs if doc["date"] in match["date"]["$in"]]
+            excluded = match.get("user_id", {}).get("$ne")
+            rows = [doc for doc in rows if doc.get("user_id") != excluded]
+
+            group = next(stage["$group"] for stage in reversed(pipeline) if "$group" in stage)
+            group_id = group["_id"]
+            if "user_ids" in group:
+                return _FakeCursor(
+                    [{"_id": None, "user_ids": sorted({doc["user_id"] for doc in rows})}]
+                )
+
+            def key_of(doc: dict[str, Any]) -> Any:
+                if group_id is None:
+                    return None
+                if isinstance(group_id, dict):
+                    return {
+                        name: doc.get(expr.lstrip("$")) for name, expr in group_id.items()
+                    }
+                return doc.get(group_id.lstrip("$"))
+
+            buckets: dict[Any, dict[str, Any]] = {}
+            for doc in rows:
+                key = key_of(doc)
+                bucket = buckets.setdefault(
+                    repr(key),
+                    {
+                        "_id": key,
+                        "new_sessions": 0,
+                        "active_sessions": 0,
+                        "user_messages": 0,
+                        "tokens": 0,
+                        "new_session_ids": [],
+                        "active_session_ids": [],
+                    },
+                )
+                for field in ("new_sessions", "active_sessions", "user_messages", "tokens"):
+                    bucket[field] += int(doc.get(field, 0) or 0)
+                for field in ("new_session_ids", "active_session_ids"):
+                    if field in doc:
+                        bucket[field].append(doc[field])
+            return _FakeCursor(list(buckets.values()))
+
+    class _Redis:
+        async def set(self, *args, **kwargs):
+            return True
+
+        async def eval(self, *args, **kwargs):
+            return 1
+
+        async def aclose(self):
+            return None
+
     storage = MagicMock(spec=AnalyticsStorage)
+    storage.snapshot = _SnapshotCollection()
+    storage.traces = MagicMock()
+    storage.traces.aggregate = MagicMock(
+        return_value=_FakeCursor([
+            {
+                "_id": {"user_id": "u_test_invariant", "persona_preset_id": None, "agent_id": "a_test_agent"},
+                "user_messages": 9,
+                "tokens": 6000,
+                "active_session_ids": ["s_active_1", "s_active_2", "s_active_3"],
+                "last_active_at": datetime.now(timezone.utc),
+            }
+        ])
+    )
+    storage.sessions = MagicMock()
+    storage.sessions.aggregate = MagicMock(return_value=_FakeCursor([]))
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(snapshot_module, "create_redis_client", lambda **kwargs: _Redis())
+    monkeypatch.setattr(
+        "src.infra.analytics.activity_storage.ActivityStorage.distinct_users",
+        AsyncMock(return_value=[]),
+    )
+    try:
+        start = datetime.strptime(history_date, "%Y-%m-%d").replace(tzinfo=CST)
+        end = start + timedelta(days=1)
+        filters = UsageFilters(start=start, end=end)
 
-    # Historical aggregation returns the frozen doc
-    mock_history_cursor = _FakeCursor([
-        {"_id": history_date, "user_messages": expected_messages, "tokens": expected_tokens, "active_sessions": 3, "new_sessions": 3}
-    ])
-    storage.snapshot.aggregate = MagicMock(return_value=mock_history_cursor)
-    storage.traces.aggregate = MagicMock(side_effect=[
-        _FakeCursor([]),  # granular historical
-        _FakeCursor([]),  # today realtime
-    ])
-    storage.sessions.count_documents = AsyncMock(return_value=0)
+        result1 = await read_or_freeze(filters, storage=storage)
+        frozen_docs_before_delete = [dict(doc) for doc in frozen_docs]
+        storage.traces.aggregate = MagicMock(return_value=_FakeCursor([]))
+        result2 = await read_or_freeze(filters, storage=storage)
+    finally:
+        monkeypatch.undo()
 
-    start, end = _range_days(3)
-    filters = UsageFilters(start=start, end=end)
-    dates = day_buckets(start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"))
-
-    # First query
-    result1 = await _merge_results(storage, filters, dates)
-
-    # Second query after "deletion" (storage unchanged - snapshot is immutable)
-    result2 = await _merge_results(storage, filters, dates)
-
-    # Critical invariant: historical numbers remain identical
-    assert result1["total"]["user_messages"] == result2["total"]["user_messages"], \
-        f"Historical user_messages should be immutable: {result1['total']['user_messages']} vs {result2['total']['user_messages']}"
-    assert result1["total"]["tokens"] == result2["total"]["tokens"], \
-        f"Historical tokens should be immutable: {result1['total']['tokens']} vs {result2['total']['tokens']}"
+    assert frozen_docs_before_delete
+    assert frozen_docs == frozen_docs_before_delete
+    # Guard against a vacuous pass: the frozen numbers must be real.
+    assert result1["total"]["user_messages"] == 9
+    assert result1["total"]["tokens"] == 6000
+    assert result1["total"]["active_sessions"] == 3
+    assert result1["total"] == result2["total"]
 
 
 @pytest.mark.asyncio
@@ -251,6 +329,98 @@ async def test_today_changes_after_data_deletion() -> None:
         "Today's numbers should change when underlying data changes"
     assert today_point2["user_messages"] == reduced_messages
     assert today_point2["tokens"] == reduced_tokens
+
+
+@pytest.mark.asyncio
+async def test_cross_day_session_ids_are_unioned_and_legacy_rows_are_summed() -> None:
+    """现代快照跨日按 ID 去重，旧快照缺字段则保留旧求和语义。"""
+    from src.infra.analytics.snapshot import _merge_results
+
+    d1 = (datetime.now(CST) - timedelta(days=4)).strftime("%Y-%m-%d")
+    d2 = (datetime.now(CST) - timedelta(days=3)).strftime("%Y-%m-%d")
+    storage = MagicMock(spec=AnalyticsStorage)
+    storage.traces.aggregate = MagicMock(return_value=_FakeCursor([]))
+    storage.sessions.aggregate = MagicMock(return_value=_FakeCursor([]))
+
+    legacy_mode = [False]
+
+    def aggregate(pipeline):
+        group = next(stage["$group"] for stage in reversed(pipeline) if "$group" in stage)
+        identifier = group["_id"]
+        if identifier == "$date":
+            if legacy_mode[0]:
+                return _FakeCursor([
+                    {"_id": d1, "active_sessions": 1, "new_sessions": 1},
+                    {"_id": d2, "active_sessions": 1, "new_sessions": 1},
+                ])
+            return _FakeCursor([
+                {"_id": d1, "active_sessions": 1, "new_sessions": 1, "active_session_ids": [["s1"]], "new_session_ids": [["n1"]]},
+                {"_id": d2, "active_sessions": 1, "new_sessions": 1, "active_session_ids": [["s1"]], "new_session_ids": [["n1"]]},
+            ])
+        return _FakeCursor([])
+
+    storage.snapshot.aggregate = MagicMock(side_effect=aggregate)
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr("src.infra.analytics.activity_storage.ActivityStorage.distinct_users", AsyncMock(return_value=[]))
+    try:
+        filters = UsageFilters(
+            start=datetime.strptime(d1, "%Y-%m-%d").replace(tzinfo=CST),
+            end=datetime.strptime(d2, "%Y-%m-%d").replace(tzinfo=CST) + timedelta(days=1),
+        )
+        modern = await _merge_results(storage, filters, [d1, d2])
+    finally:
+        monkeypatch.undo()
+
+    assert modern["total"]["active_sessions"] == 1
+    assert modern["total"]["new_sessions"] == 1
+
+    legacy_mode[0] = True
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr("src.infra.analytics.activity_storage.ActivityStorage.distinct_users", AsyncMock(return_value=[]))
+    try:
+        legacy = await _merge_results(storage, filters, [d1, d2])
+    finally:
+        monkeypatch.undo()
+    assert legacy["total"]["active_sessions"] == 2
+    assert legacy["total"]["new_sessions"] == 2
+
+
+@pytest.mark.asyncio
+async def test_freeze_releases_each_daily_lock_after_cancellation() -> None:
+    """每个日期独占锁，续租 task 取消后仍会执行 release。"""
+    from src.infra.analytics.snapshot import _freeze_dates
+
+    class _Redis:
+        def __init__(self):
+            self.set_keys: list[str] = []
+            self.release_keys: list[str] = []
+
+        async def set(self, key, value, **kwargs):
+            self.set_keys.append(key)
+            return key.endswith("2026-08-01")
+
+        async def eval(self, lua, count, key, value, *args):
+            if "del" in lua:
+                self.release_keys.append(key)
+            return 1
+
+    redis = _Redis()
+    storage = MagicMock()
+    storage.traces.aggregate = MagicMock(return_value=_FakeCursor([]))
+    storage.sessions.aggregate = MagicMock(return_value=_FakeCursor([]))
+    storage.snapshot.bulk_write = AsyncMock()
+
+    filters = UsageFilters(
+        start=datetime(2026, 8, 1, tzinfo=CST),
+        end=datetime(2026, 8, 3, tzinfo=CST),
+    )
+    await _freeze_dates(storage, redis, ["2026-08-01", "2026-08-02"], filters)
+
+    assert redis.set_keys == [
+        "analytics:snapshot:freeze:2026-08-01",
+        "analytics:snapshot:freeze:2026-08-02",
+    ]
+    assert redis.release_keys == ["analytics:snapshot:freeze:2026-08-01"]
 
 
 if __name__ == "__main__":

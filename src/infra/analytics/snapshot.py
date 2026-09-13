@@ -1,12 +1,7 @@
-"""Snapshot layer for immutable historical analytics metrics.
+"""不可变日快照与统计合并。
 
-This module provides read_or_freeze() - a strategy that:
-- Today's data is always computed in real-time from traces (will vary).
-- Historical days are frozen via snapshots; first query computes and writes,
-  subsequent queries return the same numbers even if underlying data changes.
-- Missing snapshots or read failures degrade gracefully to real-time computation.
-
-Key invariant: The same historical date queried twice returns identical numbers.
+历史日期只在第一次读取（或每日冻结任务）时从 traces/sessions 计算并写入快照；
+读取时再应用筛选条件，因此筛选不会造成部分快照被永久写入。
 """
 
 from __future__ import annotations
@@ -31,46 +26,66 @@ logger = get_logger(__name__)
 SNAPSHOT_COLLECTION_NAME = "analytics_daily_snapshot"
 _SNAPSHOT_LOCK_KEY_PREFIX = "analytics:snapshot:freeze:"
 _SNAPSHOT_LOCK_TTL_SECONDS = 60
+_MISSING = object()
+# Marks a date as fully frozen. Rows written by an older build (which froze
+# only the filtered subset it happened to read) predate this marker, so such a
+# date is re-frozen once to fill the gaps. $setOnInsert keeps existing rows
+# untouched, and the marker itself carries no metric.
+_COMPLETE_MARKER_USER_ID = "__snapshot_complete__"
 
 
-def snapshot_match(filters: Any, dates: list[str]) -> dict:
-    """Build MongoDB $match for missing snapshot check.
+def snapshot_match(filters: Any, dates: list[str]) -> dict[str, Any]:
+    """Build the legacy, filter-aware snapshot match document.
 
-    Args:
-        filters: UsageFilters-like object with persona_preset_id / agent_id attrs.
-        dates: List of "YYYY-MM-DD" strings to check.
-
-    Returns:
-        A $match document matching snapshot docs for those dates.
+    The freeze path deliberately does not use this filter-aware helper. It is
+    kept for callers that need to inspect already-frozen rows with filters.
     """
     match: dict[str, Any] = {"date": {"$in": dates}}
     pp_id = getattr(filters, "persona_preset_id", None)
-    ag_id = getattr(filters, "agent_id", None)
+    agent_id = getattr(filters, "agent_id", None)
     if pp_id:
         match["persona_preset_id"] = pp_id
-    if ag_id:
-        match["agent_id"] = ag_id
+    if agent_id:
+        match["agent_id"] = agent_id
     return match
 
 
 def snapshot_group_stages(
-    dimension: Literal["total", "day", "persona", "agent", "user"],
-) -> list[dict]:
-    """Build aggregation stages for merging snapshot + real-time results."""
-    _id_mapping: dict[str, Any] = {
+    dimension: Literal["total", "day", "persona", "agent", "user", "user_persona"],
+) -> list[dict[str, Any]]:
+    """Build grouping stages used when reading immutable snapshot rows."""
+    id_mapping: dict[str, Any] = {
         "total": None,
         "day": "$date",
         "persona": "$persona_preset_id",
         "agent": "$agent_id",
         "user": "$user_id",
+        "user_persona": {
+            "user_id": "$user_id",
+            "persona_preset_id": "$persona_preset_id",
+        },
     }
-    group_stage = {
+    group_stage: dict[str, Any] = {
         "$group": {
-            "_id": _id_mapping[dimension],
+            "_id": id_mapping[dimension],
             "new_sessions": {"$sum": {"$ifNull": ["$new_sessions", 0]}},
             "active_sessions": {"$sum": {"$ifNull": ["$active_sessions", 0]}},
             "user_messages": {"$sum": {"$ifNull": ["$user_messages", 0]}},
             "tokens": {"$sum": {"$ifNull": ["$tokens", 0]}},
+            # Arrays are pushed rather than summed. The application flattens
+            # them so a session present on multiple days is counted once.
+            "active_session_ids": {"$push": "$active_session_ids"},
+            "new_session_ids": {"$push": "$new_session_ids"},
+            "active_session_ids_present": {
+                "$addToSet": {
+                    "$ne": [{"$type": "$active_session_ids"}, "missing"]
+                }
+            },
+            "new_session_ids_present": {
+                "$addToSet": {
+                    "$ne": [{"$type": "$new_session_ids"}, "missing"]
+                }
+            },
             "last_active_at": {"$max": "$last_active_at"},
         }
     }
@@ -79,29 +94,133 @@ def snapshot_group_stages(
     return [group_stage]
 
 
+def _flatten_ids(value: Any) -> set[str]:
+    """Flatten an aggregation result containing arrays (and legacy nulls)."""
+    if isinstance(value, (list, tuple, set)):
+        result: set[str] = set()
+        for item in value:
+            result.update(_flatten_ids(item))
+        return result
+    if value is None or value == "":
+        return set()
+    return {str(value)}
+
+
+def _group_ids(doc: dict[str, Any], field: str) -> tuple[bool, set[str]]:
+    """Return ``(modern_field_present, ids)`` for a grouped snapshot row."""
+    presence = doc.get(f"{field}_present", _MISSING)
+    if presence is not _MISSING:
+        presence_values = presence if isinstance(presence, list) else [presence]
+        # A mixed rollout (old + new rows) must use the old integer semantics
+        # for the whole grouped day rather than silently dropping old rows.
+        if not all(bool(value) for value in presence_values):
+            return False, set()
+    raw = doc.get(field, _MISSING)
+    if raw is _MISSING:
+        return False, set()
+    # A modern row may contain an empty list, which must still count as modern.
+    if isinstance(raw, (list, tuple, set)):
+        return True, _flatten_ids(raw)
+    return False, set()
+
+
+def _visible_metric(doc: dict[str, Any], field: str, ids_field: str) -> tuple[int, bool, set[str]]:
+    supported, ids = _group_ids(doc, ids_field)
+    if supported:
+        return len(ids), True, ids
+    # Pre-upgrade rows have no ID array; their stored integer is the only
+    # available value, so cross-day de-duplication is not possible for them.
+    logger.debug("[Analytics] Snapshot row without %s, using legacy integer", ids_field)
+    return int(doc.get(field, 0) or 0), False, set()
+
+
+def _merge_metric_items(
+    items: list[dict[str, Any]],
+    key_field: str | tuple[str, ...],
+    metric_fields: tuple[str, ...] = ("new_sessions", "active_sessions"),
+) -> list[dict[str, Any]]:
+    """Merge dimension rows while preserving modern ID-set semantics.
+
+    Legacy rows contribute their stored integer. Modern rows contribute the
+    union of their identifier arrays. This also makes mixed-version rollouts
+    safe while old documents are still being read.
+
+    ``key_field`` may be a tuple to merge on a composite key (user × persona)
+    without collapsing rows that differ only in the secondary field.
+    """
+    key_fields = (key_field,) if isinstance(key_field, str) else key_field
+    merged: dict[Any, dict[str, Any]] = {}
+    for source in items:
+        key = tuple(source.get(field) for field in key_fields)
+        target = merged.get(key)
+        is_new = target is None
+        if target is None:
+            target = dict(source)
+            target["_active_session_ids"] = set()
+            target["_new_session_ids"] = set()
+            target["_active_session_ids_supported"] = False
+            target["_new_session_ids_supported"] = False
+            target["_active_sessions_legacy"] = 0
+            target["_new_sessions_legacy"] = 0
+            merged[key] = target
+        for field, ids_field in (
+            ("active_sessions", "active_session_ids"),
+            ("new_sessions", "new_session_ids"),
+        ):
+            supported = bool(source.get(f"_{ids_field}_supported", False))
+            if supported:
+                target[f"_{ids_field}_supported"] = True
+                target[f"_{ids_field}"].update(source.get(f"_{ids_field}", set()))
+            else:
+                target[f"_{field}_legacy"] += int(source.get(field, 0) or 0)
+        for field in (*metric_fields, "user_messages", "tokens"):
+            if field not in ("active_sessions", "new_sessions"):
+                # The first source row was copied into ``target`` above;
+                # subsequent rows need to be accumulated explicitly.
+                if not is_new:
+                    target[field] = int(target.get(field, 0) or 0) + int(source.get(field, 0) or 0)
+        if not target.get("persona_preset_name") and source.get("persona_preset_name"):
+            target["persona_preset_name"] = source["persona_preset_name"]
+        if source.get("last_active_at") and (
+            not target.get("last_active_at") or source["last_active_at"] > target["last_active_at"]
+        ):
+            target["last_active_at"] = source["last_active_at"]
+
+    result: list[dict[str, Any]] = []
+    for target in merged.values():
+        for field, ids_field in (
+            ("active_sessions", "active_session_ids"),
+            ("new_sessions", "new_session_ids"),
+        ):
+            if target[f"_{ids_field}_supported"]:
+                target[field] = len(target[f"_{ids_field}"]) + target[f"_{field}_legacy"]
+            else:
+                target[field] = target[f"_{field}_legacy"]
+        result.append(target)
+    return result
+
+
+def _public_metric_item(item: dict[str, Any]) -> dict[str, Any]:
+    """Remove internal ID sets before returning API-facing dictionaries."""
+    return {
+        key: value
+        for key, value in item.items()
+        if not key.startswith("_") and key not in {"active_session_ids", "new_session_ids"}
+    }
+
+
+def _session_id_expr() -> dict[str, Any]:
+    return {"$ifNull": ["$session_id", {"$toString": "$_id"}]}
+
+
 async def read_or_freeze(filters: Any, storage: Any | None = None) -> dict[str, Any]:
-    """Read usage metrics with snapshot-first strategy.
+    """Read usage metrics, freezing missing historical dates first.
 
-    Strategy:
-    1. Determine today (CST) and all dates in the interval.
-    2. Find which historical dates lack snapshots.
-    3. If missing: acquire lock, compute real-time aggregates per missing date,
-       batch upsert snapshot docs ($setOnInsert semantics), release lock.
-    4. Read: historical days from analytics_daily_snapshot, today from traces.
-    5. Merge both result sets and return.
-
-    Invariants guaranteed:
-    1. Same historical date produces identical numbers across queries.
-    2. Today's numbers may change (real-time, never frozen).
-    3. Snapshot miss or read failure degrades to real-time, never empty.
-
-    Returns:
-        Dict with keys: total, trend, by_persona, by_agent, by_user,
-        active_users, using_users.
+    The returned mapping always includes ``by_user_persona`` so downstream
+    usage and CSV views can share the snapshot source.
     """
     from src.infra.analytics.usage_query import UsageFilters
 
-    # Normalize to UF if needed
     if not isinstance(filters, UsageFilters):
         filters = UsageFilters(
             start=filters.start,
@@ -113,67 +232,57 @@ async def read_or_freeze(filters: Any, storage: Any | None = None) -> dict[str, 
 
     today = today_cst()
     start_str, end_inclusive = range_to_date_strings(filters.start, filters.end)
-
     dates = day_buckets(start_str, end_inclusive)
 
     if storage is None:
         from src.infra.analytics.storage import AnalyticsStorage
+
         storage = AnalyticsStorage()
+
     redis_client = None
+    snapshot_unavailable = False
     try:
         redis_client = create_redis_client(isolated_pool=True)
-    except Exception as ex:
-        logger.warning("Redis client creation failed for snapshot layer: %s", ex)
+    except Exception as exc:
+        logger.warning("[Analytics] Redis client creation failed: %s", exc)
 
     try:
-        missing_dates = [d for d in dates if d != today]
-
+        missing_dates = [date for date in dates if date != today]
         if missing_dates:
-            match_doc: dict[str, Any] = {"date": {"$in": missing_dates}}
-            if filters.persona_preset_id:
-                match_doc["persona_preset_id"] = filters.persona_preset_id
-            if filters.agent_id:
-                match_doc["agent_id"] = filters.agent_id
-
-            cursor = storage.snapshot.find(match_doc)
+            # Completeness is date-based and marker-based. Never let a filtered
+            # read decide that a partial persona/agent snapshot freezes the
+            # whole date, and re-freeze dates written before the marker existed.
+            cursor = storage.snapshot.find(
+                {"date": {"$in": missing_dates}, "user_id": _COMPLETE_MARKER_USER_ID},
+                {"date": 1},
+            )
             existing_docs = await cursor.to_list(length=None)
-            existing_dates = set(d.get("date") for d in existing_docs if d.get("date"))
-            truly_missing = [d for d in missing_dates if d not in existing_dates]
-
-            # Only freeze if there are truly missing dates AND we have a valid redis_client
+            existing_dates = {doc.get("date") for doc in existing_docs if doc.get("date")}
+            truly_missing = [date for date in missing_dates if date not in existing_dates]
             if truly_missing and redis_client is not None:
                 await _freeze_dates(storage, redis_client, truly_missing, filters)
-    except Exception as ex:
-        logger.warning("Error checking/freeze snapshots: %s", ex)
+    except Exception as exc:
+        snapshot_unavailable = True
+        logger.warning("[Analytics] Snapshot check/freeze failed: %s", exc)
     finally:
         if redis_client is not None:
             await redis_client.aclose()
 
-    return await _merge_results(storage, filters, dates)
+    return await _merge_results(storage, filters, dates, skip_historical=snapshot_unavailable)
 
 
-async def _freeze_dates(
-    storage: Any,
-    redis_client: Any,
-    dates: list[str],
-    filters: Any,
-) -> None:
-    """Compute and freeze snapshots for given dates using Redis lock."""
-    from src.infra.analytics.usage_query import (
-        UsageFilters,
-        new_sessions_match,
-        usage_facts_stages,
-    )
+async def _freeze_dates(storage: Any, redis_client: Any, dates: list[str], filters: Any) -> None:
+    """Freeze each date under its own lock; filtered reads never affect writes."""
+    from src.infra.analytics.usage_query import UsageFilters, new_sessions_match, usage_facts_stages
 
-    lock_key = f"{_SNAPSHOT_LOCK_KEY_PREFIX}{dates[0]}"
-    instance_id = str(ObjectId())
-
-    acquired = await redis_client.set(lock_key, instance_id, nx=True, ex=_SNAPSHOT_LOCK_TTL_SECONDS)
-    if not acquired:
-        logger.warning("Could not acquire snapshot freeze lock for %s", dates)
-        return
-
-    lua_renew = """
+    release_lua = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    return redis.call("del", KEYS[1])
+else
+    return 0
+end
+"""
+    renew_lua = """
 if redis.call("get", KEYS[1]) == ARGV[1] then
     return redis.call("expire", KEYS[1], ARGV[2])
 else
@@ -181,188 +290,313 @@ else
 end
 """
 
-    renew_task: asyncio.Task | None = None
+    for target_date in dates:
+        lock_key = f"{_SNAPSHOT_LOCK_KEY_PREFIX}{target_date}"
+        instance_id = str(ObjectId())
+        try:
+            acquired = await redis_client.set(
+                lock_key,
+                instance_id,
+                nx=True,
+                ex=_SNAPSHOT_LOCK_TTL_SECONDS,
+            )
+        except Exception as exc:
+            logger.warning("[Analytics] Could not acquire snapshot lock for %s: %s", target_date, exc)
+            continue
+        if not acquired:
+            logger.info("[Analytics] Snapshot date %s is being frozen by another instance", target_date)
+            continue
 
-    def stop_renewal() -> None:
-        nonlocal renew_task
-        if renew_task and not renew_task.done():
-            renew_task.cancel()
+        renew_task: asyncio.Task[None] | None = None
+        lock_lost = False
+
+        async def stop_renewal() -> None:
+            nonlocal renew_task
+            task = renew_task
+            renew_task = None
+            if task is None:
+                return
+            if not task.done():
+                task.cancel()
             try:
-                renew_task.result()
+                await task
             except asyncio.CancelledError:
                 pass
 
-    async def renew_loop() -> None:
-        try:
-            while True:
-                await asyncio.sleep(_SNAPSHOT_LOCK_TTL_SECONDS / 3)
-                renewed = await redis_client.eval(
-                    lua_renew, 1, lock_key, instance_id, _SNAPSHOT_LOCK_TTL_SECONDS
-                )
-                if not renewed:
-                    logger.warning("Snapshot freeze lock was lost")
-                    break
-        except asyncio.CancelledError:
-            pass
+        async def renew_loop() -> None:
+            nonlocal lock_lost
+            try:
+                while True:
+                    await asyncio.sleep(_SNAPSHOT_LOCK_TTL_SECONDS / 3)
+                    renewed = await redis_client.eval(
+                        renew_lua,
+                        1,
+                        lock_key,
+                        instance_id,
+                        _SNAPSHOT_LOCK_TTL_SECONDS,
+                    )
+                    if not renewed:
+                        lock_lost = True
+                        logger.warning("[Analytics] Snapshot lock lost for %s", target_date)
+                        return
+            except asyncio.CancelledError:
+                return
+            except Exception as exc:
+                lock_lost = True
+                logger.warning("[Analytics] Snapshot lock renewal failed for %s: %s", target_date, exc)
 
-    renew_task = asyncio.create_task(renew_loop())
+        renew_task = asyncio.create_task(renew_loop())
+        try:
+            # Deliberately omit every read filter: a date is frozen as a full
+            # snapshot, and filtering is applied only by _merge_results.
+            date_dt = datetime.strptime(target_date, "%Y-%m-%d").replace(tzinfo=CST)
+            next_date_dt = date_dt + timedelta(days=1)
+            date_filters = UsageFilters(start=date_dt, end=next_date_dt)
+
+            if lock_lost:
+                continue
+            try:
+                granular_docs = await storage.traces.aggregate(
+                    usage_facts_stages(date_filters)
+                    + [
+                        {
+                            "$group": {
+                                "_id": {
+                                    "user_id": "$user_id",
+                                    "persona_preset_id": "$persona_preset_id",
+                                    "agent_id": "$agent_id",
+                                },
+                                "user_messages": {"$sum": "$user_messages"},
+                                "tokens": {"$sum": "$tokens"},
+                                "active_session_ids": {
+                                    "$addToSet": {
+                                        "$cond": [
+                                            {"$gt": ["$user_messages", 0]},
+                                            "$session_id",
+                                            None,
+                                        ]
+                                    }
+                                },
+                                "last_active_at": {"$max": "$started_at"},
+                            }
+                        },
+                        {"$match": {"_id.user_id": {"$nin": [None, ""]}}},
+                    ]
+                ).to_list(length=None)
+            except Exception as exc:
+                logger.warning("[Analytics] Trace aggregation for %s failed: %s", target_date, exc)
+                continue
+
+            if lock_lost:
+                continue
+            try:
+                new_sessions_docs = await storage.sessions.aggregate(
+                    [
+                        {"$match": new_sessions_match(date_filters)},
+                        {
+                            "$group": {
+                                "_id": {
+                                    "user_id": "$user_id",
+                                    "persona_preset_id": "$metadata.persona_preset_id",
+                                    "agent_id": "$agent_id",
+                                },
+                                "new_sessions": {"$sum": 1},
+                                "new_session_ids": {"$addToSet": _session_id_expr()},
+                            }
+                        },
+                    ]
+                ).to_list(length=None)
+            except Exception as exc:
+                logger.warning("[Analytics] Session aggregation for %s failed: %s", target_date, exc)
+                continue
+
+            groups: dict[tuple[str | None, str | None, str | None], dict[str, Any]] = {}
+            for gdoc in granular_docs:
+                eid = gdoc.get("_id") or {}
+                key = (
+                    str(eid.get("user_id")) if eid.get("user_id") is not None else None,
+                    str(eid.get("persona_preset_id")) if eid.get("persona_preset_id") is not None else None,
+                    str(eid.get("agent_id")) if eid.get("agent_id") is not None else None,
+                )
+                groups[key] = {
+                    "date": target_date,
+                    "user_id": key[0],
+                    "persona_preset_id": key[1],
+                    "agent_id": key[2],
+                    "new_sessions": 0,
+                    "new_session_ids": [],
+                    "active_sessions": len(_flatten_ids(gdoc.get("active_session_ids"))),
+                    "active_session_ids": sorted(_flatten_ids(gdoc.get("active_session_ids"))),
+                    "user_messages": int(gdoc.get("user_messages", 0) or 0),
+                    "tokens": int(gdoc.get("tokens", 0) or 0),
+                    "last_active_at": gdoc.get("last_active_at"),
+                    "frozen_at": datetime.now(timezone.utc),
+                }
+
+            for sdoc in new_sessions_docs:
+                eid = sdoc.get("_id") or {}
+                key = (
+                    str(eid.get("user_id")) if eid.get("user_id") is not None else None,
+                    str(eid.get("persona_preset_id")) if eid.get("persona_preset_id") is not None else None,
+                    str(eid.get("agent_id")) if eid.get("agent_id") is not None else None,
+                )
+                group = groups.setdefault(
+                    key,
+                    {
+                        "date": target_date,
+                        "user_id": key[0],
+                        "persona_preset_id": key[1],
+                        "agent_id": key[2],
+                        "new_sessions": 0,
+                        "new_session_ids": [],
+                        "active_sessions": 0,
+                        "active_session_ids": [],
+                        "user_messages": 0,
+                        "tokens": 0,
+                        "last_active_at": None,
+                        "frozen_at": datetime.now(timezone.utc),
+                    },
+                )
+                ids = sorted(_flatten_ids(sdoc.get("new_session_ids")))
+                group["new_session_ids"] = sorted(set(group["new_session_ids"]) | set(ids))
+                group["new_sessions"] = len(group["new_session_ids"])
+
+            if lock_lost:
+                continue
+            ops: list[dict[str, Any]] = []
+            for doc in groups.values():
+                ops.append(
+                    {
+                        "updateOne": {
+                            "filter": {
+                                "date": target_date,
+                                "user_id": doc["user_id"],
+                                "persona_preset_id": doc["persona_preset_id"],
+                                "agent_id": doc["agent_id"],
+                            },
+                            "update": {"$setOnInsert": doc},
+                            "upsert": True,
+                        }
+                    }
+                )
+            if ops:
+                await storage.snapshot.bulk_write(ops, ordered=False)
+                logger.info("[Analytics] Frozen snapshots for %s: %d rows", target_date, len(ops))
+            if lock_lost:
+                continue
+            # Written last and only while the lock still holds, so a partial
+            # freeze is never marked complete. Also freezes genuinely empty
+            # days, whose numbers must stay immutable once observed.
+            await storage.snapshot.update_one(
+                {"date": target_date, "user_id": _COMPLETE_MARKER_USER_ID},
+                {
+                    "$setOnInsert": {
+                        "date": target_date,
+                        "user_id": _COMPLETE_MARKER_USER_ID,
+                        "persona_preset_id": None,
+                        "agent_id": None,
+                        "frozen_at": datetime.now(timezone.utc),
+                    }
+                },
+                upsert=True,
+            )
+        except Exception as exc:
+            logger.warning("[Analytics] Snapshot freeze for %s failed: %s", target_date, exc)
+        finally:
+            # Nested finally: releasing the lock must not depend on the
+            # renewal task shutting down cleanly.
+            try:
+                await stop_renewal()
+            except Exception as exc:
+                logger.warning("[Analytics] Snapshot lock renewal stop failed for %s: %s", target_date, exc)
+            finally:
+                try:
+                    await redis_client.eval(release_lua, 1, lock_key, instance_id)
+                except Exception as exc:
+                    logger.warning("[Analytics] Failed to release snapshot lock for %s: %s", target_date, exc)
+
+
+async def _aggregate_session_groups(storage: Any, filters: Any) -> list[dict[str, Any]]:
+    """Aggregate new sessions independently from trace documents."""
+    from src.infra.analytics.usage_query import new_sessions_match
 
     try:
-        collection = storage.snapshot
-        now_utc = datetime.now(timezone.utc)
-
-        for target_date in dates:
-            date_dt = datetime.strptime(target_date, "%Y-%m-%d").replace(
-                hour=0, minute=0, second=0, microsecond=0, tzinfo=CST
-            )
-            next_date_dt = date_dt + timedelta(days=1)
-
-            date_filters = UsageFilters(
-                start=date_dt,
-                end=next_date_dt,
-                persona_preset_id=getattr(filters, "persona_preset_id", None),
-                agent_id=getattr(filters, "agent_id", None),
-                role_user_ids=getattr(filters, "role_user_ids", None),
-            )
-
-            # Get granular docs grouped by user/persona/agent from traces
-            base_stages = usage_facts_stages(date_filters)
-            granular_pipeline = base_stages + [
+        return await storage.sessions.aggregate(
+            [
+                {"$match": new_sessions_match(filters)},
                 {
                     "$group": {
                         "_id": {
                             "user_id": "$user_id",
-                            "persona_preset_id": "$persona_preset_id",
+                            "persona_preset_id": "$metadata.persona_preset_id",
                             "agent_id": "$agent_id",
                         },
-                        "user_messages": {"$sum": "$user_messages"},
-                        "tokens": {"$sum": "$tokens"},
-                        "active_session_ids": {"$addToSet": {"$cond": [{"$gt": ["$user_messages", 0]}, "$session_id", None]}},
-                        "last_active_at": {"$max": "$started_at"},
+                        "new_sessions": {"$sum": 1},
+                        "new_session_ids": {"$addToSet": _session_id_expr()},
                     }
                 },
-                {"$match": {"_id.user_id": {"$nin": [None, ""]}}}
             ]
-
-            try:
-                granular_docs = await storage.traces.aggregate(granular_pipeline).to_list(length=None)
-            except Exception:
-                granular_docs = []
-
-            # new_sessions_match 原生返回 [$gte, $lt) 半开区间
-            session_match = new_sessions_match(date_filters)
-
-            try:
-                new_sessions_docs = await storage.sessions.aggregate([
-                    {"$match": session_match},
-                    {
-                        "$group": {
-                            "_id": {
-                                "user_id": "$user_id",
-                                "persona_preset_id": "$metadata.persona_preset_id",
-                                "agent_id": "$agent_id",
-                            },
-                            "new_sessions": {"$sum": 1},
-                        }
-                    },
-                ]).to_list(length=None)
-            except Exception:
-                new_sessions_docs = []
-
-            # Build lookup map for new_sessions
-            new_sessions_map: dict[tuple[str, str | None, str], int] = {}
-            for nsdoc in new_sessions_docs:
-                eid = nsdoc["_id"]
-                key = (str(eid.get("user_id")), eid.get("persona_preset_id"), eid.get("agent_id"))
-                new_sessions_map[key] = int(nsdoc.get("new_sessions", 0) or 0)
-
-            # Build ops for bulk write with proper new_sessions per group
-            ops: list[dict] = []
-            for gdoc in granular_docs:
-                eid = gdoc["_id"]
-                active_sess = len({s for s in (gdoc.get("active_session_ids") or []) if s})
-
-                key = (eid["user_id"], eid["persona_preset_id"], eid["agent_id"])
-                new_sess = new_sessions_map.get(key, 0)
-
-                doc_to_upsert = {
-                    "date": target_date,
-                    "user_id": str(eid["user_id"]),
-                    "persona_preset_id": eid["persona_preset_id"],
-                    "agent_id": eid["agent_id"],
-                    "new_sessions": new_sess,
-                    "active_sessions": active_sess,
-                    "user_messages": int(gdoc.get("user_messages", 0) or 0),
-                    "tokens": int(gdoc.get("tokens", 0) or 0),
-                    "last_active_at": gdoc.get("last_active_at"),
-                    "frozen_at": now_utc,
-                }
-
-                ops.append({
-                    "updateOne": {
-                        "filter": {
-                            "date": target_date,
-                            "user_id": doc_to_upsert["user_id"],
-                            "persona_preset_id": doc_to_upsert["persona_preset_id"],
-                            "agent_id": doc_to_upsert["agent_id"],
-                        },
-                        "update": {"$setOnInsert": doc_to_upsert},
-                        "upsert": True,
-                    }
-                })
-
-            if ops:
-                try:
-                    await collection.bulk_write(ops, ordered=False)
-                    logger.info("Frozen snapshots for %s: %d rows", target_date, len(ops))
-                except Exception as ex:
-                    logger.warning("Bulk write for %s failed: %s", target_date, ex)
-
-    finally:
-        stop_renewal()
-        lua_release = """
-if redis.call("get", KEYS[1]) == ARGV[1] then
-    return redis.call("del", KEYS[1])
-else
-    return 0
-end
-"""
-        try:
-            await redis_client.eval(lua_release, 1, lock_key, instance_id)
-        except Exception:
-            pass
+        ).to_list(length=None)
+    except Exception as exc:
+        logger.debug("[Analytics] Session dimension aggregate unavailable: %s", exc)
+        return []
 
 
-async def _merge_results(storage: Any, filters: Any, dates: list[str]) -> dict[str, Any]:
-    """Merge snapshot (historical) and real-time (today) results.
+def _session_metric_map(docs: list[dict[str, Any]], field: str) -> dict[Any, dict[str, Any]]:
+    mapping: dict[Any, dict[str, Any]] = {}
+    for doc in docs:
+        eid = doc.get("_id") or {}
+        ids = sorted(_flatten_ids(doc.get("new_session_ids")))
+        mapping[eid.get(field)] = {
+            "new_sessions": int(doc.get("new_sessions", len(ids)) or 0),
+            "new_session_ids": ids,
+        }
+    return mapping
 
-    Ensures invariant: Never returns empty data - degrades to realtime on any failure.
-    """
+
+async def _merge_results(
+    storage: Any,
+    filters: Any,
+    dates: list[str],
+    *,
+    skip_historical: bool = False,
+) -> dict[str, Any]:
+    """Merge historical snapshots and today's live aggregates."""
     from src.infra.analytics.usage_query import UsageFilters, new_sessions_match, usage_facts_stages
 
     today = today_cst()
-    historical_dates = [d for d in dates if d != today]
-
+    historical_dates = [date for date in dates if date != today]
     result: dict[str, Any] = {
         "total": {"new_sessions": 0, "active_sessions": 0, "user_messages": 0, "tokens": 0},
         "trend": [],
         "by_persona": [],
         "by_agent": [],
         "by_user": [],
+        "by_user_persona": [],
         "active_users": 0,
         "using_users": 0,
     }
+    persona_user_sets: dict[str | None, set[str]] = {}
+    agent_user_sets: dict[str | None, set[str]] = {}
+    realtime_user_ids: set[str] = set()
+    historical_items: list[dict[str, Any]] = []
+    persona_items: list[dict[str, Any]] = []
+    agent_items: list[dict[str, Any]] = []
+    user_items: list[dict[str, Any]] = []
+    user_persona_items: list[dict[str, Any]] = []
 
     try:
-        # 每个 persona 的去重消息用户集合（历史快照 + 今日实时，供 active_users 回填）
-        persona_user_sets: dict[str | None, set[str]] = {}
-
-        # Process historical dates from snapshots
-        if historical_dates:
+        if historical_dates and not skip_historical:
             snapshot_collection = storage.snapshot
-
+            # The completion marker carries no metric and must never reach an
+            # aggregation; excluding it here covers every dimension below.
             base_match: list[dict[str, Any]] = [
-                {"$match": {"date": {"$in": historical_dates}}}
+                {
+                    "$match": {
+                        "date": {"$in": historical_dates},
+                        "user_id": {"$ne": _COMPLETE_MARKER_USER_ID},
+                    }
+                }
             ]
             if getattr(filters, "persona_preset_id", None):
                 base_match.append({"$match": {"persona_preset_id": filters.persona_preset_id}})
@@ -371,339 +605,555 @@ async def _merge_results(storage: Any, filters: Any, dates: list[str]) -> dict[s
             if getattr(filters, "role_user_ids", None) is not None:
                 base_match.append({"$match": {"user_id": {"$in": filters.role_user_ids}}})
 
-            for dim_str in ("total", "day", "persona"):
-                pipeline: list[dict[str, Any]] = list(base_match)
-                pipeline.extend(snapshot_group_stages(dim_str))  # type: ignore[arg-type]
-
+            dimension_docs: dict[str, list[dict[str, Any]]] = {}
+            for dimension in ("day", "persona", "agent", "user", "user_persona"):
                 try:
-                    docs = await snapshot_collection.aggregate(pipeline).to_list(length=None)
-                except Exception:
-                    docs = []
+                    dimension_docs[dimension] = await snapshot_collection.aggregate(
+                        base_match + snapshot_group_stages(dimension)  # type: ignore[arg-type]
+                    ).to_list(length=None)
+                except Exception as exc:
+                    logger.warning("[Analytics] Snapshot %s aggregation failed: %s", dimension, exc)
+                    dimension_docs[dimension] = []
 
-                if dim_str == "total" and docs:
-                    d = docs[0]
-                    result["total"]["new_sessions"] = int(d.get("new_sessions", 0) or 0)
-                    result["total"]["active_sessions"] = int(d.get("active_sessions", 0) or 0)
-                    result["total"]["user_messages"] = int(d.get("user_messages", 0) or 0)
-                    result["total"]["tokens"] = int(d.get("tokens", 0) or 0)
-                elif dim_str == "day":
-                    # 只取计数字段：快照组里的 last_active_at 是 datetime，不能 int()
-                    result["trend"].extend([
-                        {
-                            "date": str(d.get("_id")),
-                            "new_sessions": int(d.get("new_sessions", 0) or 0),
-                            "active_sessions": int(d.get("active_sessions", 0) or 0),
-                            "user_messages": int(d.get("user_messages", 0) or 0),
-                            "tokens": int(d.get("tokens", 0) or 0),
-                        }
-                        for d in docs
-                    ])
-                elif dim_str == "persona":
-                    result["by_persona"].extend([
-                        {
-                            "persona_preset_id": str(d.get("_id")) if d.get("_id") else None,
-                            "persona_preset_name": None,
-                            "new_sessions": int(d.get("new_sessions", 0) or 0),
-                            "active_sessions": int(d.get("active_sessions", 0) or 0),
-                            "user_messages": int(d.get("user_messages", 0) or 0),
-                            "tokens": int(d.get("tokens", 0) or 0),
-                        }
-                        for d in docs
-                    ])
+            for doc in dimension_docs["day"]:
+                value = dict(doc)
+                value["date"] = str(value.pop("_id", ""))
+                active, active_supported, active_ids = _visible_metric(value, "active_sessions", "active_session_ids")
+                new, new_supported, new_ids = _visible_metric(value, "new_sessions", "new_session_ids")
+                value["active_sessions"] = active
+                value["new_sessions"] = new
+                value["_active_session_ids_supported"] = active_supported
+                value["_active_session_ids"] = active_ids
+                value["_new_session_ids_supported"] = new_supported
+                value["_new_session_ids"] = new_ids
+                historical_items.append(value)
 
-            # persona 维度的去重用户集合（快照行按 用户×persona 存储，可还原去重人数）
-            persona_users_pipeline = list(base_match) + [
-                {
-                    "$group": {
-                        "_id": "$persona_preset_id",
-                        "user_ids": {
-                            "$addToSet": {
-                                "$cond": [{"$gt": ["$user_messages", 0]}, "$user_id", None]
-                            }
-                        },
-                    }
-                }
-            ]
+            def dimension_items(docs: list[dict[str, Any]], dimension: str) -> list[dict[str, Any]]:
+                values: list[dict[str, Any]] = []
+                for doc in docs:
+                    value = dict(doc)
+                    identifier = value.pop("_id", None)
+                    if dimension == "persona":
+                        value["persona_preset_id"] = str(identifier) if identifier else None
+                        value.setdefault("persona_preset_name", None)
+                    elif dimension == "agent":
+                        value["agent_id"] = str(identifier) if identifier else None
+                    elif dimension == "user":
+                        value["user_id"] = str(identifier) if identifier else None
+                    elif dimension == "user_persona":
+                        identifier = identifier or {}
+                        value["user_id"] = str(identifier.get("user_id")) if identifier.get("user_id") else None
+                        pid = identifier.get("persona_preset_id")
+                        value["persona_preset_id"] = str(pid) if pid else None
+                        value.setdefault("persona_preset_name", None)
+                    active, active_supported, active_ids = _visible_metric(value, "active_sessions", "active_session_ids")
+                    new, new_supported, new_ids = _visible_metric(value, "new_sessions", "new_session_ids")
+                    value["active_sessions"] = active
+                    value["new_sessions"] = new
+                    value["_active_session_ids_supported"] = active_supported
+                    value["_active_session_ids"] = active_ids
+                    value["_new_session_ids_supported"] = new_supported
+                    value["_new_session_ids"] = new_ids
+                    values.append(value)
+                return values
+
+            persona_items.extend(dimension_items(dimension_docs["persona"], "persona"))
+            agent_items.extend(dimension_items(dimension_docs["agent"], "agent"))
+            user_items.extend(dimension_items(dimension_docs["user"], "user"))
+            user_persona_items.extend(dimension_items(dimension_docs["user_persona"], "user_persona"))
+
             try:
                 persona_user_docs = await snapshot_collection.aggregate(
-                    persona_users_pipeline
+                    base_match
+                    + [
+                        {
+                            "$group": {
+                                "_id": "$persona_preset_id",
+                                "user_ids": {
+                                    "$addToSet": {
+                                        "$cond": [{"$gt": ["$user_messages", 0]}, "$user_id", None]
+                                    }
+                                },
+                            }
+                        }
+                    ]
                 ).to_list(length=None)
-                for d in persona_user_docs:
-                    pid = str(d.get("_id")) if d.get("_id") else None
+                for doc in persona_user_docs:
+                    pid = str(doc.get("_id")) if doc.get("_id") else None
                     persona_user_sets.setdefault(pid, set()).update(
-                        {str(u) for u in (d.get("user_ids") or []) if u}
+                        {str(uid) for uid in (doc.get("user_ids") or []) if uid}
                     )
-            except Exception:
-                pass
-
-            # User dimension
-            user_pipeline = list(base_match) + [
-                {"$group": {"_id": "$user_id", "user_messages": {"$sum": "$user_messages"}, "tokens": {"$sum": "$tokens"}}},
-            ]
+            except Exception as exc:
+                logger.debug("[Analytics] Snapshot persona users unavailable: %s", exc)
             try:
-                user_docs = await snapshot_collection.aggregate(user_pipeline).to_list(length=None)
-                result["by_user"].extend([{"user_id": str(d.get("_id")), "user_messages": int(d.get("user_messages", 0) or 0), "tokens": int(d.get("tokens", 0) or 0)} for d in user_docs if d.get("_id")])
-            except Exception:
-                pass
+                agent_user_docs = await snapshot_collection.aggregate(
+                    base_match
+                    + [
+                        {
+                            "$group": {
+                                "_id": "$agent_id",
+                                "user_ids": {
+                                    "$addToSet": {
+                                        "$cond": [{"$gt": ["$user_messages", 0]}, "$user_id", None]
+                                    }
+                                },
+                            }
+                        }
+                    ]
+                ).to_list(length=None)
+                for doc in agent_user_docs:
+                    aid = str(doc.get("_id")) if doc.get("_id") else None
+                    agent_user_sets.setdefault(aid, set()).update(
+                        {str(uid) for uid in (doc.get("user_ids") or []) if uid}
+                    )
+            except Exception as exc:
+                logger.debug("[Analytics] Snapshot agent users unavailable: %s", exc)
 
-            # Fallback: for historical dates with no snapshot data, compute realtime
-            # Check if we have any snapshot data
-            has_snapshot_data = bool(result["trend"]) or bool(result["by_user"])
-            if not has_snapshot_data and historical_dates:
-                # Compute entire range as realtime fallback
-                date_filters = UsageFilters(
-                    start=filters.start,
-                    end=filters.end,
-                    persona_preset_id=getattr(filters, "persona_preset_id", None),
-                    agent_id=getattr(filters, "agent_id", None),
-                    role_user_ids=getattr(filters, "role_user_ids", None),
-                )
-                realtime_result = await _compute_realtime_aggregate(storage, date_filters, historical_dates)
-                result["trend"].extend(realtime_result.get("trend", []))
-                result["total"]["user_messages"] += realtime_result.get("total", {}).get("user_messages", 0)
-                result["total"]["tokens"] += realtime_result.get("total", {}).get("tokens", 0)
+        if historical_dates and (skip_historical or not historical_items):
+            realtime = await _compute_realtime_aggregate(storage, filters, historical_dates)
+            historical_items.extend(realtime.get("trend", []))
+            realtime_user_ids.update({str(uid) for uid in realtime.get("active_user_ids", set()) if uid})
+            try:
+                fallback_docs = await storage.traces.aggregate(
+                    usage_facts_stages(filters)
+                    + [
+                        {
+                            "$group": {
+                                "_id": None,
+                                "active_user_ids": {
+                                    "$addToSet": {
+                                        "$cond": [{"$gt": ["$user_messages", 0]}, "$user_id", None]
+                                    }
+                                },
+                            }
+                        }
+                    ]
+                ).to_list(length=1)
+                if fallback_docs:
+                    realtime_user_ids.update(
+                        {str(uid) for uid in (fallback_docs[0].get("active_user_ids") or []) if uid}
+                    )
+            except Exception as exc:
+                logger.debug("[Analytics] Realtime fallback user set unavailable: %s", exc)
 
-        # Process today separately (always realtime, never frozen)
-        today_dt = datetime.strptime(today, "%Y-%m-%d").replace(tzinfo=CST)
-        tomorrow_dt = today_dt + timedelta(days=1)
-        today_filters = UsageFilters(
-            start=today_dt,
-            end=tomorrow_dt,
-            persona_preset_id=getattr(filters, "persona_preset_id", None),
-            agent_id=getattr(filters, "agent_id", None),
-            role_user_ids=getattr(filters, "role_user_ids", None),
-        )
-
-        # Only include today in trend if it's in the date range
+        # Today's metrics are always live and new sessions are queried independently.
         if today in dates:
-            facts_stages = usage_facts_stages(today_filters) + [
-                {
-                    "$group": {
-                        "_id": None,
-                        "user_messages": {"$sum": "$user_messages"},
-                        "tokens": {"$sum": "$tokens"},
-                        "active_session_ids": {"$addToSet": {"$cond": [{"$gt": ["$user_messages", 0]}, "$session_id", None]}},
-                    }
-                },
-            ]
-
+            today_dt = datetime.strptime(today, "%Y-%m-%d").replace(tzinfo=CST)
+            tomorrow_dt = today_dt + timedelta(days=1)
+            today_filters = UsageFilters(
+                start=today_dt,
+                end=tomorrow_dt,
+                persona_preset_id=getattr(filters, "persona_preset_id", None),
+                agent_id=getattr(filters, "agent_id", None),
+                role_user_ids=getattr(filters, "role_user_ids", None),
+            )
+            fact_docs = []
             try:
-                facts_docs = await storage.traces.aggregate(facts_stages).to_list(length=1)
-            except Exception as ex:
-                logger.warning("Real-time aggregate for today failed: %s", ex)
-                facts_docs = []
-
-            fact_doc = facts_docs[0] if facts_docs else {}
-            today_user_messages = int(fact_doc.get("user_messages", 0) or 0)
-            today_tokens = int(fact_doc.get("tokens", 0) or 0)
-            today_active_sessions = len({s for s in (fact_doc.get("active_session_ids") or []) if s})
-
-            # new_sessions_match 原生返回 [$gte, $lt) 半开区间
+                fact_docs = await storage.traces.aggregate(
+                    usage_facts_stages(today_filters)
+                    + [
+                        {
+                            "$group": {
+                                "_id": None,
+                                "user_messages": {"$sum": "$user_messages"},
+                                "tokens": {"$sum": "$tokens"},
+                                "active_session_ids": {
+                                    "$addToSet": {
+                                        "$cond": [{"$gt": ["$user_messages", 0]}, "$session_id", None]
+                                    }
+                                },
+                            }
+                        }
+                    ]
+                ).to_list(length=1)
+            except Exception as exc:
+                logger.warning("[Analytics] Realtime total aggregation failed: %s", exc)
+            fact = fact_docs[0] if fact_docs else {}
             session_match = new_sessions_match(today_filters)
-
             try:
-                today_new_sessions = await storage.sessions.count_documents(session_match)
+                today_new_sessions = int(await storage.sessions.count_documents(session_match))
             except Exception:
                 today_new_sessions = 0
-
-            result["trend"].append({
-                "date": today,
-                "new_sessions": today_new_sessions,
-                "active_sessions": today_active_sessions,
-                "user_messages": today_user_messages,
-                "tokens": today_tokens,
-            })
-
-            result["total"]["new_sessions"] += today_new_sessions
-            result["total"]["active_sessions"] += today_active_sessions
-            result["total"]["user_messages"] += today_user_messages
-            result["total"]["tokens"] += today_tokens
-
-            # 今天的 persona 维度（快照不含今天，需实时计算并与历史行合并）
-            today_persona_stages = usage_facts_stages(today_filters) + [
+            today_active_ids = _flatten_ids(fact.get("active_session_ids"))
+            historical_items.append(
                 {
-                    "$group": {
-                        "_id": "$persona_preset_id",
-                        "persona_preset_name": {"$first": "$persona_preset_name"},
-                        "user_messages": {"$sum": "$user_messages"},
-                        "tokens": {"$sum": "$tokens"},
-                        "active_session_ids": {
-                            "$addToSet": {
-                                "$cond": [{"$gt": ["$user_messages", 0]}, "$session_id", None]
-                            }
-                        },
-                        "active_user_ids": {
-                            "$addToSet": {
-                                "$cond": [{"$gt": ["$user_messages", 0]}, "$user_id", None]
-                            }
-                        },
-                    }
+                    "date": today,
+                    "new_sessions": today_new_sessions,
+                    "active_sessions": len(today_active_ids),
+                    "user_messages": int(fact.get("user_messages", 0) or 0),
+                    "tokens": int(fact.get("tokens", 0) or 0),
+                    "_active_session_ids_supported": True,
+                    "_active_session_ids": today_active_ids,
+                    "_new_session_ids_supported": False,
+                    "_new_session_ids": set(),
                 }
-            ]
-            try:
-                persona_docs = await storage.traces.aggregate(
-                    today_persona_stages
-                ).to_list(length=None)
-            except Exception as ex:
-                logger.warning("Real-time persona aggregate for today failed: %s", ex)
-                persona_docs = []
+            )
 
-            for pdoc in persona_docs:
-                pid = str(pdoc.get("_id")) if pdoc.get("_id") else None
-                active_user_ids = {str(u) for u in (pdoc.get("active_user_ids") or []) if u}
-                persona_user_sets.setdefault(pid, set()).update(active_user_ids)
-                result["by_persona"].append({
-                    "persona_preset_id": pid,
-                    "persona_preset_name": pdoc.get("persona_preset_name"),
-                    "new_sessions": 0,
-                    "active_sessions": len(
-                        {s for s in (pdoc.get("active_session_ids") or []) if s}
-                    ),
-                    "user_messages": int(pdoc.get("user_messages", 0) or 0),
-                    "tokens": int(pdoc.get("tokens", 0) or 0),
-                })
-
-            # 今天的用户维度
-            today_user_stages = usage_facts_stages(today_filters) + [
-                {
-                    "$group": {
-                        "_id": "$user_id",
-                        "user_messages": {"$sum": "$user_messages"},
-                        "tokens": {"$sum": "$tokens"},
-                    }
-                },
-                {"$match": {"_id": {"$nin": [None, ""]}}},
-            ]
-            try:
-                user_docs = await storage.traces.aggregate(
-                    today_user_stages
-                ).to_list(length=None)
-            except Exception as ex:
-                logger.warning("Real-time user aggregate for today failed: %s", ex)
-                user_docs = []
-
-            result["by_user"].extend([
-                {
-                    "user_id": str(udoc.get("_id")),
-                    "user_messages": int(udoc.get("user_messages", 0) or 0),
-                    "tokens": int(udoc.get("tokens", 0) or 0),
+            session_docs = await _aggregate_session_groups(storage, today_filters)
+            persona_new = _session_metric_map(session_docs, "persona_preset_id")
+            agent_new = _session_metric_map(session_docs, "agent_id")
+            user_persona_new: dict[tuple[Any, Any], dict[str, Any]] = {
+                (
+                    doc.get("_id", {}).get("user_id"),
+                    doc.get("_id", {}).get("persona_preset_id"),
+                ): {
+                    "new_sessions": int(doc.get("new_sessions", 0) or 0),
+                    "new_session_ids": sorted(_flatten_ids(doc.get("new_session_ids"))),
                 }
-                for udoc in user_docs
-                if udoc.get("_id")
-            ])
+                for doc in session_docs
+            }
 
-        # 合并历史与今天中重复出现的 persona / 用户行（跨天求和）
-        merged_persona: dict[str | None, dict[str, Any]] = {}
-        for item in result["by_persona"]:
-            pid = item.get("persona_preset_id")
-            acc = merged_persona.get(pid)
-            if acc is None:
-                merged_persona[pid] = dict(item)
-                continue
-            if not acc.get("persona_preset_name") and item.get("persona_preset_name"):
-                acc["persona_preset_name"] = item.get("persona_preset_name")
-            for field in ("new_sessions", "active_sessions", "user_messages", "tokens"):
-                acc[field] = int(acc.get(field, 0) or 0) + int(item.get(field, 0) or 0)
-        result["by_persona"] = list(merged_persona.values())
+            async def today_dimension(dimension: str) -> list[dict[str, Any]]:
+                identifier: Any = {
+                    "persona": "$persona_preset_id",
+                    "agent": "$agent_id",
+                    "user": "$user_id",
+                    "user_persona": {
+                        "user_id": "$user_id",
+                        "persona_preset_id": "$persona_preset_id",
+                    },
+                }[dimension]
+                group: dict[str, Any] = {
+                    "_id": identifier,
+                    "user_messages": {"$sum": "$user_messages"},
+                    "tokens": {"$sum": "$tokens"},
+                    "active_session_ids": {
+                        "$addToSet": {
+                            "$cond": [{"$gt": ["$user_messages", 0]}, "$session_id", None]
+                        }
+                    },
+                    "last_active_at": {"$max": "$started_at"},
+                }
+                if dimension in {"persona", "agent"}:
+                    group["active_user_ids"] = {
+                        "$addToSet": {
+                            "$cond": [{"$gt": ["$user_messages", 0]}, "$user_id", None]
+                        }
+                    }
+                try:
+                    return await storage.traces.aggregate(usage_facts_stages(today_filters) + [{"$group": group}]).to_list(length=None)
+                except Exception as exc:
+                    logger.warning("[Analytics] Realtime %s aggregation failed: %s", dimension, exc)
+                    return []
 
-        merged_user: dict[str, dict[str, Any]] = {}
-        for item in result["by_user"]:
+            for doc in await today_dimension("persona"):
+                pid = str(doc.get("_id")) if doc.get("_id") else None
+                active_ids = _flatten_ids(doc.get("active_session_ids"))
+                persona_user_sets.setdefault(pid, set()).update(
+                    {str(uid) for uid in (doc.get("active_user_ids") or []) if uid}
+                )
+                persona_items.append(
+                    {
+                        "persona_preset_id": pid,
+                        "persona_preset_name": doc.get("persona_preset_name"),
+                        "new_sessions": persona_new.get(doc.get("_id"), {}).get("new_sessions", 0),
+                        "new_session_ids": set(persona_new.get(doc.get("_id"), {}).get("new_session_ids", [])),
+                        "active_sessions": len(active_ids),
+                        "active_session_ids": active_ids,
+                        "user_messages": int(doc.get("user_messages", 0) or 0),
+                        "tokens": int(doc.get("tokens", 0) or 0),
+                        "_new_session_ids_supported": True,
+                        "_active_session_ids_supported": True,
+                        "_new_session_ids": set(persona_new.get(doc.get("_id"), {}).get("new_session_ids", [])),
+                        "_active_session_ids": active_ids,
+                    }
+                )
+            for doc in await today_dimension("agent"):
+                aid = str(doc.get("_id")) if doc.get("_id") else None
+                active_ids = _flatten_ids(doc.get("active_session_ids"))
+                agent_user_sets.setdefault(aid, set()).update(
+                    {str(uid) for uid in (doc.get("active_user_ids") or []) if uid}
+                )
+                agent_items.append(
+                    {
+                        "agent_id": aid,
+                        "new_sessions": agent_new.get(doc.get("_id"), {}).get("new_sessions", 0),
+                        "new_session_ids": set(agent_new.get(doc.get("_id"), {}).get("new_session_ids", [])),
+                        "active_sessions": len(active_ids),
+                        "active_session_ids": active_ids,
+                        "user_messages": int(doc.get("user_messages", 0) or 0),
+                        "tokens": int(doc.get("tokens", 0) or 0),
+                        "_new_session_ids_supported": True,
+                        "_active_session_ids_supported": True,
+                        "_new_session_ids": set(agent_new.get(doc.get("_id"), {}).get("new_session_ids", [])),
+                        "_active_session_ids": active_ids,
+                    }
+                )
+            for doc in await today_dimension("user"):
+                uid = str(doc.get("_id")) if doc.get("_id") else None
+                if uid:
+                    user_items.append(
+                        {
+                            "user_id": uid,
+                            "user_messages": int(doc.get("user_messages", 0) or 0),
+                            "tokens": int(doc.get("tokens", 0) or 0),
+                        }
+                    )
+            for doc in await today_dimension("user_persona"):
+                identifier = doc.get("_id") or {}
+                uid = str(identifier.get("user_id")) if identifier.get("user_id") else None
+                if uid:
+                    pid = identifier.get("persona_preset_id")
+                    metric = user_persona_new.get((identifier.get("user_id"), pid), {})
+                    user_persona_items.append(
+                        {
+                            "user_id": uid,
+                            "persona_preset_id": str(pid) if pid else None,
+                            "persona_preset_name": doc.get("persona_preset_name"),
+                            "new_sessions": int(metric.get("new_sessions", 0) or 0),
+                            "new_session_ids": set(metric.get("new_session_ids", [])),
+                            "active_sessions": len(_flatten_ids(doc.get("active_session_ids"))),
+                            "active_session_ids": _flatten_ids(doc.get("active_session_ids")),
+                            "user_messages": int(doc.get("user_messages", 0) or 0),
+                            "tokens": int(doc.get("tokens", 0) or 0),
+                            "last_active_at": doc.get("last_active_at"),
+                            "_new_session_ids_supported": True,
+                            "_active_session_ids_supported": True,
+                            "_new_session_ids": set(metric.get("new_session_ids", [])),
+                            "_active_session_ids": _flatten_ids(doc.get("active_session_ids")),
+                        }
+                    )
+            # A newly-created session may have no trace yet. Keep it in the
+            # persona/agent/user×persona dimensions instead of relying on a
+            # trace row to make the independent sessions aggregate visible.
+            for session_doc in session_docs:
+                identifier = session_doc.get("_id") or {}
+                session_ids = _flatten_ids(session_doc.get("new_session_ids"))
+                new_count = int(session_doc.get("new_sessions", 0) or 0)
+                new_supported = bool(session_ids)
+                persona_id = identifier.get("persona_preset_id")
+                agent_id = identifier.get("agent_id")
+                persona_items.append(
+                    {
+                        "persona_preset_id": str(persona_id) if persona_id else None,
+                        "new_sessions": len(session_ids) if new_supported else new_count,
+                        "new_session_ids": session_ids,
+                        "active_sessions": 0,
+                        "active_session_ids": set(),
+                        "user_messages": 0,
+                        "tokens": 0,
+                        "_new_session_ids_supported": new_supported,
+                        "_new_session_ids": session_ids,
+                        "_active_session_ids_supported": True,
+                        "_active_session_ids": set(),
+                    }
+                )
+                agent_items.append(
+                    {
+                        "agent_id": str(agent_id) if agent_id else None,
+                        "new_sessions": len(session_ids) if new_supported else new_count,
+                        "new_session_ids": session_ids,
+                        "active_sessions": 0,
+                        "active_session_ids": set(),
+                        "user_messages": 0,
+                        "tokens": 0,
+                        "_new_session_ids_supported": new_supported,
+                        "_new_session_ids": session_ids,
+                        "_active_session_ids_supported": True,
+                        "_active_session_ids": set(),
+                    }
+                )
+                user_id = identifier.get("user_id")
+                if user_id is not None:
+                    user_persona_items.append(
+                        {
+                            "user_id": str(user_id),
+                            "persona_preset_id": str(persona_id) if persona_id else None,
+                            "persona_preset_name": None,
+                            "new_sessions": len(session_ids) if new_supported else new_count,
+                            "new_session_ids": session_ids,
+                            "active_sessions": 0,
+                            "active_session_ids": set(),
+                            "user_messages": 0,
+                            "tokens": 0,
+                            "last_active_at": None,
+                            "_new_session_ids_supported": new_supported,
+                            "_new_session_ids": session_ids,
+                            "_active_session_ids_supported": True,
+                            "_active_session_ids": set(),
+                        }
+                    )
+
+        merged_days = _merge_metric_items(historical_items, "date")
+        result["trend"] = [
+            {
+                "date": item.get("date"),
+                "new_sessions": item.get("new_sessions", 0),
+                "active_sessions": item.get("active_sessions", 0),
+                "user_messages": int(item.get("user_messages", 0) or 0),
+                "tokens": int(item.get("tokens", 0) or 0),
+            }
+            for item in sorted(merged_days, key=lambda value: str(value.get("date", "")))
+        ]
+        total_active_ids: set[str] = set()
+        total_new_ids: set[str] = set()
+        total_active_legacy = 0
+        total_new_legacy = 0
+        for item in merged_days:
+            total_active_ids.update(item.get("_active_session_ids", set()))
+            total_new_ids.update(item.get("_new_session_ids", set()))
+            total_active_legacy += int(item.get("_active_sessions_legacy", 0) or 0)
+            total_new_legacy += int(item.get("_new_sessions_legacy", 0) or 0)
+        result["total"] = {
+            "new_sessions": len(total_new_ids) + total_new_legacy,
+            "active_sessions": len(total_active_ids) + total_active_legacy,
+            "user_messages": sum(int(item.get("user_messages", 0) or 0) for item in result["trend"]),
+            "tokens": sum(int(item.get("tokens", 0) or 0) for item in result["trend"]),
+        }
+
+        result["by_persona"] = [
+            _public_metric_item(item)
+            for item in _merge_metric_items(persona_items, "persona_preset_id")
+        ]
+        result["by_agent"] = [
+            _public_metric_item(item)
+            for item in _merge_metric_items(agent_items, "agent_id")
+        ]
+        merged_users: dict[str, dict[str, Any]] = {}
+        for item in user_items:
             uid = item.get("user_id")
-            acc = merged_user.get(uid)
-            if acc is None:
-                merged_user[uid] = dict(item)
+            if not uid:
                 continue
-            for field in ("user_messages", "tokens"):
-                acc[field] = int(acc.get(field, 0) or 0) + int(item.get(field, 0) or 0)
-        result["by_user"] = list(merged_user.values())
+            target = merged_users.setdefault(uid, {"user_id": uid, "user_messages": 0, "tokens": 0})
+            target["user_messages"] += int(item.get("user_messages", 0) or 0)
+            target["tokens"] += int(item.get("tokens", 0) or 0)
+        result["by_user"] = list(merged_users.values())
+        # user×persona rows must not collapse different personas, and legacy
+        # rows without ID arrays must keep their stored integers.
+        result["by_user_persona"] = [
+            _public_metric_item(item)
+            for item in _merge_metric_items(
+                user_persona_items, ("user_id", "persona_preset_id")
+            )
+        ]
 
-        # 回填 persona 维度 active_users（去重消息用户数；快照行不直接存该字段）
         for item in result["by_persona"]:
-            pid = item.get("persona_preset_id")
-            item["active_users"] = len(persona_user_sets.get(pid, set()))
+            item["active_users"] = len(persona_user_sets.get(item.get("persona_preset_id"), set()))
+        for item in result["by_agent"]:
+            item["active_users"] = len(agent_user_sets.get(item.get("agent_id"), set()))
 
-        # Active users / using_users from S2's activity_storage (may not exist yet)
-        result["active_users"] = 0
-        result["using_users"] = 0
-
-        try:
+        # Login activity rows carry no persona/agent/role dimension, so any
+        # dimensional filter must derive its user counts from filtered rows.
+        has_dimension_filter = bool(
+            getattr(filters, "persona_preset_id", None)
+            or getattr(filters, "agent_id", None)
+            or getattr(filters, "role_user_ids", None) is not None
+        )
+        if has_dimension_filter:
+            result["using_users"] = len({item["user_id"] for item in result["by_user"] if item.get("user_id")})
+            result["active_users"] = result["using_users"]
+        else:
             from src.infra.analytics.activity_storage import ActivityStorage
-            _activity_storage = ActivityStorage()
+
+            activity = ActivityStorage()
             start_str, end_str = range_to_date_strings(filters.start, filters.end)
-
-            # Get distinct users who sent messages
-            using_users_list = await _activity_storage.distinct_users(start_str, end_str, source="message")
-            result["using_users"] = len(using_users_list)
-
-            # Get all active users (login + message)
-            active_users_list = await _activity_storage.distinct_users(start_str, end_str)
-            result["active_users"] = len(active_users_list)
-
-            # Contract: if persona/agent filter applied, active_users = using_users
-            # because login records don't have persona/agent归属
-            if getattr(filters, "persona_preset_id", None) or getattr(filters, "agent_id", None):
-                result["active_users"] = result["using_users"]
-
-        except ImportError:
-            # ActivityStorage not available yet (S2 work in progress)
-            # Fall back to trace-based count
-            logger.info("ActivityStorage not available, using fallback for active users")
-            result["using_users"] = len(result.get("by_user", []))
-            result["active_users"] = result["using_users"]
-
-        except Exception as ex:
-            # Degrade gracefully
-            logger.warning("ActivityStorage lookup failed: %s, using fallback", ex)
-            result["using_users"] = len(result.get("by_user", []))
-            result["active_users"] = result["using_users"]
-
-    except Exception as ex:
-        logger.warning("Merging results failed: %s, returning empty with zeros", ex)
+            using_users = await activity.distinct_users(start_str, end_str, source="message")
+            active_users = await activity.distinct_users(start_str, end_str)
+            result["using_users"] = len(using_users) or len(realtime_user_ids)
+            result["active_users"] = len(active_users) or len(realtime_user_ids)
+    except ImportError:
+        result["using_users"] = len(result["by_user"])
+        result["active_users"] = result["using_users"]
+    except Exception as exc:
+        logger.warning("[Analytics] Merging results failed: %s", exc)
+        result["using_users"] = len(result["by_user"])
+        result["active_users"] = result["using_users"]
 
     return result
 
 
-async def _compute_realtime_aggregate(
-    storage: Any,
-    filters: Any,
-    dates: list[str],
-) -> dict[str, Any]:
-    """Compute aggregate for dates using traces directly (fallback)."""
-    from src.infra.analytics.usage_query import usage_facts_stages
+async def _compute_realtime_aggregate(storage: Any, filters: Any, dates: list[str]) -> dict[str, Any]:
+    """Compute a complete realtime fallback, including sessions independently."""
+    from src.infra.analytics.usage_query import UsageFilters, new_sessions_match, usage_facts_stages
 
-    result: dict[str, Any] = {"total": {}, "trend": []}
-
-    # Group by date for trend
-    facts_stages = usage_facts_stages(filters) + [
+    result: dict[str, Any] = {
+        "total": {"new_sessions": 0, "active_sessions": 0, "user_messages": 0, "tokens": 0},
+        "trend": [],
+        "active_user_ids": set(),
+    }
+    trace_pipeline = usage_facts_stages(filters) + [
         {
             "$group": {
                 "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$started_at", "timezone": "Asia/Shanghai"}},
                 "user_messages": {"$sum": "$user_messages"},
                 "tokens": {"$sum": "$tokens"},
-                "active_sessions": {"$sum": {"$cond": [{"$gt": ["$user_messages", 0]}, 1, 0]}},
-                "new_sessions": {"$sum": {"$cond": [{"$gt": ["$user_messages", 0]}, 0, 0]}},
+                "active_session_ids": {
+                    "$addToSet": {"$cond": [{"$gt": ["$user_messages", 0]}, "$session_id", None]}
+                },
+                "active_user_ids": {
+                    "$addToSet": {"$cond": [{"$gt": ["$user_messages", 0]}, "$user_id", None]}
+                },
             }
-        },
-    ]
-
-    try:
-        trend_docs = await storage.traces.aggregate(facts_stages).to_list(length=None)
-        for td in trend_docs:
-            date_str = td.get("_id", "")
-            if date_str in dates:
-                result["trend"].append({
-                    "date": date_str,
-                    "user_messages": int(td.get("user_messages", 0)),
-                    "tokens": int(td.get("tokens", 0)),
-                    "active_sessions": int(td.get("active_sessions", 0)),
-                    "new_sessions": int(td.get("new_sessions", 0)),
-                })
-
-        result["total"] = {
-            "user_messages": sum(t.get("user_messages", 0) for t in result["trend"]),
-            "tokens": sum(t.get("tokens", 0) for t in result["trend"]),
         }
-    except Exception as ex:
-        logger.warning("Realtime aggregate fallback failed: %s", ex)
+    ]
+    try:
+        trace_docs = await storage.traces.aggregate(trace_pipeline).to_list(length=None)
+    except Exception as exc:
+        logger.warning("[Analytics] Realtime fallback traces failed: %s", exc)
+        trace_docs = []
 
+    session_counts: dict[str, int] = {}
+    try:
+        session_docs = await storage.sessions.aggregate(
+            [
+                {"$match": new_sessions_match(filters)},
+                {"$group": {"_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$created_at", "timezone": "Asia/Shanghai"}}, "new_sessions": {"$sum": 1}}},
+            ]
+        ).to_list(length=None)
+        session_counts = {str(doc.get("_id")): int(doc.get("new_sessions", 0) or 0) for doc in session_docs}
+    except Exception as exc:
+        logger.debug("[Analytics] Realtime fallback session aggregate failed: %s", exc)
+        for date in dates:
+            date_dt = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=CST)
+            date_filters = UsageFilters(
+                start=date_dt,
+                end=date_dt + timedelta(days=1),
+                persona_preset_id=getattr(filters, "persona_preset_id", None),
+                agent_id=getattr(filters, "agent_id", None),
+                role_user_ids=getattr(filters, "role_user_ids", None),
+            )
+            try:
+                session_counts[date] = int(await storage.sessions.count_documents(new_sessions_match(date_filters)))
+            except Exception:
+                session_counts[date] = 0
+
+    by_date = {str(doc.get("_id")): doc for doc in trace_docs}
+    for doc in trace_docs:
+        result["active_user_ids"].update(
+            {str(uid) for uid in (doc.get("active_user_ids") or []) if uid}
+        )
+    for date in dates:
+        doc = by_date.get(date, {})
+        active_ids = _flatten_ids(doc.get("active_session_ids"))
+        result["trend"].append(
+            {
+                "date": date,
+                "new_sessions": session_counts.get(date, 0),
+                "active_sessions": len(active_ids),
+                "user_messages": int(doc.get("user_messages", 0) or 0),
+                "tokens": int(doc.get("tokens", 0) or 0),
+            }
+        )
+    # Some storage adapters expose a single already-grouped document with
+    # ``_id=None``. Preserve that aggregate for the realtime compatibility
+    # path instead of turning it into an empty result.
+    if trace_docs and not any(str(doc.get("_id")) in dates for doc in trace_docs):
+        user_messages = sum(int(doc.get("user_messages", 0) or 0) for doc in trace_docs)
+        tokens = sum(int(doc.get("tokens", doc.get("total_tokens", 0)) or 0) for doc in trace_docs)
+        active_ids = set()
+        for doc in trace_docs:
+            active_ids.update(_flatten_ids(doc.get("active_session_ids")))
+        result["trend"] = [
+            {
+                "date": dates[0] if dates else "",
+                "new_sessions": session_counts.get(dates[0], 0) if dates else 0,
+                "active_sessions": len(active_ids),
+                "user_messages": user_messages,
+                "tokens": tokens,
+            }
+        ]
+    result["total"] = {
+        field: sum(int(item.get(field, 0) or 0) for item in result["trend"])
+        for field in ("new_sessions", "active_sessions", "user_messages", "tokens")
+    }
     return result

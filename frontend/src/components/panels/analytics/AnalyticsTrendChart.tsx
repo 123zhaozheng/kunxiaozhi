@@ -1,9 +1,9 @@
 /**
  * Analytics Trend Chart — core multi-metric trend (daily granularity).
  *
- * Sessions / active users / user messages share the left axis; tokens use
- * the right axis. Sessions and tokens come from `/usage/trend`, active
- * users from `/users/active` — all requested with the identical filter
+ * Sessions / using users / user messages share the left axis; tokens use
+ * the right axis. Sessions and tokens come from `/usage/trend`, using users
+ * from `/users/active` — all requested with the identical filter
  * batch by AnalyticsPanel.
  */
 
@@ -17,12 +17,14 @@ export interface AnalyticsTrendChartProps {
   usageTrend: UsageTrendPoint[];
   activeTrend: TrendDataPoint[];
   isLoading: boolean;
+  error?: string | null;
 }
 
 export function AnalyticsTrendChart({
   usageTrend,
   activeTrend,
   isLoading,
+  error,
 }: AnalyticsTrendChartProps) {
   const { t } = useTranslation();
   const tokensUnit = t("analytics.tokens.unit", "tokens");
@@ -38,6 +40,7 @@ export function AnalyticsTrendChart({
       )}
       icon={<TrendingUp size={16} aria-hidden />}
       isLoading={isLoading}
+      error={error}
       isEmpty={isEmpty}
     >
       <LineTrend
@@ -48,13 +51,13 @@ export function AnalyticsTrendChart({
             label: t("analytics.sessions.sessions", "会话数"),
             data: usageTrend.map((point) => ({
               date: point.date,
-              value: point.new_sessions,
+              value: point.active_sessions,
             })),
           },
           {
             key: "activeUsers",
             color: PIE_COLORS[0],
-            label: t("analytics.trend.activeUsers", "活跃用户"),
+            label: t("analytics.overview.usingUsers", "使用用户"),
             data: activeTrend,
           },
           {

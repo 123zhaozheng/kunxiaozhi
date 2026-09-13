@@ -326,6 +326,7 @@
       "fastestGrowingPersona": "가장 빠르게 성장한 페르소나",
       "newUsers": "이번 기간 신규 사용자",
       "newUsersDrillHint": "사용자 목록 보기",
+      "peakDrillHint": "활성 사용자 보기",
       "peak": "활동 피크",
       "peakValue": "{{weekday}} {{hour}}:00 · {{count}}건의 사용자 메시지",
       "personaFilterHint": "상단 페르소나 필터로 설정",
@@ -337,6 +338,7 @@
     "overview": {
       "activeUsers": "활성 사용자",
       "activeSessions": "활성 {{count}}",
+      "newSessions": "신규 {{count}}",
       "userMessages": "사용자 메시지",
       "totalTokens": "총 토큰 수",
       "messagesPerUser": "1인당 메시지",
@@ -410,7 +412,15 @@
       "hint": "세션·활성 사용자·사용자 메시지 일별 비교, 토큰은 우측 축",
       "title": "핵심 추이"
     },
-    "weekdays": ["일", "월", "화", "수", "목", "금", "토"]
+    "weekdays": [
+      "일",
+      "월",
+      "화",
+      "수",
+      "목",
+      "금",
+      "토"
+    ]
   },
   "appName": "昆小智",
   "approvals": {

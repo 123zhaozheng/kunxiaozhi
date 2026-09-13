@@ -14,7 +14,8 @@ import { Download, Search } from "lucide-react";
 import { Pagination } from "../../common/Pagination";
 import { PanelLoadingState } from "../../common/PanelLoadingState";
 import type { UsageByUserItem, UsageSummaryResponse } from "../../../types/analytics";
-import { formatDateTime, formatNumber } from "./analyticsFormat";
+import { formatDateTime } from "../../../utils/datetime";
+import { formatNumber } from "./analyticsFormat";
 
 // Column order mirrors UsageByUserItem so the table and the CSV export match.
 const USAGE_COLUMN_KEYS = [
@@ -227,7 +228,9 @@ export function AnalyticsUsageTable({
                       {formatNumber(row.total_tokens)}
                     </td>
                     <td className="py-2 pr-3 whitespace-nowrap">
-                      {formatDateTime(row.last_active_at)}
+                      {row.last_active_at
+                        ? formatDateTime(row.last_active_at)
+                        : "—"}
                     </td>
                   </tr>
                 ))}

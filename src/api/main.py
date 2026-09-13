@@ -32,6 +32,7 @@ from src.api.routes import (
     mcp,
     memory,
     notification,
+    opensandbox_admin,
     persona_preset,
     project,
     revealed_file,
@@ -47,7 +48,6 @@ from src.api.routes import (
     websocket,
 )
 from src.api.routes import settings as settings_router
-from src.api.routes import opensandbox_admin
 from src.api.routes.agent import config as agent_config
 from src.api.routes.agent import model as agent_model
 from src.frontend_resolution import resolve_frontend_target
@@ -86,6 +86,7 @@ API_MULTIPART_UPLOAD_PATHS = {"/api/upload/file", "/api/upload/avatar", "/upload
 _LIFESPAN_BACKGROUND_TASK_NAMES = (
     "session_search_backfill_task",
     "analytics_backfill_task",
+    "analytics_daily_freeze_task",
     "memory_monitor_startup_reset_task",
     "agent_discovery_task",
     "models_preload_task",
@@ -528,6 +529,23 @@ async def lifespan(app: FastAPI):
 
     _analytics_backfill_task = asyncio.create_task(_backfill_analytics())
     app.state.analytics_backfill_task = _analytics_backfill_task
+
+    # Freeze yesterday's UTC+8 analytics snapshot in the background. Any
+    # failure is logged by the worker and must never delay application startup.
+    async def _freeze_daily_analytics() -> None:
+        from src.infra.analytics.daily_freeze import DailyFreezeWorker
+
+        worker = DailyFreezeWorker()
+        try:
+            await worker.run_forever()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("Daily analytics freeze failed: %s", exc)
+        finally:
+            await worker.close()
+
+    app.state.analytics_daily_freeze_task = asyncio.create_task(_freeze_daily_analytics())
 
     # Start embedded WeCom in a background task. External/disabled modes never
     # import the SDK into the FastAPI process.

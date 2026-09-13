@@ -6,7 +6,7 @@
  * Query params mirror backend list APIs (CSV export reuses the same contract).
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, Download } from "lucide-react";
 import { Pagination } from "../common/Pagination";
@@ -25,7 +25,8 @@ import type {
   SessionListResponse,
 } from "../../types/analytics";
 import type { Role } from "../../types";
-import { formatDateTime } from "./analytics/analyticsFormat";
+import { formatDateTime } from "../../utils/datetime";
+import { formatNumber } from "./analytics/analyticsFormat";
 
 export type DrilldownKind = "sessions" | "users" | "feedback" | "runs";
 
@@ -33,6 +34,8 @@ export interface AnalyticsDrilldownFilters {
   agentId?: string;
   personaPresetId?: string;
   roleId?: string;
+  firstUse?: boolean;
+  model?: string;
   sort?: AnalyticsListSort;
 }
 
@@ -56,11 +59,6 @@ interface AnalyticsDrilldownListProps {
 
 const PAGE_SIZE = 20;
 
-function formatNumber(value: number): string {
-  if (!Number.isFinite(value)) return "0";
-  return value.toLocaleString();
-}
-
 export function AnalyticsDrilldownList({
   kind,
   start,
@@ -83,6 +81,8 @@ export function AnalyticsDrilldownList({
     initialFilters?.personaPresetId ?? presetId ?? "",
   );
   const [roleId, setRoleId] = useState(initialFilters?.roleId ?? "");
+  const [firstUse] = useState(initialFilters?.firstUse ?? false);
+  const [model] = useState(initialFilters?.model ?? "");
   const [sort, setSort] = useState<AnalyticsListSort>(
     initialFilters?.sort ??
       (kind === "users" ? "frequency" : "recent"),
@@ -95,6 +95,7 @@ export function AnalyticsDrilldownList({
   const [runs, setRuns] = useState<RunListResponse | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
   const supportsListFilters = kind === "sessions" || kind === "users";
   const supportsCsvExport = kind === "sessions" || kind === "users";
@@ -116,6 +117,7 @@ export function AnalyticsDrilldownList({
   }, [supportsListFilters]);
 
   const fetchData = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setError(null);
     const skip = (page - 1) * PAGE_SIZE;
@@ -129,17 +131,19 @@ export function AnalyticsDrilldownList({
           skip,
           limit: PAGE_SIZE,
         });
-        setSessions(res ?? null);
+        if (requestId === requestIdRef.current) setSessions(res ?? null);
       } else if (kind === "users") {
         const res = await analyticsApi.listActiveUsers(start, end, {
           agentId: agentId || undefined,
           personaPresetId: personaPresetId || undefined,
           roleId: roleId || undefined,
+          // Optional on the API so older deployments keep their existing list behavior.
+          firstUse: firstUse || undefined,
           sort,
           skip,
           limit: PAGE_SIZE,
         });
-        setUsers(res ?? null);
+        if (requestId === requestIdRef.current) setUsers(res ?? null);
       } else if (kind === "feedback") {
         const res = await analyticsApi.listFeedback(start, end, {
           presetId: personaPresetId || presetId,
@@ -147,23 +151,24 @@ export function AnalyticsDrilldownList({
           skip,
           limit: PAGE_SIZE,
         });
-        setFeedback(res ?? null);
+        if (requestId === requestIdRef.current) setFeedback(res ?? null);
       } else {
         const res = await analyticsApi.listRuns(start, end, {
           presetId: personaPresetId || presetId,
+          model: model || undefined,
           skip,
           limit: PAGE_SIZE,
         });
-        setRuns(res ?? null);
+        if (requestId === requestIdRef.current) setRuns(res ?? null);
       }
     } catch (err) {
       const message =
         err instanceof Error
           ? err.message
           : t("common.loadFailed", "Load failed");
-      setError(message);
+      if (requestId === requestIdRef.current) setError(message);
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) setIsLoading(false);
     }
   }, [
     kind,
@@ -175,17 +180,34 @@ export function AnalyticsDrilldownList({
     agentId,
     personaPresetId,
     roleId,
+    firstUse,
+    model,
     sort,
     t,
   ]);
 
   useEffect(() => {
     fetchData();
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [fetchData]);
 
   useEffect(() => {
     setPage(1);
-  }, [kind, start, end, presetId, rating, agentId, personaPresetId, roleId, sort]);
+  }, [
+    kind,
+    start,
+    end,
+    presetId,
+    rating,
+    agentId,
+    personaPresetId,
+    roleId,
+    firstUse,
+    model,
+    sort,
+  ]);
 
   const handleExport = useCallback(async () => {
     if (!supportsCsvExport) return;
@@ -195,6 +217,7 @@ export function AnalyticsDrilldownList({
       agentId: agentId || undefined,
       personaPresetId: personaPresetId || undefined,
       roleId: roleId || undefined,
+      firstUse: firstUse || undefined,
       sort,
     };
     try {
@@ -220,6 +243,7 @@ export function AnalyticsDrilldownList({
     agentId,
     personaPresetId,
     roleId,
+    firstUse,
     sort,
     t,
   ]);
@@ -514,7 +538,9 @@ export function AnalyticsDrilldownList({
                             {formatNumber(row.session_count)}
                           </td>
                           <td className="whitespace-nowrap py-2 pr-3">
-                            {formatDateTime(row.last_active_at)}
+                            {row.last_active_at
+                              ? formatDateTime(row.last_active_at)
+                              : "—"}
                           </td>
                         </tr>
                       ))

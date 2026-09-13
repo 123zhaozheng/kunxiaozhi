@@ -53,7 +53,7 @@ class ActivityStorage:
 
         for index in indexes_to_create:  # type: ignore[arg-type]
             try:
-                await self.collection.create_index(index)  # type: ignore[arg-type]
+                await self.collection.create_index(index, background=True)  # type: ignore[arg-type]
             except Exception as e:
                 # Index already exists is not an error
                 if "duplicate key" not in str(e).lower() and "index already exists" not in str(e).lower():
@@ -199,3 +199,11 @@ class ActivityStorage:
         except Exception as e:
             logger.warning(f"Failed to list activities: {e}")
             return []
+
+
+async def record_message_activity(user_id: str, at: Optional[datetime] = None) -> None:
+    """Record a message best-effort from every message ingestion path."""
+    try:
+        await ActivityStorage().record(user_id, "message", at=at)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to record message activity for user=%s: %s", user_id, exc)

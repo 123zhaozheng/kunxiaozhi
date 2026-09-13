@@ -5,7 +5,7 @@
  * 不展示全局 by-agent / by-persona 对比看板。
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   BarChart3,
@@ -44,15 +44,9 @@ import {
   type AnalyticsDateRange,
   type FixedRangePreset,
 } from "./analytics/analyticsDates";
+import { formatNumber } from "./analytics/analyticsFormat";
 
 const BAR_COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444"];
-
-function formatNumber(value: number): string {
-  if (!Number.isFinite(value)) return "0";
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-  return value.toLocaleString();
-}
 
 interface PresetAnalyticsModalProps {
   open: boolean;
@@ -127,6 +121,7 @@ export function PresetAnalyticsModal({
     kind: DrilldownKind;
     rating?: "up" | "down";
   } | null>(null);
+  const requestIdRef = useRef(0);
 
   const effectiveRange = useMemo(
     () => effectiveRangeFor(rangePreset, customRange),
@@ -140,6 +135,7 @@ export function PresetAnalyticsModal({
 
   const fetchMetrics = useCallback(async () => {
     if (!preset) return;
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setError(null);
     try {
@@ -148,15 +144,15 @@ export function PresetAnalyticsModal({
         effectiveRange.start,
         effectiveRange.end,
       );
-      setMetrics(data ?? null);
+      if (requestId === requestIdRef.current) setMetrics(data ?? null);
     } catch (err) {
       const message =
         err instanceof Error
           ? err.message
           : t("common.loadFailed", "Load failed");
-      setError(message);
+      if (requestId === requestIdRef.current) setError(message);
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) setIsLoading(false);
     }
   }, [preset, effectiveRange, t]);
 
@@ -164,8 +160,12 @@ export function PresetAnalyticsModal({
     if (open) {
       fetchMetrics();
     } else {
+      requestIdRef.current += 1;
       setDrilldown(null);
     }
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [open, fetchMetrics]);
 
   useEffect(() => {

@@ -121,6 +121,11 @@ class AnalyticsBackfillWorker:
     async def _process_batch(self) -> int:
         db = get_mongo_client()[settings.MONGODB_DB]
         traces_col = db[settings.MONGODB_TRACES_COLLECTION]
+        try:
+            sessions_col = db[settings.MONGODB_SESSIONS_COLLECTION]
+        except KeyError:
+            # Older lightweight test doubles may not expose sessions.
+            sessions_col = None
         activity_col = db["user_daily_activity"]
         snapshot_col = db["analytics_daily_snapshot"]
         state_col = db[STATE_COLLECTION]
@@ -139,12 +144,17 @@ class AnalyticsBackfillWorker:
 
         # Load progress cursor
         state_doc = await state_col.find_one({"_id": STATE_DOC_ID})
-        cursor_date_str: str | None = (
-            state_doc.get("cursor_date") if state_doc else None
-        )
+        cursor_date_str: str | None = state_doc.get("cursor_date") if state_doc else None
+        failed_dates: list[str] = list(state_doc.get("failed_dates", [])) if state_doc else []
+        failed_dates = sorted({date for date in failed_dates if date >= earliest_date_str})
 
-        # Decide start date for this batch
-        if cursor_date_str and cursor_date_str >= earliest_date_str:
+        # Retry failed dates before advancing the normal cursor. A failed day
+        # is never silently skipped by a later successful cursor update.
+        days: list[str] = []
+        if failed_dates:
+            days = failed_dates[: self._batch_days]
+            start_dt = datetime.strptime(days[0], "%Y-%m-%d").replace(tzinfo=CST)
+        elif cursor_date_str and cursor_date_str >= earliest_date_str:
             # Advance past last completed date
             cursor_dt = datetime.strptime(cursor_date_str, "%Y-%m-%d").replace(
                 tzinfo=CST
@@ -166,12 +176,12 @@ class AnalyticsBackfillWorker:
             end_dt = datetime.strptime(today_str, "%Y-%m-%d").replace(tzinfo=CST)
             end_date_str = today_str
 
-        # Generate day list
-        days: list[str] = []
-        cur = start_dt
-        while cur.strftime("%Y-%m-%d") < today_str and cur < end_dt:
-            days.append(cur.strftime("%Y-%m-%d"))
-            cur += timedelta(days=1)
+        # Generate day list for the normal cursor path.
+        if not days:
+            cur = start_dt
+            while cur.strftime("%Y-%m-%d") < today_str and cur < end_dt:
+                days.append(cur.strftime("%Y-%m-%d"))
+                cur += timedelta(days=1)
         if not days:
             return 0
 
@@ -183,25 +193,48 @@ class AnalyticsBackfillWorker:
         )
 
         now_utc = datetime.now(timezone.utc)
+        processed_count = 0
 
         for target_date in days:
             date_start = datetime.strptime(target_date, "%Y-%m-%d").replace(tzinfo=CST)
             date_end = date_start + timedelta(days=1)
 
-            await self._backfill_activity_for_day(
+            activity_ok = await self._backfill_activity_for_day(
                 activity_col, traces_col, target_date, date_start, date_end, now_utc
             )
-            await self._backfill_snapshot_for_day(
-                snapshot_col, traces_col, target_date, date_start, date_end, now_utc
+            snapshot_ok = await self._backfill_snapshot_for_day(
+                snapshot_col,
+                traces_col,
+                sessions_col,
+                target_date,
+                date_start,
+                date_end,
+                now_utc,
             )
 
-            # Update cursor after each day so partial progress survives crashes
+            if not (activity_ok and snapshot_ok):
+                if target_date not in failed_dates:
+                    failed_dates.append(target_date)
+                    failed_dates.sort()
+                try:
+                    await state_col.update_one(
+                        {"_id": STATE_DOC_ID},
+                        {"$set": {"failed_dates": failed_dates, "updated_at": now_utc}},
+                        upsert=True,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Failed to persist failed backfill date %s: %s", target_date, exc)
+                continue
+
+            failed_dates = [date for date in failed_dates if date != target_date]
+            # Update cursor only after both activity and snapshot succeeded.
             try:
                 await state_col.update_one(
                     {"_id": STATE_DOC_ID},
                     {
                         "$set": {
                             "cursor_date": target_date,
+                            "failed_dates": failed_dates,
                             "updated_at": now_utc,
                         }
                     },
@@ -209,8 +242,9 @@ class AnalyticsBackfillWorker:
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Failed to persist backfill cursor: %s", exc)
+            processed_count += 1
 
-        return len(days)
+        return processed_count
 
     # ── per-day helpers ─────────────────────────────────────────────
 
@@ -222,7 +256,7 @@ class AnalyticsBackfillWorker:
         date_start: datetime,
         date_end: datetime,
         now_utc: datetime,
-    ) -> None:
+    ) -> bool:
         """Derive user_daily_activity docs with source=message for one day."""
         pipeline: list[dict[str, Any]] = [
             {
@@ -243,10 +277,10 @@ class AnalyticsBackfillWorker:
             docs = await traces_col.aggregate(pipeline).to_list(length=None)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Activity backfill aggregate for %s failed: %s", target_date, exc)
-            return
+            return False
 
         if not docs:
-            return
+            return True
 
         ops: list[Any] = []
         for doc in docs:
@@ -276,21 +310,23 @@ class AnalyticsBackfillWorker:
                 await activity_col.bulk_write(ops, ordered=False)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Activity backfill bulk_write for %s failed: %s", target_date, exc)
+                return False
+        return True
 
     @staticmethod
     async def _backfill_snapshot_for_day(
         snapshot_col: Any,
         traces_col: Any,
+        sessions_col: Any,
         target_date: str,
         date_start: datetime,
         date_end: datetime,
         now_utc: datetime,
-    ) -> None:
+    ) -> bool:
         """Derive analytics_daily_snapshot docs for one day.
 
-        Mirrors the aggregation in ``snapshot._freeze_dates`` but without
-        sessions lookup for new_sessions (sessions may have been deleted;
-        we accept 0 for historical new_sessions during backfill).
+        Mirrors ``snapshot._freeze_dates`` and independently aggregates
+        ``sessions.created_at`` for new sessions.
         """
         pipeline: list[dict[str, Any]] = [
             {
@@ -384,23 +420,85 @@ class AnalyticsBackfillWorker:
             docs = await traces_col.aggregate(pipeline).to_list(length=None)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Snapshot backfill aggregate for %s failed: %s", target_date, exc)
-            return
+            return False
 
-        if not docs:
-            return
+        try:
+            session_docs = []
+            if sessions_col is not None:
+                session_docs = await sessions_col.aggregate(
+                    [
+                        {"$match": {"created_at": {"$gte": date_start, "$lt": date_end}}},
+                        {
+                            "$group": {
+                                "_id": {
+                                    "user_id": "$user_id",
+                                    "persona_preset_id": "$metadata.persona_preset_id",
+                                    "agent_id": "$agent_id",
+                                },
+                                "new_sessions": {"$sum": 1},
+                                "new_session_ids": {
+                                    "$addToSet": {
+                                        "$ifNull": ["$session_id", {"$toString": "$_id"}]
+                                    }
+                                },
+                            }
+                        },
+                    ]
+                ).to_list(length=None)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Session backfill aggregate for %s failed: %s", target_date, exc)
+            return False
+
+        if not docs and not session_docs:
+            return True
+
+        session_map: dict[tuple[str | None, str | None, str | None], dict[str, Any]] = {}
+        for session_doc in session_docs:
+            sid = session_doc.get("_id") or {}
+            key = (
+                str(sid.get("user_id")) if sid.get("user_id") is not None else None,
+                str(sid.get("persona_preset_id")) if sid.get("persona_preset_id") is not None else None,
+                str(sid.get("agent_id")) if sid.get("agent_id") is not None else None,
+            )
+            session_ids = sorted({str(value) for value in session_doc.get("new_session_ids", []) if value})
+            session_map[key] = {"new_sessions": len(session_ids), "new_session_ids": session_ids}
+
+        from pymongo import UpdateOne
 
         ops: list[Any] = []
+        trace_keys: set[tuple[str | None, str | None, str | None]] = set()
         for doc in docs:
             eid = doc["_id"]
+            trace_key = (
+                str(eid.get("user_id")) if eid.get("user_id") is not None else None,
+                str(eid.get("persona_preset_id")) if eid.get("persona_preset_id") is not None else None,
+                str(eid.get("agent_id")) if eid.get("agent_id") is not None else None,
+            )
+            trace_keys.add(trace_key)
             active_sess = len({s for s in (doc.get("active_session_ids") or []) if s})
-            from pymongo import UpdateOne
 
             doc_to_upsert = {
                 "date": target_date,
-                "user_id": str(eid["user_id"]),
-                "persona_preset_id": eid.get("persona_preset_id"),
-                "agent_id": eid.get("agent_id"),
-                "new_sessions": 0,  # Cannot recover after hard-delete
+                "user_id": trace_key[0],
+                "persona_preset_id": trace_key[1],
+                "agent_id": trace_key[2],
+                "new_sessions": session_map.get(
+                    (
+                        trace_key[0],
+                        trace_key[1],
+                        trace_key[2],
+                    ),
+                    {},
+                ).get("new_sessions", 0),
+                "new_session_ids": session_map.get(
+                    (
+                        trace_key[0],
+                        trace_key[1],
+                        trace_key[2],
+                    ),
+                    {},
+                ).get("new_session_ids", []),
+                "active_session_ids": [str(value) for value in (doc.get("active_session_ids") or []) if value],
                 "active_sessions": active_sess,
                 "user_messages": int(doc.get("user_messages", 0) or 0),
                 "tokens": int(doc.get("tokens", 0) or 0),
@@ -420,11 +518,45 @@ class AnalyticsBackfillWorker:
                 )
             )
 
+        for key, session_data in session_map.items():
+            if key in trace_keys:
+                continue
+            user_id, persona_id, agent_id = key
+            ops.append(
+                UpdateOne(
+                    {
+                        "date": target_date,
+                        "user_id": user_id,
+                        "persona_preset_id": persona_id,
+                        "agent_id": agent_id,
+                    },
+                    {
+                        "$setOnInsert": {
+                            "date": target_date,
+                            "user_id": user_id,
+                            "persona_preset_id": persona_id,
+                            "agent_id": agent_id,
+                            "new_sessions": session_data["new_sessions"],
+                            "new_session_ids": session_data["new_session_ids"],
+                            "active_sessions": 0,
+                            "active_session_ids": [],
+                            "user_messages": 0,
+                            "tokens": 0,
+                            "last_active_at": None,
+                            "frozen_at": now_utc,
+                        }
+                    },
+                    upsert=True,
+                )
+            )
+
         if ops:
             try:
                 await snapshot_col.bulk_write(ops, ordered=False)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Snapshot backfill bulk_write for %s failed: %s", target_date, exc)
+                return False
+        return True
 
     # ── lock management (mirrors session backfill) ──────────────────
 

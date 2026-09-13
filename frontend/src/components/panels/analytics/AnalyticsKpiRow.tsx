@@ -1,7 +1,7 @@
 /**
  * Analytics KPI Row — the six overview cards.
  *
- * Cards: 活跃用户/使用用户 · 会话数 · 用户消息 · 总 Token · 人均消息 · 会话均 Token.
+ * Cards: 使用用户 · 会话数 · 用户消息 · 总 Token · 人均消息 · 会话均 Token.
  * Every card carries a sparkline (recharts LineChart with no axes / grid)
  * and a "vs previous period" badge sourced from `summary.previous` — the
  * badge is hidden (never "0%") when the previous period is unavailable.
@@ -36,10 +36,13 @@ export interface AnalyticsKpiRowProps {
   summary: UsageSummaryResponse | null;
   /** Daily usage trend (sessions / messages / tokens) for the sparklines. */
   usageTrend: UsageTrendPoint[];
-  /** Daily active-user counts for the first card's sparkline. */
+  /** Daily using-user counts from `/users/active` for the first card's sparkline. */
   activeTrend: TrendDataPoint[];
-  /** True when a persona/agent filter is active (card 1 switches to 使用用户). */
+  /** A persona/agent filter switches the first card to the using-user metric. */
   isFiltered: boolean;
+  /** Shows a skeleton for KPI values during the initial or filter load. */
+  isLoading: boolean;
+  error?: string | null;
   onUsersDrilldown: () => void;
   onSessionsDrilldown: () => void;
 }
@@ -83,6 +86,7 @@ interface KpiCardProps {
   deltaText: (signedPct: string) => string;
   sparkValues: number[];
   sparkColor: string;
+  isLoading?: boolean;
   hint?: string;
   tooltip?: string;
   onClick?: () => void;
@@ -96,6 +100,7 @@ function KpiCard({
   deltaText,
   sparkValues,
   sparkColor,
+  isLoading = false,
   hint,
   tooltip,
   onClick,
@@ -120,8 +125,18 @@ function KpiCard({
         </p>
       </div>
       <div className="flex items-baseline justify-between gap-2">
-        <p className="truncate text-lg font-bold text-stone-900 dark:text-stone-100 sm:text-xl">
-          {value}
+        <p
+          className="truncate text-lg font-bold text-stone-900 dark:text-stone-100 sm:text-xl"
+          aria-busy={isLoading}
+        >
+          {isLoading ? (
+            <span
+              className="inline-block h-6 w-20 animate-pulse rounded bg-stone-200 dark:bg-stone-700"
+              aria-hidden
+            />
+          ) : (
+            value
+          )}
         </p>
         {delta !== null ? (
           <span
@@ -172,10 +187,15 @@ export function AnalyticsKpiRow({
   usageTrend,
   activeTrend,
   isFiltered,
+  isLoading,
+  error,
   onUsersDrilldown,
   onSessionsDrilldown,
 }: AnalyticsKpiRowProps) {
   const { t } = useTranslation();
+  // Unfiltered the headline counts logins, so the message-based `/users/active`
+  // series would trend a different metric than the number above it.
+  const usersSparkline = isFiltered ? activeTrend.map((point) => point.value) : [];
 
   const valueFor = (metric: KpiMetric): string => {
     switch (metric) {
@@ -203,7 +223,7 @@ export function AnalyticsKpiRow({
   };
 
   const deltaFor = (metric: KpiMetric): number | null =>
-    kpiDeltaPct(summary, metric, isFiltered);
+    kpiDeltaPct(summary, metric, metric === "users" ? isFiltered : false);
 
   const deltaText = (pct: string) =>
     t("analytics.overview.vsPrev", { pct, defaultValue: "较上一区间 {{pct}}" });
@@ -211,9 +231,9 @@ export function AnalyticsKpiRow({
   const sparkFor = (metric: KpiMetric): number[] => {
     switch (metric) {
       case "users":
-        return activeTrend.map((point) => point.value);
+        return usersSparkline;
       case "sessions":
-        return usageTrend.map((point) => point.new_sessions);
+        return usageTrend.map((point) => point.active_sessions);
       case "userMessages":
         return usageTrend.map((point) => point.user_messages);
       case "totalTokens":
@@ -228,23 +248,33 @@ export function AnalyticsKpiRow({
   };
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+    <>
+      {error ? (
+        <p
+          role="alert"
+          className="mb-2 rounded-lg bg-red-50 p-2 text-xs text-red-700 dark:bg-red-900/30 dark:text-red-200"
+        >
+          {error}
+        </p>
+      ) : null}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
       <KpiCard
         icon={Users}
         label={
           isFiltered
             ? t("analytics.overview.usingUsers", "使用用户")
-            : t("analytics.overview.activeUsers")
+            : t("analytics.overview.activeUsers", "活跃用户")
         }
         value={valueFor("users")}
         delta={deltaFor("users")}
         deltaText={deltaText}
         sparkValues={sparkFor("users")}
         sparkColor={PIE_COLORS[0]}
+        isLoading={isLoading}
         hint={
           !isFiltered && summary
             ? t("analytics.overview.usingHint", {
-                count: formatNumber(summary.using_users),
+                count: summary.using_users ?? 0,
                 defaultValue: "其中使用 {{count}} 人",
               })
             : undefined
@@ -261,11 +291,13 @@ export function AnalyticsKpiRow({
         sparkColor={PIE_COLORS[4]}
         hint={
           summary
-            ? t("analytics.overview.activeSessions", {
-                count: formatNumber(summary.active_sessions),
+            ? t("analytics.overview.newSessions", {
+                count: formatNumber(summary.new_sessions),
+                defaultValue: "新建 {{count}}",
               })
             : undefined
         }
+        isLoading={isLoading}
         onClick={onSessionsDrilldown}
       />
       <KpiCard
@@ -276,6 +308,7 @@ export function AnalyticsKpiRow({
         deltaText={deltaText}
         sparkValues={sparkFor("userMessages")}
         sparkColor={PIE_COLORS[1]}
+        isLoading={isLoading}
       />
       <KpiCard
         icon={Cpu}
@@ -285,6 +318,7 @@ export function AnalyticsKpiRow({
         deltaText={deltaText}
         sparkValues={sparkFor("totalTokens")}
         sparkColor={PIE_COLORS[3]}
+        isLoading={isLoading}
       />
       <KpiCard
         icon={PieChart}
@@ -294,6 +328,7 @@ export function AnalyticsKpiRow({
         deltaText={deltaText}
         sparkValues={sparkFor("messagesPerUser")}
         sparkColor={PIE_COLORS[2]}
+        isLoading={isLoading}
         tooltip={t(
           "analytics.overview.messagesPerUserHint",
           "分母为发过消息的人数",
@@ -307,7 +342,9 @@ export function AnalyticsKpiRow({
         deltaText={deltaText}
         sparkValues={sparkFor("tokensPerSession")}
         sparkColor={PIE_COLORS[5]}
+        isLoading={isLoading}
       />
-    </div>
+      </div>
+    </>
   );
 }

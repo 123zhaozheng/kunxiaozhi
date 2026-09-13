@@ -3,7 +3,7 @@
  *
  * Consistency contract (PRD R3.1): each donut's center number is read from
  * the very same accessor as its KPI card in `analyticsKpi.ts`:
- *   - 智能体 Top5 / Persona Top5 centers == sessions KPI (new_sessions)
+ *   - 智能体 Top5 / Persona Top5 centers == sessions KPI (active_sessions)
  *   - 模型 Token Top5 center            == total tokens KPI (total_tokens)
  */
 
@@ -42,6 +42,13 @@ export interface AnalyticsTopRowProps {
   feedbackSummary: FeedbackSummaryResponse | null;
   feedbackByPreset: ByPresetFeedbackItem[];
   isLoading: boolean;
+  errors?: {
+    sessionsByAgent?: string | null;
+    sessionsByPersona?: string | null;
+    tokensByModel?: string | null;
+    feedbackSummary?: string | null;
+    feedbackByPreset?: string | null;
+  };
   onAgentSliceClick: (entry: ByLabelItem) => void;
   onPersonaSliceClick: (entry: ByLabelItem) => void;
   onModelSliceClick: (entry: ByLabelItem) => void;
@@ -57,6 +64,7 @@ export function AnalyticsTopRow({
   feedbackSummary,
   feedbackByPreset,
   isLoading,
+  errors = {},
   onAgentSliceClick,
   onPersonaSliceClick,
   onModelSliceClick,
@@ -81,6 +89,7 @@ export function AnalyticsTopRow({
             )}
             icon={<Cpu size={16} aria-hidden />}
             isLoading={isLoading}
+            error={errors.sessionsByAgent}
             isEmpty={!isLoading && (sessionsByAgent?.length ?? 0) === 0}
           >
             <DonutBlock
@@ -98,6 +107,7 @@ export function AnalyticsTopRow({
             )}
             icon={<UserIcon size={16} aria-hidden />}
             isLoading={isLoading}
+            error={errors.sessionsByPersona}
             isEmpty={!isLoading && (sessionsByPersona?.length ?? 0) === 0}
           >
             <DonutBlock
@@ -115,6 +125,7 @@ export function AnalyticsTopRow({
             )}
             icon={<Cpu size={16} aria-hidden />}
             isLoading={isLoading}
+            error={errors.tokensByModel}
             isEmpty={!isLoading && (tokensByModel?.length ?? 0) === 0}
           >
             <DonutBlock
@@ -132,6 +143,14 @@ export function AnalyticsTopRow({
         <h2 className="mb-2 text-sm font-semibold tracking-wide text-stone-600 uppercase dark:text-stone-400">
           {t("analytics.feedback.title", "反馈")}
         </h2>
+        {errors.feedbackSummary ? (
+          <p
+            role="alert"
+            className="mb-2 rounded-lg bg-red-50 p-2 text-xs text-red-700 dark:bg-red-900/30 dark:text-red-200"
+          >
+            {errors.feedbackSummary}
+          </p>
+        ) : null}
         <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatsCard
             icon={ThumbsUp}
@@ -167,6 +186,7 @@ export function AnalyticsTopRow({
             )}
             icon={<UserIcon size={16} aria-hidden />}
             isLoading={isLoading}
+            error={errors.feedbackByPreset}
             isEmpty={!isLoading && (feedbackByPreset?.length ?? 0) === 0}
           >
             <FeedbackByPresetBar data={feedbackByPreset} onSliceClick={onFeedbackPresetClick} />
@@ -179,6 +199,7 @@ export function AnalyticsTopRow({
             )}
             icon={<ThumbsDown size={16} aria-hidden />}
             isLoading={isLoading}
+            error={errors.feedbackSummary}
             isEmpty={
               !isLoading &&
               (feedbackSummary?.reason_distribution.length ?? 0) === 0

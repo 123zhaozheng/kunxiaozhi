@@ -45,9 +45,9 @@ const summary: UsageSummaryResponse = {
 };
 
 test("donut center accessors are pinned to the KPI summary fields", () => {
-  // Sessions KPI card and both session donut centers: created-in-range sessions.
-  assert.equal(kpiSessionsValue(summary), summary.new_sessions);
-  assert.equal(kpiSessionsValue(summary), 123);
+  // Sessions KPI card and both session donut centers: active sessions.
+  assert.equal(kpiSessionsValue(summary), summary.active_sessions);
+  assert.equal(kpiSessionsValue(summary), 91);
   // Model-token donut center: total tokens.
   assert.equal(kpiTotalTokensValue(summary), summary.total_tokens);
   assert.equal(kpiTotalTokensValue(summary), 78900);
@@ -60,6 +60,25 @@ test("KPI row renders the session/token cards from the shared accessors", () => 
   assert.match(kpiRowSource, /from "\.\/analyticsKpi"/);
   assert.match(kpiRowSource, /kpiSessionsValue\(summary\)/);
   assert.match(kpiRowSource, /kpiTotalTokensValue\(summary\)/);
+});
+
+test("session KPI uses active sessions as the main and trend value", () => {
+  assert.match(kpiRowSource, /kpiSessionsValue\(summary\)/);
+  assert.match(kpiRowSource, /point\.active_sessions/);
+  assert.match(kpiRowSource, /analytics\.overview\.newSessions/);
+});
+
+test("first KPI card follows the PRD filter-dependent user metric", () => {
+  // Unfiltered the headline is 活跃用户 (logins) with a using-user subline;
+  // a persona/agent filter switches it to 使用用户. Hardcoding either side
+  // was a real regression, so assert the conditional wiring itself.
+  assert.match(kpiRowSource, /kpiUsersValue\(summary, isFiltered\)/);
+  assert.match(kpiRowSource, /analytics\.overview\.usingUsers/);
+  assert.match(kpiRowSource, /analytics\.overview\.activeUsers/);
+  assert.match(kpiRowSource, /analytics\.overview\.usingHint/);
+  // The `/users/active` series counts users with messages, so it may only
+  // trend the headline when the headline is also the using-user metric.
+  assert.match(kpiRowSource, /isFiltered \? activeTrend\.map/);
 });
 
 test("both session donut centers use the sessions KPI accessor", () => {

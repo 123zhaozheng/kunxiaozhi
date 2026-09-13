@@ -139,14 +139,9 @@ class TaskExecutor:
                 await presenter.emit_user_message(
                     display_message or message, attachments=attachments
                 )
-                # 追加活跃度记录 (message)，失败不影响主流程
-                try:
-                    from src.infra.analytics.activity_storage import ActivityStorage
+                from src.infra.analytics.activity_storage import record_message_activity
 
-                    activity_storage = ActivityStorage()
-                    await activity_storage.record(user_id, "message")
-                except Exception as e:
-                    logger.warning(f"Failed to record message activity for user={user_id}: {e}")
+                await record_message_activity(user_id)
 
             # 保存 trace_id 和 agent_id 到 run_info，保留已有的 flag
             run_info_entry: dict[str, Any] = {

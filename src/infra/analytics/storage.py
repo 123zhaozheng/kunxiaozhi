@@ -377,40 +377,51 @@ class AnalyticsStorage:
         self,
         start: datetime,
         end: datetime,
+        filters: UsageFilters | None = None,
     ) -> list[ByLabelItem]:
         """按模型聚合 token 消耗。"""
         s = _ensure_datetime(start)
         e = _ensure_datetime(end)
-        pipeline: list[dict[str, Any]] = [
-            {
-                "$match": {
-                    "events.event_type": _TOKEN_USAGE_EVENT,
-                    "started_at": {"$gte": s, "$lt": e},
-                }
-            },
-            {"$unwind": "$events"},
-            {"$match": {"events.event_type": _TOKEN_USAGE_EVENT}},
-            {
-                "$group": {
-                    "_id": {
-                        "$ifNull": [
-                            "$events.data.model_id",
-                            "$events.data.model",
-                            "unknown",
-                        ]
-                    },
-                    "value": {
-                        "$sum": {
-                            "$ifNull": ["$events.data.total_tokens", 0],
-                        }
-                    },
-                }
-            },
-            {"$match": {"_id": {"$ne": None}}},
-            {"$sort": {"value": -1}},
-            {"$limit": 50},
-            {"$project": {"_id": 0, "label": "$_id", "value": 1}},
-        ]
+        if filters is None:
+            pipeline: list[dict[str, Any]] = [
+                {
+                    "$match": {
+                        "events.event_type": _TOKEN_USAGE_EVENT,
+                        "started_at": {"$gte": s, "$lt": e},
+                    }
+                },
+            ]
+        else:
+            # Keep persona fallback and role/agent filtering in the shared
+            # usage-facts stages.  The final project removes events, so token
+            # events are unwound immediately before that project stage.
+            pipeline = usage_facts_stages(filters)[:-1]
+        pipeline.extend(
+            [
+                {"$unwind": "$events"},
+                {"$match": {"events.event_type": _TOKEN_USAGE_EVENT}},
+                {
+                    "$group": {
+                        "_id": {
+                            "$ifNull": [
+                                "$events.data.model_id",
+                                "$events.data.model",
+                                "unknown",
+                            ]
+                        },
+                        "value": {
+                            "$sum": {
+                                "$ifNull": ["$events.data.total_tokens", 0],
+                            }
+                        },
+                    }
+                },
+                {"$match": {"_id": {"$ne": None}}},
+                {"$sort": {"value": -1}},
+                {"$limit": 50},
+                {"$project": {"_id": 0, "label": "$_id", "value": 1}},
+            ]
+        )
         out: list[ByLabelItem] = []
         async for doc in self.traces.aggregate(pipeline):
             out.append(
@@ -425,97 +436,90 @@ class AnalyticsStorage:
         start: datetime,
         end: datetime,
         limit: int = _TOP_PRESET_LIMIT,
+        filters: UsageFilters | None = None,
     ) -> list[ByLabelItem]:
-        """按 agent_id 聚合会话数（by-agent 维度）。"""
+        """按 agent_id 聚合活跃会话数（by-agent 环图）。
+
+        与会话 KPI 卡及环图中心同源（``active_sessions``），因此切片口径与中心
+        数字一致；数据来自快照层，历史值同样不可变。
+        """
         s = _ensure_datetime(start)
         e = _ensure_datetime(end)
-        pipeline: list[dict[str, Any]] = [
-            {"$match": {"created_at": {"$gte": s, "$lt": e}}},
-            {
-                "$group": {
-                    "_id": {"$ifNull": ["$agent_id", "default"]},
-                    "value": {"$sum": 1},
-                }
-            },
-            {"$project": {"_id": 0, "label": "$_id", "value": 1}},
-            {"$sort": {"value": -1}},
-            {"$limit": max(int(limit), 1)},
-        ]
-        out: list[ByLabelItem] = []
+        resolved = filters or UsageFilters(start=s, end=e)
+        return await self._sessions_by_dimension(
+            resolved, dimension="by_agent", key="agent_id", limit=limit
+        )
+
+    async def _sessions_by_dimension(
+        self,
+        filters: UsageFilters,
+        *,
+        dimension: str,
+        key: str,
+        limit: int,
+        name_key: str | None = None,
+    ) -> list[ByLabelItem]:
+        """Top-N active sessions for one snapshot dimension."""
         try:
-            async for doc in self.sessions.aggregate(pipeline):
-                out.append(
+            result = await read_or_freeze(filters, storage=self)
+            rows = list(result.get(dimension, []) or [])
+        except Exception as ex:
+            logger.warning("sessions by %s from snapshot failed: %s", key, ex)
+            return []
+
+        missing_name_ids = [
+            str(row.get(key))
+            for row in rows
+            if name_key and row.get(key) and not row.get(name_key)
+        ]
+        names = await self._preset_names(missing_name_ids) if missing_name_ids else {}
+
+        items: list[ByLabelItem] = []
+        for row in rows:
+            identifier = row.get(key)
+            value = int(row.get("active_sessions", 0) or 0)
+            if value <= 0:
+                continue
+            if name_key:
+                if not identifier:
+                    continue
+                label = row.get(name_key) or names.get(str(identifier)) or str(identifier)
+                items.append(
                     ByLabelItem(
-                        label=str(doc.get("label", "") or "—"),
-                        value=float(doc.get("value", 0)),
+                        label=str(label),
+                        value=float(value),
+                        id=str(identifier),
                     )
                 )
-        except Exception as ex:
-            logger.warning("get_sessions_by_agent failed: %s", ex)
-        return out
+                continue
+            label = str(identifier or "default")
+            items.append(ByLabelItem(label=label, value=float(value)))
+        items.sort(key=lambda item: (-item.value, item.label))
+        return items[:limit]
 
     async def get_sessions_by_persona(
         self,
         start: datetime,
         end: datetime,
         limit: int = _TOP_PRESET_LIMIT,
+        filters: UsageFilters | None = None,
     ) -> list[ByLabelItem]:
-        """按 persona_preset_id 聚合会话数（by-persona 维度）。
+        """按 persona_preset_id 聚合活跃会话数（by-persona 环图）。
 
-        label 优先使用 metadata.persona_preset_name，缺失时回退 preset_id。
+        与会话 KPI 卡及环图中心同源（``active_sessions``）。persona 归属沿用
+        统一口径：会话 metadata 优先、缺失回退 trace metadata。
+        label 优先使用 persona_preset_name，缺失时回退 preset_id。
         """
-        s = _ensure_datetime(start)
-        e = _ensure_datetime(end)
-        pipeline: list[dict[str, Any]] = [
-            {
-                "$match": {
-                    "created_at": {"$gte": s, "$lt": e},
-                    "metadata.persona_preset_id": {"$exists": True, "$nin": [None, ""]},
-                }
-            },
-            {
-                "$group": {
-                    "_id": "$metadata.persona_preset_id",
-                    "name": {"$first": "$metadata.persona_preset_name"},
-                    "value": {"$sum": 1},
-                }
-            },
-            {
-                "$project": {
-                    "_id": 0,
-                    "id": "$_id",
-                    "label": {
-                        "$cond": [
-                            {
-                                "$and": [
-                                    {"$ne": ["$name", None]},
-                                    {"$ne": ["$name", ""]},
-                                ]
-                            },
-                            "$name",
-                            "$_id",
-                        ]
-                    },
-                    "value": 1,
-                }
-            },
-            {"$sort": {"value": -1}},
-            {"$limit": max(int(limit), 1)},
-        ]
-        out: list[ByLabelItem] = []
-        try:
-            async for doc in self.sessions.aggregate(pipeline):
-                preset_id = doc.get("id")
-                out.append(
-                    ByLabelItem(
-                        label=str(doc.get("label", "") or "—"),
-                        value=float(doc.get("value", 0)),
-                        id=str(preset_id) if preset_id else None,
-                    )
-                )
-        except Exception as ex:
-            logger.warning("get_sessions_by_persona failed: %s", ex)
-        return out
+        s_dt = _ensure_datetime(start)
+        e_dt = _ensure_datetime(end)
+        resolved = filters or UsageFilters(start=s_dt, end=e_dt)
+        return await self._sessions_by_dimension(
+            resolved,
+            dimension="by_persona",
+            key="persona_preset_id",
+            limit=limit,
+            name_key="persona_preset_name",
+        )
 
     # ── PR2: 按角色智能体 + 反馈 + 钻取明细 ─────────────────────────
 
@@ -783,32 +787,10 @@ class AnalyticsStorage:
         start: datetime,
         end: datetime,
     ) -> list[str]:
-        """在时间范围内，返回持有指定 RBAC 角色的 user_id 列表。"""
-        s = _ensure_datetime(start)
-        e = _ensure_datetime(end)
+        """返回持有指定 RBAC 角色的全部用户，不依赖会话创建时间。"""
         try:
-            session_user_ids = await self.sessions.distinct(
-                "user_id",
-                {
-                    "created_at": {"$gte": s, "$lt": e},
-                    "user_id": {"$exists": True, "$nin": [None, ""]},
-                },
-            )
-        except Exception as ex:
-            logger.warning("distinct session user_ids failed: %s", ex)
-            return []
-        cleaned = [str(uid) for uid in session_user_ids if uid]
-        if not cleaned:
-            return []
-        object_ids = _user_object_ids(cleaned)
-        if not object_ids:
-            return []
-        try:
-            cursor = self.users.find(
-                {"_id": {"$in": object_ids}, "roles": role_id},
-                {"_id": 1},
-            )
-            docs = await cursor.to_list(length=len(object_ids))
+            cursor = self.users.find({"roles": role_id}, {"_id": 1})
+            docs = await cursor.to_list(length=None)
             return [str(doc["_id"]) for doc in docs if doc.get("_id") is not None]
         except Exception as ex:
             logger.warning("filter users by role failed: %s", ex)
@@ -967,6 +949,33 @@ class AnalyticsStorage:
             items=items, total=total, skip=skip, limit=limit, has_more=has_more
         )
 
+    async def _restrict_to_first_use(self, filters: UsageFilters) -> UsageFilters:
+        """Narrow ``role_user_ids`` to users whose first message day is in range.
+
+        Shares ``_insights_new_users``'s source so the drill-down list matches
+        the insight number it was opened from.
+        """
+        start_str, end_str = range_to_date_strings(filters.start, filters.end)
+        candidates = await self.activity_storage.distinct_users(
+            start_str, end_str, source="message"
+        )
+        if filters.role_user_ids is not None:
+            allowed = set(filters.role_user_ids)
+            candidates = [uid for uid in candidates if uid in allowed]
+        first_dates = await self.activity_storage.first_message_date(candidates)
+        new_user_ids = [
+            uid
+            for uid in candidates
+            if (first := first_dates.get(uid)) and start_str <= first <= end_str
+        ]
+        return UsageFilters(
+            start=filters.start,
+            end=filters.end,
+            persona_preset_id=filters.persona_preset_id,
+            agent_id=filters.agent_id,
+            role_user_ids=new_user_ids,
+        )
+
     async def list_active_users(
         self,
         start: datetime,
@@ -978,6 +987,7 @@ class AnalyticsStorage:
         persona_preset_id: str | None = None,
         role_id: str | None = None,
         sort: str = "frequency",
+        first_use: bool = False,
     ) -> ActiveUserListResponse:
         """活跃用户列表。
 
@@ -987,6 +997,8 @@ class AnalyticsStorage:
         sort:
           - frequency: 按会话数降序（默认）
           - recent: 按最近活跃时间降序
+        first_use:
+          仅保留首次使用日落在本区间的用户，与洞察栏「本期新增使用者」同源。
         """
         s = _ensure_datetime(start)
         e = _ensure_datetime(end)
@@ -997,6 +1009,8 @@ class AnalyticsStorage:
             agent_id=agent_id,
             role_id=role_id,
         )
+        if first_use:
+            filters = await self._restrict_to_first_use(filters)
 
         sort_mode = (sort or "frequency").lower()
         sort_stage = (
@@ -1162,6 +1176,7 @@ class AnalyticsStorage:
         preset_id: str | None = None,
         skip: int = 0,
         limit: int = 20,
+        model: str | None = None,
     ) -> RunListResponse:
         """运行明细列表（含 token 用量，分页）。"""
         s = _ensure_datetime(start)
@@ -1169,6 +1184,18 @@ class AnalyticsStorage:
         query: dict[str, Any] = {"started_at": {"$gte": s, "$lt": e}}
         if preset_id:
             query["metadata.persona_preset_id"] = preset_id
+        if model:
+            # Same field path as get_tokens_by_model, so drilling into a model
+            # slice lists exactly the runs that produced it.
+            query["events"] = {
+                "$elemMatch": {
+                    "event_type": _TOKEN_USAGE_EVENT,
+                    "$or": [
+                        {"data.model_id": model},
+                        {"data.model": model},
+                    ],
+                }
+            }
         projection = {
             "events": 0,  # 避免一次取出大事件数组，token 单独查
         }
@@ -1268,14 +1295,6 @@ class AnalyticsStorage:
                 "user_messages": int(total.get("user_messages", 0) or 0),
                 "total_tokens": int(total.get("tokens", 0) or 0),
             }
-            # If snapshot layer returned all zeros, it may have failed silently.
-            # Fall through to direct real-time computation as safety net.
-            if (
-                numbers["user_messages"] == 0
-                and numbers["total_tokens"] == 0
-                and numbers["new_sessions"] == 0
-            ):
-                raise ValueError("Snapshot layer returned empty result, falling back to real-time")
         except Exception as ex:
             logger.warning("get_usage_summary from snapshot failed: %s", ex)
             # Fallback to real-time computation
@@ -1517,18 +1536,11 @@ class AnalyticsStorage:
             )
         return items
 
-    async def list_usage_by_user(
-        self,
-        filters: UsageFilters,
-        skip: int = 0,
-        limit: int = 20,
-    ) -> UsageByUserResponse:
-        """使用明细，行粒度为「用户 × Persona」，仅含区间内发过消息的用户。"""
-        # Note: Snapshot layer does not yet support list-level pagination.
-        # This remains a real-time query path. Will be integrated in future iteration
-        # when snapshot supports granular user-level filtering with pagination.
-
-        facts_pipeline = usage_facts_stages(filters) + [
+    async def _usage_by_user_persona_realtime(
+        self, filters: UsageFilters
+    ) -> list[dict[str, Any]]:
+        """Real-time user×persona rows shaped like the snapshot contract."""
+        pipeline = usage_facts_stages(filters) + [
             {
                 "$group": {
                     "_id": {
@@ -1537,59 +1549,75 @@ class AnalyticsStorage:
                     },
                     "persona_preset_name": {"$first": "$persona_preset_name"},
                     "user_messages": {"$sum": "$user_messages"},
-                    "total_tokens": {"$sum": "$tokens"},
+                    "tokens": {"$sum": "$tokens"},
                     "active_session_ids": self._active_set_expr("$session_id"),
                     "last_active_at": {"$max": "$started_at"},
                 }
             },
-            {"$match": {"user_messages": {"$gt": 0}, "_id.user_id": {"$nin": [None, ""]}}},
-            {
-                "$facet": {
-                    "total": [{"$count": "count"}],
-                    "items": [
-                        {"$sort": {"user_messages": -1, "last_active_at": -1}},
-                        {"$skip": skip},
-                        {"$limit": limit},
-                    ],
-                }
-            },
+            {"$match": {"_id.user_id": {"$nin": [None, ""]}}},
         ]
-        new_sessions_pipeline: list[dict[str, Any]] = [
-            {"$match": new_sessions_match(filters)},
-            {
-                "$group": {
-                    "_id": {
-                        "user_id": "$user_id",
-                        "persona_preset_id": "$metadata.persona_preset_id",
-                    },
-                    "new_sessions": {"$sum": 1},
+        try:
+            docs = await self.traces.aggregate(pipeline).to_list(length=None)
+        except Exception as ex:
+            logger.warning("usage by-user realtime fallback failed: %s", ex)
+            return []
+        items: list[dict[str, Any]] = []
+        for doc in docs:
+            identifier = doc.get("_id") or {}
+            persona_id = identifier.get("persona_preset_id")
+            items.append(
+                {
+                    "user_id": str(identifier.get("user_id")),
+                    "persona_preset_id": str(persona_id) if persona_id else None,
+                    "persona_preset_name": doc.get("persona_preset_name"),
+                    "user_messages": int(doc.get("user_messages", 0) or 0),
+                    "tokens": int(doc.get("tokens", 0) or 0),
+                    "active_sessions": self._count_active(doc.get("active_session_ids")),
+                    "new_sessions": 0,
+                    "last_active_at": doc.get("last_active_at"),
                 }
-            },
-        ]
+            )
+        return items
 
-        facts_docs, new_sessions_docs = await self._fan_out(
-            [
-                (self.traces, facts_pipeline),
-                (self.sessions, new_sessions_pipeline),
-            ]
+    async def list_usage_by_user(
+        self,
+        filters: UsageFilters,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> UsageByUserResponse:
+        """使用明细，行粒度为「用户 × Persona」，仅含区间内发过消息的用户。"""
+        try:
+            result = await read_or_freeze(filters, storage=self)
+            raw_items = list(result.get("by_user_persona", []) or [])
+        except Exception as ex:
+            # Summary degrades to real-time here, so the detail must too;
+            # returning an empty page would contradict the KPI cards.
+            logger.warning("list_usage_by_user from snapshot failed: %s", ex)
+            raw_items = await self._usage_by_user_persona_realtime(filters)
+
+        # Contract: only users who actually sent messages appear here. The
+        # snapshot also carries new-session rows that have no trace yet.
+        raw_items = [
+            item for item in raw_items if int(item.get("user_messages", 0) or 0) > 0
+        ]
+        # Slicing an unordered aggregate would drift page contents between
+        # requests, so order by traffic with a deterministic tiebreaker.
+        raw_items.sort(
+            key=lambda item: (
+                -int(item.get("user_messages", 0) or 0),
+                -int(item.get("total_tokens", item.get("tokens", 0)) or 0),
+                str(item.get("user_id") or ""),
+                str(item.get("persona_preset_id") or ""),
+            )
         )
-
-        facet = facts_docs[0] if facts_docs else {}
-        total_arr = facet.get("total") or []
-        total = int(total_arr[0].get("count", 0)) if total_arr else 0
-        raw_items = facet.get("items") or []
-
-        new_sessions_by_key: dict[tuple[str, str], int] = {}
-        for doc in new_sessions_docs:
-            key = doc.get("_id") or {}
-            new_sessions_by_key[
-                (str(key.get("user_id") or ""), str(key.get("persona_preset_id") or ""))
-            ] = int(doc.get("new_sessions", 0) or 0)
-
+        total = len(raw_items)
+        # Snapshot aggregation is deliberately not paginated in Mongo.  Keep
+        # pagination here so summary, detail and CSV all consume one frozen set.
+        page_items = raw_items[skip : skip + limit]
         user_ids = [
-            str((doc.get("_id") or {}).get("user_id"))
-            for doc in raw_items
-            if (doc.get("_id") or {}).get("user_id")
+            str(doc.get("user_id") or (doc.get("_id") or {}).get("user_id"))
+            for doc in page_items
+            if (doc.get("user_id") or (doc.get("_id") or {}).get("user_id"))
         ]
         user_meta: dict[str, dict[str, Any]] = {}
         object_ids = _user_object_ids(user_ids)
@@ -1607,18 +1635,18 @@ class AnalyticsStorage:
                 logger.warning("list_usage_by_user user lookup failed: %s", ex)
 
         missing_name_ids = [
-            str((doc.get("_id") or {}).get("persona_preset_id"))
-            for doc in raw_items
-            if (doc.get("_id") or {}).get("persona_preset_id")
+            str(doc.get("persona_preset_id") or (doc.get("_id") or {}).get("persona_preset_id"))
+            for doc in page_items
+            if (doc.get("persona_preset_id") or (doc.get("_id") or {}).get("persona_preset_id"))
             and not doc.get("persona_preset_name")
         ]
         names = await self._preset_names(missing_name_ids)
 
         items: list[UsageByUserItem] = []
-        for doc in raw_items:
+        for doc in page_items:
             key = doc.get("_id") or {}
-            uid = str(key.get("user_id") or "")
-            preset_id = key.get("persona_preset_id")
+            uid = str(doc.get("user_id") or key.get("user_id") or "")
+            preset_id = doc.get("persona_preset_id") or key.get("persona_preset_id")
             preset_id_str = str(preset_id) if preset_id else None
             name = str(doc.get("persona_preset_name") or "")
             if not name and preset_id_str:
@@ -1633,10 +1661,10 @@ class AnalyticsStorage:
                     roles=roles,
                     persona_preset_id=preset_id_str,
                     persona_preset_name=name,
-                    new_sessions=new_sessions_by_key.get((uid, preset_id_str or ""), 0),
-                    active_sessions=self._count_active(doc.get("active_session_ids")),
+                    new_sessions=int(doc.get("new_sessions", 0) or 0),
+                    active_sessions=int(doc.get("active_sessions", 0) or 0),
                     user_messages=int(doc.get("user_messages", 0) or 0),
-                    total_tokens=int(doc.get("total_tokens", 0) or 0),
+                    total_tokens=int(doc.get("tokens", doc.get("total_tokens", 0)) or 0),
                     last_active_at=doc.get("last_active_at"),
                 )
             )
@@ -1684,22 +1712,35 @@ class AnalyticsStorage:
     async def _insights_peak(self, filters: UsageFilters) -> UsageInsightsPeak | None:
         """峰值时段：只统计有用户消息的 trace，按 UTC+8 星期×小时分桶。
 
-        与其它指标同源（usage_facts_stages + trace started_at）。无消息时返回 None。
+        峰值按用户消息自身的事件时间归属，而不是 trace 的开始时间。
+        无消息时返回 None。
         """
-        pipeline = usage_facts_stages(filters) + [
+        pipeline = usage_facts_stages(filters)[:-1] + [
             {"$match": {"user_messages": {"$gt": 0}}},
+            {"$unwind": "$events"},
+            {"$match": {"events.event_type": "user:message"}},
             {
                 "$group": {
                     "_id": {
                         "weekday": {
                             "$subtract": [
-                                {"$dayOfWeek": {"date": "$started_at", "timezone": _BUCKET_TZ}},
+                                {
+                                    "$dayOfWeek": {
+                                        "date": "$events.timestamp",
+                                        "timezone": _BUCKET_TZ,
+                                    }
+                                },
                                 1,
                             ]
                         },
-                        "hour": {"$hour": {"date": "$started_at", "timezone": _BUCKET_TZ}},
+                        "hour": {
+                            "$hour": {
+                                "date": "$events.timestamp",
+                                "timezone": _BUCKET_TZ,
+                            }
+                        },
                     },
-                    "user_messages": {"$sum": "$user_messages"},
+                    "user_messages": {"$sum": 1},
                 }
             },
             {"$sort": {"user_messages": -1}},

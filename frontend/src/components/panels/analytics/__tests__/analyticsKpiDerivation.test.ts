@@ -115,7 +115,7 @@ test("previous period present yields signed percentage deltas", () => {
       total_tokens: 5000,
     },
   });
-  assert.equal(kpiDeltaPct(summary, "sessions", false), 20);
+  assert.equal(kpiDeltaPct(summary, "sessions", false), -10);
   assert.equal(kpiDeltaPct(summary, "userMessages", false), -20);
   assert.equal(formatDeltaPct(20), "+20.0%");
   assert.equal(formatDeltaPct(-20), "-20.0%");
@@ -170,7 +170,7 @@ test("first card switches between active_users and using_users", () => {
 
 test("plain KPI fields stay pinned to their summary fields", () => {
   const summary = makeSummary();
-  assert.equal(kpiSessionsValue(summary), summary.new_sessions);
+  assert.equal(kpiSessionsValue(summary), summary.active_sessions);
   assert.equal(kpiUserMessagesValue(summary), summary.user_messages);
   assert.equal(kpiTotalTokensValue(summary), summary.total_tokens);
   assert.equal(kpiSessionsValue(null), null);

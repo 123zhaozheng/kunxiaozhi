@@ -157,6 +157,8 @@ export interface AnalyticsListFilters {
   personaPresetId?: string;
   /** RBAC user role id */
   roleId?: string;
+  /** Optional first-use filter; older API versions safely ignore it. */
+  firstUse?: boolean;
   sort?: AnalyticsListSort;
   skip?: number;
   limit?: number;
@@ -241,19 +243,6 @@ export interface UsageTrendPoint {
 
 export interface UsageTrendResponse {
   items: UsageTrendPoint[];
-}
-
-export interface UsageByPersonaItem {
-  persona_preset_id: string | null;
-  persona_preset_name: string;
-  active_users: number;
-  active_sessions: number;
-  user_messages: number;
-  total_tokens: number;
-}
-
-export interface UsageByPersonaResponse {
-  items: UsageByPersonaItem[];
 }
 
 /** One row per user × persona. */

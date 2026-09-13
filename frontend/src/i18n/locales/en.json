@@ -326,6 +326,7 @@
       "fastestGrowingPersona": "Fastest-growing persona",
       "newUsers": "New users this period",
       "newUsersDrillHint": "View user list",
+      "peakDrillHint": "View active users",
       "peak": "Peak activity",
       "peakValue": "{{weekday}} {{hour}}:00 · {{count}} user messages",
       "personaFilterHint": "Set as the persona filter",
@@ -337,6 +338,7 @@
     "overview": {
       "activeUsers": "Active users",
       "activeSessions": "Active {{count}}",
+      "newSessions": "New {{count}}",
       "userMessages": "User messages",
       "totalTokens": "Total tokens",
       "messagesPerUser": "Messages per user",
@@ -410,7 +412,15 @@
       "hint": "Sessions, active users and user messages by day; tokens on the right axis",
       "title": "Core trends"
     },
-    "weekdays": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    "weekdays": [
+      "Sun",
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat"
+    ]
   },
   "appName": "昆小智",
   "approvals": {

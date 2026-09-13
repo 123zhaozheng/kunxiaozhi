@@ -48,54 +48,64 @@ def _range() -> tuple[datetime, datetime]:
 
 
 @pytest.mark.asyncio
-async def test_get_sessions_by_agent_groups_agent_id():
+async def test_get_sessions_by_agent_uses_active_sessions_from_snapshot(monkeypatch):
+    """环图切片与 KPI 卡/环图中心同源，均为去重后的活跃会话数。"""
+    from src.infra.analytics import storage as storage_module
+
     storage = AnalyticsStorage()
-    sessions = MagicMock()
-    sessions.aggregate = MagicMock(
-        return_value=_FakeCursor(
-            [
-                {"label": "fast", "value": 5},
-                {"label": "team", "value": 2},
+
+    async def fake_read_or_freeze(filters, storage=None):
+        return {
+            "by_agent": [
+                {"agent_id": "team", "active_sessions": 2, "new_sessions": 9},
+                {"agent_id": "fast", "active_sessions": 5, "new_sessions": 1},
+                {"agent_id": "idle", "active_sessions": 0, "new_sessions": 7},
             ]
-        )
-    )
-    storage._sessions = sessions
+        }
+
+    monkeypatch.setattr(storage_module, "read_or_freeze", fake_read_or_freeze)
 
     start, end = _range()
     items = await storage.get_sessions_by_agent(start, end, limit=10)
 
+    # Sorted by active sessions desc; zero-activity agents are not charted.
     assert [i.label for i in items] == ["fast", "team"]
     assert items[0].value == 5.0
-    pipeline = sessions.aggregate.call_args[0][0]
-    match = next(s["$match"] for s in pipeline if "$match" in s)
-    assert "created_at" in match
-    group = next(s["$group"] for s in pipeline if "$group" in s)
-    assert group["_id"] == {"$ifNull": ["$agent_id", "default"]}
 
 
 @pytest.mark.asyncio
-async def test_get_sessions_by_persona_includes_stable_id():
+async def test_get_sessions_by_persona_includes_stable_id(monkeypatch):
+    from src.infra.analytics import storage as storage_module
+
     storage = AnalyticsStorage()
-    sessions = MagicMock()
-    sessions.aggregate = MagicMock(
-        return_value=_FakeCursor(
-            [
-                {"id": "preset-1", "label": "Friendly Bot", "value": 4},
-                {"id": "preset-2", "label": "preset-2", "value": 1},
+
+    async def fake_read_or_freeze(filters, storage=None):
+        return {
+            "by_persona": [
+                {
+                    "persona_preset_id": "preset-1",
+                    "persona_preset_name": "Friendly Bot",
+                    "active_sessions": 4,
+                },
+                {
+                    "persona_preset_id": "preset-2",
+                    "persona_preset_name": None,
+                    "active_sessions": 1,
+                },
             ]
-        )
-    )
-    storage._sessions = sessions
+        }
+
+    monkeypatch.setattr(storage_module, "read_or_freeze", fake_read_or_freeze)
+    storage._preset_names = AsyncMock(return_value={})
 
     start, end = _range()
     items = await storage.get_sessions_by_persona(start, end, limit=10)
 
     assert items[0].label == "Friendly Bot"
     assert items[0].id == "preset-1"
+    # Name lookup miss falls back to the preset id as the label.
+    assert items[1].label == "preset-2"
     assert items[1].id == "preset-2"
-    pipeline = sessions.aggregate.call_args[0][0]
-    project = next(s["$project"] for s in pipeline if "$project" in s)
-    assert project["id"] == "$_id"
 
 
 @pytest.mark.asyncio
@@ -362,16 +372,19 @@ async def test_list_active_users_frequency_sort_and_filters():
 
 
 @pytest.mark.asyncio
-async def test_session_user_ids_for_role_queries_users_by_object_id():
+async def test_session_user_ids_for_role_queries_users_by_role_only():
+    """角色成员直接来自 users.roles，不再由区间内新建会话反推。
+
+    旧实现先查 ``sessions.created_at`` 拿 user_id 再回查 users，导致只使用
+    更早创建会话的成员被漏掉，按角色筛选时所有指标系统性少算。
+    """
     storage = AnalyticsStorage()
     user_oid = ObjectId()
     user_id = str(user_oid)
     sessions = MagicMock()
-    sessions.distinct = AsyncMock(return_value=[user_id, "not-an-oid"])
+    sessions.distinct = AsyncMock(return_value=[])
     users = MagicMock()
-    users.find = MagicMock(
-        return_value=_FakeCursor([{"_id": user_oid}])
-    )
+    users.find = MagicMock(return_value=_FakeCursor([{"_id": user_oid}]))
     storage._sessions = sessions
     storage._users = users
 
@@ -380,5 +393,6 @@ async def test_session_user_ids_for_role_queries_users_by_object_id():
 
     assert result == [user_id]
     user_query = users.find.call_args[0][0]
-    assert user_query["_id"]["$in"] == [user_oid]
-    assert user_query["roles"] == "role-a"
+    assert user_query == {"roles": "role-a"}
+    # 角色成员与会话创建时间无关，不得再查 sessions
+    sessions.distinct.assert_not_awaited()

@@ -266,3 +266,33 @@ async def test_run_until_complete_stops_on_zero() -> None:
 
     assert total == 0
     await worker.close()
+
+
+@pytest.mark.asyncio
+async def test_failed_day_does_not_advance_cursor_and_is_recorded() -> None:
+    """activity/snapshot 任一步失败都必须保留失败日期供下批重试。"""
+    earliest = datetime(2026, 8, 20, 3, 0, tzinfo=timezone.utc)
+    db = _make_db(earliest_trace=earliest, state_doc={"_id": "analytics_daily"})
+    redis = _FakeRedis(acquire=True)
+    fake_today = datetime(2026, 9, 1, 0, 0, tzinfo=timezone.utc)
+
+    with (
+        patch("src.infra.analytics.backfill.get_mongo_client") as mock_gmc,
+        patch("src.infra.analytics.backfill.datetime") as mock_dt,
+        patch.object(AnalyticsBackfillWorker, "_backfill_activity_for_day", new=AsyncMock(return_value=False)),
+        patch.object(AnalyticsBackfillWorker, "_backfill_snapshot_for_day", new=AsyncMock(return_value=True)),
+    ):
+        mock_gmc.return_value.__getitem__ = lambda self_, key: db
+        mock_dt.now.return_value = fake_today
+        mock_dt.strptime = datetime.strptime
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+        worker = AnalyticsBackfillWorker(redis_client=redis, batch_days=1)
+        result = await worker.run_once()
+
+    assert result == 0
+    update = db["analytics_backfill_state"].update_one_calls[-1]
+    state_update = update[1]["$set"]
+    assert state_update["failed_dates"] == ["2026-08-20"]
+    assert "cursor_date" not in state_update
+    await worker.close()

@@ -42,9 +42,14 @@ export function isValidDateString(value: string): boolean {
   );
 }
 
-/** Browser-local calendar date of `now` as `YYYY-MM-DD` (no time component). */
+/** Calendar date at the fixed UTC+8 analytics boundary. */
 export function todayString(now: Date = new Date()): AnalyticsDate {
-  return toDateString(now.getFullYear(), now.getMonth() + 1, now.getDate());
+  const utc8 = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  return toDateString(
+    utc8.getUTCFullYear(),
+    utc8.getUTCMonth() + 1,
+    utc8.getUTCDate(),
+  );
 }
 
 /** Add (or subtract) whole days to a `YYYY-MM-DD` date string. */

@@ -94,6 +94,7 @@ export function ChartCard({
   subtitle,
   icon,
   isLoading,
+  error,
   isEmpty,
   emptyText,
   children,
@@ -102,6 +103,7 @@ export function ChartCard({
   subtitle?: string;
   icon?: React.ReactNode;
   isLoading?: boolean;
+  error?: string | null;
   isEmpty?: boolean;
   emptyText?: string;
   children: React.ReactNode;
@@ -129,6 +131,13 @@ export function ChartCard({
       <div className="relative flex-1">
         {isLoading ? (
           <PanelLoadingState containerClassName="absolute inset-0" />
+        ) : error ? (
+          <div
+            role="alert"
+            className="flex h-full items-center justify-center rounded-lg bg-red-50 p-3 text-center text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200"
+          >
+            {error}
+          </div>
         ) : isEmpty ? (
           <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
             {emptyText ?? t("analytics.empty", "No data")}
@@ -187,7 +196,15 @@ export function DonutBlock({
   }
 
   return (
-    <div className="relative h-48">
+    <div
+      className="relative h-48"
+      role="img"
+      aria-label={
+        centerCaption
+          ? `${centerCaption}: ${centerValue === null ? "—" : format(centerValue)}`
+          : undefined
+      }
+    >
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
@@ -263,7 +280,11 @@ export function FeedbackByPresetBar({ data, onSliceClick }: FeedbackByPresetBarP
     raw: d,
   }));
   return (
-    <div className="h-56">
+    <div
+      className="h-56"
+      role="img"
+      aria-label={t("analytics.feedback.byPreset", "按角色分反馈")}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           data={rows}
@@ -323,7 +344,11 @@ export function ReasonBar({ data, onSliceClick }: ReasonBarProps) {
     );
   }
   return (
-    <div className="h-56">
+    <div
+      className="h-56"
+      role="img"
+      aria-label={t("analytics.feedback.reasonDistribution", "点踩原因分布")}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           data={data}
@@ -401,7 +426,11 @@ export function LineTrend({ series, valueFormatter }: LineTrendProps) {
     s.valueFormatter ?? valueFormatter ?? ((value: number) => formatNumber(value));
 
   return (
-    <div className="h-56">
+    <div
+      className="h-56"
+      role="img"
+      aria-label={series.map((item) => item.label).join(", ")}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={merged} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(120,113,108,0.2)" />

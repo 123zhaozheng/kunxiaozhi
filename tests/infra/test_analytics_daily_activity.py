@@ -9,53 +9,22 @@
 
 from __future__ import annotations
 
-import sys
 from datetime import datetime, timezone
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from bson import ObjectId
 
+from src.infra.analytics.activity_storage import ActivityStorage
+from src.infra.user.storage import UserStorage
+
 
 def _load_activity_storage():
-    """Load ActivityStorage module dynamically to avoid circular imports"""
-    # Use hardcoded absolute path based on the repo root
-    from src.infra.user.storage import UserStorage  # noqa: F401
-
-    repo_root = Path("D:/code/python/LambChat")
-    src_root = repo_root / "src"
-    src_root = src_root.resolve().absolute()
-    if str(src_root) not in sys.path:
-        sys.path.insert(0, str(src_root))
-
-    spec_path = src_root / "infra" / "analytics" / "activity_storage.py"
-    if not spec_path.exists():
-        raise FileNotFoundError(f"Cannot find activity_storage at {spec_path}")
-
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("activity_storage", str(spec_path))
-    activity_storage_module = importlib.util.module_from_spec(spec)
-    sys.modules["activity_storage"] = activity_storage_module
-    spec.loader.exec_module(activity_storage_module)
-    return activity_storage_module.ActivityStorage
+    """Use the package import so tests are independent of the checkout path."""
+    return ActivityStorage
 
 
 # Load modules lazily to avoid circular import during collection
-ActivityStorage = None
-UserStorage = None
-
-
-@pytest.fixture(scope="session", autouse=True)
-def load_modules_once():
-    """Lazy load modules on first test run"""
-    global ActivityStorage, UserStorage
-    ActivityStorage = _load_activity_storage()
-    from src.infra.user.storage import UserStorage as UserStorageClass
-
-    UserStorage = UserStorageClass
-
-
 class _FakeCursor:
     def __init__(self, docs: list[dict]):
         self._docs = docs
@@ -250,3 +219,17 @@ async def test_record_uses_cst_timezone_not_utc():
     assert date_written == expected_date_cst, (
         f"Date should be {expected_date_cst} (CST), got {date_written}"
     )
+
+
+@pytest.mark.asyncio
+async def test_message_activity_helper_is_idempotent_and_best_effort(monkeypatch):
+    """三条消息入口共享的 helper 失败时不阻断主流程。"""
+    from src.infra.analytics.activity_storage import record_message_activity
+
+    record = AsyncMock()
+    monkeypatch.setattr(ActivityStorage, "record", record)
+    await record_message_activity("user-1")
+    record.assert_awaited_once_with("user-1", "message", at=None)
+
+    record.side_effect = RuntimeError("activity unavailable")
+    await record_message_activity("user-1")

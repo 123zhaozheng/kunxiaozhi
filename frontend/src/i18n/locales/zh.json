@@ -326,6 +326,7 @@
       "fastestGrowingPersona": "增长最快 Persona",
       "newUsers": "本期新增使用者",
       "newUsersDrillHint": "查看用户列表",
+      "peakDrillHint": "查看活跃用户",
       "peak": "活跃高峰",
       "peakValue": "{{weekday}} {{hour}}:00 · {{count}} 条用户消息",
       "personaFilterHint": "设为顶部 Persona 筛选",
@@ -337,6 +338,7 @@
     "overview": {
       "activeUsers": "活跃用户",
       "activeSessions": "活跃 {{count}}",
+      "newSessions": "新建 {{count}}",
       "messagesPerUser": "人均消息",
       "messagesPerUserHint": "分母为发过消息的人数",
       "tokensPerSession": "会话均 Token",
@@ -410,7 +412,15 @@
       "hint": "会话、活跃用户、用户消息按天对比，Token 见右轴",
       "title": "核心趋势"
     },
-    "weekdays": ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+    "weekdays": [
+      "周日",
+      "周一",
+      "周二",
+      "周三",
+      "周四",
+      "周五",
+      "周六"
+    ]
   },
   "appName": "昆小智",
   "approvals": {

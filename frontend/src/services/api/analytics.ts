@@ -52,6 +52,9 @@ function appendListFilters(
   if (options?.roleId) {
     q = appendParam(q, "role_id", options.roleId);
   }
+  if (options?.firstUse) {
+    q = appendParam(q, "first_use", "true");
+  }
   if (options?.sort || opts?.defaultSort) {
     q = appendParam(q, "sort", options?.sort ?? opts!.defaultSort!);
   }
@@ -250,11 +253,19 @@ export const analyticsApi = {
   async listRuns(
     start: string,
     end: string,
-    options?: { presetId?: string; skip?: number; limit?: number },
+    options?: {
+      presetId?: string;
+      model?: string;
+      skip?: number;
+      limit?: number;
+    },
   ): Promise<RunListResponse> {
     let query = rangeQuery(start, end);
     if (options?.presetId) {
       query = appendParam(query, "preset_id", options.presetId);
+    }
+    if (options?.model) {
+      query = appendParam(query, "model", options.model);
     }
     query = appendParam(query, "skip", options?.skip ?? 0);
     query = appendParam(query, "limit", options?.limit ?? 20);

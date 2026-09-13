@@ -56,19 +56,34 @@ class AnalyticsManager:
         return await self.storage.get_sessions_trend(start, end, filters)
 
     async def get_tokens_by_model(
-        self, start: datetime, end: datetime
+        self,
+        start: datetime,
+        end: datetime,
+        filters: Optional[UsageFilters] = None,
     ) -> list[ByLabelItem]:
-        return await self.storage.get_tokens_by_model(start, end)
+        return await self.storage.get_tokens_by_model(start, end, filters=filters)
 
     async def get_sessions_by_agent(
-        self, start: datetime, end: datetime, limit: int = 10
+        self,
+        start: datetime,
+        end: datetime,
+        limit: int = 10,
+        filters: Optional[UsageFilters] = None,
     ) -> list[ByLabelItem]:
-        return await self.storage.get_sessions_by_agent(start, end, limit=limit)
+        return await self.storage.get_sessions_by_agent(
+            start, end, limit=limit, filters=filters
+        )
 
     async def get_sessions_by_persona(
-        self, start: datetime, end: datetime, limit: int = 10
+        self,
+        start: datetime,
+        end: datetime,
+        limit: int = 10,
+        filters: Optional[UsageFilters] = None,
     ) -> list[ByLabelItem]:
-        return await self.storage.get_sessions_by_persona(start, end, limit=limit)
+        return await self.storage.get_sessions_by_persona(
+            start, end, limit=limit, filters=filters
+        )
 
     async def get_preset_metrics(
         self, preset_id: str, start: datetime, end: datetime
@@ -119,6 +134,7 @@ class AnalyticsManager:
         persona_preset_id: Optional[str] = None,
         role_id: Optional[str] = None,
         sort: str = "frequency",
+        first_use: bool = False,
     ) -> ActiveUserListResponse:
         return await self.storage.list_active_users(
             start,
@@ -129,6 +145,7 @@ class AnalyticsManager:
             persona_preset_id=persona_preset_id,
             role_id=role_id,
             sort=sort,
+            first_use=first_use,
         )
 
     async def list_feedback(
@@ -149,8 +166,11 @@ class AnalyticsManager:
         preset_id: Optional[str] = None,
         skip: int = 0,
         limit: int = 20,
+        model: Optional[str] = None,
     ) -> RunListResponse:
-        return await self.storage.list_runs(start, end, preset_id, skip, limit)
+        return await self.storage.list_runs(
+            start, end, preset_id, skip, limit, model=model
+        )
 
     # ── 使用情况报表（统一口径）─────────────────────────────────────
 

@@ -8,10 +8,8 @@
  *   - persona donut center == sessions KPI card  == kpiSessionsValue
  *   - model donut center   == total tokens card  == kpiTotalTokensValue
  *
- * The sessions field is `new_sessions` because the session donut data
- * (`/sessions/by-agent`, `/sessions/by-persona`) counts sessions created in
- * range; `summary.active_sessions` uses a different base (sessions with
- * activity) that the donut endpoints cannot provide.
+ * The sessions KPI is the active-session count. The card renders
+ * `new_sessions` as its secondary line; donut centers use this same accessor.
  */
 
 import type { UsageSummaryResponse } from "../../../types/analytics";
@@ -25,9 +23,9 @@ export function kpiUsersValue(
   return isFiltered ? summary.using_users : summary.active_users;
 }
 
-/** Sessions KPI card == both session donut centers (created-in-range count). */
+/** Sessions KPI card == both session donut centers (active-session count). */
 export function kpiSessionsValue(summary: UsageSummaryResponse | null): number | null {
-  return summary ? summary.new_sessions : null;
+  return summary ? summary.active_sessions : null;
 }
 
 export function kpiUserMessagesValue(
@@ -94,7 +92,7 @@ export function previousMetricValue(
     case "users":
       return isFiltered ? previous.using_users : previous.active_users;
     case "sessions":
-      return previous.new_sessions;
+      return previous.active_sessions;
     case "userMessages":
       return previous.user_messages;
     case "totalTokens":

@@ -43,6 +43,9 @@ logger = get_logger(__name__)
 
 _MAX_TOP_PRESET_LIMIT = 100
 _LIST_LIMIT_MAX = 100
+# A bounded range prevents a single request from triggering an unbounded
+# day-by-day snapshot freeze.
+_MAX_QUERY_DAYS = 366
 # Export = full filtered set for list UIs; hard safety cap (surfaced as X-Export-Row-Cap).
 _EXPORT_ROW_CAP = 10_000
 
@@ -60,12 +63,29 @@ def _parse_range(start: str, end: str) -> tuple[datetime, datetime]:
     非法日期格式（如 ``abc``、``2026-13-01``）或 ``end < start`` 一律 400。
     """
     try:
-        return resolve_range(start, end)
+        start_dt, end_dt = resolve_range(start, end)
+    except OverflowError as e:
+        # e.g. 9999-12-31, whose exclusive upper bound overflows `date`.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"日期超出可查询范围: start={start}, end={end}",
+        ) from e
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"无效的日期参数: {e}",
+            detail=(
+                f"无效的日期参数: start={start}, end={end}。"
+                "请使用 YYYY-MM-DD 格式，且结束日期不早于开始日期。"
+            ),
         ) from e
+
+    if (end_dt - start_dt).days > _MAX_QUERY_DAYS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"查询日期范围不能超过 {_MAX_QUERY_DAYS} 天",
+        )
+
+    return start_dt, end_dt
 
 
 @router.get("/overview", response_model=OverviewResponse)
@@ -143,12 +163,25 @@ async def get_sessions_by_agent(
     start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
     end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     limit: int = Query(10, ge=1, le=_MAX_TOP_PRESET_LIMIT, description="Top N"),
+    persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
+    agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
+    role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
     _: None = Depends(require_permissions("settings:manage")),
     manager: AnalyticsManager = Depends(get_analytics_manager),
 ) -> ByLabelResponse:
     """按 agent_id 聚合会话数（by-agent 维度）。"""
     s, e = _parse_range(start, end)
-    items = await manager.get_sessions_by_agent(s, e, limit=limit)
+    if persona_preset_id or agent_id or role_id:
+        filters = await manager.build_usage_filters(
+            s,
+            e,
+            persona_preset_id=persona_preset_id,
+            agent_id=agent_id,
+            role_id=role_id,
+        )
+        items = await manager.get_sessions_by_agent(s, e, limit=limit, filters=filters)
+    else:
+        items = await manager.get_sessions_by_agent(s, e, limit=limit)
     return ByLabelResponse(items=items)
 
 
@@ -157,12 +190,25 @@ async def get_sessions_by_persona(
     start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
     end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     limit: int = Query(10, ge=1, le=_MAX_TOP_PRESET_LIMIT, description="Top N"),
+    persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
+    agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
+    role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
     _: None = Depends(require_permissions("settings:manage")),
     manager: AnalyticsManager = Depends(get_analytics_manager),
 ) -> ByLabelResponse:
     """按 persona_preset_id 聚合会话数（by-persona 维度）。"""
     s, e = _parse_range(start, end)
-    items = await manager.get_sessions_by_persona(s, e, limit=limit)
+    if persona_preset_id or agent_id or role_id:
+        filters = await manager.build_usage_filters(
+            s,
+            e,
+            persona_preset_id=persona_preset_id,
+            agent_id=agent_id,
+            role_id=role_id,
+        )
+        items = await manager.get_sessions_by_persona(s, e, limit=limit, filters=filters)
+    else:
+        items = await manager.get_sessions_by_persona(s, e, limit=limit)
     return ByLabelResponse(items=items)
 
 
@@ -170,12 +216,25 @@ async def get_sessions_by_persona(
 async def get_tokens_by_model(
     start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
     end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
+    persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
+    agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
+    role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
     _: None = Depends(require_permissions("settings:manage")),
     manager: AnalyticsManager = Depends(get_analytics_manager),
 ) -> ByLabelResponse:
     """按模型统计 token 消耗。"""
     s, e = _parse_range(start, end)
-    items = await manager.get_tokens_by_model(s, e)
+    if persona_preset_id or agent_id or role_id:
+        filters = await manager.build_usage_filters(
+            s,
+            e,
+            persona_preset_id=persona_preset_id,
+            agent_id=agent_id,
+            role_id=role_id,
+        )
+        items = await manager.get_tokens_by_model(s, e, filters=filters)
+    else:
+        items = await manager.get_tokens_by_model(s, e)
     return ByLabelResponse(items=items)
 
 
@@ -536,6 +595,10 @@ async def list_active_users(
     agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
     persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
     role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
+    first_use: bool = Query(
+        False,
+        description="仅返回首次使用日落在本区间的用户（洞察栏「本期新增使用者」钻取）",
+    ),
     sort: str = Query(
         "frequency",
         description="排序: frequency（会话频次，默认）| recent（最近活跃）",
@@ -560,6 +623,7 @@ async def list_active_users(
         persona_preset_id=persona_preset_id,
         role_id=role_id,
         sort=sort_mode,
+        first_use=first_use,
     )
 
 
@@ -570,6 +634,10 @@ async def export_users_csv(
     agent_id: Optional[str] = Query(None, description="按智能体 agent_id 筛选"),
     persona_preset_id: Optional[str] = Query(None, description="按 Persona preset ID 筛选"),
     role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
+    first_use: bool = Query(
+        False,
+        description="仅导出首次使用日落在本区间的用户，与 /users/list 一致",
+    ),
     sort: str = Query(
         "frequency",
         description="排序: frequency（会话频次，默认）| recent（最近活跃）",
@@ -592,6 +660,7 @@ async def export_users_csv(
         persona_preset_id=persona_preset_id,
         role_id=role_id,
         sort=sort_mode,
+        first_use=first_use,
     )
     headers = [
         "username",
@@ -638,6 +707,7 @@ async def list_runs(
     start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
     end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
     preset_id: Optional[str] = Query(None, description="按角色智能体 ID 筛选"),
+    model: Optional[str] = Query(None, description="按模型筛选（模型 token 环图钻取）"),
     skip: int = Query(0, ge=0, description="跳过条数"),
     limit: int = Query(20, ge=1, le=_LIST_LIMIT_MAX, description="返回条数"),
     _: None = Depends(require_permissions("settings:manage")),
@@ -645,4 +715,6 @@ async def list_runs(
 ) -> RunListResponse:
     """运行明细列表（含 token 用量，分页）。"""
     s, e = _parse_range(start, end)
-    return await manager.list_runs(s, e, preset_id=preset_id, skip=skip, limit=limit)
+    return await manager.list_runs(
+        s, e, preset_id=preset_id, skip=skip, limit=limit, model=model
+    )

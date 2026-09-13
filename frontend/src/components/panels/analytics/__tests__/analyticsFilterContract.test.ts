@@ -22,6 +22,7 @@ import {
   isValidDateString,
   normalizeRangeInput,
   rangeForPreset,
+  todayString,
 } from "../analyticsDates";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -142,7 +143,7 @@ test("every usage endpoint serializes through the single helper", () => {
 });
 
 test("date presets produce pure YYYY-MM-DD ranges", () => {
-  const now = new Date(2026, 7, 28); // 2026-08-28 local
+  const now = new Date("2026-08-28T12:00:00Z");
   const oneDay = rangeForPreset("1d", now);
   assert.deepEqual(oneDay, { start: "2026-08-28", end: "2026-08-28" });
 
@@ -160,13 +161,31 @@ test("date presets produce pure YYYY-MM-DD ranges", () => {
   }
 });
 
+test("UTC+8 date stays stable across browser timezone representations", () => {
+  const sameInstant = [
+    ["UTC", "2026-08-28T16:30:00Z"],
+    ["UTC-5", "2026-08-28T11:30:00-05:00"],
+    ["UTC+8", "2026-08-29T00:30:00+08:00"],
+    ["UTC+9", "2026-08-29T01:30:00+09:00"],
+  ] as const;
+
+  for (const [browserTimezone, instant] of sameInstant) {
+    const now = new Date(instant);
+    assert.equal(todayString(now), "2026-08-29", browserTimezone);
+    assert.deepEqual(rangeForPreset("7d", now), {
+      start: "2026-08-23",
+      end: "2026-08-29",
+    });
+  }
+});
+
 test("date arithmetic crosses month, year and leap boundaries", () => {
   assert.equal(addDaysString("2026-01-05", -7), "2025-12-29");
   assert.equal(addDaysString("2026-03-01", -1), "2026-02-28");
   assert.equal(addDaysString("2024-02-28", 1), "2024-02-29");
   assert.equal(addDaysString("2026-12-31", 1), "2027-01-01");
 
-  const yearEdge = rangeForPreset("7d", new Date(2026, 0, 3));
+  const yearEdge = rangeForPreset("7d", new Date("2026-01-03T12:00:00Z"));
   assert.deepEqual(yearEdge, { start: "2025-12-28", end: "2026-01-03" });
 });
 

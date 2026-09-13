@@ -115,6 +115,7 @@ async def test_single_day_range_is_one_full_day() -> None:
         ("2026-08-28", "2026-08-22"),  # end < start
         ("2026/08/22", "2026-08-28"),  # 分隔符错误
         ("2026-8-1", "2026-08-28"),  # 非零填充
+        ("9999-12-31", "9999-12-31"),  # end + 1 day 溢出
     ],
 )
 async def test_invalid_dates_rejected_with_400(start: str, end: str) -> None:
@@ -126,6 +127,21 @@ async def test_invalid_dates_rejected_with_400(start: str, end: str) -> None:
         )
     assert response.status_code == 400, f"start={start} end={end}: {response.text}"
     # 非法参数不应触达下游
+    assert fake.filter_calls == []
+
+
+@pytest.mark.asyncio
+async def test_query_range_over_366_days_rejected_before_manager() -> None:
+    fake = _FakeManager()
+    transport = ASGITransport(app=_app(fake))
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get(
+            "/api/analytics/usage/summary",
+            params={"start": "2026-01-01", "end": "2027-01-02"},
+        )
+
+    assert response.status_code == 400
+    assert "366" in response.json()["detail"]
     assert fake.filter_calls == []
 
 

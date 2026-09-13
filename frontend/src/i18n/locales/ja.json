@@ -326,6 +326,7 @@
       "fastestGrowingPersona": "最も成長しているペルソナ",
       "newUsers": "今期の新しい利用者",
       "newUsersDrillHint": "ユーザー一覧を見る",
+      "peakDrillHint": "アクティブユーザーを見る",
       "peak": "アクティブピーク",
       "peakValue": "{{weekday}} {{hour}}:00 · {{count}} 件のユーザーメッセージ",
       "personaFilterHint": "上部のペルソナフィルターに設定",
@@ -337,6 +338,7 @@
     "overview": {
       "activeUsers": "アクティブユーザー",
       "activeSessions": "アクティブ {{count}}",
+      "newSessions": "新規 {{count}}",
       "userMessages": "ユーザーメッセージ",
       "totalTokens": "総トークン数",
       "messagesPerUser": "1人あたりメッセージ",
@@ -410,7 +412,15 @@
       "hint": "セッション・アクティブユーザー・ユーザーメッセージの日別比較、トークンは右軸",
       "title": "コアトレンド"
     },
-    "weekdays": ["日", "月", "火", "水", "木", "金", "土"]
+    "weekdays": [
+      "日",
+      "月",
+      "火",
+      "水",
+      "木",
+      "金",
+      "土"
+    ]
   },
   "appName": "昆小智",
   "approvals": {
