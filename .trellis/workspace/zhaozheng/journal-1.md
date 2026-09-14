@@ -1537,3 +1537,24 @@ check 复核修 5 项：自定义按钮死 key、tooltip 英文硬编码、导�
 
 - 用户按 `archive/2026-08/08-28-analytics-dashboard-rebuild/manual-verification.md` 做浏览器实测
 - 生产上线拉镜像重启即触发快照回填 worker；首日前历史区间走降级实时聚合
+
+
+## Session 48: 归档 .qoder / .kiro 平台 harness
+
+**Date**: 2026-09-14
+**Task**: 归档 .qoder / .kiro 平台 harness
+**Branch**: `main`
+
+### Summary
+
+创建并执行任务 09-14-archive-qoder-kiro-harness：将 Trellis 为 Qoder / Kiro Code 生成的 harness 目录移入 .trellis/.backup-harness-archive-2026-09-14/（可回滚，因 .backup-* 被忽略而不进 git），并从 .template-hashes.json 剔除 104 个 .qoder/.kiro 托管条目（354 -> 250），使 trellis update --dry-run 不再重建。trellis platforms 现仅剩 Claude Code / Cursor / Codex / Pi Agent；.claude/.cursor/.codex/.pi/.agents/.grok 文件数与基线一致。遗留：.grok（49 文件，git 已跟踪）同为非激活平台残留，本次未处理。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d1014b9b` | (see git log) |
+
+### Status
+
+[OK] **Completed**
