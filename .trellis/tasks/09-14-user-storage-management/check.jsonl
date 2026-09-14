@@ -1,0 +1,12 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Review atomic Mongo accounting, additive compatibility and storage boundaries."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Review stable HTTP errors and failure cleanup."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Review backend types, async I/O, auth and test coverage."}
+{"file":".trellis/spec/backend/upload-dangerous-extensions.md","reason":"Ensure quota changes do not regress early dangerous-file rejection."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Review consistency of the profile tab and attachment components."}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Review summary refresh and attachment lifecycle propagation."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Review API/attachment compatibility and absence of unsafe types."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Review i18n, accessibility, dark/mobile behavior and frontend validation."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Review complete source-to-storage-to-history-to-UI data flow."}
+{"file":".trellis/tasks/09-14-user-storage-management/research/backend-storage.md","reason":"Security, concurrency, lifecycle and compatibility review baseline."}
+{"file":".trellis/tasks/09-14-user-storage-management/research/frontend-storage.md","reason":"UI and attachment behavior review baseline."}
+{"file":".trellis/tasks/09-14-user-storage-management/research/local-preview.md","reason":"Final local-service and Preview verification baseline."}

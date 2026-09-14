@@ -1920,7 +1920,9 @@
     "usernamePlaceholder": "Enter username",
     "usernameUpdateFailed": "Failed to update username",
     "usernameUpdated": "Username updated successfully",
-    "termsItem2": "If you encounter a bug or need to provide feedback, please contact Zhao Zhengtong via WeCom Mini-K."
+    "termsItem2": "If you encounter a bug or need to provide feedback, please contact Zhao Zhengtong via WeCom Mini-K.",
+    "storageTab": "Storage",
+    "tabsLabel": "Profile sections"
   },
   "project": {
     "code": "Code",
@@ -1996,6 +1998,7 @@
     "updated": "Updated",
     "uploadLimitsHint": "Leave empty to use system defaults",
     "uploadLimitsTitle": "Upload Limits",
+    "storageQuotaMb": "Storage quota (MB)",
     "validation": {
       "enterName": "Please enter role name",
       "selectPermission": "Please select at least one permission"
@@ -2964,6 +2967,9 @@
     "updateSuccess": "User updated successfully",
     "user": "Profile",
     "username": "Username",
+    "storageQuotaMb": "Personal storage quota (MB)",
+    "storageQuotaPlaceholder": "Use role/default quota",
+    "storageQuotaHint": "Leave blank to inherit the most permissive role or global quota.",
     "usernamePlaceholder": "Enter username",
     "validation": {
       "enterEmail": "Please enter email",
@@ -2971,5 +2977,67 @@
       "enterUsername": "Please enter username",
       "passwordMinLength": "Password must be at least 6 characters"
     }
+  },
+  "storage": {
+    "summaryTitle": "Personal storage",
+    "status": {
+      "normal": "Normal",
+      "warning": "Storage warning",
+      "full": "Storage full",
+      "overQuota": "Over quota"
+    },
+    "remaining": "remaining",
+    "usageProgress": "Storage usage",
+    "warningHint": "You are using most of your storage. Remove unused files before uploading more.",
+    "fullHint": "New uploads are blocked until you free storage space.",
+    "filesTitle": "Your files",
+    "filesHint": "Chat files can be removed here. Avatars and Skills stay protected.",
+    "loadFailed": "Unable to load storage.",
+    "deleteComplete": "File removed from your storage.",
+    "partialDelete": "Some files could not be removed.",
+    "deleteFailed": "Unable to remove file.",
+    "confirmBatchTitle": "Remove selected files?",
+    "confirmBatchMessage": "Remove {{count}} selected files? This cannot be undone.",
+    "confirmDeleteTitle": "Remove this file?",
+    "confirmDeleteMessage": "Future access will be removed; historical messages keep a deleted attachment marker. This cannot be undone.",
+    "searchPlaceholder": "Search files",
+    "sourceFilter": "Filter by source",
+    "statusFilter": "Filter by status",
+    "selectedCount": "{{count}} selected",
+    "fileCount": "{{count}} files",
+    "selectAll": "Select all removable files",
+    "selectFile": "Select {{name}}",
+    "protected": "Protected",
+    "protectedHint": "Manage this file from its owning feature.",
+    "deleteFile": "Remove {{name}}",
+    "page": "Page",
+    "emptyTitle": "No managed files",
+    "emptyHint": "Files you upload will appear here.",
+    "partialDetails": "Some files remain protected or need another cleanup attempt.",
+    "releaseDetails": "Logical deletion completed; physical cleanup is tracked by the server.",
+    "quotaExceeded": "Storage space is full. Free space and try again.",
+    "deleted": "Deleted",
+    "retryUpload": "Retry upload",
+    "resultReleased": "Released: {{bytes}}",
+    "resultPhysical": "Physical cleanup: {{status}}",
+    "sources": {
+      "chat": "Chat",
+      "wecom": "WeCom",
+      "profile_avatar": "Profile avatar",
+      "persona_avatar": "Persona avatar",
+      "team_avatar": "Team avatar",
+      "skill": "Skill",
+      "legacy": "Legacy"
+    },
+    "fileStatuses": {
+      "active": "Active",
+      "pending": "Pending",
+      "delete_pending": "Deleting",
+      "deleted": "Deleted",
+      "migration_required": "Needs migration",
+      "failed": "Failed",
+      "missing": "Missing"
+    }
   }
+
 }

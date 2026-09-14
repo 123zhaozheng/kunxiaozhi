@@ -1862,7 +1862,9 @@
     "usernamePlaceholder": "ユーザー名を入力してください",
     "usernameUpdateFailed": "ユーザー名の更新に失敗しました",
     "usernameUpdated": "ユーザー名が更新されました",
-    "termsItem2": "不具合の報告やフィードバックが必要な場合は、企業微信の小K経由で趙正通までご連絡ください。"
+    "termsItem2": "不具合の報告やフィードバックが必要な場合は、企業微信の小K経由で趙正通までご連絡ください。",
+    "storageTab": "ストレージ",
+    "tabsLabel": "プロフィールのセクション"
   },
   "project": {
     "code": "コード",
@@ -1938,6 +1940,7 @@
     "updated": "更新済み",
     "uploadLimitsHint": "空欄 = システムデフォルトを使用",
     "uploadLimitsTitle": "アップロード制限",
+    "storageQuotaMb": "ストレージ容量（MB）",
     "validation": {
       "enterName": "ロール名を入力してください",
       "selectPermission": "少なくとも1つの権限を選択してください"
@@ -2759,6 +2762,9 @@
     "updateSuccess": "ユーザーが正常に更新されました",
     "user": "プロフィール",
     "username": "ユーザー名",
+    "storageQuotaMb": "個人ストレージ容量（MB）",
+    "storageQuotaPlaceholder": "ロール/デフォルト容量を使用",
+    "storageQuotaHint": "空欄にすると最も広いロールまたはグローバル容量を継承します。",
     "usernamePlaceholder": "ユーザー名を入力",
     "validation": {
       "enterEmail": "メールアドレスを入力してください",
@@ -2766,5 +2772,67 @@
       "enterUsername": "ユーザー名を入力してください",
       "passwordMinLength": "パスワードは6文字以上である必要があります"
     }
+  },
+  "storage": {
+    "summaryTitle": "個人ストレージ",
+    "status": {
+      "normal": "正常",
+      "warning": "容量警告",
+      "full": "容量上限",
+      "overQuota": "容量超過"
+    },
+    "remaining": "残り",
+    "usageProgress": "ストレージ使用量",
+    "warningHint": "ストレージの大部分を使用しています。不要なファイルを削除してください。",
+    "fullHint": "空き容量を確保するまで新しいアップロードはブロックされます。",
+    "filesTitle": "自分のファイル",
+    "filesHint": "チャットファイルはここで削除できます。アバターとSkillは保護されています。",
+    "loadFailed": "ストレージを読み込めません。",
+    "deleteComplete": "ファイルを個人ストレージから削除しました。",
+    "partialDelete": "一部のファイルを削除できませんでした。",
+    "deleteFailed": "ファイルを削除できません。",
+    "confirmBatchTitle": "選択したファイルを削除しますか？",
+    "confirmBatchMessage": "選択した{{count}}個のファイルを削除しますか？元に戻せません。",
+    "confirmDeleteTitle": "このファイルを削除しますか？",
+    "confirmDeleteMessage": "今後のアクセスは削除されますが、過去のメッセージには削除済み添付ファイルの表示が残ります。元に戻せません。",
+    "searchPlaceholder": "ファイルを検索",
+    "sourceFilter": "ソースで絞り込み",
+    "statusFilter": "状態で絞り込み",
+    "selectedCount": "{{count}}件を選択",
+    "fileCount": "{{count}}ファイル",
+    "selectAll": "削除可能なファイルをすべて選択",
+    "selectFile": "{{name}}を選択",
+    "protected": "保護済み",
+    "protectedHint": "このファイルは所属機能から管理してください。",
+    "deleteFile": "{{name}}を削除",
+    "page": "ページ",
+    "emptyTitle": "管理対象のファイルはありません",
+    "emptyHint": "アップロードしたファイルがここに表示されます。",
+    "partialDetails": "一部のファイルは保護されているか、再試行が必要です。",
+    "releaseDetails": "論理削除が完了しました。物理削除の状態はサーバーが追跡します。",
+    "quotaExceeded": "容量が不足しています。整理してから再試行してください。",
+    "deleted": "削除済み",
+    "retryUpload": "アップロードを再試行",
+    "resultReleased": "解放済み：{{bytes}}",
+    "resultPhysical": "\u7269\u7406\u30af\u30ea\u30fc\u30f3\u30a2\u30c3\u30d7\uff1a{{status}}",
+    "sources": {
+      "chat": "チャット",
+      "wecom": "WeCom",
+      "profile_avatar": "プロフィール画像",
+      "persona_avatar": "Persona画像",
+      "team_avatar": "チーム画像",
+      "skill": "Skill",
+      "legacy": "レガシー"
+    },
+    "fileStatuses": {
+      "active": "有効",
+      "pending": "処理中",
+      "delete_pending": "削除中",
+      "deleted": "削除済み",
+      "migration_required": "移行待ち",
+      "failed": "失敗",
+      "missing": "欠落"
+    }
   }
+
 }

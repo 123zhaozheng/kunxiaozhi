@@ -31,6 +31,7 @@ import {
 } from "./personaPresetEditor";
 import { marketplaceApi, uploadApi, personaPresetApi } from "../../services/api";
 import { compressImageFile } from "../../utils/imageCompression";
+import { uuid } from "../../utils/uuid";
 import {
   isPersonaImageAvatar,
   isEmojiAvatar,
@@ -181,6 +182,7 @@ export function PersonaEditorModal({
   const iconPickerRef = useRef<HTMLDivElement>(null);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const draftAvatarOwnerRef = useRef(`draft-${uuid()}`);
 
   // WeCom config state (only visible for global scope + channel:manage + editing existing preset)
   const { hasPermission } = useAuth();
@@ -537,6 +539,10 @@ export function PersonaEditorModal({
         });
         const result = await uploadApi.uploadFile(compressed, {
           folder: "persona-avatars",
+          managedAsset: {
+            kind: "persona",
+            ownerRef: editingPreset?.id ?? draftAvatarOwnerRef.current,
+          },
         }).promise;
         setDraft((prev) => ({ ...prev, avatar: result.url }));
       } catch (error) {
@@ -546,7 +552,7 @@ export function PersonaEditorModal({
         setIsUploadingAvatar(false);
       }
     },
-    [t],
+    [editingPreset?.id, t],
   );
 
   const isFormValid = draft.name.trim() && draft.system_prompt.trim();

@@ -39,6 +39,12 @@ class RoleLimits(BaseModel):
     max_files: Optional[int] = Field(
         default=None, description="Max number of files per upload (null = use global default)"
     )
+    storage_quota_mb: Optional[int] = Field(
+        default=None,
+        gt=0,
+        le=(1 << 60) // (1024 * 1024),
+        description="Per-user personal storage quota in MiB (null = use the global default)",
+    )
 
     model_config = ConfigDict(extra="allow")  # Allow future extensions
 

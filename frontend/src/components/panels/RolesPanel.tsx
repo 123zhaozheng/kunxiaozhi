@@ -81,6 +81,9 @@ function RoleFormModal({
   const [maxUploadFiles, setMaxUploadFiles] = useState<number | "">(
     role?.limits?.max_files ?? "",
   );
+  const [storageQuotaMb, setStorageQuotaMb] = useState<number | "">(
+    role?.limits?.storage_quota_mb ?? "",
+  );
   const [showUploadLimits, setShowUploadLimits] = useState(false);
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>(
     role?.permissions || [],
@@ -184,6 +187,16 @@ function RoleFormModal({
         const numValue = Number(maxUploadFiles);
         if (!isNaN(numValue) && numValue >= 0) {
           limits.max_files = numValue;
+        }
+      }
+      if (
+        storageQuotaMb !== "" &&
+        storageQuotaMb !== null &&
+        storageQuotaMb !== undefined
+      ) {
+        const numValue = Number(storageQuotaMb);
+        if (!isNaN(numValue) && numValue > 0) {
+          limits.storage_quota_mb = numValue;
         }
       }
       const data: RoleCreate | RoleUpdate = {
@@ -403,6 +416,11 @@ function RoleFormModal({
                   label: "maxFiles",
                   value: maxUploadFiles,
                   setter: setMaxUploadFiles,
+                },
+                {
+                  label: "storageQuotaMb",
+                  value: storageQuotaMb,
+                  setter: setStorageQuotaMb,
                 },
               ].map(({ label, value, setter }) => (
                 <div key={label} className="es-field">

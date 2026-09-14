@@ -87,13 +87,24 @@ export interface EventData {
   // user:message event fields
   message_id?: string;
   attachments?: Array<{
-    id: string;
-    key: string;
+    id?: string;
+    file_id?: string;
+    fileId?: string;
+    key?: string;
     name: string;
     type: string;
-    mime_type: string;
+    mime_type?: string;
+    mimeType?: string;
     size: number;
-    url: string;
+    url?: string;
+    source?: string;
+    status?: string;
+    lifecycle_status?: string;
+    lifecycleStatus?: string;
+    deleted?: boolean;
+    deleted_at?: string;
+    deletedAt?: string;
+    available?: boolean;
   }>;
   // user:cancel event fields
   user_id?: string;
@@ -209,13 +220,24 @@ export interface HistoryEventData {
       }
   >;
   attachments?: Array<{
-    id: string;
-    key: string;
+    id?: string;
+    file_id?: string;
+    fileId?: string;
+    key?: string;
     name: string;
     type: string;
-    mime_type: string;
+    mime_type?: string;
+    mimeType?: string;
     size: number;
-    url: string;
+    url?: string;
+    source?: string;
+    status?: string;
+    lifecycle_status?: string;
+    lifecycleStatus?: string;
+    deleted?: boolean;
+    deleted_at?: string;
+    deletedAt?: string;
+    available?: boolean;
   }>;
   message_id?: string;
   // sop:updated / approval_required(sop_plan) fields

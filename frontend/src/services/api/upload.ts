@@ -4,7 +4,7 @@
 
 import type { FileCheckResult, UploadConfig, UploadResult } from "../../types";
 import { API_BASE, getFullUrl } from "./config";
-import { authFetch } from "./fetch";
+import { ApiRequestError, authFetch } from "./fetch";
 import { authenticatedRequest } from "./authenticatedRequest";
 import {
   getValidAccessToken,
@@ -19,8 +19,46 @@ interface SignedUrlItem {
   error?: string;
 }
 
+function getErrorEnvelope(value: unknown): {
+  message?: string;
+  code?: string;
+  detail?: unknown;
+} {
+  if (!value || typeof value !== "object") return {};
+  const payload = value as { detail?: unknown; message?: unknown; code?: unknown };
+  const detail = payload.detail;
+  if (detail && typeof detail === "object") {
+    const typed = detail as { message?: unknown; code?: unknown; error?: unknown };
+    return {
+      message:
+        typeof typed.message === "string" ? typed.message : undefined,
+      code:
+        typeof typed.code === "string"
+          ? typed.code
+          : typeof typed.error === "string"
+            ? typed.error
+            : undefined,
+      detail,
+    };
+  }
+  return {
+    message:
+      typeof detail === "string"
+        ? detail
+        : typeof payload.message === "string"
+          ? payload.message
+          : undefined,
+    code: typeof payload.code === "string" ? payload.code : undefined,
+    detail,
+  };
+}
+
 export interface UploadOptions {
   folder?: string;
+  managedAsset?: {
+    kind: "persona" | "team";
+    ownerRef: string;
+  };
   onProgress?: (progress: number, loaded: number, total: number) => void;
 }
 
@@ -86,6 +124,10 @@ export const uploadApi = {
                 type: raw.type,
                 mimeType: raw.mimeType ?? raw.mime_type ?? "",
                 size: raw.size,
+                fileId: raw.file_id ?? raw.fileId,
+                source: raw.source,
+                status: raw.status,
+                storageUsage: raw.storage_usage ?? raw.storageUsage,
               };
               resolve(result);
             } catch {
@@ -104,14 +146,21 @@ export const uploadApi = {
             }
           }
 
+          let errorData: unknown;
           try {
-            const errorData = JSON.parse(xhr.responseText);
-            reject(
-              new Error(errorData.detail || `Upload failed: ${xhr.statusText}`),
-            );
+            errorData = JSON.parse(xhr.responseText);
           } catch {
-            reject(new Error(`Upload failed: ${xhr.statusText}`));
+            errorData = undefined;
           }
+          const envelope = getErrorEnvelope(errorData);
+          reject(
+            new ApiRequestError(
+              envelope.message || `Upload failed: ${xhr.statusText}`,
+              xhr.status,
+              envelope.code,
+              envelope.detail,
+            ),
+          );
         });
 
         xhr.addEventListener("error", () => {
@@ -123,9 +172,9 @@ export const uploadApi = {
           reject(new Error("Upload was aborted"));
         });
 
-        const url = `${API_BASE}/api/upload/file?folder=${encodeURIComponent(
-          folder,
-        )}`;
+        const url = options.managedAsset
+          ? `${API_BASE}/api/upload/asset/${options.managedAsset.kind}/${encodeURIComponent(options.managedAsset.ownerRef)}`
+          : `${API_BASE}/api/upload/file?folder=${encodeURIComponent(folder)}`;
         xhr.open("POST", url);
         xhr.withCredentials = true;
 
@@ -175,6 +224,10 @@ export const uploadApi = {
     return {
       ...data,
       mimeType: data.mime_type || data.mimeType,
+      fileId: data.file_id || data.fileId,
+      source: data.source,
+      status: data.status,
+      storageUsage: data.storage_usage || data.storageUsage,
     };
   },
 

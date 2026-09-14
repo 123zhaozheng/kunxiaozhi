@@ -252,6 +252,34 @@ export type {
 } from "./upload";
 
 // ============================================
+// Personal Storage Types
+// ============================================
+export type {
+  StorageFileStatus,
+  StorageFileSource,
+  StorageUsageStatus,
+  StorageUsageSummary,
+  StorageFile,
+  StorageFileListParams,
+  StorageFileListResponse,
+  StorageFileStatusRequest,
+  StorageFileLifecycleProjection,
+  StorageDeleteResult,
+  StorageDeleteResponse,
+  StorageBatchDeleteResponse,
+  StorageErrorDetail,
+  StorageQuotaUpdate,
+} from "./storage";
+export {
+  isProtectedStorageFile,
+  getStorageUsageStatus,
+  isStorageQuotaError,
+  getStorageErrorDetail,
+  isDeletedAttachmentStatus,
+  formatStorageBytes,
+} from "./storage";
+
+// ============================================
 // Share Types
 // ============================================
 export type {

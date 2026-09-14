@@ -1,4 +1,6 @@
+import hashlib
 import json
+import uuid
 from typing import TYPE_CHECKING, Any, Optional
 
 from src.infra.async_utils import run_blocking_io
@@ -8,6 +10,7 @@ from src.infra.skill.binary import (
     SkillBinaryRef,
     build_binary_ref_content,
     build_storage_key,
+    build_versioned_storage_key,
     guess_mime_type,
     parse_binary_ref_async,
 )
@@ -21,6 +24,15 @@ from src.infra.skill.storage_helpers import (
     normalize_skill_name_list,
 )
 from src.infra.skill.types import InstalledFrom, SkillMeta
+from src.infra.storage.managed_integration import (
+    commit_managed_files,
+    compensate_managed_files,
+    get_managed_storage_service,
+    managed_file_plan,
+    managed_file_plan_for,
+    release_managed_file,
+    reserve_managed_files,
+)
 from src.infra.storage.mongodb import get_mongo_client
 from src.infra.utils.datetime import utc_now_iso
 from src.kernel.config import settings
@@ -113,32 +125,158 @@ class SkillStorage:
         data: bytes,
         user_id: str,
         mime_type: Optional[str] = None,
+        *,
+        managed_reservation: Any | None = None,
+        commit_managed: bool = True,
     ) -> SkillBinaryRef:
-        """上传二进制文件到 S3/本地存储，并在 MongoDB 存储引用。"""
+        """Write one Skill binary through an optional managed reservation.
+
+        The legacy path remains compatible for deployments before the storage
+        foundation rollout.  When the foundation is present, every write gets a
+        generation-specific key and a logical owner before the old generation is
+        released.
+        """
         from src.infra.storage.s3.service import get_or_init_storage
 
         if not mime_type:
             mime_type = guess_mime_type(file_path)
 
-        storage_key = build_storage_key(user_id, skill_name, file_path)
+        collection = self._get_files_collection()
+        previous_doc = await collection.find_one(
+            {"skill_name": skill_name, "user_id": user_id, "file_path": file_path},
+            {"content": 1},
+        )
+        previous_ref = (
+            await parse_binary_ref_async(previous_doc.get("content", ""))
+            if previous_doc
+            else None
+        )
+        file_hash = hashlib.sha256(data).hexdigest()
+        source_ref = f"{skill_name}/{file_path}"
+        requested_storage_key = build_versioned_storage_key(user_id, skill_name, file_path)
+        reservation = managed_reservation
+        grouped_reservation = managed_reservation is not None and not commit_managed
+        managed_service = get_managed_storage_service()
+        if reservation is None and managed_service is not None:
+            reservation = await reserve_managed_files(
+                user_id=user_id,
+                source="skill",
+                items=[
+                    {
+                        "source": "skill",
+                        "source_ref": source_ref,
+                        "name": file_path,
+                        "mime_type": mime_type,
+                        "category": "skill",
+                        "size": len(data),
+                        "content_hash": file_hash,
+                        "storage_key": requested_storage_key,
+                        "previous_file_id": previous_ref.file_id if previous_ref else None,
+                        "previous_size": previous_ref.size if previous_ref else 0,
+                    }
+                ],
+                idempotency_key=f"skill:{user_id}:{skill_name}:{file_path}:{file_hash}",
+                operation_kind="replace" if previous_ref else "create",
+            )
+            if reservation is None:
+                raise RuntimeError("managed storage reservation returned no intent")
+
+        plan = (
+            managed_file_plan_for(reservation, source_ref)
+            if reservation is not None
+            else None
+        )
+        resolved_file_id = plan.file_id if plan else None
+        if plan and plan.storage_key:
+            storage_key = plan.storage_key
+        elif reservation is not None:
+            storage_key = requested_storage_key
+        else:
+            storage_key = build_storage_key(user_id, skill_name, file_path)
         storage_service = await get_or_init_storage()
 
-        # 上传到 S3/本地存储
-        await storage_service.upload_to_key(
-            data=data,
-            key=storage_key,
-            content_type=mime_type,
-            skip_size_limit=True,  # size already validated at API layer
-        )
+        item = {
+            "source": "skill",
+            "source_ref": source_ref,
+            "storage_key": storage_key,
+            "size": len(data),
+            "content_hash": file_hash,
+        }
+        try:
+            await storage_service.upload_to_key(
+                data=data,
+                key=storage_key,
+                content_type=mime_type,
+                skip_size_limit=True,
+            )
+            ref_content = build_binary_ref_content(
+                storage_key,
+                mime_type,
+                len(data),
+                file_id=plan.file_id if plan else None,
+                status=("pending" if grouped_reservation else "active") if reservation is not None else None,
+                source="skill" if reservation is not None else None,
+            )
+            await self.set_skill_file(skill_name, file_path, ref_content, user_id)
 
-        # 构建引用并存入 MongoDB
-        ref_content = build_binary_ref_content(storage_key, mime_type, len(data))
-        await self.set_skill_file(skill_name, file_path, ref_content, user_id)
+            if reservation is not None and commit_managed:
+                result = await commit_managed_files(
+                    reservation,
+                    user_id=user_id,
+                    items=[item],
+                )
+                committed_plan = managed_file_plan(result) if result is not None else plan
+                if committed_plan and committed_plan.file_id and not resolved_file_id:
+                    resolved_file_id = committed_plan.file_id
+                if committed_plan or resolved_file_id:
+                    ref_content = build_binary_ref_content(
+                        storage_key,
+                        mime_type,
+                        len(data),
+                        file_id=resolved_file_id,
+                        status="active",
+                        source="skill",
+                    )
+                    await self.set_skill_file(skill_name, file_path, ref_content, user_id)
+
+            if (
+                previous_ref
+                and previous_ref.file_id
+                and storage_key != previous_ref.storage_key
+                and not grouped_reservation
+            ):
+                await release_managed_file(
+                    user_id=user_id,
+                    file_id=previous_ref.file_id,
+                    storage_key=previous_ref.storage_key,
+                    source="skill",
+                    reason="skill_generation_replaced",
+                    allow_protected=True,
+                )
+        except Exception:
+            if reservation is not None and not grouped_reservation:
+                try:
+                    await compensate_managed_files(
+                        reservation,
+                        user_id=user_id,
+                        items=[item],
+                        reason="skill_binary_write_failed",
+                    )
+                except Exception as compensation_error:
+                    logger.error("Failed to compensate Skill binary reservation: %s", compensation_error)
+            try:
+                await storage_service.delete_file(storage_key)
+            except Exception as delete_error:
+                logger.warning("Failed to remove staged Skill binary %s: %s", storage_key, delete_error)
+            raise
 
         return SkillBinaryRef(
             storage_key=storage_key,
             mime_type=mime_type,
             size=len(data),
+            file_id=resolved_file_id,
+            status=("pending" if grouped_reservation else "active") if reservation is not None else None,
+            source="skill" if reservation is not None else None,
         )
 
     async def update_skill_file_cas(
@@ -172,7 +310,7 @@ class SkillStorage:
         return result.modified_count > 0
 
     async def delete_skill_file(self, skill_name: str, file_path: str, user_id: str) -> None:
-        """删除单个文件（如果是二进制引用，同时删除 S3 对象）"""
+        """Delete one file and release its managed owner when applicable."""
         collection = self._get_files_collection()
         doc = await collection.find_one(
             {"skill_name": skill_name, "user_id": user_id, "file_path": file_path},
@@ -181,7 +319,11 @@ class SkillStorage:
             # 检查是否为二进制引用，如果是则删除 S3 对象
             binary_ref = await parse_binary_ref_async(doc.get("content", ""))
             if binary_ref:
-                await self._delete_s3_object(binary_ref.storage_key)
+                await self._retire_binary_ref(
+                    binary_ref,
+                    user_id,
+                    reason="skill_file_deleted",
+                )
             await collection.delete_one(
                 {"skill_name": skill_name, "user_id": user_id, "file_path": file_path},
             )
@@ -204,6 +346,34 @@ class SkillStorage:
         those objects would destroy central or marketplace files.
         """
         return bool(user_id) and storage_key.startswith(f"skills/{user_id}/")
+
+    async def _retire_binary_ref(
+        self,
+        binary_ref: SkillBinaryRef,
+        user_id: str,
+        *,
+        reason: str,
+    ) -> None:
+        """Release a managed owner, or safely clean a legacy user key."""
+
+        if binary_ref.file_id:
+            if get_managed_storage_service() is None:
+                logger.warning(
+                    "Keeping managed Skill binary %s: lifecycle service is unavailable",
+                    binary_ref.storage_key,
+                )
+                return
+            await release_managed_file(
+                user_id=user_id,
+                file_id=binary_ref.file_id,
+                storage_key=binary_ref.storage_key,
+                source="skill",
+                reason=reason,
+                allow_protected=True,
+            )
+            return
+        if self._is_user_owned_storage_key(binary_ref.storage_key, user_id):
+            await self._delete_s3_object(binary_ref.storage_key)
 
     async def sync_skill_files(self, skill_name: str, files: dict[str, str], user_id: str) -> None:
         """批量同步文件（替换所有，但保留 __meta__）。支持文本和二进制引用。"""
@@ -236,7 +406,14 @@ class SkillStorage:
         async for doc in removed_binary_cursor:
             binary_ref = await parse_binary_ref_async(doc.get("content", ""))
             if binary_ref:
-                s3_keys_to_delete.append(binary_ref.storage_key)
+                if binary_ref.file_id:
+                    await self._retire_binary_ref(
+                        binary_ref,
+                        user_id,
+                        reason="skill_file_removed",
+                    )
+                elif self._is_user_owned_storage_key(binary_ref.storage_key, user_id):
+                    s3_keys_to_delete.append(binary_ref.storage_key)
 
         await collection.delete_many(removed_query)
 
@@ -297,10 +474,12 @@ class SkillStorage:
             {"content": 1},
         ):
             binary_ref = await parse_binary_ref_async(doc.get("content", ""))
-            if binary_ref and self._is_user_owned_storage_key(
-                binary_ref.storage_key, user_id
-            ):
-                await self._delete_s3_object(binary_ref.storage_key)
+            if binary_ref:
+                await self._retire_binary_ref(
+                    binary_ref,
+                    user_id,
+                    reason="skill_deleted",
+                )
 
         await collection.delete_many(
             {
@@ -817,10 +996,12 @@ class SkillStorage:
             {"content": 1},
         ):
             binary_ref = await parse_binary_ref_async(doc.get("content", ""))
-            if binary_ref and self._is_user_owned_storage_key(
-                binary_ref.storage_key, user_id
-            ):
-                await self._delete_s3_object(binary_ref.storage_key)
+            if binary_ref:
+                await self._retire_binary_ref(
+                    binary_ref,
+                    user_id,
+                    reason="skill_deleted",
+                )
 
         await collection.delete_many({"skill_name": skill_name, "user_id": user_id})
 
@@ -1086,14 +1267,103 @@ class SkillStorage:
         if not files and not binary_files:
             raise ValueError("Skill must have at least one file")
 
-        await self.sync_skill_files(skill_name, files, user_id)
-
-        # 上传二进制文件
-        if binary_files:
+        reservation = None
+        managed_service = get_managed_storage_service()
+        group_items: list[dict[str, Any]] = []
+        if binary_files and managed_service is not None:
+            if len(binary_files) > 500:
+                raise ValueError("Skill binary operation contains too many files")
             for file_path, data in binary_files.items():
-                await self.set_skill_binary_file(skill_name, file_path, data, user_id)
+                group_items.append(
+                    {
+                        "source": "skill",
+                        "source_ref": f"{skill_name}/{file_path}",
+                        "name": file_path,
+                        "mime_type": guess_mime_type(file_path),
+                        "category": "skill",
+                        "size": len(data),
+                        "content_hash": hashlib.sha256(data).hexdigest(),
+                        "storage_key": build_versioned_storage_key(
+                            user_id,
+                            skill_name,
+                            file_path,
+                        ),
+                    }
+                )
+            reservation = await reserve_managed_files(
+                user_id=user_id,
+                source="skill",
+                items=group_items,
+                idempotency_key=f"skill-group:{user_id}:{skill_name}:{uuid.uuid4().hex}",
+                operation_kind="group_create",
+            )
+            if reservation is None:
+                raise RuntimeError("managed storage group reservation returned no intent")
 
-        await self.set_skill_meta(skill_name, user_id, installed_from=installed_from)
+        try:
+            await self.sync_skill_files(skill_name, files, user_id)
+
+            if binary_files:
+                for file_path, data in binary_files.items():
+                    binary_ref = await self.set_skill_binary_file(
+                        skill_name,
+                        file_path,
+                        data,
+                        user_id,
+                        managed_reservation=reservation,
+                        commit_managed=reservation is None,
+                    )
+                    if reservation is not None:
+                        for item in group_items:
+                            if item["source_ref"] == f"{skill_name}/{file_path}":
+                                item["storage_key"] = binary_ref.storage_key
+                                if binary_ref.file_id:
+                                    item["file_id"] = binary_ref.file_id
+                                break
+
+            await self.set_skill_meta(skill_name, user_id, installed_from=installed_from)
+            if reservation is not None:
+                await commit_managed_files(
+                    reservation,
+                    user_id=user_id,
+                    items=group_items,
+                )
+                # Owner rows are now charged/active; flip pending projections
+                # without changing the immutable physical generation.
+                for file_path in binary_files or {}:
+                    current = await self.get_skill_file(skill_name, file_path, user_id)
+                    current_ref = await parse_binary_ref_async(current or "")
+                    if current_ref:
+                        await self.set_skill_file(
+                            skill_name,
+                            file_path,
+                            build_binary_ref_content(
+                                current_ref.storage_key,
+                                current_ref.mime_type,
+                                current_ref.size,
+                                file_id=current_ref.file_id,
+                                status="active",
+                                source="skill",
+                            ),
+                            user_id,
+                        )
+        except Exception:
+            if reservation is not None:
+                try:
+                    await compensate_managed_files(
+                        reservation,
+                        user_id=user_id,
+                        items=group_items,
+                        reason="skill_group_write_failed",
+                    )
+                except Exception as compensation_error:
+                    logger.error("Failed to compensate Skill group reservation: %s", compensation_error)
+                try:
+                    await self.delete_skill_files(skill_name, user_id)
+                except Exception as cleanup_error:
+                    logger.error("Failed to remove partial Skill group rows: %s", cleanup_error)
+            raise
+
         await self.invalidate_user_cache(user_id)
 
     async def close(self):

@@ -17,7 +17,8 @@ from src.infra.storage.checkpoint import (
     delete_checkpoints_for_thread,
     seed_checkpoint_from_messages,
 )
-from src.infra.storage.s3.service import get_or_init_storage, get_s3_enabled
+from src.infra.storage.managed_integration import remove_managed_message_refs
+from src.infra.storage.s3.service import get_or_init_storage, get_s3_enabled  # noqa: F401
 from src.infra.upload.file_record import FileRecordStorage
 from src.infra.utils.datetime import utc_now, utc_now_iso
 from src.kernel.exceptions import NotFoundError, SessionError
@@ -143,29 +144,84 @@ class SessionManager:
         return sorted(keys)
 
     async def _cleanup_unreferenced_files(self, keys: list[str]) -> int:
-        """Delete backing files and records for keys whose references reached zero."""
+        """Legacy cleanup helper retained for non-session callers.
+
+        ``clear_session_messages`` deliberately does not call this method: managed
+        tombstones and physical purge are owned by the lifecycle service.
+        """
         if not keys:
             return 0
-
         storage = await get_or_init_storage() if get_s3_enabled() else None
         deleted = 0
         for key in keys:
             record = await self._file_record_storage.find_by_key(key)
             if record is None or record.get("reference_count", 0) > 0:
                 continue
-
             if storage is not None:
                 await storage.delete_file(key)
             await self._file_record_storage.delete_by_key(key)
             deleted += 1
-
         return deleted
 
+    async def _collect_user_attachment_reference_keys(self, session_id: str) -> list[str]:
+        """Collect one legacy key per message attachment for balanced ref release."""
+        page_reader = getattr(self.trace_storage, "get_session_events_page", None)
+        if callable(page_reader):
+            events: list[dict] = []
+            cursor: str | None = None
+            seen_cursors: set[str] = set()
+            while True:
+                page = await page_reader(
+                    session_id,
+                    event_types=["user:message"],
+                    completed_only=False,
+                    limit=SESSION_ATTACHMENT_EVENT_SCAN_LIMIT,
+                    after=cursor,
+                )
+                page_events = list(page.get("events", [])) if isinstance(page, dict) else []
+                events.extend(page_events)
+                next_cursor = page.get("next_cursor") if isinstance(page, dict) else None
+                if not page.get("has_more") or not next_cursor or next_cursor in seen_cursors:
+                    break
+                seen_cursors.add(next_cursor)
+                cursor = next_cursor
+        else:
+            # Compatibility doubles and older trace stores expose only the list
+            # API. They retain the historical bounded behavior until migrated.
+            events = await self.trace_storage.get_session_events(
+                session_id,
+                event_types=["user:message"],
+                completed_only=False,
+                max_events=SESSION_ATTACHMENT_EVENT_SCAN_LIMIT,
+            )
+        keys: list[str] = []
+        for event in events:
+            if event.get("event_type") != "user:message":
+                continue
+            data = event.get("data", {})
+            for attachment in data.get("attachments") or []:
+                key = str(attachment.get("key", "")).strip()
+                if key:
+                    keys.append(key)
+        return keys
+
     async def clear_session_messages(self, session_id: str) -> int:
-        """Release attachment references and remove all traces for a session."""
-        attachment_keys = await self._collect_user_attachment_keys(session_id)
-        await self._file_record_storage.release_references(attachment_keys)
-        await self._cleanup_unreferenced_files(attachment_keys)
+        """Remove message refs/traces without deleting file metadata or objects."""
+        attachment_keys = await self._collect_user_attachment_reference_keys(session_id)
+        for key in attachment_keys:
+            await self._file_record_storage.release_references([key])
+
+        session_owner_id = ""
+        try:
+            session = await self.storage.get_by_session_id(session_id)
+            session_owner_id = str(getattr(session, "user_id", "") or "")
+        except Exception as exc:
+            logger.debug("Could not resolve session owner for managed refs %s: %s", session_id, exc)
+        if session_owner_id:
+            await remove_managed_message_refs(
+                session_id=session_id,
+                user_id=session_owner_id,
+            )
         await self.trace_storage.delete_session_traces(session_id)
         return len(attachment_keys)
 

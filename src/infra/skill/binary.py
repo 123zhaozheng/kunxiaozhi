@@ -7,6 +7,7 @@ Binary files are stored in S3/local storage, with a JSON reference in MongoDB.
 
 import json
 import mimetypes
+import uuid
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -84,6 +85,9 @@ class SkillBinaryRef(BaseModel):
     storage_key: str  # S3/local storage key
     mime_type: str
     size: int
+    file_id: Optional[str] = None
+    status: Optional[str] = None
+    source: Optional[str] = None
 
 
 def is_binary_file(file_path: str, data: Optional[bytes] = None) -> bool:
@@ -184,7 +188,28 @@ def build_storage_key(user_id: str, skill_name: str, file_path: str) -> str:
     return f"skills/{user_id}/{skill_name}/{file_path}"
 
 
-def build_binary_ref_content(storage_key: str, mime_type: str, size: int) -> str:
+def build_versioned_storage_key(
+    user_id: str,
+    skill_name: str,
+    file_path: str,
+    *,
+    generation: str | None = None,
+) -> str:
+    """Build an immutable generation key for a user-owned Skill binary."""
+
+    generation = generation or uuid.uuid4().hex
+    return f"skills/{user_id}/{skill_name}/{generation}/{file_path}"
+
+
+def build_binary_ref_content(
+    storage_key: str,
+    mime_type: str,
+    size: int,
+    *,
+    file_id: str | None = None,
+    status: str | None = None,
+    source: str | None = None,
+) -> str:
     """
     Build JSON string to store in MongoDB content field for a binary file.
     """
@@ -192,8 +217,11 @@ def build_binary_ref_content(storage_key: str, mime_type: str, size: int) -> str
         storage_key=storage_key,
         mime_type=mime_type,
         size=size,
+        file_id=file_id,
+        status=status,
+        source=source,
     )
-    return json.dumps(ref.model_dump(by_alias=True))
+    return json.dumps(ref.model_dump(by_alias=True, exclude_none=True))
 
 
 def parse_binary_ref(content: str) -> Optional[SkillBinaryRef]:

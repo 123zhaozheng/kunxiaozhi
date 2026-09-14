@@ -23,6 +23,22 @@ class AttachmentSchema(BaseModel):
     mime_type: str = Field(..., description="MIME type", alias="mimeType")
     size: int = Field(..., description="File size in bytes")
     url: str = Field(..., description="Accessible URL")
+    # Managed storage fields are additive.  Old clients/events only carry the
+    # legacy key and continue to validate unchanged.
+    file_id: Optional[str] = Field(None, alias="fileId", description="Managed logical file ID")
+    status: Optional[str] = Field(
+        None,
+        description="Server-authoritative lifecycle status",
+    )
+    source: Optional[str] = Field(None, description="Managed storage source")
+    lifecycle_error: Optional[str] = Field(
+        None,
+        description="Machine-readable unavailable-file reason",
+    )
+    reupload_required: bool = Field(
+        False,
+        description="Whether the user must upload the file again",
+    )
 
 
 class AgentRequest(BaseModel):

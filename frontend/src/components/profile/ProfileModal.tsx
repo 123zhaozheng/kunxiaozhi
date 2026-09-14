@@ -9,6 +9,7 @@ import {
   Braces,
   Wrench,
   Cpu,
+  HardDrive,
   Scale,
   LogOut,
 } from "lucide-react";
@@ -23,13 +24,25 @@ import { ProfileEnvVarsTab } from "./tabs/ProfileEnvVarsTab";
 import { ProfileToolsTab } from "./tabs/ProfileToolsTab";
 import { ProfileModelsTab } from "./tabs/ProfileModelsTab";
 import { ProfileTermsTab } from "./tabs/ProfileTermsTab";
+import { ProfileStorageTab } from "./tabs/ProfileStorageTab";
 import { useSwipeToClose } from "../../hooks/useSwipeToClose";
+import { STORAGE_OPEN_MANAGEMENT_EVENT } from "../../services/storageLifecycle";
 
 interface ProfileModalProps {
   showProfileModal: boolean;
   onCloseProfileModal: () => void;
   versionInfo: ReturnType<typeof useVersion>["versionInfo"];
 }
+
+type ProfileTab =
+  | "info"
+  | "notification"
+  | "preferences"
+  | "envvars"
+  | "tools"
+  | "models"
+  | "terms"
+  | "storage";
 
 const TAB_ICONS: Record<
   string,
@@ -42,6 +55,7 @@ const TAB_ICONS: Record<
   tools: Wrench,
   models: Cpu,
   terms: Scale,
+  storage: HardDrive,
 };
 
 export function ProfileModal({
@@ -52,15 +66,8 @@ export function ProfileModal({
   const { t } = useTranslation();
   const { logout } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<
-    | "info"
-    | "notification"
-    | "preferences"
-    | "envvars"
-    | "tools"
-    | "models"
-    | "terms"
-  >("info");
+  const [activeTab, setActiveTab] = useState<ProfileTab>("info");
+  const openStorageOnShowRef = useRef(false);
 
   const mobileTabsRef = useRef<HTMLDivElement>(null);
   const activeTabRef = useRef<HTMLButtonElement>(null);
@@ -78,9 +85,23 @@ export function ProfileModal({
     });
   }, [activeTab]);
 
-  // Reset tab when modal opens
+  // Upload rejection can open this modal without a React parent callback.
   useEffect(() => {
-    if (showProfileModal) setActiveTab("info");
+    const openStorage = () => {
+      openStorageOnShowRef.current = true;
+      setActiveTab("storage");
+    };
+    window.addEventListener(STORAGE_OPEN_MANAGEMENT_EVENT, openStorage);
+    return () =>
+      window.removeEventListener(STORAGE_OPEN_MANAGEMENT_EVENT, openStorage);
+  }, []);
+
+  // Reset tab when modal opens, while preserving an explicit storage request.
+  useEffect(() => {
+    if (showProfileModal) {
+      setActiveTab(openStorageOnShowRef.current ? "storage" : "info");
+      openStorageOnShowRef.current = false;
+    }
   }, [showProfileModal]);
 
   // Body scroll lock
@@ -107,7 +128,7 @@ export function ProfileModal({
 
   if (!showProfileModal) return null;
 
-  const tabs: { key: typeof activeTab; label: string }[] = [
+  const tabs: { key: ProfileTab; label: string }[] = [
     { key: "info", label: t("profile.title") },
     { key: "notification", label: t("profile.notifications") },
     { key: "preferences", label: t("profile.preferences") },
@@ -115,6 +136,7 @@ export function ProfileModal({
     { key: "tools", label: t("profile.toolsTab", "Tools") },
     { key: "models", label: t("profile.modelIntro") },
     { key: "terms", label: t("profile.termsTab") },
+    { key: "storage", label: t("profile.storageTab", "Storage") },
   ];
 
   const renderTabContent = () => (
@@ -126,12 +148,14 @@ export function ProfileModal({
       {activeTab === "tools" && <ProfileToolsTab />}
       {activeTab === "models" && <ProfileModelsTab />}
       {activeTab === "terms" && <ProfileTermsTab />}
+      {activeTab === "storage" && <ProfileStorageTab />}
     </div>
   );
 
   const renderCloseButton = (className?: string) => (
     <button
       onClick={onCloseProfileModal}
+      aria-label={t("common.close", "Close")}
       className={`p-1.5 rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 dark:text-stone-500 dark:hover:text-stone-300 dark:hover:bg-stone-700/60 transition-all ${
         className ?? ""
       }`}
@@ -173,6 +197,9 @@ export function ProfileModal({
       {/* ===== Mobile: bottom sheet ===== */}
       <div
         ref={swipeRef as React.RefObject<HTMLDivElement>}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("profile.title")}
         className="sm:hidden relative z-10 w-full bg-white dark:bg-stone-800 rounded-t-2xl shadow-2xl shadow-black/20 dark:shadow-black/50 border-x border-t border-stone-200/80 dark:border-stone-700/60 overflow-hidden max-h-[90dvh] flex flex-col animate-slide-up-sheet"
         onClick={(e) => e.stopPropagation()}
       >
@@ -195,6 +222,8 @@ export function ProfileModal({
             ref={mobileTabsRef}
             className="flex gap-1 overflow-x-auto scrollbar-none scroll-smooth"
             style={{ scrollSnapType: "x mandatory" }}
+            role="tablist"
+            aria-label={t("profile.tabsLabel", "Profile sections")}
           >
             {tabs.map((tab) => {
               const Icon = TAB_ICONS[tab.key];
@@ -204,6 +233,10 @@ export function ProfileModal({
                   key={tab.key}
                   ref={isActive ? activeTabRef : undefined}
                   onClick={() => setActiveTab(tab.key)}
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls="profile-tabpanel-mobile"
+                  tabIndex={isActive ? 0 : -1}
                   style={{ scrollSnapAlign: "start" }}
                   className={`relative shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
                     isActive
@@ -230,7 +263,12 @@ export function ProfileModal({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto py-2 sm:py-4 px-4">
+        <div
+          className="flex-1 overflow-y-auto py-2 sm:py-4 px-4"
+          role="tabpanel"
+          id="profile-tabpanel-mobile"
+          aria-label={t("profile.tabsLabel", "Profile sections")}
+        >
           {renderTabContent()}
         </div>
 
@@ -242,6 +280,9 @@ export function ProfileModal({
 
       {/* ===== Desktop: centered with sidebar ===== */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("profile.title")}
         className="hidden sm:flex relative z-10 w-[80vw] max-w-[680px] h-[75dvh] max-h-[640px] bg-white dark:bg-stone-800 rounded-2xl shadow-2xl shadow-stone-900/10 dark:shadow-black/40 border border-stone-200/80 dark:border-stone-700/50 overflow-hidden flex-col animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
@@ -261,7 +302,11 @@ export function ProfileModal({
         {/* Body: left sidebar tabs + right content */}
         <div className="flex flex-1 min-h-0">
           {/* Left sidebar tabs */}
-          <div className="w-[152px] shrink-0 border-r border-stone-100 dark:border-stone-700/50 py-2 px-2 space-y-0.5 bg-stone-50/50 dark:bg-stone-900/20">
+          <div
+            className="w-[152px] shrink-0 border-r border-stone-100 dark:border-stone-700/50 py-2 px-2 space-y-0.5 bg-stone-50/50 dark:bg-stone-900/20"
+            role="tablist"
+            aria-label={t("profile.tabsLabel", "Profile sections")}
+          >
             {tabs.map((tab) => {
               const Icon = TAB_ICONS[tab.key];
               const isActive = activeTab === tab.key;
@@ -269,6 +314,10 @@ export function ProfileModal({
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls="profile-tabpanel-desktop"
+                  tabIndex={isActive ? 0 : -1}
                   className={`w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
                     isActive
                       ? "bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-sm border border-stone-200/80 dark:border-stone-700/60"
@@ -304,7 +353,12 @@ export function ProfileModal({
           </div>
 
           {/* Right content */}
-          <div className="flex-1 overflow-y-auto p-5 sm:p-8">
+          <div
+            className="flex-1 overflow-y-auto p-5 sm:p-8"
+            role="tabpanel"
+            id="profile-tabpanel-desktop"
+            aria-label={t("profile.tabsLabel", "Profile sections")}
+          >
             {renderTabContent()}
           </div>
         </div>

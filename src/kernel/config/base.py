@@ -316,6 +316,26 @@ class Settings(BaseSettings):
     FILE_UPLOAD_MAX_SIZE_DOCUMENT: int = 50
     FILE_UPLOAD_MAX_FILES: int = 10
 
+    # User-owned storage quota settings.  The ledger remains authoritative even
+    # when hard rejection is disabled during a rollout or rollback.
+    USER_STORAGE_ENFORCEMENT_ENABLED: bool = True
+    USER_STORAGE_DEFAULT_QUOTA_MB: int = 1024
+    USER_STORAGE_WARNING_PERCENT: int = 80
+
+    @field_validator("USER_STORAGE_DEFAULT_QUOTA_MB")
+    @classmethod
+    def validate_user_storage_quota(cls, value: int) -> int:
+        if not 0 < int(value) <= (1 << 60) // (1024 * 1024):
+            raise ValueError("USER_STORAGE_DEFAULT_QUOTA_MB is outside the safe byte range")
+        return int(value)
+
+    @field_validator("USER_STORAGE_WARNING_PERCENT")
+    @classmethod
+    def validate_user_storage_warning(cls, value: int) -> int:
+        if not 1 <= int(value) <= 99:
+            raise ValueError("USER_STORAGE_WARNING_PERCENT must be between 1 and 99")
+        return int(value)
+
     # Frontend Settings
     FRONTEND_DEV_URL: str = ""
     DEFAULT_AGENT: str = "default"

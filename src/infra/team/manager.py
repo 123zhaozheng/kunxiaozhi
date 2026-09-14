@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 
 from src.infra.persona_preset.manager import PersonaPresetManager
+from src.infra.storage.user_storage import UserStorageQuotaService
 from src.infra.team.storage import TeamStorage
 from src.kernel.exceptions import NotFoundError
 from src.kernel.schemas.team import (
@@ -16,6 +17,14 @@ from src.kernel.schemas.team import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _managed_file_id(value: object) -> str | None:
+    text = str(value or "")
+    marker = "/api/storage/files/"
+    if marker not in text:
+        return None
+    return text.split(marker, 1)[1].split("/", 1)[0] or None
 
 
 class TeamManager:
@@ -80,7 +89,18 @@ class TeamManager:
                 prompt.model_dump(mode="json") for prompt in team_data.starter_prompts
             ],
         )
-        return await self._hydrate_member_display_metadata(team)
+        result = await self._hydrate_member_display_metadata(team)
+        file_id = _managed_file_id(result.avatar)
+        if file_id:
+            try:
+                await UserStorageQuotaService().bind_protected_file(
+                    owner_user_id,
+                    file_id,
+                    f"team_avatar:{result.id}",
+                )
+            except Exception as exc:
+                logger.warning("Failed to bind Team avatar %s: %s", file_id, exc)
+        return result
 
     async def get_team(
         self,
@@ -92,7 +112,8 @@ class TeamManager:
         team = await self.storage.get_team(team_id, owner_user_id=owner_user_id)
         if not team:
             raise NotFoundError("team_not_found")
-        return await self._hydrate_member_display_metadata(team)
+        result = await self._hydrate_member_display_metadata(team)
+        return result
 
     async def list_teams(
         self,
@@ -156,7 +177,19 @@ class TeamManager:
         )
         if not team:
             raise NotFoundError("team_not_found")
-        return await self._hydrate_member_display_metadata(team)
+        result = await self._hydrate_member_display_metadata(team)
+        file_id = _managed_file_id(update.get("avatar"))
+        if file_id:
+            try:
+                await UserStorageQuotaService().bind_protected_file(
+                    owner_user_id,
+                    file_id,
+                    f"team_avatar:{team_id}",
+                )
+                await UserStorageQuotaService().finalize_replacement_for_file(owner_user_id, file_id)
+            except Exception as exc:
+                logger.warning("Failed to finalize Team avatar %s: %s", file_id, exc)
+        return result
 
     async def delete_team(
         self,
@@ -165,6 +198,16 @@ class TeamManager:
         owner_user_id: str,
     ) -> bool:
         """Delete a team."""
+        existing = await self.storage.get_team(team_id, owner_user_id=owner_user_id)
+        if not existing:
+            raise NotFoundError("team_not_found")
+        file_id = _managed_file_id(existing.avatar)
+        if file_id:
+            await UserStorageQuotaService().delete_protected_file(
+                owner_user_id,
+                file_id,
+                reason="team_deleted",
+            )
         deleted = await self.storage.delete_team(team_id, owner_user_id=owner_user_id)
         if not deleted:
             raise NotFoundError("team_not_found")

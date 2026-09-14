@@ -42,23 +42,44 @@ import type { ThinkingPart } from "../../types";
  */
 export function convertAttachments(
   attachments?: Array<{
-    id: string;
-    key: string;
+    id?: string;
+    file_id?: string;
+    fileId?: string;
+    key?: string;
     name: string;
     type: string;
-    mime_type: string;
+    mime_type?: string;
+    mimeType?: string;
     size: number;
-    url: string;
+    url?: string;
+    source?: string;
+    status?: string;
+    lifecycle_status?: string;
+    lifecycleStatus?: string;
+    deleted?: boolean;
+    deleted_at?: string;
+    deletedAt?: string;
+    available?: boolean;
+    lifecycle_error?: string;
+    lifecycleError?: string;
   }>,
 ): MessageAttachment[] | undefined {
   return attachments?.map((a) => ({
-    id: a.id,
-    key: a.key,
+    id: a.id || a.file_id || a.fileId || a.key || `${a.name}:${a.size}`,
+    key: a.key || "",
     name: a.name,
     type: a.type as MessageAttachment["type"],
-    mimeType: a.mime_type,
+    mimeType: a.mime_type || a.mimeType || "application/octet-stream",
     size: a.size,
     url: a.url,
+    fileId: a.file_id || a.fileId,
+    source: a.source,
+    lifecycleStatus: a.lifecycle_status || a.lifecycleStatus || a.status,
+    status: a.status,
+    deleted: a.deleted,
+    deletedAt: a.deleted_at || a.deletedAt,
+    available: a.available,
+    lifecycleError: a.lifecycle_error || a.lifecycleError,
   }));
 }
 

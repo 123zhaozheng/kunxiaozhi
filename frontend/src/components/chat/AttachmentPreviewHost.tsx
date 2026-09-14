@@ -7,6 +7,11 @@ import {
   getAttachmentPreviewState,
   subscribeAttachmentPreview,
 } from "./attachmentPreviewStore";
+import {
+  STORAGE_LIFECYCLE_EVENT,
+  matchesStorageLifecycleEvent,
+  type StorageLifecycleEventDetail,
+} from "../../services/storageLifecycle";
 
 export function AttachmentPreviewHost() {
   const [, forceRender] = useState(0);
@@ -23,6 +28,21 @@ export function AttachmentPreviewHost() {
 
   const previewState = previewStateRef.current;
   const attachment = previewState?.attachment ?? null;
+
+  useEffect(() => {
+    if (!attachment) return;
+    const closeDeletedPreview = (event: Event) => {
+      const detail = (event as CustomEvent<StorageLifecycleEventDetail>).detail;
+      if (
+        matchesStorageLifecycleEvent(detail, attachment.fileId, attachment.key) &&
+        (detail.status === "deleted" || detail.status === "delete_pending")
+      ) {
+        closeAttachmentPreview();
+      }
+    };
+    window.addEventListener(STORAGE_LIFECYCLE_EVENT, closeDeletedPreview);
+    return () => window.removeEventListener(STORAGE_LIFECYCLE_EVENT, closeDeletedPreview);
+  }, [attachment]);
 
   return (
     <DelayedUnmount show={!!attachment}>

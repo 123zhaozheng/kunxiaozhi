@@ -22,6 +22,7 @@ from src.agents.core.node_utils import (
     _download_image_as_data_url,
     _is_image_attachment,
 )
+from src.infra.agent.attachments import attachment_is_unavailable, attachment_reupload_context
 from src.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -55,6 +56,8 @@ async def describe_image(attachment: dict, *, max_bytes: int) -> str | None:
     失败/超限返回 None（调用方降级）。
     """
     key = attachment.get("key")
+    if attachment_is_unavailable(attachment):
+        return None
     if not key:
         return None
 
@@ -143,6 +146,11 @@ async def describe_image_attachments(
     async def _enrich(att: dict) -> dict:
         if not _is_image_attachment(att):
             return att
+        if attachment_is_unavailable(att):
+            return {
+                **att,
+                "reupload_context": attachment_reupload_context(att),
+            }
         desc = await describe_image(att, max_bytes=max_bytes)
         if desc:
             return {**att, "vision_description": desc}

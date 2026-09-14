@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useVersion } from "../../../hooks/useVersion";
 import { SIDEBAR_COLLAPSED_STORAGE_KEY } from "../../../hooks/useAuth";
 import { authApi } from "../../../services/api";
+import { STORAGE_OPEN_MANAGEMENT_EVENT } from "../../../services/storageLifecycle";
 import { ChatAppContent } from "./ChatAppContent";
 import { NonChatAppContent } from "./NonChatAppContent";
 import {
@@ -46,6 +47,19 @@ export function AppContent({ activeTab }: AppContentProps) {
     window.addEventListener("sidebar-collapsed-changed", handler);
     return () =>
       window.removeEventListener("sidebar-collapsed-changed", handler);
+  }, []);
+
+  useEffect(() => {
+    const openStorageManagement = () => setShowProfileModal(true);
+    window.addEventListener(
+      STORAGE_OPEN_MANAGEMENT_EVENT,
+      openStorageManagement,
+    );
+    return () =>
+      window.removeEventListener(
+        STORAGE_OPEN_MANAGEMENT_EVENT,
+        openStorageManagement,
+      );
   }, []);
 
   useEffect(() => {

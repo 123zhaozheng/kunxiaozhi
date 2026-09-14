@@ -12,6 +12,19 @@ export interface MessageAttachment {
   mimeType: string;
   size: number;
   url?: string;
+  /** Server-owned logical file identifier. */
+  fileId?: string;
+  /** Lifecycle projection returned by the storage service. */
+  lifecycleStatus?: string;
+  /** Backward-compatible raw status alias from API payloads. */
+  status?: string;
+  deleted?: boolean;
+  deletedAt?: string;
+  available?: boolean;
+  source?: string;
+  lifecycleError?: string;
+  /** Set when a selected file is retained for a retry after admission fails. */
+  uploadError?: string;
   /** Upload progress (0-100) */
   uploadProgress?: number;
   /** Whether upload is in progress */
@@ -49,6 +62,10 @@ export interface UploadResult {
   type: FileCategory;
   mimeType: string;
   size: number;
+  fileId?: string;
+  source?: string;
+  status?: string;
+  storageUsage?: import("./storage").StorageUsageSummary;
 }
 
 export interface FileCheckResult {
@@ -59,4 +76,8 @@ export interface FileCheckResult {
   type?: FileCategory;
   mimeType?: string;
   size?: number;
+  fileId?: string;
+  source?: string;
+  status?: string;
+  storageUsage?: import("./storage").StorageUsageSummary;
 }

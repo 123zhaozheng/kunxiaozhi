@@ -160,7 +160,13 @@ export const ChatInput = memo(function ChatInput({
   const attachments = externalAttachments ?? internalAttachments;
   const setAttachments = externalOnAttachmentsChange ?? setInternalAttachments;
 
-  const { uploadFiles, uploadLimits, validateCount, cancelUpload } =
+  const {
+    uploadFiles,
+    uploadLimits,
+    validateCount,
+    cancelUpload,
+    retryUpload,
+  } =
     useFileUpload({
       attachments,
       onAttachmentsChange: setAttachments,
@@ -679,12 +685,14 @@ export const ChatInput = memo(function ChatInput({
 
   const hasContent = !!input.trim() && !disabled;
   const hasUploadingAttachment = attachments.some((a) => a.isUploading);
+  const hasFailedAttachment = attachments.some((a) => !!a.uploadError);
   const canSubmit =
     hasContent &&
     canSend &&
     !isLoading &&
     !isSubmitting &&
     !hasUploadingAttachment &&
+    !hasFailedAttachment &&
     !requiresTeamSelection;
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -804,6 +812,7 @@ export const ChatInput = memo(function ChatInput({
             attachments={attachments}
             onAttachmentsChange={setAttachments}
             onCancelUpload={cancelUpload}
+            onRetryUpload={retryUpload}
             onImageViewerOpen={(url) => setImageViewerSrc(url)}
           />
 

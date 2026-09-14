@@ -31,6 +31,27 @@ def _extract_attachment_keys(attachments: Optional[List[Dict[str, Any]]]) -> lis
     return keys
 
 
+def _extract_attachment_file_ids(
+    attachments: Optional[List[Dict[str, Any]]],
+) -> list[str]:
+    """Extract unique managed IDs, including tombstoned historical files."""
+
+    if not attachments:
+        return []
+    file_ids: list[str] = []
+    seen: set[str] = set()
+    for attachment in attachments:
+        value = attachment.get("file_id") or attachment.get("fileId")
+        file_id = str(value).strip() if value else ""
+        if not file_id or file_id in seen:
+            continue
+        seen.add(file_id)
+        file_ids.append(file_id)
+        if len(file_ids) >= ATTACHMENT_KEYS_MAX:
+            break
+    return file_ids
+
+
 def _bounded_attachments(
     attachments: Optional[List[Dict[str, Any]]],
     *,

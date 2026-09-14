@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import type { Message, MessagePart, ToolPart } from "../../../types";
+import { isDeletedAttachmentStatus } from "../../../types/storage";
 import { getFullUrl } from "../../../services/api/config";
 import { isImageFile } from "../../documents/utils";
 import { ImageViewer } from "../../common";
@@ -171,6 +172,7 @@ export function collectSessionImageGalleryItems(
         const isImage =
           attachment.type === "image" ||
           attachment.mimeType?.startsWith("image/");
+        if (isDeletedAttachmentStatus(attachment)) return [];
         const src = resolveImageSrc(attachment.url);
         if (!isImage || !src) return [];
         return [

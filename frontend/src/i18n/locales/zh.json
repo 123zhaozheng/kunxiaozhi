@@ -1920,7 +1920,9 @@
     "usernamePlaceholder": "请输入用户名",
     "usernameUpdateFailed": "用户名修改失败",
     "usernameUpdated": "用户名修改成功",
-    "termsItem2": "如使用过程中遇到 Bug，或需要功能反馈与支持，请通过企业微信小 K 联系赵正通。"
+    "termsItem2": "如使用过程中遇到 Bug，或需要功能反馈与支持，请通过企业微信小 K 联系赵正通。",
+    "storageTab": "空间管理",
+    "tabsLabel": "个人信息栏目"
   },
   "project": {
     "code": "代码",
@@ -1996,6 +1998,7 @@
     "updated": "更新",
     "uploadLimitsHint": "留空 = 使用系统默认值",
     "uploadLimitsTitle": "上传限制",
+    "storageQuotaMb": "存储配额（MB）",
     "validation": {
       "enterName": "请输入角色名称",
       "selectPermission": "请至少选择一个权限"
@@ -2964,6 +2967,9 @@
     "updateSuccess": "用户更新成功",
     "user": "个人资料",
     "username": "用户名",
+    "storageQuotaMb": "个人存储配额（MB）",
+    "storageQuotaPlaceholder": "使用角色/默认配额",
+    "storageQuotaHint": "留空将继承最宽松角色或全局配额。",
     "usernamePlaceholder": "请输入用户名",
     "validation": {
       "enterEmail": "请输入邮箱",
@@ -2971,5 +2977,67 @@
       "enterUsername": "请输入用户名",
       "passwordMinLength": "密码至少需要6个字符"
     }
+  },
+  "storage": {
+    "summaryTitle": "个人存储空间",
+    "status": {
+      "normal": "正常",
+      "warning": "空间预警",
+      "full": "空间已满",
+      "overQuota": "已超配额"
+    },
+    "remaining": "剩余",
+    "usageProgress": "存储使用量",
+    "warningHint": "当前已使用大部分空间，建议清理不再使用的文件。",
+    "fullHint": "请先释放空间，再上传新文件。",
+    "filesTitle": "我的文件",
+    "filesHint": "聊天文件可在此删除；头像和 Skill 文件受保护。",
+    "loadFailed": "存储空间加载失败。",
+    "deleteComplete": "文件已从个人空间移除。",
+    "partialDelete": "部分文件未能移除。",
+    "deleteFailed": "文件移除失败。",
+    "confirmBatchTitle": "确认删除所选文件？",
+    "confirmBatchMessage": "确定删除选中的 {{count}} 个文件吗？此操作无法撤销。",
+    "confirmDeleteTitle": "确认删除此文件？",
+    "confirmDeleteMessage": "删除后将无法继续访问该文件；历史消息仍会保留“已删除”附件标记，且无法撤销。",
+    "searchPlaceholder": "搜索文件",
+    "sourceFilter": "按来源筛选",
+    "statusFilter": "按状态筛选",
+    "selectedCount": "已选择 {{count}} 个",
+    "fileCount": "{{count}} 个文件",
+    "selectAll": "选择所有可删除文件",
+    "selectFile": "选择 {{name}}",
+    "protected": "受保护",
+    "protectedHint": "请前往所属功能管理此文件。",
+    "deleteFile": "删除 {{name}}",
+    "page": "页",
+    "emptyTitle": "暂无可管理文件",
+    "emptyHint": "上传的文件会显示在这里。",
+    "partialDetails": "部分文件仍受保护或需要再次清理。",
+    "releaseDetails": "逻辑删除已完成；物理清理状态由服务端跟踪。",
+    "quotaExceeded": "存储空间不足，请清理后重试。",
+    "deleted": "已删除",
+    "retryUpload": "重试上传",
+    "resultReleased": "已释放：{{bytes}}",
+    "resultPhysical": "\u7269\u7406\u6e05\u7406\uff1a{{status}}",
+    "sources": {
+      "chat": "聊天",
+      "wecom": "企业微信",
+      "profile_avatar": "个人头像",
+      "persona_avatar": "Persona 头像",
+      "team_avatar": "团队头像",
+      "skill": "Skill",
+      "legacy": "历史文件"
+    },
+    "fileStatuses": {
+      "active": "正常",
+      "pending": "处理中",
+      "delete_pending": "删除中",
+      "deleted": "已删除",
+      "migration_required": "待迁移",
+      "failed": "失败",
+      "missing": "缺失"
+    }
   }
+
 }

@@ -8,15 +8,25 @@ WeCom (企业微信) 消息处理器模块
 
 import asyncio
 import hashlib
+import inspect
 import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Callable, Optional
 from urllib.parse import quote
 
+from src.infra.agent.attachments import normalize_attachments
 from src.infra.agent.wecom.collector import WeComResponseCollector
 from src.infra.agent.wecom.manager import WeComBotManager
 from src.infra.logging import get_logger
+from src.infra.storage.managed_integration import (
+    commit_managed_files,
+    compensate_managed_files,
+    get_managed_storage_service,
+    has_explicit_managed_storage_service,
+    managed_file_plan,
+    reserve_managed_files,
+)
 from src.infra.storage.s3.service import get_or_init_storage
 from src.infra.upload.file_record import FileRecordStorage
 from src.infra.utils.datetime import utc_now
@@ -24,6 +34,13 @@ from src.kernel.config import settings
 from src.kernel.schemas.wecom import WECOM_DEFAULT_SEGMENT_TARGET_CHARS
 
 logger = get_logger(__name__)
+
+
+class WeComAttachmentAccountingError(RuntimeError):
+    """Inbound media could not be accounted for before it was persisted."""
+
+
+WECOM_INBOUND_DEFAULT_MAX_BYTES = 50 * 1024 * 1024
 
 # 单例 file_record 存储（与 Web 端 upload.py 共享同一 collection）
 _file_record_storage = FileRecordStorage()
@@ -410,10 +427,10 @@ async def _build_single_attachment(
     attachment_type: str,
     owner_id: str,
 ) -> dict | None:
-    """下载单个 WeCom 媒体 → 上传 S3 → 写 file_record → 构造 attachment dict。
+    """下载单个 WeCom 媒体 → 预留空间 → 上传 → 写入权威记录。
 
     与 Web 端 AttachmentSchema 对齐。attachment_type ∈ "image"|"document"|"audio"。
-    下载/S3 上传/file_record 任一失败降级返回 None（记日志，不阻断消息处理）。
+    下载失败仍可降级；一旦进入托管存储，记账或补偿失败必须 fail closed。
     """
     folder, default_mime = _ATTACHMENT_DEFAULTS.get(
         attachment_type, ("document", "application/octet-stream")
@@ -433,23 +450,108 @@ async def _build_single_attachment(
         logger.warning("[WeCom] Empty inbound media bytes, skipping attachment")
         return None
 
+    max_bytes = int(
+        getattr(settings, "WECOM_MEDIA_MAX_BYTES", WECOM_INBOUND_DEFAULT_MAX_BYTES)
+        or WECOM_INBOUND_DEFAULT_MAX_BYTES
+    )
+    if len(file_bytes) > max_bytes:
+        logger.warning(
+            "[WeCom] Inbound media exceeds cap: size=%d max=%d owner=%s",
+            len(file_bytes),
+            max_bytes,
+            owner_id,
+        )
+        return None
+
+    file_hash = hashlib.sha256(file_bytes).hexdigest()
+    source_ref = f"{owner_id}:{url}"
+    reservation = None
+    requested_storage_key = f"managed/wecom/{owner_id}/{uuid.uuid4().hex}"
+    managed_service = get_managed_storage_service()
+    if not isinstance(_file_record_storage, FileRecordStorage) and not has_explicit_managed_storage_service():
+        managed_service = None
+    if managed_service is not None:
+        try:
+            reservation = await reserve_managed_files(
+                user_id=owner_id,
+                source="wecom",
+                items=[
+                    {
+                        "source": "wecom",
+                        "source_ref": source_ref,
+                        "name": file_name or "unknown",
+                        "mime_type": mime_type,
+                        "category": attachment_type,
+                        "size": len(file_bytes),
+                        "content_hash": file_hash,
+                        "storage_key": requested_storage_key,
+                    }
+                ],
+                idempotency_key=f"wecom:{file_hash}:{owner_id}",
+                operation_kind="create",
+            )
+            if reservation is None:
+                raise WeComAttachmentAccountingError("storage reservation returned no intent")
+        except Exception as exc:
+            logger.warning("[WeCom] Inbound media quota reservation failed: %s", exc)
+            raise WeComAttachmentAccountingError("storage_quota_exceeded") from exc
+
+    plan = managed_file_plan(reservation) if reservation is not None else None
+    staged_key = plan.storage_key if plan else None
+
     try:
         storage = await get_or_init_storage()
-        upload_result = await storage.upload_bytes(
-            file_bytes,
-            folder=folder,
-            filename=file_name or f"{uuid.uuid4().hex}",
-            content_type=mime_type,
-            metadata={"uploaded_by": owner_id, "source": "wecom_inbound"},
-            skip_size_limit=True,
-        )
+        upload_to_key = getattr(storage, "upload_to_key", None)
+        if reservation is not None and (not staged_key or not callable(upload_to_key)):
+            raise WeComAttachmentAccountingError(
+                "managed storage requires an immutable staged-key writer"
+            )
+        use_staged_key = bool(staged_key and callable(upload_to_key))
+        if use_staged_key:
+            candidate = upload_to_key(
+                data=file_bytes,
+                key=staged_key,
+                content_type=mime_type,
+                metadata={"uploaded_by": owner_id, "source": "wecom_inbound"},
+                skip_size_limit=True,
+            )
+            if inspect.isawaitable(candidate):
+                upload_result = await candidate
+                if upload_result is None:
+                    upload_result = type("UploadResult", (), {
+                        "key": staged_key,
+                        "size": len(file_bytes),
+                    })()
+            if reservation is not None and str(getattr(upload_result, "key", "")) != str(staged_key):
+                raise WeComAttachmentAccountingError(
+                    "managed storage writer changed the reserved object key"
+                )
+        if not use_staged_key:
+            upload_result = await storage.upload_bytes(
+                file_bytes,
+                folder=folder,
+                filename=file_name or f"{uuid.uuid4().hex}",
+                content_type=mime_type,
+                metadata={"uploaded_by": owner_id, "source": "wecom_inbound"},
+                skip_size_limit=True,
+            )
     except Exception as e:
         logger.error("[WeCom] Failed to upload media to S3: %s", e, exc_info=True)
+        if reservation is not None:
+            try:
+                await compensate_managed_files(
+                    reservation,
+                    user_id=owner_id,
+                    items=[{"storage_key": staged_key, "size": len(file_bytes)}],
+                    reason="physical_write_failed",
+                )
+            except Exception as compensation_error:
+                logger.error("[WeCom] Failed to compensate media reservation: %s", compensation_error)
+            raise WeComAttachmentAccountingError("storage_write_failed") from e
         return None
 
     storage_key = upload_result.key
     size = upload_result.size
-    file_hash = hashlib.sha256(file_bytes).hexdigest()
     logger.info(
         "[WeCom] Media uploaded to S3: key=%s size=%d mime=%s owner=%s",
         storage_key,
@@ -458,22 +560,70 @@ async def _build_single_attachment(
         owner_id,
     )
 
-    # file_record 写失败不阻断附件传递（去重失效但 agent 仍可见附件）
-    try:
-        await _file_record_storage.create(
-            file_hash=file_hash,
-            key=storage_key,
-            name=file_name or "unknown",
-            mime_type=mime_type,
-            size=size,
-            category=attachment_type,
-            uploaded_by=owner_id,
+    # New managed writes are recorded by the lifecycle service.  Keep the
+    # legacy projection only for deployments before that service is enabled;
+    # its global hash index must never reject a valid cross-user managed file.
+    if reservation is None:
+        try:
+            await _file_record_storage.create(
+                file_hash=file_hash,
+                key=storage_key,
+                name=file_name or "unknown",
+                mime_type=mime_type,
+                size=size,
+                category=attachment_type,
+                uploaded_by=owner_id,
+            )
+        except Exception as e:
+            logger.warning("[WeCom] Failed to write file_record for key=%s: %s", storage_key, e)
+
+    managed_result = None
+    if reservation is not None:
+        try:
+            managed_result = await commit_managed_files(
+                reservation,
+                user_id=owner_id,
+                items=[
+                    {
+                        "storage_key": storage_key,
+                        "size": size,
+                        "content_hash": file_hash,
+                        "source_ref": source_ref,
+                    }
+                ],
+            )
+        except Exception as exc:
+            try:
+                await compensate_managed_files(
+                    reservation,
+                    user_id=owner_id,
+                    items=[{"storage_key": storage_key, "size": size}],
+                    reason="lifecycle_commit_failed",
+                )
+            except Exception as compensation_error:
+                logger.error("[WeCom] Failed to compensate commit failure: %s", compensation_error)
+            try:
+                await storage.delete_file(storage_key)
+            except Exception as delete_error:
+                logger.error("[WeCom] Failed to remove staged object: %s", delete_error)
+            raise WeComAttachmentAccountingError("storage_commit_failed") from exc
+
+    committed_plan = managed_file_plan(managed_result) if managed_result is not None else plan
+    file_id = (committed_plan.file_id if committed_plan else None) or uuid.uuid4().hex
+    logical_url = _attachment_url_from_key(storage_key) if _app_base_url_configured() else ""
+    if reservation is not None and file_id:
+        base_url = (getattr(settings, "APP_BASE_URL", "") or "").rstrip("/")
+        logical_url = f"{base_url}/api/storage/files/{file_id}/content" if base_url else f"/api/storage/files/{file_id}/content"
+    if committed_plan and committed_plan.raw is not None:
+        logical_url = str(
+            getattr(committed_plan.raw, "url", None)
+            or (committed_plan.raw.get("url") if isinstance(committed_plan.raw, dict) else "")
+            or logical_url
         )
-    except Exception as e:
-        logger.warning("[WeCom] Failed to write file_record for key=%s: %s", storage_key, e)
 
     return {
-        "id": uuid.uuid4().hex,
+        "id": file_id,
+        "file_id": file_id if reservation is not None else None,
         "key": storage_key,
         "name": file_name or "unknown",
         "type": attachment_type,
@@ -481,7 +631,9 @@ async def _build_single_attachment(
         "size": size,
         # APP_BASE_URL 未配置时留空：agent 链会按 live request base_url 重建，
         # 或回退到内联 data_url。填占位 URL 会让 vision 模型 fetch 失败。
-        "url": _attachment_url_from_key(storage_key) if _app_base_url_configured() else "",
+        "url": logical_url,
+        "status": "active" if reservation is not None else None,
+        "source": "wecom" if reservation is not None else None,
     }
 
 
@@ -573,6 +725,8 @@ async def _build_wecom_attachments(
                     attachments.append(att)
 
         # video 和未知类型：不构造附件，保持占位符行为
+    except WeComAttachmentAccountingError:
+        raise
     except Exception as e:
         logger.error(
             "[WeCom] Failed to build attachments for msg_type=%s: %s",
@@ -806,8 +960,21 @@ def create_wecom_message_handler(
 
             # ── 构造入站附件（下载媒体 → S3 → attachment）──────────
             # 失败降级返回 None，保持占位符行为，不阻断消息处理。
-            attachments = await _build_wecom_attachments(
-                manager, aibotid, metadata, owner_id=session_owner_id
+            try:
+                attachments = await _build_wecom_attachments(
+                    manager, aibotid, metadata, owner_id=session_owner_id
+                )
+            except WeComAttachmentAccountingError as exc:
+                logger.warning("[WeCom] Rejecting inbound attachment before task submit: %s", exc)
+                await manager.send_message(
+                    aibotid,
+                    delivery_chat_id,
+                    "附件未能记入个人存储空间，请清理空间后重试。",
+                )
+                return
+            attachments = await normalize_attachments(
+                attachments,
+                user_id=session_owner_id,
             )
 
             task_manager = get_task_manager()
