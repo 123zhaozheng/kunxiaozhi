@@ -29,7 +29,7 @@ import type {
   ByPresetFeedbackItem,
   TrendDataPoint,
 } from "../../../types/analytics";
-import { PIE_COLORS, formatNumber } from "./analyticsFormat";
+import { PIE_COLORS, formatDonutLegendLabel, formatNumber } from "./analyticsFormat";
 
 export function StatsCard({
   icon: Icon,
@@ -172,17 +172,11 @@ export function DonutBlock({
   unitFormatter,
   onSliceClick,
 }: DonutBlockProps) {
-  const top = (data ?? []).slice(0, 5);
+  const top = useMemo(() => (data ?? []).slice(0, 5), [data]);
   const renderLabel = useCallback(
-    (entry: ByLabelItem) => {
-      const label = entry?.label ?? "—";
-      const truncated = label.length > 12 ? `${label.slice(0, 12)}…` : label;
-      const value = unitFormatter
-        ? unitFormatter(entry?.value ?? 0)
-        : formatNumber(entry?.value ?? 0);
-      return `${truncated} (${value})`;
-    },
-    [unitFormatter],
+    // recharts passes (name, entry, index); `name` is the nameKey string.
+    (name: unknown) => formatDonutLegendLabel(name, top, unitFormatter),
+    [top, unitFormatter],
   );
   const format = (value: number) =>
     unitFormatter ? unitFormatter(value) : formatNumber(value);

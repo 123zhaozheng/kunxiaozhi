@@ -26,3 +26,34 @@ export function formatNumber(value: number): string {
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
   return value.toLocaleString();
 }
+
+/** Maximum legend label length before ellipsis. */
+const LEGEND_LABEL_MAX = 12;
+
+/**
+ * Build one donut legend row (`label (value)`).
+ *
+ * recharts calls `<Legend formatter>` with `(name, entry, index)` where `name`
+ * is the `nameKey` **string** — not the data row. The numeric value therefore
+ * has to be resolved from the chart's own data by label; reading `.value` off
+ * the first argument silently yields `undefined` and renders `— (0)` for every
+ * slice.
+ */
+export function formatDonutLegendLabel(
+  name: unknown,
+  items: ReadonlyArray<{ label: string; value: number }>,
+  unitFormatter?: (value: number) => string,
+): string {
+  const label = typeof name === "string" && name.length > 0 ? name : "";
+  const match = items.find((item) => item.label === label);
+  const numeric = Number(match?.value ?? 0);
+  const display = label.length > 0 ? label : "—";
+  const truncated =
+    display.length > LEGEND_LABEL_MAX
+      ? `${display.slice(0, LEGEND_LABEL_MAX)}…`
+      : display;
+  const formatted = unitFormatter
+    ? unitFormatter(numeric)
+    : formatNumber(numeric);
+  return `${truncated} (${formatted})`;
+}
