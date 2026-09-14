@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from src.infra.analytics.date_range import CST
+from src.infra.analytics.snapshot import _COMPLETE_MARKER_USER_ID
 from src.infra.logging import get_logger
 from src.infra.storage.mongodb import get_mongo_client
 from src.infra.storage.redis import create_redis_client
@@ -314,6 +315,28 @@ class AnalyticsBackfillWorker:
         return True
 
     @staticmethod
+    async def _mark_snapshot_complete(snapshot_col: Any, target_date: str, now_utc: datetime) -> bool:
+        """Mark a successfully written day without changing existing rows."""
+        try:
+            await snapshot_col.update_one(
+                {"date": target_date, "user_id": _COMPLETE_MARKER_USER_ID},
+                {
+                    "$setOnInsert": {
+                        "date": target_date,
+                        "user_id": _COMPLETE_MARKER_USER_ID,
+                        "persona_preset_id": None,
+                        "agent_id": None,
+                        "frozen_at": now_utc,
+                    }
+                },
+                upsert=True,
+            )
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Snapshot completion marker for %s failed: %s", target_date, exc)
+            return False
+
+    @staticmethod
     async def _backfill_snapshot_for_day(
         snapshot_col: Any,
         traces_col: Any,
@@ -450,7 +473,9 @@ class AnalyticsBackfillWorker:
             return False
 
         if not docs and not session_docs:
-            return True
+            return await AnalyticsBackfillWorker._mark_snapshot_complete(
+                snapshot_col, target_date, now_utc
+            )
 
         session_map: dict[tuple[str | None, str | None, str | None], dict[str, Any]] = {}
         for session_doc in session_docs:
@@ -556,7 +581,9 @@ class AnalyticsBackfillWorker:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Snapshot backfill bulk_write for %s failed: %s", target_date, exc)
                 return False
-        return True
+        return await AnalyticsBackfillWorker._mark_snapshot_complete(
+            snapshot_col, target_date, now_utc
+        )
 
     # ── lock management (mirrors session backfill) ──────────────────
 

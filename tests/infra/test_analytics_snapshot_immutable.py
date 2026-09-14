@@ -409,6 +409,7 @@ async def test_freeze_releases_each_daily_lock_after_cancellation() -> None:
     storage.traces.aggregate = MagicMock(return_value=_FakeCursor([]))
     storage.sessions.aggregate = MagicMock(return_value=_FakeCursor([]))
     storage.snapshot.bulk_write = AsyncMock()
+    storage.snapshot.update_one = AsyncMock()
 
     filters = UsageFilters(
         start=datetime(2026, 8, 1, tzinfo=CST),
@@ -421,6 +422,107 @@ async def test_freeze_releases_each_daily_lock_after_cancellation() -> None:
         "analytics:snapshot:freeze:2026-08-02",
     ]
     assert redis.release_keys == ["analytics:snapshot:freeze:2026-08-01"]
+    storage.snapshot.update_one.assert_awaited_once()
+    marker_query, marker_update = storage.snapshot.update_one.call_args.args[:2]
+    assert marker_query == {"date": "2026-08-01", "user_id": "__snapshot_complete__"}
+    assert marker_update["$setOnInsert"]["user_id"] == "__snapshot_complete__"
+    assert marker_update["$setOnInsert"]["date"] == "2026-08-01"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_mode", ["redis_unavailable", "lock_competition", "freeze_failure"])
+async def test_read_or_freeze_marks_incomplete_fallbacks(failure_mode, monkeypatch) -> None:
+    from src.infra.analytics import snapshot as snapshot_module
+    from src.infra.analytics.snapshot import read_or_freeze
+
+    class _Redis:
+        async def set(self, *args, **kwargs):
+            return failure_mode != "lock_competition"
+
+        async def eval(self, *args, **kwargs):
+            return 1
+
+        async def aclose(self):
+            return None
+
+    storage = MagicMock()
+    storage.snapshot.find.return_value = _FakeCursor([])
+    if failure_mode == "redis_unavailable":
+        def unavailable(**kwargs):
+            raise RuntimeError("redis unavailable")
+        monkeypatch.setattr(snapshot_module, "create_redis_client", unavailable)
+    else:
+        monkeypatch.setattr(snapshot_module, "create_redis_client", lambda **kwargs: _Redis())
+        if failure_mode == "freeze_failure":
+            storage.traces.aggregate.side_effect = RuntimeError("aggregate failed")
+
+    monkeypatch.setattr(
+        snapshot_module,
+        "_merge_results",
+        AsyncMock(return_value={"by_user_persona": []}),
+    )
+    filters = UsageFilters(
+        start=datetime(2026, 8, 1, tzinfo=CST),
+        end=datetime(2026, 8, 2, tzinfo=CST),
+    )
+
+    result = await read_or_freeze(filters, storage=storage)
+
+    assert result["snapshot_complete"] is False
+
+
+@pytest.mark.asyncio
+async def test_realtime_fallback_keeps_dates_and_unions_cross_day_sessions() -> None:
+    from src.infra.analytics.snapshot import _compute_realtime_aggregate
+
+    d1 = "2026-08-01"
+    d2 = "2026-08-02"
+    storage = MagicMock()
+    storage.traces.aggregate.return_value = _FakeCursor(
+        [
+            {"_id": d1, "user_messages": 1, "tokens": 2, "active_session_ids": ["s1"], "active_user_ids": ["u1"]},
+            {"_id": d2, "user_messages": 1, "tokens": 3, "active_session_ids": ["s1"], "active_user_ids": ["u1"]},
+        ]
+    )
+    storage.sessions.aggregate.return_value = _FakeCursor(
+        [
+            {"_id": d1, "new_sessions": 1, "new_session_ids": ["s1"]},
+            {"_id": d2, "new_sessions": 1, "new_session_ids": ["s1"]},
+        ]
+    )
+    filters = UsageFilters(
+        start=datetime(2026, 8, 1, tzinfo=CST),
+        end=datetime(2026, 8, 3, tzinfo=CST),
+    )
+
+    result = await _compute_realtime_aggregate(storage, filters, [d1, d2])
+
+    assert [point["date"] for point in result["trend"]] == [d1, d2]
+    assert result["total"]["active_sessions"] == 1
+    assert result["total"]["new_sessions"] == 1
+
+
+@pytest.mark.asyncio
+async def test_snapshot_aggregate_failure_marks_result_incomplete(monkeypatch) -> None:
+    from src.infra.analytics import snapshot as snapshot_module
+    from src.infra.analytics.snapshot import _merge_results
+
+    storage = MagicMock()
+    storage.snapshot.aggregate.side_effect = RuntimeError("snapshot read failed")
+    storage.traces.aggregate.return_value = _FakeCursor([])
+    monkeypatch.setattr(
+        snapshot_module,
+        "_compute_realtime_aggregate",
+        AsyncMock(return_value={"trend": [], "active_user_ids": set()}),
+    )
+    filters = UsageFilters(
+        start=datetime(2026, 8, 1, tzinfo=CST),
+        end=datetime(2026, 8, 2, tzinfo=CST),
+    )
+
+    result = await _merge_results(storage, filters, ["2026-08-01"])
+
+    assert result["snapshot_complete"] is False
 
 
 if __name__ == "__main__":

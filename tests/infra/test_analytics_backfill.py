@@ -198,6 +198,11 @@ async def test_run_once_processes_batch_and_updates_cursor() -> None:
     assert result == 1
     # Activity & snapshot bulk_write each called once
     assert len(db["user_daily_activity"].bulk_write_calls) == 1
+    marker_calls = db["analytics_daily_snapshot"].update_one_calls
+    assert len(marker_calls) == 1
+    assert marker_calls[0][0] == {"date": "2026-08-20", "user_id": "__snapshot_complete__"}
+    assert marker_calls[0][1]["$setOnInsert"]["user_id"] == "__snapshot_complete__"
+
     assert len(db["analytics_daily_snapshot"].bulk_write_calls) == 1
     # Cursor persisted
     assert len(db["analytics_backfill_state"].update_one_calls) >= 1
@@ -296,3 +301,32 @@ async def test_failed_day_does_not_advance_cursor_and_is_recorded() -> None:
     assert state_update["failed_dates"] == ["2026-08-20"]
     assert "cursor_date" not in state_update
     await worker.close()
+
+
+@pytest.mark.asyncio
+async def test_snapshot_backfill_bulk_failure_does_not_write_completion_marker() -> None:
+    snapshot_col = _FakeCollection()
+    snapshot_col.bulk_write = AsyncMock(side_effect=RuntimeError("bulk failed"))
+    traces_col = _FakeCollection(
+        aggregate_results=[
+            [
+                {
+                    "_id": {"user_id": "u1", "persona_preset_id": None, "agent_id": None},
+                    "user_messages": 1,
+                    "tokens": 2,
+                    "active_session_ids": ["s1"],
+                }
+            ]
+        ]
+    )
+    ok = await AnalyticsBackfillWorker._backfill_snapshot_for_day(
+        snapshot_col,
+        traces_col,
+        None,
+        "2026-08-20",
+        datetime(2026, 8, 20, tzinfo=CST),
+        datetime(2026, 8, 21, tzinfo=CST),
+        datetime(2026, 8, 21, tzinfo=timezone.utc),
+    )
+    assert ok is False
+    assert snapshot_col.update_one_calls == []

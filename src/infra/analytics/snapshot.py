@@ -259,8 +259,17 @@ async def read_or_freeze(filters: Any, storage: Any | None = None) -> dict[str, 
             existing_docs = await cursor.to_list(length=None)
             existing_dates = {doc.get("date") for doc in existing_docs if doc.get("date")}
             truly_missing = [date for date in missing_dates if date not in existing_dates]
-            if truly_missing and redis_client is not None:
-                await _freeze_dates(storage, redis_client, truly_missing, filters)
+            if truly_missing:
+                if redis_client is None:
+                    snapshot_unavailable = True
+                else:
+                    frozen_dates = await _freeze_dates(
+                        storage, redis_client, truly_missing, filters
+                    )
+                    if set(truly_missing) - frozen_dates:
+                        # A lock race, aggregate failure, or marker write
+                        # failure must never be mistaken for an empty snapshot.
+                        snapshot_unavailable = True
     except Exception as exc:
         snapshot_unavailable = True
         logger.warning("[Analytics] Snapshot check/freeze failed: %s", exc)
@@ -268,10 +277,19 @@ async def read_or_freeze(filters: Any, storage: Any | None = None) -> dict[str, 
         if redis_client is not None:
             await redis_client.aclose()
 
-    return await _merge_results(storage, filters, dates, skip_historical=snapshot_unavailable)
+    result = await _merge_results(
+        storage, filters, dates, skip_historical=snapshot_unavailable
+    )
+    # This extra flag preserves the historical mapping for existing callers
+    # while allowing detail/CSV consumers to distinguish incomplete fallback
+    # output from a legitimate empty dimension.
+    result["snapshot_complete"] = bool(
+        result.get("snapshot_complete", True) and not snapshot_unavailable
+    )
+    return result
 
 
-async def _freeze_dates(storage: Any, redis_client: Any, dates: list[str], filters: Any) -> None:
+async def _freeze_dates(storage: Any, redis_client: Any, dates: list[str], filters: Any) -> set[str]:
     """Freeze each date under its own lock; filtered reads never affect writes."""
     from src.infra.analytics.usage_query import UsageFilters, new_sessions_match, usage_facts_stages
 
@@ -290,6 +308,7 @@ else
 end
 """
 
+    completed_dates: set[str] = set()
     for target_date in dates:
         lock_key = f"{_SNAPSHOT_LOCK_KEY_PREFIX}{target_date}"
         instance_id = str(ObjectId())
@@ -500,6 +519,7 @@ end
                 },
                 upsert=True,
             )
+            completed_dates.add(target_date)
         except Exception as exc:
             logger.warning("[Analytics] Snapshot freeze for %s failed: %s", target_date, exc)
         finally:
@@ -514,6 +534,9 @@ end
                     await redis_client.eval(release_lua, 1, lock_key, instance_id)
                 except Exception as exc:
                     logger.warning("[Analytics] Failed to release snapshot lock for %s: %s", target_date, exc)
+
+
+    return completed_dates
 
 
 async def _aggregate_session_groups(storage: Any, filters: Any) -> list[dict[str, Any]]:
@@ -566,6 +589,7 @@ async def _merge_results(
 
     today = today_cst()
     historical_dates = [date for date in dates if date != today]
+    snapshot_read_failed = False
     result: dict[str, Any] = {
         "total": {"new_sessions": 0, "active_sessions": 0, "user_messages": 0, "tokens": 0},
         "trend": [],
@@ -575,10 +599,16 @@ async def _merge_results(
         "by_user_persona": [],
         "active_users": 0,
         "using_users": 0,
+        "snapshot_complete": not (
+            skip_historical and any(date != today_cst() for date in dates)
+        ) and not snapshot_read_failed,
     }
     persona_user_sets: dict[str | None, set[str]] = {}
     agent_user_sets: dict[str | None, set[str]] = {}
     realtime_user_ids: set[str] = set()
+    realtime_fallback_active_session_ids: set[str] = set()
+    realtime_fallback_user_messages = 0
+    realtime_fallback_tokens = 0
     historical_items: list[dict[str, Any]] = []
     persona_items: list[dict[str, Any]] = []
     agent_items: list[dict[str, Any]] = []
@@ -613,6 +643,7 @@ async def _merge_results(
                     ).to_list(length=None)
                 except Exception as exc:
                     logger.warning("[Analytics] Snapshot %s aggregation failed: %s", dimension, exc)
+                    snapshot_read_failed = True
                     dimension_docs[dimension] = []
 
             for doc in dimension_docs["day"]:
@@ -685,6 +716,7 @@ async def _merge_results(
                     )
             except Exception as exc:
                 logger.debug("[Analytics] Snapshot persona users unavailable: %s", exc)
+                snapshot_read_failed = True
             try:
                 agent_user_docs = await snapshot_collection.aggregate(
                     base_match
@@ -708,6 +740,7 @@ async def _merge_results(
                     )
             except Exception as exc:
                 logger.debug("[Analytics] Snapshot agent users unavailable: %s", exc)
+                snapshot_read_failed = True
 
         if historical_dates and (skip_historical or not historical_items):
             realtime = await _compute_realtime_aggregate(storage, filters, historical_dates)
@@ -730,8 +763,28 @@ async def _merge_results(
                     ]
                 ).to_list(length=1)
                 if fallback_docs:
+                    fallback_dates = {
+                        str(doc.get("_id"))
+                        for doc in fallback_docs
+                        if doc.get("_id") is not None
+                    }
+                    if not fallback_dates.intersection(historical_dates):
+                        for doc in fallback_docs:
+                            realtime_fallback_active_session_ids.update(
+                                _flatten_ids(doc.get("active_session_ids"))
+                            )
+                            realtime_fallback_user_messages += int(
+                                doc.get("user_messages", 0) or 0
+                            )
+                            realtime_fallback_tokens += int(
+                                doc.get("tokens", doc.get("total_tokens", 0)) or 0
+                            )
                     realtime_user_ids.update(
-                        {str(uid) for uid in (fallback_docs[0].get("active_user_ids") or []) if uid}
+                        {
+                            str(uid)
+                            for uid in (fallback_docs[0].get("active_user_ids") or [])
+                            if uid
+                        }
                     )
             except Exception as exc:
                 logger.debug("[Analytics] Realtime fallback user set unavailable: %s", exc)
@@ -996,9 +1049,19 @@ async def _merge_results(
             total_new_legacy += int(item.get("_new_sessions_legacy", 0) or 0)
         result["total"] = {
             "new_sessions": len(total_new_ids) + total_new_legacy,
-            "active_sessions": len(total_active_ids) + total_active_legacy,
-            "user_messages": sum(int(item.get("user_messages", 0) or 0) for item in result["trend"]),
-            "tokens": sum(int(item.get("tokens", 0) or 0) for item in result["trend"]),
+            "active_sessions": (
+                len(total_active_ids)
+                + total_active_legacy
+                + len(realtime_fallback_active_session_ids)
+            ),
+            "user_messages": (
+                sum(int(item.get("user_messages", 0) or 0) for item in result["trend"])
+                + realtime_fallback_user_messages
+            ),
+            "tokens": (
+                sum(int(item.get("tokens", 0) or 0) for item in result["trend"])
+                + realtime_fallback_tokens
+            ),
         }
 
         result["by_persona"] = [
@@ -1049,8 +1112,10 @@ async def _merge_results(
             start_str, end_str = range_to_date_strings(filters.start, filters.end)
             using_users = await activity.distinct_users(start_str, end_str, source="message")
             active_users = await activity.distinct_users(start_str, end_str)
-            result["using_users"] = len(using_users) or len(realtime_user_ids)
-            result["active_users"] = len(active_users) or len(realtime_user_ids)
+            using_user_ids = {str(uid) for uid in using_users if uid}
+            active_user_ids = {str(uid) for uid in active_users if uid}
+            result["using_users"] = len(using_user_ids) or len(realtime_user_ids)
+            result["active_users"] = len(active_user_ids) or len(realtime_user_ids)
     except ImportError:
         result["using_users"] = len(result["by_user"])
         result["active_users"] = result["using_users"]
@@ -1059,29 +1124,42 @@ async def _merge_results(
         result["using_users"] = len(result["by_user"])
         result["active_users"] = result["using_users"]
 
+    if snapshot_read_failed:
+        result["snapshot_complete"] = False
     return result
 
 
 async def _compute_realtime_aggregate(storage: Any, filters: Any, dates: list[str]) -> dict[str, Any]:
-    """Compute a complete realtime fallback, including sessions independently."""
-    from src.infra.analytics.usage_query import UsageFilters, new_sessions_match, usage_facts_stages
+    """Compute a complete per-date realtime fallback without cross-day inflation."""
+    from src.infra.analytics.usage_query import new_sessions_match, usage_facts_stages
 
     result: dict[str, Any] = {
         "total": {"new_sessions": 0, "active_sessions": 0, "user_messages": 0, "tokens": 0},
         "trend": [],
         "active_user_ids": set(),
     }
+    requested_dates = set(dates)
     trace_pipeline = usage_facts_stages(filters) + [
         {
             "$group": {
-                "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$started_at", "timezone": "Asia/Shanghai"}},
+                "_id": {
+                    "$dateToString": {
+                        "format": "%Y-%m-%d",
+                        "date": "$started_at",
+                        "timezone": "Asia/Shanghai",
+                    }
+                },
                 "user_messages": {"$sum": "$user_messages"},
                 "tokens": {"$sum": "$tokens"},
                 "active_session_ids": {
-                    "$addToSet": {"$cond": [{"$gt": ["$user_messages", 0]}, "$session_id", None]}
+                    "$addToSet": {
+                        "$cond": [{"$gt": ["$user_messages", 0]}, "$session_id", None]
+                    }
                 },
                 "active_user_ids": {
-                    "$addToSet": {"$cond": [{"$gt": ["$user_messages", 0]}, "$user_id", None]}
+                    "$addToSet": {
+                        "$cond": [{"$gt": ["$user_messages", 0]}, "$user_id", None]
+                    }
                 },
             }
         }
@@ -1092,20 +1170,43 @@ async def _compute_realtime_aggregate(storage: Any, filters: Any, dates: list[st
         logger.warning("[Analytics] Realtime fallback traces failed: %s", exc)
         trace_docs = []
 
-    session_counts: dict[str, int] = {}
+    session_by_date: dict[str, dict[str, Any]] = {}
     try:
         session_docs = await storage.sessions.aggregate(
             [
                 {"$match": new_sessions_match(filters)},
-                {"$group": {"_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$created_at", "timezone": "Asia/Shanghai"}}, "new_sessions": {"$sum": 1}}},
+                {
+                    "$group": {
+                        "_id": {
+                            "$dateToString": {
+                                "format": "%Y-%m-%d",
+                                "date": "$created_at",
+                                "timezone": "Asia/Shanghai",
+                            }
+                        },
+                        "new_sessions": {"$sum": 1},
+                        "new_session_ids": {
+                            "$addToSet": {"$ifNull": ["$session_id", {"$toString": "$_id"}]}
+                        },
+                    }
+                },
             ]
         ).to_list(length=None)
-        session_counts = {str(doc.get("_id")): int(doc.get("new_sessions", 0) or 0) for doc in session_docs}
+        for doc in session_docs:
+            date = str(doc.get("_id") or "")
+            if date not in requested_dates:
+                continue
+            ids = _flatten_ids(doc.get("new_session_ids"))
+            session_by_date[date] = {
+                "ids": ids,
+                "count": len(ids) if ids else int(doc.get("new_sessions", 0) or 0),
+                "supported": bool(ids),
+            }
     except Exception as exc:
         logger.debug("[Analytics] Realtime fallback session aggregate failed: %s", exc)
         for date in dates:
             date_dt = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=CST)
-            date_filters = UsageFilters(
+            date_filters = type(filters)(
                 start=date_dt,
                 end=date_dt + timedelta(days=1),
                 persona_preset_id=getattr(filters, "persona_preset_id", None),
@@ -1113,47 +1214,57 @@ async def _compute_realtime_aggregate(storage: Any, filters: Any, dates: list[st
                 role_user_ids=getattr(filters, "role_user_ids", None),
             )
             try:
-                session_counts[date] = int(await storage.sessions.count_documents(new_sessions_match(date_filters)))
+                session_by_date[date] = {
+                    "ids": set(),
+                    "count": int(
+                        await storage.sessions.count_documents(new_sessions_match(date_filters))
+                    ),
+                    "supported": False,
+                }
             except Exception:
-                session_counts[date] = 0
+                session_by_date[date] = {"ids": set(), "count": 0, "supported": False}
 
-    by_date = {str(doc.get("_id")): doc for doc in trace_docs}
-    for doc in trace_docs:
+    by_date = {
+        str(doc.get("_id")): doc
+        for doc in trace_docs
+        if str(doc.get("_id")) in requested_dates
+    }
+    for doc in by_date.values():
         result["active_user_ids"].update(
             {str(uid) for uid in (doc.get("active_user_ids") or []) if uid}
         )
+
     for date in dates:
         doc = by_date.get(date, {})
-        active_ids = _flatten_ids(doc.get("active_session_ids"))
+        day_active_ids = _flatten_ids(doc.get("active_session_ids"))
+        session = session_by_date.get(date, {"ids": set(), "count": 0, "supported": True})
         result["trend"].append(
             {
                 "date": date,
-                "new_sessions": session_counts.get(date, 0),
-                "active_sessions": len(active_ids),
+                "new_sessions": int(session["count"]),
+                "active_sessions": len(day_active_ids),
                 "user_messages": int(doc.get("user_messages", 0) or 0),
                 "tokens": int(doc.get("tokens", 0) or 0),
+                "_active_session_ids_supported": True,
+                "_active_session_ids": day_active_ids,
+                "_new_session_ids_supported": bool(session["supported"]),
+                "_new_session_ids": set(session["ids"]),
+                "_new_sessions_legacy": int(session["count"]) if not session["supported"] else 0,
             }
         )
-    # Some storage adapters expose a single already-grouped document with
-    # ``_id=None``. Preserve that aggregate for the realtime compatibility
-    # path instead of turning it into an empty result.
-    if trace_docs and not any(str(doc.get("_id")) in dates for doc in trace_docs):
-        user_messages = sum(int(doc.get("user_messages", 0) or 0) for doc in trace_docs)
-        tokens = sum(int(doc.get("tokens", doc.get("total_tokens", 0)) or 0) for doc in trace_docs)
-        active_ids = set()
-        for doc in trace_docs:
-            active_ids.update(_flatten_ids(doc.get("active_session_ids")))
-        result["trend"] = [
-            {
-                "date": dates[0] if dates else "",
-                "new_sessions": session_counts.get(dates[0], 0) if dates else 0,
-                "active_sessions": len(active_ids),
-                "user_messages": user_messages,
-                "tokens": tokens,
-            }
-        ]
+
+    total_active_ids: set[str] = set()
+    new_ids: set[str] = set()
+    active_legacy = 0
+    new_legacy = 0
+    for item in result["trend"]:
+        total_active_ids.update(item["_active_session_ids"])
+        new_ids.update(item["_new_session_ids"])
+        new_legacy += int(item.get("_new_sessions_legacy", 0) or 0)
     result["total"] = {
-        field: sum(int(item.get(field, 0) or 0) for item in result["trend"])
-        for field in ("new_sessions", "active_sessions", "user_messages", "tokens")
+        "new_sessions": len(new_ids) + new_legacy,
+        "active_sessions": len(total_active_ids) + active_legacy,
+        "user_messages": sum(int(item.get("user_messages", 0) or 0) for item in result["trend"]),
+        "tokens": sum(int(item.get("tokens", 0) or 0) for item in result["trend"]),
     }
     return result

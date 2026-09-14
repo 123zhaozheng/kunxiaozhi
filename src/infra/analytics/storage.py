@@ -60,6 +60,60 @@ _TOKEN_USAGE_EVENT = "token:usage"
 _TOP_PRESET_LIMIT = 10
 
 
+def _model_label(data: dict[str, Any]) -> str:
+    """Resolve one token event to the label used by model analytics."""
+    model_id = data.get("model_id")
+    if model_id not in (None, ""):
+        return str(model_id)
+    model = data.get("model")
+    if model not in (None, ""):
+        return str(model)
+    return "unknown"
+
+
+def _model_label_expr(data_ref: str = "$events.data") -> dict[str, Any]:
+    """Mongo expression matching :func:`_model_label`, including legacy data."""
+    model_id = {"$ifNull": [f"{data_ref}.model_id", ""]}
+    model = {"$ifNull": [f"{data_ref}.model", ""]}
+    return {
+        "$let": {
+            "vars": {"model_id": model_id, "model": model},
+            "in": {
+                "$cond": [
+                    {"$ne": ["$$model_id", ""]},
+                    "$$model_id",
+                    {"$cond": [{"$ne": ["$$model", ""]}, "$$model", "unknown"]},
+                ]
+            },
+        }
+    }
+
+
+def _model_event_match_expr(model: str) -> dict[str, Any]:
+    """Return a query expression using the same model ownership rule."""
+    return {
+        "$expr": {
+            "$gt": [
+                {
+                    "$size": {
+                        "$filter": {
+                            "input": {"$ifNull": ["$events", []]},
+                            "as": "event",
+                            "cond": {
+                                "$and": [
+                                    {"$eq": ["$$event.event_type", _TOKEN_USAGE_EVENT]},
+                                    {"$eq": [_model_label_expr("$$event.data"), model]},
+                                ]
+                            },
+                        }
+                    }
+                },
+                0,
+            ]
+        }
+    }
+
+
 def _ensure_datetime(value: datetime) -> datetime:
     """确保 datetime 携带 UTC 时区信息，供 MongoDB 比较。"""
     if value.tzinfo is None:
@@ -402,13 +456,7 @@ class AnalyticsStorage:
                 {"$match": {"events.event_type": _TOKEN_USAGE_EVENT}},
                 {
                     "$group": {
-                        "_id": {
-                            "$ifNull": [
-                                "$events.data.model_id",
-                                "$events.data.model",
-                                "unknown",
-                            ]
-                        },
+                        "_id": _model_label_expr(),
                         "value": {
                             "$sum": {
                                 "$ifNull": ["$events.data.total_tokens", 0],
@@ -1029,7 +1077,20 @@ class AnalyticsStorage:
             },
             {
                 "$addFields": {
-                    "session_count": {"$size": "$active_session_ids"},
+                    "session_count": {
+                        "$size": {
+                            "$filter": {
+                                "input": "$active_session_ids",
+                                "as": "session_id",
+                                "cond": {
+                                    "$and": [
+                                        {"$ne": ["$$session_id", None]},
+                                        {"$ne": ["$$session_id", ""]},
+                                    ]
+                                },
+                            }
+                        }
+                    },
                 }
             },
             {
@@ -1185,17 +1246,9 @@ class AnalyticsStorage:
         if preset_id:
             query["metadata.persona_preset_id"] = preset_id
         if model:
-            # Same field path as get_tokens_by_model, so drilling into a model
-            # slice lists exactly the runs that produced it.
-            query["events"] = {
-                "$elemMatch": {
-                    "event_type": _TOKEN_USAGE_EVENT,
-                    "$or": [
-                        {"data.model_id": model},
-                        {"data.model": model},
-                    ],
-                }
-            }
+            # Use the same ownership expression as the model donut.  This
+            # also treats missing/null/empty legacy fields as ``unknown``.
+            query.update(_model_event_match_expr(model))
         projection = {
             "events": 0,  # 避免一次取出大事件数组，token 单独查
         }
@@ -1218,6 +1271,8 @@ class AnalyticsStorage:
                     )
                     for ev in events:
                         data = ev.get("data") or {}
+                        if model and _model_label(data) != model:
+                            continue
                         total_tokens += int(data.get("total_tokens", 0) or 0)
                 except Exception as ex:
                     logger.warning("token sum for trace %s failed: %s", trace_id, ex)
@@ -1540,7 +1595,7 @@ class AnalyticsStorage:
         self, filters: UsageFilters
     ) -> list[dict[str, Any]]:
         """Real-time user×persona rows shaped like the snapshot contract."""
-        pipeline = usage_facts_stages(filters) + [
+        trace_pipeline = usage_facts_stages(filters) + [
             {
                 "$group": {
                     "_id": {
@@ -1556,28 +1611,73 @@ class AnalyticsStorage:
             },
             {"$match": {"_id.user_id": {"$nin": [None, ""]}}},
         ]
+        session_pipeline = [
+            {"$match": new_sessions_match(filters)},
+            {
+                "$group": {
+                    "_id": {
+                        "user_id": "$user_id",
+                        "persona_preset_id": "$metadata.persona_preset_id",
+                    },
+                    "new_session_ids": {
+                        "$addToSet": {"$ifNull": ["$session_id", {"$toString": "$_id"}]}
+                    },
+                }
+            },
+        ]
         try:
-            docs = await self.traces.aggregate(pipeline).to_list(length=None)
+            trace_docs, session_docs = await asyncio.gather(
+                self.traces.aggregate(trace_pipeline).to_list(length=None),
+                self.sessions.aggregate(session_pipeline).to_list(length=None),
+            )
         except Exception as ex:
             logger.warning("usage by-user realtime fallback failed: %s", ex)
             return []
-        items: list[dict[str, Any]] = []
-        for doc in docs:
+
+        by_key: dict[tuple[str, str | None], dict[str, Any]] = {}
+        for doc in trace_docs:
             identifier = doc.get("_id") or {}
+            user_id = identifier.get("user_id")
+            if user_id in (None, ""):
+                continue
             persona_id = identifier.get("persona_preset_id")
-            items.append(
+            key = (str(user_id), str(persona_id) if persona_id else None)
+            by_key[key] = {
+                "user_id": key[0],
+                "persona_preset_id": key[1],
+                "persona_preset_name": doc.get("persona_preset_name"),
+                "user_messages": int(doc.get("user_messages", 0) or 0),
+                "tokens": int(doc.get("tokens", 0) or 0),
+                "active_sessions": self._count_active(doc.get("active_session_ids")),
+                "new_sessions": 0,
+                "last_active_at": doc.get("last_active_at"),
+            }
+
+        for doc in session_docs:
+            identifier = doc.get("_id") or {}
+            user_id = identifier.get("user_id")
+            if user_id in (None, ""):
+                continue
+            persona_id = identifier.get("persona_preset_id")
+            key = (str(user_id), str(persona_id) if persona_id else None)
+            session_ids = {
+                str(value) for value in (doc.get("new_session_ids") or []) if value
+            }
+            row = by_key.setdefault(
+                key,
                 {
-                    "user_id": str(identifier.get("user_id")),
-                    "persona_preset_id": str(persona_id) if persona_id else None,
-                    "persona_preset_name": doc.get("persona_preset_name"),
-                    "user_messages": int(doc.get("user_messages", 0) or 0),
-                    "tokens": int(doc.get("tokens", 0) or 0),
-                    "active_sessions": self._count_active(doc.get("active_session_ids")),
+                    "user_id": key[0],
+                    "persona_preset_id": key[1],
+                    "persona_preset_name": None,
+                    "user_messages": 0,
+                    "tokens": 0,
+                    "active_sessions": 0,
                     "new_sessions": 0,
-                    "last_active_at": doc.get("last_active_at"),
-                }
+                    "last_active_at": None,
+                },
             )
-        return items
+            row["new_sessions"] = len(session_ids)
+        return list(by_key.values())
 
     async def list_usage_by_user(
         self,
@@ -1588,6 +1688,8 @@ class AnalyticsStorage:
         """使用明细，行粒度为「用户 × Persona」，仅含区间内发过消息的用户。"""
         try:
             result = await read_or_freeze(filters, storage=self)
+            if result.get("snapshot_complete", True) is False:
+                raise RuntimeError("analytics snapshot is incomplete")
             raw_items = list(result.get("by_user_persona", []) or [])
         except Exception as ex:
             # Summary degrades to real-time here, so the detail must too;
@@ -1718,7 +1820,15 @@ class AnalyticsStorage:
         pipeline = usage_facts_stages(filters)[:-1] + [
             {"$match": {"user_messages": {"$gt": 0}}},
             {"$unwind": "$events"},
-            {"$match": {"events.event_type": "user:message"}},
+            {
+                "$match": {
+                    "events.event_type": "user:message",
+                    "events.timestamp": {
+                        "$gte": filters.start,
+                        "$lt": filters.end,
+                    },
+                }
+            },
             {
                 "$group": {
                     "_id": {

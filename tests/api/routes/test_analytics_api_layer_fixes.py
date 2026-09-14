@@ -28,6 +28,16 @@ class _Cursor:
 
     def __aiter__(self) -> Any:
         return self._iterate()
+    def sort(self, *args, **kwargs):
+        return self
+
+    def skip(self, *args, **kwargs):
+        return self
+
+    def limit(self, *args, **kwargs):
+        return self
+
+
 
     async def _iterate(self) -> Any:
         for doc in self.docs:
@@ -190,10 +200,168 @@ async def test_peak_pipeline_buckets_user_message_event_timestamp() -> None:
     assert peak.hour == 11
     pipeline = traces.aggregate.call_args.args[0]
     assert {"$unwind": "$events"} in pipeline
-    assert {"$match": {"events.event_type": "user:message"}} in pipeline
+    peak_match = next(stage["$match"] for stage in pipeline if "$match" in stage and "events.timestamp" in stage["$match"])
+    assert peak_match["events.event_type"] == "user:message"
+    assert peak_match["events.timestamp"] == {"$gte": filters.start, "$lt": filters.end}
     group = next(stage["$group"] for stage in pipeline if "$group" in stage)
     assert group["user_messages"] == {"$sum": 1}
     assert group["_id"]["hour"]["$hour"]["date"] == "$events.timestamp"
+
+
+@pytest.mark.asyncio
+async def test_peak_pipeline_excludes_messages_outside_trace_range() -> None:
+    """A trace boundary must not decide message-event date ownership."""
+    storage = AnalyticsStorage()
+    traces = MagicMock()
+    traces.aggregate.return_value = _Cursor([])
+    storage._traces = traces
+    filters = UsageFilters(
+        start=datetime(2026, 8, 1, tzinfo=timezone.utc),
+        end=datetime(2026, 8, 3, tzinfo=timezone.utc),
+    )
+
+    await storage._insights_peak(filters)
+
+    pipeline = traces.aggregate.call_args.args[0]
+    event_match = next(
+        stage["$match"]
+        for stage in pipeline
+        if "$match" in stage and "events.timestamp" in stage["$match"]
+    )
+    assert event_match["events.timestamp"]["$gte"] == filters.start
+    assert event_match["events.timestamp"]["$lt"] == filters.end
+
+
+@pytest.mark.asyncio
+async def test_model_drilldown_sums_only_selected_model_tokens() -> None:
+    storage = AnalyticsStorage()
+    traces = MagicMock()
+    traces.count_documents = AsyncMock(return_value=1)
+    traces.find.return_value = _Cursor(
+        [{"trace_id": "trace-1", "run_id": "run-1", "started_at": datetime(2026, 8, 1, tzinfo=timezone.utc)}]
+    )
+    storage._traces = traces
+    storage._trace_storage = MagicMock()
+    storage._trace_storage.get_trace_events = AsyncMock(
+        return_value=[
+            {"event_type": "token:usage", "data": {"model_id": "model-a", "total_tokens": 10}},
+            {"event_type": "token:usage", "data": {"model": "model-b", "total_tokens": 20}},
+        ]
+    )
+
+    result = await storage.list_runs(
+        datetime(2026, 8, 1, tzinfo=timezone.utc),
+        datetime(2026, 8, 3, tzinfo=timezone.utc),
+        model="model-a",
+    )
+
+    assert result.items[0].total_tokens == 10
+    query = traces.count_documents.call_args.args[0]
+    assert "$expr" in query
+    assert "$filter" in query["$expr"]["$gt"][0]["$size"]
+
+
+@pytest.mark.asyncio
+async def test_unknown_model_drilldown_matches_missing_and_null_fields() -> None:
+    storage = AnalyticsStorage()
+    traces = MagicMock()
+    traces.count_documents = AsyncMock(return_value=1)
+    traces.find.return_value = _Cursor(
+        [{"trace_id": "trace-unknown", "run_id": "run-unknown", "started_at": datetime(2026, 8, 1, tzinfo=timezone.utc)}]
+    )
+    storage._traces = traces
+    storage._trace_storage = MagicMock()
+    storage._trace_storage.get_trace_events = AsyncMock(
+        return_value=[{"event_type": "token:usage", "data": {"model_id": None, "model": None, "total_tokens": 7}}]
+    )
+
+    result = await storage.list_runs(
+        datetime(2026, 8, 1, tzinfo=timezone.utc),
+        datetime(2026, 8, 3, tzinfo=timezone.utc),
+        model="unknown",
+    )
+
+    assert result.total == 1
+    assert result.items[0].total_tokens == 7
+    query = traces.count_documents.call_args.args[0]
+    assert query["$expr"]["$gt"][0]["$size"]["$filter"]["cond"]["$and"][1]["$eq"][1] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_realtime_user_persona_rows_count_new_sessions_per_persona() -> None:
+    storage = AnalyticsStorage()
+    storage._traces = MagicMock()
+    storage._sessions = MagicMock()
+    storage._traces.aggregate.return_value = _Cursor(
+        [
+            {
+                "_id": {"user_id": "u1", "persona_preset_id": "p1"},
+                "user_messages": 2,
+                "tokens": 3,
+                "active_session_ids": ["s1"],
+            },
+            {
+                "_id": {"user_id": "u1", "persona_preset_id": "p2"},
+                "user_messages": 1,
+                "tokens": 4,
+                "active_session_ids": ["s2"],
+            },
+        ]
+    )
+    storage._sessions.aggregate.return_value = _Cursor(
+        [
+            {"_id": {"user_id": "u1", "persona_preset_id": "p1"}, "new_session_ids": ["n1", "n2"]},
+            {"_id": {"user_id": "u1", "persona_preset_id": "p2"}, "new_session_ids": ["n3"]},
+            {"_id": {"user_id": "u2", "persona_preset_id": "p3"}, "new_session_ids": ["n4"]},
+        ]
+    )
+    filters = UsageFilters(
+        start=datetime(2026, 8, 1, tzinfo=timezone.utc),
+        end=datetime(2026, 8, 3, tzinfo=timezone.utc),
+    )
+
+    rows = await storage._usage_by_user_persona_realtime(filters)
+
+    assert {(row["persona_preset_id"], row["new_sessions"]) for row in rows} == {
+        ("p1", 2),
+        ("p2", 1),
+        ("p3", 1),
+    }
+    session_only = next(row for row in rows if row["persona_preset_id"] == "p3")
+    assert session_only["user_messages"] == 0
+
+
+
+@pytest.mark.asyncio
+async def test_incomplete_snapshot_falls_back_to_realtime_user_rows(monkeypatch) -> None:
+    storage = AnalyticsStorage()
+    storage._usage_by_user_persona_realtime = AsyncMock(
+        return_value=[
+            {
+                "user_id": "u1",
+                "persona_preset_id": "p1",
+                "user_messages": 1,
+                "tokens": 9,
+                "active_sessions": 1,
+                "new_sessions": 2,
+            }
+        ]
+    )
+
+    async def incomplete_snapshot(filters, storage=None):
+        return {"snapshot_complete": False, "by_user_persona": []}
+
+    monkeypatch.setattr(storage_module, "read_or_freeze", incomplete_snapshot)
+    filters = UsageFilters(
+        start=datetime(2026, 8, 1, tzinfo=timezone.utc),
+        end=datetime(2026, 8, 3, tzinfo=timezone.utc),
+    )
+
+    result = await storage.list_usage_by_user(filters)
+
+    assert result.total == 1
+    assert result.items[0].new_sessions == 2
+    storage._usage_by_user_persona_realtime.assert_awaited_once_with(filters)
 
 
 @pytest.mark.asyncio

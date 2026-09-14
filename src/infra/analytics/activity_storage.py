@@ -107,6 +107,7 @@ class ActivityStorage:
                         "$gte": start,
                         "$lte": end,
                     },
+                    "user_id": {"$nin": [None, ""]},
                 }
             },
         ]
@@ -126,7 +127,9 @@ class ActivityStorage:
             cursor = self.collection.aggregate(pipeline)  # type: ignore[arg-type]
             users: list[str] = []
             async for doc in cursor:
-                users.append(doc["_id"])
+                user_id = doc.get("_id")
+                if user_id:
+                    users.append(str(user_id))
             return users
         except Exception as e:
             logger.warning(f"Failed to query distinct users: {e}")
