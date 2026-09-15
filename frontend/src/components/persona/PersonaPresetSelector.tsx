@@ -12,7 +12,6 @@ import {
   Loader2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { nameToGradient } from "../panels/MarketplacePanel/constants";
 import type { PersonaPreset, PersonaPresetSnapshot } from "../../types";
 import {
   isPersonaImageAvatar,
@@ -288,7 +287,6 @@ export function PersonaPresetSelector({
               {paged.map((preset, index) => {
                 const selected = selectedPresetId === preset.id;
                 const isUsingPreset = pendingUsePresetId === preset.id;
-                const gradient = nameToGradient(preset.name);
                 const primaryTag = preset.tags[0];
                 return (
                   <div
@@ -297,58 +295,6 @@ export function PersonaPresetSelector({
                     style={{ animationDelay: `${index * 50}ms` }}
                     onClick={() => setPreviewPreset(preset)}
                   >
-                    {/* Gradient Banner */}
-                    <div
-                      className="pps-card__banner relative h-12 shrink-0"
-                      style={{
-                        background: `linear-gradient(45deg, ${gradient[0]}, ${gradient[1]}, ${gradient[2]})`,
-                      }}
-                    >
-                      {selected && (
-                        <span className="scb__status-pill scb__status-pill--installed absolute top-1.5 right-2">
-                          {t("personaPresets.using", "使用中")}
-                        </span>
-                      )}
-                      {onTogglePreference && (
-                        <div className="absolute left-2 top-2 flex gap-1.5">
-                          <button
-                            type="button"
-                            className={`pps-card__icon-action ${
-                              preset.is_pinned
-                                ? "pps-card__icon-action--active-pin"
-                                : ""
-                            }`}
-                            title={t("personaPresets.pin", "置顶")}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void onTogglePreference(preset, {
-                                is_pinned: !preset.is_pinned,
-                              });
-                            }}
-                          >
-                            <Pin size={12} />
-                          </button>
-                          <button
-                            type="button"
-                            className={`pps-card__icon-action ${
-                              preset.is_favorite
-                                ? "pps-card__icon-action--active-fav"
-                                : ""
-                            }`}
-                            title={t("personaPresets.favorite", "收藏")}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void onTogglePreference(preset, {
-                                is_favorite: !preset.is_favorite,
-                              });
-                            }}
-                          >
-                            <Star size={12} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
                     {/* Card Body */}
                     <div className="flex flex-1 flex-col p-4 pt-5">
                       {/* Title row */}
@@ -401,6 +347,51 @@ export function PersonaPresetSelector({
                               </>
                             )}
                           </div>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                          {selected && (
+                            <span className="scb__status-pill scb__status-pill--installed">
+                              {t("personaPresets.using", "使用中")}
+                            </span>
+                          )}
+                          {onTogglePreference && (
+                            <>
+                              <button
+                                type="button"
+                                className={`pps-card__icon-action ${
+                                  preset.is_pinned
+                                    ? "pps-card__icon-action--active-pin"
+                                    : ""
+                                }`}
+                                title={t("personaPresets.pin", "置顶")}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void onTogglePreference(preset, {
+                                    is_pinned: !preset.is_pinned,
+                                  });
+                                }}
+                              >
+                                <Pin size={12} />
+                              </button>
+                              <button
+                                type="button"
+                                className={`pps-card__icon-action ${
+                                  preset.is_favorite
+                                    ? "pps-card__icon-action--active-fav"
+                                    : ""
+                                }`}
+                                title={t("personaPresets.favorite", "收藏")}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void onTogglePreference(preset, {
+                                    is_favorite: !preset.is_favorite,
+                                  });
+                                }}
+                              >
+                                <Star size={12} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
 

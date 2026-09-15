@@ -1282,13 +1282,6 @@
     0 3px 8px -4px rgb(0 0 0 / 0.3);
 }
 
-/* Layout-only: the remaining consumers supply an inline gradient background,
-   so this must not declare `background` (an !important here would win over the
-   inline style and blank the banner out). */
-.pps-card__banner {
-  position: relative;
-}
-
 .pps-card__icon-action {
   position: relative;
   z-index: 1;

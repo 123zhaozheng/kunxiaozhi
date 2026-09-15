@@ -795,22 +795,6 @@
   display: flex;
   flex-direction: column;
 }
-.team-card::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 3px;
-  background: linear-gradient(
-    90deg,
-    var(--team-accent, var(--theme-primary)),
-    color-mix(
-      in srgb,
-      var(--team-accent, var(--theme-primary)) 32%,
-      transparent
-    )
-  );
-  opacity: 0.8;
-}
 .team-card:hover {
   transform: translateY(-2px);
   border-color: color-mix(
