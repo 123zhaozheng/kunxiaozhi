@@ -7,13 +7,11 @@ import {
   CircleHelp,
   File,
   HardDrive,
-  Image,
   LockKeyhole,
   RefreshCw,
   Search,
   Trash2,
   TriangleAlert,
-  Wrench,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
@@ -49,12 +47,6 @@ type DeleteTarget =
   | { kind: "single"; files: StorageFile[] }
   | { kind: "batch"; files: StorageFile[] }
   | null;
-
-function sourceIcon(source: string) {
-  if (source.includes("avatar")) return Image;
-  if (source === "skill") return Wrench;
-  return File;
-}
 
 function sourceLabel(
   source: string,
@@ -353,7 +345,7 @@ export function ProfileStorageTab() {
             {t("storage.filesTitle", "Your files")}
           </h3>
           <p className="mt-0.5 text-xs text-stone-500 dark:text-stone-400">
-            {t("storage.filesHint", "Chat files can be removed here. Avatars and Skills stay protected.")}
+            {t("storage.filesHint", "Files uploaded in conversations appear here and can be removed.")}
           </p>
         </div>
         <button
@@ -387,8 +379,6 @@ export function ProfileStorageTab() {
           <option value="">{t("common.all", "All")}</option>
           <option value="chat">{sourceLabel("chat", translate)}</option>
           <option value="wecom">{sourceLabel("wecom", translate)}</option>
-          <option value="profile_avatar">{sourceLabel("profile_avatar", translate)}</option>
-          <option value="skill">{sourceLabel("skill", translate)}</option>
         </select>
         <select
           value={statusFilter}
@@ -481,7 +471,6 @@ export function ProfileStorageTab() {
           <ul className="divide-y divide-stone-100 dark:divide-stone-700/60">
             {files.map((file) => {
               const protectedFile = isProtectedStorageFile(file);
-              const Icon = sourceIcon(file.source);
               const isSelected = selectedIds.has(file.file_id);
               return (
                 <li key={file.file_id} className="flex items-center gap-3 px-3 py-3 sm:px-4">
@@ -494,7 +483,7 @@ export function ProfileStorageTab() {
                     className="size-4 shrink-0 accent-red-600 disabled:opacity-30"
                   />
                   <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400">
-                    <Icon size={17} />
+                    <File size={17} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-stone-800 dark:text-stone-100">

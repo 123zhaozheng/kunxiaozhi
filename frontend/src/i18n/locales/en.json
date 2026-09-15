@@ -83,7 +83,8 @@
   },
   "welcomeModes": {
     "recommendationTitle": "Not sure which expert to use? Try these!",
-    "shuffle": "Shuffle"
+    "shuffle": "Shuffle",
+    "lockedReason": "Agent mode switching is unavailable while an expert preset is selected."
   },
   "agentConfig": {
     "addFirstModel": "Add your first model",
@@ -3005,7 +3006,7 @@
     "warningHint": "You are using most of your storage. Remove unused files before uploading more.",
     "fullHint": "New uploads are blocked until you free storage space.",
     "filesTitle": "Your files",
-    "filesHint": "Chat files can be removed here. Avatars and Skills stay protected.",
+    "filesHint": "Files uploaded in conversations appear here and can be removed.",
     "loadFailed": "Unable to load storage.",
     "deleteComplete": "File removed from your storage.",
     "partialDelete": "Some files could not be removed.",
@@ -3037,10 +3038,6 @@
     "sources": {
       "chat": "Chat",
       "wecom": "WeCom",
-      "profile_avatar": "Profile avatar",
-      "persona_avatar": "Persona avatar",
-      "team_avatar": "Team avatar",
-      "skill": "Skill",
       "legacy": "Legacy"
     },
     "fileStatuses": {

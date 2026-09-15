@@ -9,6 +9,7 @@ interface AgentModePillsProps {
   agents: AgentInfo[];
   currentAgent: string;
   onSelectAgent?: (id: string) => void;
+  lockedReason?: string | null;
 }
 
 /**
@@ -19,9 +20,12 @@ export const AgentModePills = memo(function AgentModePills({
   agents,
   currentAgent,
   onSelectAgent,
+  lockedReason,
 }: AgentModePillsProps) {
   const { i18n, t } = useTranslation();
   const modes = useMemo(() => sortAgentModes(agents), [agents]);
+  const isLocked = lockedReason != null;
+  const lockTitle = lockedReason || t("welcomeModes.lockedReason");
 
   if (agents.length <= 1) return null;
 
@@ -40,8 +44,12 @@ export const AgentModePills = memo(function AgentModePills({
               key={agent.id}
               type="button"
               aria-pressed={isActive}
-              disabled={!onSelectAgent}
-              onClick={() => onSelectAgent?.(agent.id)}
+              aria-disabled={isLocked ? true : undefined}
+              disabled={!onSelectAgent && !isLocked}
+              title={isLocked ? lockTitle : undefined}
+              onClick={() => {
+                if (!isLocked) onSelectAgent?.(agent.id);
+              }}
               className="welcome-mode-pill inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-200 disabled:cursor-default sm:px-4 sm:py-2 sm:text-sm"
               data-active={isActive}
             >

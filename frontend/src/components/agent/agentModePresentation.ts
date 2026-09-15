@@ -14,16 +14,10 @@ import type { AgentInfo } from "../../types";
 export const AGENT_MODE_IDS = ["search", "fast", "team"] as const;
 export type AgentModeId = (typeof AGENT_MODE_IDS)[number];
 
-/** Lucide icon name per mode, used when the admin catalog has no icon set. */
-export const AGENT_MODE_FALLBACK_ICON: Record<AgentModeId, string> = {
-  search: "Briefcase",
-  fast: "Zap",
-  team: "Users",
-};
-
 /**
  * Canonical ordering for the home-page mode pills: 日常办公 → 快速问答 → 团队协作.
- * Unknown/custom agents keep their catalog sort_order and land after these.
+ * Known modes use this fixed product order; unknown/custom agents land after
+ * them, ordered by catalog sort_order and then id.
  */
 const MODE_ORDER: Record<string, number> = {
   search: 0,
@@ -35,23 +29,25 @@ export function isKnownAgentMode(id: string): id is AgentModeId {
   return (AGENT_MODE_IDS as readonly string[]).includes(id);
 }
 
-export function resolveAgentModeIcon(agent: Pick<AgentInfo, "id" | "icon">) {
-  if (agent.icon && agent.icon !== "Bot") return agent.icon;
-  if (isKnownAgentMode(agent.id)) return AGENT_MODE_FALLBACK_ICON[agent.id];
-  return "Bot";
-}
-
 /**
  * Order agents for the mode switcher. Never filters: the caller already
  * receives only the modes this user is allowed to see from `/api/agents`.
  */
-export function sortAgentModes<T extends Pick<AgentInfo, "id">>(
+export function sortAgentModes<T extends Pick<AgentInfo, "id" | "sort_order">>(
   agents: readonly T[],
 ): T[] {
   return [...agents].sort((a, b) => {
-    const ra = MODE_ORDER[a.id] ?? Number.MAX_SAFE_INTEGER;
-    const rb = MODE_ORDER[b.id] ?? Number.MAX_SAFE_INTEGER;
-    if (ra !== rb) return ra - rb;
+    const knownRankA = MODE_ORDER[a.id];
+    const knownRankB = MODE_ORDER[b.id];
+    if (knownRankA !== undefined || knownRankB !== undefined) {
+      if (knownRankA === undefined) return 1;
+      if (knownRankB === undefined) return -1;
+      return knownRankA - knownRankB;
+    }
+
+    const sortOrderA = a.sort_order ?? Number.MAX_SAFE_INTEGER;
+    const sortOrderB = b.sort_order ?? Number.MAX_SAFE_INTEGER;
+    if (sortOrderA !== sortOrderB) return sortOrderA - sortOrderB;
     return a.id.localeCompare(b.id);
   });
 }

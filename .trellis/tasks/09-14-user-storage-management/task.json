@@ -2,11 +2,11 @@
   "id": "user-storage-management",
   "name": "user-storage-management",
   "title": "用户存储空间管理与文件删除状态",
-  "description": "",
+  "description": "审查交接实现（915f6f54，合入时标注未 review）并收敛个人存储空间的口径：头像与 Skill 文件移出个人存储（不计配额、列表不展示），只覆盖会话上传的文件；修复分页越权泄漏与管理员重算时的配额覆盖；角色级配额经核实已存在，未重复实现。",
   "status": "in_progress",
-  "dev_type": null,
-  "scope": null,
-  "package": null,
+  "dev_type": "fix",
+  "scope": "backend+frontend",
+  "package": "src,frontend",
   "priority": "P2",
   "creator": "hoplite",
   "assignee": "hoplite",
@@ -15,12 +15,25 @@
   "branch": "main",
   "base_branch": "main",
   "worktree_path": null,
-  "commit": null,
+  "commit": "83be880e",
   "pr_url": null,
   "subtasks": [],
   "children": [],
   "parent": null,
-  "relatedFiles": [],
-  "notes": "",
-  "meta": {}
+  "relatedFiles": [
+    "src/kernel/schemas/storage.py",
+    "src/infra/storage/user_storage.py",
+    "src/api/routes/storage.py",
+    "frontend/src/components/profile/tabs/ProfileStorageTab.tsx",
+    "frontend/src/types/storage.ts",
+    "tests/infra/test_user_storage_quota_billable_sources.py"
+  ],
+  "notes": "存量用户的 used_bytes 不会自动修正：READY 状态账本不重算。已提供 POST /api/storage/admin/users/{user_id}/reconcile，部署后需对存量用户触发一次。",
+  "meta": {
+    "reviewed_commit": "915f6f54",
+    "upstream_repo": "https://github.com/123zhaozheng/kunxiaozhi.git",
+    "base_commit": "2aafaf39321b1d2fa500b405004a289be2653497",
+    "tests": "storage suite 29 passed",
+    "findings_doc": "REVIEW-FINDINGS.md"
+  }
 }

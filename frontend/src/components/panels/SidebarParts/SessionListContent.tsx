@@ -166,7 +166,7 @@ export function SessionListContent({
           <button
             type="button"
             onClick={onOpenSearch}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-stone-600 transition-colors hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800/60"
+            className="sidebar-nav-btn flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
             title={t("sidebar.searchSessions")}
             aria-label={t("sidebar.searchSessions")}
           >

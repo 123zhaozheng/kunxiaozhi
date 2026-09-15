@@ -19,6 +19,30 @@ const welcomeCss = readFileSync(
   resolve(currentDir, "../../../styles/welcome.css"),
   "utf8",
 );
+const tokensCss = readFileSync(
+  resolve(currentDir, "../../../styles/tokens.css"),
+  "utf8",
+);
+
+test("uses a dedicated accessible text token for unselected mode pills", () => {
+  assert.match(tokensCss, /--theme-mode-track-text:\s*#696972;/);
+  assert.match(
+    tokensCss,
+    /\.dark\s*\{[\s\S]*--theme-mode-track-text:\s*#d6d3d1;/,
+  );
+  assert.match(welcomeCss, /color:\s*var\(--theme-mode-track-text\);/);
+});
+
+test("does not apply hover feedback to locked mode pills", () => {
+  assert.match(
+    welcomeCss,
+    /\.welcome-mode-pill:not\(:disabled\):not\(\[aria-disabled="true"\]\):hover/,
+  );
+  assert.match(
+    welcomeCss,
+    /\.welcome-mode-pill\[aria-disabled="true"\]\s*\{[\s\S]*opacity:\s*0\.58;/,
+  );
+});
 
 test("keeps every welcome persona card reachable on mobile", () => {
   const className = getWelcomePersonaCardClass(3);

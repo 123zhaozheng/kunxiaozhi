@@ -8,7 +8,7 @@ const source = readFileSync(
   "utf8",
 );
 
-test("space management exposes summary, filtering, pagination, and protected rows", () => {
+test("space management exposes summary, filtering, pagination, and conversation files", () => {
   assert.match(source, /storageApi\.getUsage\(\)/);
   assert.match(source, /storageApi\.listFiles\(/);
   assert.match(source, /sourceFilter/);
@@ -17,9 +17,13 @@ test("space management exposes summary, filtering, pagination, and protected row
   assert.match(source, /isProtectedStorageFile/);
   assert.match(source, /confirmBatchTitle/);
   assert.match(source, /partialDetails/);
+  assert.match(source, /<option value="chat">/);
+  assert.match(source, /<option value="wecom">/);
+  assert.doesNotMatch(source, /<option value="(?:profile_avatar|skill)">/);
+  assert.doesNotMatch(source, /Image|Wrench/);
 });
 
-test("storage rows keep protected assets out of generic delete controls", () => {
+test("storage rows keep server-marked undeletable files out of delete controls", () => {
   assert.match(source, /disabled=\{protectedFile \|\| file\.status !== "active"\}/);
   assert.match(source, /storage\.protectedHint/);
   assert.match(source, /storage\.deleteFile/);

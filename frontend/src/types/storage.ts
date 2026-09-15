@@ -12,10 +12,6 @@ export type StorageFileStatus =
 
 export type StorageFileSource =
   | "chat"
-  | "profile_avatar"
-  | "persona_avatar"
-  | "team_avatar"
-  | "skill"
   | "wecom"
   | "legacy";
 
@@ -133,13 +129,9 @@ export interface StorageQuotaUpdate {
 }
 
 export function isProtectedStorageFile(file: StorageFile): boolean {
-  return (
-    file.is_user_deletable === false ||
-    file.source === "profile_avatar" ||
-    file.source === "persona_avatar" ||
-    file.source === "team_avatar" ||
-    file.source === "skill"
-  );
+  // Keep migration-required legacy rows non-removable even though protected
+  // source rows are excluded from the inventory by the backend.
+  return file.is_user_deletable === false;
 }
 
 export function getStorageUsageStatus(

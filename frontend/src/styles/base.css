@@ -299,6 +299,11 @@ html[data-mobile-keyboard="true"] #root {
   background-color: var(--theme-sidebar-hover);
   color: var(--theme-text);
 }
+.sidebar-nav-btn:focus-visible,
+.sidebar-rail-btn:focus-visible {
+  outline: 2px solid var(--theme-ring);
+  outline-offset: 2px;
+}
 .sidebar-rail-btn[aria-current="page"],
 .sidebar-rail-btn.is-active {
   background-color: var(--theme-sidebar-active);

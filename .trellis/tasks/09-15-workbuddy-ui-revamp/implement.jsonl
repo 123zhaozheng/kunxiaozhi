@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端规范入口：组件、hook、状态管理与质量门禁的总索引"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "新增 AgentModePills / ThinkingEffortSlider / AgentModeIcon 时遵循的组件约定"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "内网离线约束：禁止外部 CDN/字体/图片，新增依赖需评估"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "AgentModeId / ThinkingLevel 等共享契约的类型收敛方式"}
+{"file": ".trellis/spec/frontend/composer-mention-slash-skills.md", "reason": "改动输入框工具条时必须保持 @ 提及与 / 技能行为不回归"}

@@ -83,7 +83,8 @@
   },
   "welcomeModes": {
     "recommendationTitle": "어떤 전문가를 써야 할지 모르겠다면, 이것을 사용해 보세요!",
-    "shuffle": "다른 추천"
+    "shuffle": "다른 추천",
+    "lockedReason": "전문가 프리셋을 선택한 동안에는 모드를 전환할 수 없습니다."
   },
   "agentConfig": {
     "addFirstModel": "첫 번째 모델 추가",
@@ -2800,7 +2801,7 @@
     "warningHint": "저장 공간 대부분을 사용했습니다. 사용하지 않는 파일을 정리하세요.",
     "fullHint": "저장 공간을 확보할 때까지 새 업로드가 차단됩니다.",
     "filesTitle": "내 파일",
-    "filesHint": "채팅 파일은 여기서 삭제할 수 있습니다. 아바타와 Skill 파일은 보호됩니다.",
+    "filesHint": "대화에서 업로드한 파일을 여기에서 확인하고 삭제할 수 있습니다.",
     "loadFailed": "저장 공간을 불러올 수 없습니다.",
     "deleteComplete": "파일이 개인 저장 공간에서 제거되었습니다.",
     "partialDelete": "일부 파일을 제거하지 못했습니다.",
@@ -2832,10 +2833,6 @@
     "sources": {
       "chat": "채팅",
       "wecom": "WeCom",
-      "profile_avatar": "프로필 아바타",
-      "persona_avatar": "Persona 아바타",
-      "team_avatar": "팀 아바타",
-      "skill": "Skill",
       "legacy": "레거시"
     },
     "fileStatuses": {

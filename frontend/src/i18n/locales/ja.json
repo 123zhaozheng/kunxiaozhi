@@ -83,7 +83,8 @@
   },
   "welcomeModes": {
     "recommendationTitle": "どの専門家を使うか迷ったら、こちらをお試しください！",
-    "shuffle": "入れ替える"
+    "shuffle": "入れ替える",
+    "lockedReason": "専門家プリセットを選択中はモードを切り替えられません。"
   },
   "agentConfig": {
     "addFirstModel": "最初のモデルを追加",
@@ -2800,7 +2801,7 @@
     "warningHint": "ストレージの大部分を使用しています。不要なファイルを削除してください。",
     "fullHint": "空き容量を確保するまで新しいアップロードはブロックされます。",
     "filesTitle": "自分のファイル",
-    "filesHint": "チャットファイルはここで削除できます。アバターとSkillは保護されています。",
+    "filesHint": "会話でアップロードしたファイルをここで確認・削除できます。",
     "loadFailed": "ストレージを読み込めません。",
     "deleteComplete": "ファイルを個人ストレージから削除しました。",
     "partialDelete": "一部のファイルを削除できませんでした。",
@@ -2832,10 +2833,6 @@
     "sources": {
       "chat": "チャット",
       "wecom": "WeCom",
-      "profile_avatar": "プロフィール画像",
-      "persona_avatar": "Persona画像",
-      "team_avatar": "チーム画像",
-      "skill": "Skill",
       "legacy": "レガシー"
     },
     "fileStatuses": {

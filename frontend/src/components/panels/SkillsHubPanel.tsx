@@ -110,7 +110,10 @@ function WorkspaceHubPanel() {
     } else {
       params.delete("subtab");
     }
-    navigate({ pathname: "/workspace", search: `?${params.toString()}` });
+    navigate(
+      { pathname: "/workspace", search: `?${params.toString()}` },
+      { replace: true },
+    );
   };
 
   return (
@@ -281,7 +284,10 @@ export function SkillsHubPanel({ embedded = false }: SkillsHubPanelProps) {
     const params = new URLSearchParams(location.search);
     params.set("tab", "skills");
     params.set("subtab", tab);
-    navigate({ pathname: "/workspace", search: `?${params.toString()}` });
+    navigate(
+      { pathname: "/workspace", search: `?${params.toString()}` },
+      { replace: true },
+    );
   };
 
   return (

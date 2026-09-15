@@ -29,6 +29,7 @@
 
   /* ── Segmented mode switcher (WorkBuddy-style track + dark active pill) ── */
   --theme-mode-track: #ebebeb;
+  --theme-mode-track-text: #696972;
   --theme-mode-active: #3b3b3b;
   --theme-mode-active-text: #ffffff;
 
@@ -103,6 +104,7 @@
   --theme-sidebar-active: #2d2724;
 
   --theme-mode-track: #241f1c;
+  --theme-mode-track-text: #d6d3d1;
   --theme-mode-active: #e7e5e4;
   --theme-mode-active-text: #1c1917;
 

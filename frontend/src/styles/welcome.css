@@ -40,11 +40,16 @@
   white-space: nowrap;
   border: 0;
   background-color: transparent;
-  color: var(--theme-text-secondary);
+  color: var(--theme-mode-track-text);
 }
 
-.welcome-mode-pill:not(:disabled):hover {
+.welcome-mode-pill:not(:disabled):not([aria-disabled="true"]):hover {
   color: var(--theme-text);
+}
+
+.welcome-mode-pill[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .welcome-mode-pill[data-active="true"] {
@@ -53,7 +58,9 @@
   box-shadow: 0 1px 2px color-mix(in srgb, var(--theme-text) 14%, transparent);
 }
 
-.welcome-mode-pill[data-active="true"]:not(:disabled):hover {
+.welcome-mode-pill[data-active="true"]:not(:disabled):not(
+    [aria-disabled="true"]
+  ):hover {
   color: var(--theme-mode-active-text);
 }
 

@@ -83,7 +83,8 @@
   },
   "welcomeModes": {
     "recommendationTitle": "不知道用哪些专家，试试这些！",
-    "shuffle": "换一批"
+    "shuffle": "换一批",
+    "lockedReason": "选择专家预设后无法切换模式。"
   },
   "agentConfig": {
     "addFirstModel": "添加第一个模型",
@@ -3005,7 +3006,7 @@
     "warningHint": "当前已使用大部分空间，建议清理不再使用的文件。",
     "fullHint": "请先释放空间，再上传新文件。",
     "filesTitle": "我的文件",
-    "filesHint": "聊天文件可在此删除；头像和 Skill 文件受保护。",
+    "filesHint": "此处列出会话中上传的文件，可在这里删除。",
     "loadFailed": "存储空间加载失败。",
     "deleteComplete": "文件已从个人空间移除。",
     "partialDelete": "部分文件未能移除。",
@@ -3037,10 +3038,6 @@
     "sources": {
       "chat": "聊天",
       "wecom": "企业微信",
-      "profile_avatar": "个人头像",
-      "persona_avatar": "Persona 头像",
-      "team_avatar": "团队头像",
-      "skill": "Skill",
       "legacy": "历史文件"
     },
     "fileStatuses": {
