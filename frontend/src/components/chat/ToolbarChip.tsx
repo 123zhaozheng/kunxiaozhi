@@ -40,7 +40,7 @@ export function ToolbarChip({
             )}
           </span>
         )}
-        <span className="max-w-40 truncate text-sm font-semibold text-blue-600 dark:text-blue-400 font-serif">
+        <span className="max-w-40 truncate text-sm font-medium text-[var(--theme-text-secondary)]">
           {label}
         </span>
       </div>

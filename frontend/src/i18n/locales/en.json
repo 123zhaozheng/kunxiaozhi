@@ -81,6 +81,10 @@
     "selectMode": "Select Mode",
     "selectModeDesc": "Switch agent mode"
   },
+  "welcomeModes": {
+    "recommendationTitle": "Not sure which expert to use? Try these!",
+    "shuffle": "Shuffle"
+  },
   "agentConfig": {
     "addFirstModel": "Add your first model",
     "addModel": "Add Model",
@@ -249,16 +253,16 @@
   },
   "agents": {
     "fast": {
-      "description": "No sandbox, faster response, for daily chat",
-      "name": "Fast Agent"
+      "description": "No sandbox, faster responses — best for everyday questions and short chats",
+      "name": "Quick Answer"
     },
     "search": {
-      "description": "With code interpreter & sandbox, for complex tasks",
-      "name": "Search Agent"
+      "description": "Web search, code interpreter and sandbox — best for documents, data and complex tasks",
+      "name": "Daily Work"
     },
     "team": {
-      "description": "Routes tasks to role-based sub-agents. Falls back to single agent mode when no team is configured.",
-      "name": "Team Agent"
+      "description": "Dispatches role-based sub-agents; falls back to a single agent when no team is selected",
+      "name": "Team Collaboration"
     }
   },
   "analytics": {
@@ -1598,6 +1602,15 @@
     "hideCode": "Hide code",
     "showCode": "Show code"
   },
+  "workspaceHub": {
+    "subtitle": "Discover experts, manage skills, and configure connectors",
+    "tabs": {
+      "connectors": "Connectors",
+      "expert": "Experts",
+      "skills": "Skills"
+    },
+    "title": "Experts · Skills · Connectors"
+  },
   "nav": {
     "adminMarketplace": "Admin Marketplace",
     "agents": "Configuration",
@@ -1622,7 +1635,8 @@
     "systemSettings": "System Settings",
     "team": "Team Builder",
     "userSettings": "User Management",
-    "users": "Users"
+    "users": "Users",
+    "workspace": "Experts · Skills · Connectors"
   },
   "navDesc": {
     "agents": "Configure and manage AI agents",
@@ -3039,5 +3053,4 @@
       "missing": "Missing"
     }
   }
-
 }

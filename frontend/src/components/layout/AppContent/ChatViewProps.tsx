@@ -20,6 +20,7 @@ import type { ActiveGoalSpec } from "../../../hooks/useAgent/types";
 import type { SopPlan } from "../../../types/sop";
 import type { RevealPreviewRequest } from "../../chat/ChatMessage/items/revealPreviewData";
 import type { ExternalNavigationTargetFile } from "./externalNavigationState";
+import type { ModelOption } from "../../../services/api/model";
 
 // ---------------------------------------------------------------------------
 // Hooks
@@ -159,6 +160,10 @@ export interface ChatViewProps {
   agents: AgentInfo[];
   currentAgent: string;
   onSelectAgent: (id: string) => void;
+  // Model selection is owned by the composer, not the app header.
+  availableModels?: ModelOption[] | null;
+  currentModelId?: string;
+  onSelectModel?: (modelId: string, modelValue: string) => void;
   // Team picker
   selectedTeamId: string | null;
   onSelectTeam: (teamId: string | null) => void;

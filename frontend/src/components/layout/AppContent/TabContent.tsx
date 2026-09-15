@@ -66,6 +66,7 @@ const panelMap: Record<
   React.LazyExoticComponent<React.ComponentType>
 > = {
   skills: SkillsHubPanel,
+  workspace: SkillsHubPanel,
   marketplace: SkillsHubPanel,
   builtin: SkillsHubPanel,
   users: UsersPanel,

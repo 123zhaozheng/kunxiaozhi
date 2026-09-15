@@ -4,10 +4,11 @@ import {
   Clock,
   MoreHorizontal,
   FolderOpen,
-  UserRound,
+  Sparkles,
   Users,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useLocation } from "react-router-dom";
 import { useAuth } from "../../../hooks/useAuth";
 import { Permission } from "../../../types/auth";
 import { getFullUrl } from "../../../services/api";
@@ -25,9 +26,8 @@ interface SidebarRailProps {
   onOpenSearch: () => void;
   onOpenRecentChats: () => void;
   onOpenFileLibrary: () => void;
-  onOpenPersonaPlaza: () => void;
+  onOpenWorkspace: () => void;
   onOpenTeamBuilder: () => void;
-  onOpenSkills: () => void;
   hasMoreMenuItems: boolean;
   onToggleMoreMenu: () => void;
   moreMenuBtnRef: React.RefObject<HTMLButtonElement | null>;
@@ -45,7 +45,7 @@ export function SidebarRail({
   onOpenSearch,
   onOpenRecentChats,
   onOpenFileLibrary,
-  onOpenPersonaPlaza,
+  onOpenWorkspace,
   onOpenTeamBuilder,
   hasMoreMenuItems,
   onToggleMoreMenu,
@@ -55,8 +55,17 @@ export function SidebarRail({
   unreadCount = 0,
 }: SidebarRailProps) {
   const { t } = useTranslation();
+  const location = useLocation();
   const { hasPermission } = useAuth();
   const canReadTeam = hasPermission(Permission.TEAM_READ);
+  const isWorkspaceActive = [
+    "/workspace",
+    "/persona",
+    "/skills",
+    "/marketplace",
+    "/builtin-skills",
+    "/mcp",
+  ].includes(location.pathname);
 
   return (
     <nav
@@ -120,12 +129,13 @@ export function SidebarRail({
         </button>
         <button
           type="button"
-          onClick={onOpenPersonaPlaza}
-          className={railBtn}
-          title={t("personaPresets.title", "角色广场")}
-          aria-label={t("personaPresets.title", "角色广场")}
+          onClick={onOpenWorkspace}
+          className={`${railBtn} ${isWorkspaceActive ? "is-active" : ""}`}
+          title={t("nav.workspace", "专家 · 技能 · 连接器")}
+          aria-label={t("nav.workspace", "专家 · 技能 · 连接器")}
+          aria-current={isWorkspaceActive ? "page" : undefined}
         >
-          <UserRound size={20} />
+          <Sparkles size={20} />
         </button>
         {canReadTeam && (
           <button

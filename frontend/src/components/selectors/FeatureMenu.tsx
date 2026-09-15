@@ -12,7 +12,6 @@ import {
   Wrench,
   Sparkles,
   Bot,
-  Brain,
   Plus,
   Image,
   Video,
@@ -26,7 +25,6 @@ import {
   Settings2,
   ToggleLeft,
 } from "lucide-react";
-import { THINKING_LEVEL_COLOR } from "../chat/chatInputConstants";
 
 import type { AgentOption, FileCategory } from "../../types";
 import type { UploadLimits } from "../../hooks/useFileUpload";
@@ -37,7 +35,6 @@ export type FeaturePanel =
   | "tools"
   | "skills"
   | "agent"
-  | "thinking"
   | null;
 
 const FILE_CATEGORY_ICONS: Record<FileCategory, React.ElementType> = {
@@ -60,9 +57,6 @@ interface FeatureMenuProps {
   totalTeamCount?: number;
   hasAgentSelector: boolean;
   agentName?: string | null;
-  hasThinkingOption: boolean;
-  thinkingLabel?: string;
-  thinkingLevel?: string;
   booleanAgentOptions?: Record<string, AgentOption>;
   agentOptionValues?: Record<string, boolean | string | number>;
   onToggleAgentOption?: (key: string, value: boolean | string | number) => void;
@@ -113,18 +107,15 @@ function MenuItem({
   icon,
   label,
   badge,
-  badgeColor,
   active,
   onClick,
 }: {
   icon: ReactNode;
   label: string;
   badge?: string;
-  badgeColor?: string;
   active?: boolean;
   onClick: () => void;
 }) {
-  const color = THINKING_LEVEL_COLOR[badgeColor ?? ""];
   return (
     <button
       type="button"
@@ -135,19 +126,7 @@ function MenuItem({
       <span className="feature-menu-item-icon">{icon}</span>
       <span className="flex-1 text-left truncate">{label}</span>
       {badge && (
-        <span
-          className="feature-menu-item-badge"
-          style={
-            color
-              ? {
-                  color: color.text,
-                  background: color.bg,
-                }
-              : undefined
-          }
-        >
-          {badge}
-        </span>
+        <span className="feature-menu-item-badge">{badge}</span>
       )}
     </button>
   );
@@ -166,9 +145,6 @@ export const FeatureMenu = memo(function FeatureMenu({
   totalTeamCount = 0,
   hasAgentSelector,
   agentName,
-  hasThinkingOption,
-  thinkingLabel,
-  thinkingLevel,
   booleanAgentOptions,
   agentOptionValues = {},
   onToggleAgentOption,
@@ -221,7 +197,6 @@ export const FeatureMenu = memo(function FeatureMenu({
     hasPersonaSelector ||
     hasTeamSelector ||
     hasAgentSelector ||
-    hasThinkingOption ||
     booleanOptionEntries.length > 0;
   if (!hasFeatureItems && uploadCategories.length === 0) return null;
 
@@ -298,7 +273,7 @@ export const FeatureMenu = memo(function FeatureMenu({
                 {hasPersonaSelector && (
                   <MenuItem
                     icon={<UserRound size={18} />}
-                    label={t("featureMenu.persona", "角色")}
+                    label={t("featureMenu.persona", "专家")}
                     badge={personaName || undefined}
                     active={activePanel === "persona"}
                     onClick={() => onOpen("persona")}
@@ -333,9 +308,7 @@ export const FeatureMenu = memo(function FeatureMenu({
                 )}
               </MenuGroup>
             )}
-            {(hasAgentSelector ||
-              hasThinkingOption ||
-              booleanOptionEntries.length > 0) && (
+            {(hasAgentSelector || booleanOptionEntries.length > 0) && (
               <MenuGroup
                 label={t("featureMenu.settings", "设置")}
                 icon={<Settings2 size={18} />}
@@ -347,16 +320,6 @@ export const FeatureMenu = memo(function FeatureMenu({
                     badge={agentName ? t(agentName) : undefined}
                     active={activePanel === "agent"}
                     onClick={() => onOpen("agent")}
-                  />
-                )}
-                {hasThinkingOption && (
-                  <MenuItem
-                    icon={<Brain size={18} />}
-                    label={t("chat.thinkingIntensity", "思考强度")}
-                    badge={thinkingLabel}
-                    badgeColor={thinkingLevel}
-                    active={activePanel === "thinking"}
-                    onClick={() => onOpen("thinking")}
                   />
                 )}
                 {booleanOptionEntries.map(([key, option]) => {

@@ -2,6 +2,8 @@ import { useRef, useCallback, useState, useEffect } from "react";
 import { ArrowUp, Square, Lock } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { FeatureMenu, type FeaturePanel } from "../selectors/FeatureMenu";
+import { ModelSelector } from "../agent/ModelSelector";
+import type { ModelOption } from "../../services/api/model";
 import {
   PersonaAvatarIcon,
   PersonaAvatarImage,
@@ -17,7 +19,8 @@ import {
   getTeamFallbackTag,
 } from "../team/teamAvatarUtils";
 import { ToolbarChip } from "./ToolbarChip";
-import { AgentIcon } from "../agent/AgentIcon";
+import { AgentModeIcon } from "../agent/AgentModeIcon";
+import type { ThinkingLevel } from "./thinkingLevels";
 
 export interface ChatInputToolbarProps {
   activePanel: FeaturePanel;
@@ -34,10 +37,12 @@ export interface ChatInputToolbarProps {
   personaName?: string | null;
   hasAgentSelector: boolean;
   agentName?: string;
-  agentIcon?: string;
-  hasThinkingOption: boolean;
-  thinkingLabel?: string;
-  thinkingLevel?: string;
+  availableModels?: ModelOption[] | null;
+  currentModelId?: string;
+  onSelectModel?: (modelId: string, modelValue: string) => void;
+  thinkingOption?: AgentOption;
+  thinkingValue?: boolean | string | number;
+  onChangeThinking?: (value: ThinkingLevel) => void;
   uploadCategories: FileCategory[];
   uploadLimits: UploadLimits | null;
   uploadFiles: (files: FileList | File[], category?: FileCategory) => void;
@@ -76,10 +81,12 @@ export function ChatInputToolbar({
   personaName,
   hasAgentSelector,
   agentName,
-  agentIcon,
-  hasThinkingOption,
-  thinkingLabel,
-  thinkingLevel,
+  availableModels,
+  currentModelId,
+  onSelectModel,
+  thinkingOption,
+  thinkingValue,
+  onChangeThinking,
   uploadCategories,
   uploadLimits,
   uploadFiles,
@@ -170,12 +177,9 @@ export function ChatInputToolbar({
           totalTeamCount={totalTeamCount}
           hasAgentSelector={hasAgentSelector}
           agentName={agentName}
-          hasThinkingOption={hasThinkingOption}
           uploadCategories={uploadCategories}
           uploadLimits={uploadLimits}
           onFileCategorySelect={handleFileCategorySelect}
-          thinkingLabel={thinkingLabel}
-          thinkingLevel={thinkingLevel}
           booleanAgentOptions={booleanAgentOptions}
           agentOptionValues={agentOptionValues}
           onToggleAgentOption={onToggleAgentOption}
@@ -184,7 +188,7 @@ export function ChatInputToolbar({
           !selectedPersonaName &&
           !(currentAgent === "team" && onSelectTeam && selectedTeamId) && (
             <ToolbarChip
-              icon={<AgentIcon icon={agentIcon || "Bot"} size={18} />}
+              icon={<AgentModeIcon agentId={currentAgent ?? ""} size={16} />}
               label={t(`agents.${currentAgent}.name`) || agentName || ""}
               onClick={() => onActivePanelChange("agent")}
             />
@@ -246,6 +250,16 @@ export function ChatInputToolbar({
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5 self-end">
+        {availableModels && availableModels.length > 0 && onSelectModel && (
+          <ModelSelector
+            models={availableModels}
+            currentModelId={currentModelId || ""}
+            thinkingOption={thinkingOption}
+            thinkingValue={thinkingValue}
+            onChangeThinking={onChangeThinking}
+            onSelectModel={onSelectModel}
+          />
+        )}
         {!canSend ? (
           <button
             type="button"

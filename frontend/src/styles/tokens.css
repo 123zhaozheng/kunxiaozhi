@@ -6,28 +6,42 @@
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
 
   /* ── Primary ── */
-  --theme-primary: #78716c;
-  --theme-primary-hover: #57534e;
-  --theme-primary-light: #f5f5f4;
-  --theme-ring: #78716c;
+  --theme-primary: #71717a;
+  --theme-primary-hover: #52525b;
+  --theme-primary-light: #f0f0f2;
+  --theme-ring: #71717a;
 
-  /* ── Backgrounds ── */
-  --theme-bg: #f5f5f4;
+  /* ── Backgrounds ──
+     Content surfaces are pure white; the sidebar is the only grey plane.
+     Keep --theme-bg-subtle a step darker than --theme-bg so inset fills
+     stay visible now that the content area is white. */
+  --theme-bg: #ffffff;
   --theme-bg-card: #ffffff;
-  --theme-bg-sidebar: #f5f5f4;
+  --theme-bg-sidebar: #f4f4f5;
   --theme-bg-elevated: #ffffff;
-  --theme-bg-subtle: #f5f5f4;
+  --theme-bg-subtle: #f6f6f7;
+
+  /* ── Sidebar surfaces ──
+     Hover/active must read against --theme-bg-sidebar, not --theme-bg,
+     now that the content plane is white. */
+  --theme-sidebar-hover: #ebebed;
+  --theme-sidebar-active: #e3e3e6;
+
+  /* ── Segmented mode switcher (WorkBuddy-style track + dark active pill) ── */
+  --theme-mode-track: #ebebeb;
+  --theme-mode-active: #3b3b3b;
+  --theme-mode-active-text: #ffffff;
 
   /* ── Borders ── */
-  --theme-border: #e7e5e4;
-  --theme-border-hover: #d6d3d1;
-  --theme-border-subtle: #f5f5f4;
+  --theme-border: #e6e6e9;
+  --theme-border-hover: #d4d4d8;
+  --theme-border-subtle: #f1f1f3;
   --theme-border-faint: rgba(0, 0, 0, 0.06);
 
   /* ── Text ── */
-  --theme-text: #1c1917;
-  --theme-text-secondary: #78716c;
-  --theme-text-tertiary: #a8a29e;
+  --theme-text: #18181b;
+  --theme-text-secondary: #71717a;
+  --theme-text-tertiary: #a1a1aa;
 
   /* ── Overlays ── */
   --theme-overlay: rgba(0, 0, 0, 0.4);
@@ -84,6 +98,13 @@
   --theme-bg-sidebar: #151210;
   --theme-bg-elevated: #292524;
   --theme-bg-subtle: #1e1b18;
+
+  --theme-sidebar-hover: #241f1c;
+  --theme-sidebar-active: #2d2724;
+
+  --theme-mode-track: #241f1c;
+  --theme-mode-active: #e7e5e4;
+  --theme-mode-active-text: #1c1917;
 
   /* ── Borders ── */
   --theme-border: #3d3835;

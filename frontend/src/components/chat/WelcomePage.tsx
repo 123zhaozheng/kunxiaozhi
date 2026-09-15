@@ -13,6 +13,7 @@ import type { ChatInputProps } from "./ChatInput";
 import type { ActiveGoalSpec } from "../../hooks/useAgent/types";
 import { ContactAdminDialog } from "../common/ContactAdminDialog";
 import {
+  getRandomWelcomePersonaCards,
   getSelectedPersonaStarterPrompts,
   getSelectedTeamStarterPrompts,
   getWelcomePersonaCards,
@@ -21,11 +22,17 @@ import {
   getWelcomeTeamCards,
   getWelcomeSuggestionsContainerClass,
   getWelcomeSuggestionButtonClass,
+  WELCOME_PERSONA_RECOMMENDATION_LIMIT,
 } from "./welcomeLayout";
+import { AgentModePills } from "./AgentModePills";
 import { PersonaAvatarWithLoading } from "../persona/PersonaAvatarWithLoading";
 import { useSettingsContext } from "../../contexts/SettingsContext";
 import { teamApi } from "../../services/api/team";
-import type { PersonaPreset, PersonaPresetSnapshot } from "../../types";
+import type {
+  AgentInfo,
+  PersonaPreset,
+  PersonaPresetSnapshot,
+} from "../../types";
 import type { Team } from "../../types/team";
 import { TeamAvatar } from "../team/TeamAvatar";
 import {
@@ -37,7 +44,6 @@ const WELCOME_ICON_SRC = "/images/lamb.webp";
 
 interface WelcomePageProps {
   greeting: string;
-  subtitle: string;
   refreshLabel: string;
   personasLabel?: string;
   starterPromptsLabel?: string;
@@ -50,6 +56,8 @@ interface WelcomePageProps {
   selectedPersonaSnapshot?: PersonaPresetSnapshot | null;
   personaPresetsLoading?: boolean;
   personaPresetsMutating?: boolean;
+  agents: AgentInfo[];
+  onSelectAgent?: (id: string) => void;
   currentAgent?: string;
   selectedTeamId?: string | null;
   canSendMessage: boolean;
@@ -82,7 +90,6 @@ function WelcomeIcon({
 
 export const WelcomePage = memo(function WelcomePage({
   greeting,
-  subtitle,
   refreshLabel,
   personasLabel,
   starterPromptsLabel,
@@ -95,6 +102,8 @@ export const WelcomePage = memo(function WelcomePage({
   selectedPersonaSnapshot,
   personaPresetsLoading = false,
   personaPresetsMutating = false,
+  agents,
+  onSelectAgent,
   currentAgent,
   selectedTeamId,
   canSendMessage,
@@ -117,6 +126,29 @@ export const WelcomePage = memo(function WelcomePage({
   const [teamCardsLoaded, setTeamCardsLoaded] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const galleryRef = useRef<HTMLDivElement>(null);
+  const personaPresetSignature = useMemo(
+    () =>
+      personaPresets
+        .map((persona) => persona.id)
+        .sort()
+        .join("\u0000"),
+    [personaPresets],
+  );
+  const [recommendedPersonaCards, setRecommendedPersonaCards] = useState<
+    PersonaPreset[]
+  >(() => getRandomWelcomePersonaCards(personaPresets));
+  const recommendationSignatureRef = useRef(personaPresetSignature);
+
+  useEffect(() => {
+    if (recommendationSignatureRef.current === personaPresetSignature) return;
+    recommendationSignatureRef.current = personaPresetSignature;
+    setRecommendedPersonaCards((previous) =>
+      getRandomWelcomePersonaCards(
+        personaPresets,
+        previous.map((persona) => persona.id),
+      ),
+    );
+  }, [personaPresetSignature, personaPresets]);
 
   const handleGalleryScroll = useCallback(() => {
     const el = galleryRef.current;
@@ -276,6 +308,19 @@ export const WelcomePage = memo(function WelcomePage({
     setTimeout(() => setIsRefreshing(false), 400);
   }, [onSelectTeam]);
 
+  const handleShufflePersonaCards = useCallback(() => {
+    if (personaPresets.length <= WELCOME_PERSONA_RECOMMENDATION_LIMIT) return;
+    setRecommendedPersonaCards((previous) =>
+      getRandomWelcomePersonaCards(
+        personaPresets,
+        previous.map((persona) => persona.id),
+      ),
+    );
+    setAnimKey((key) => key + 1);
+    setIsRefreshing(true);
+    setTimeout(() => setIsRefreshing(false), 400);
+  }, [personaPresets]);
+
   const handlePersonaClick = useCallback(
     async (preset: PersonaPreset) => {
       if (personaPresetsMutating) return;
@@ -330,7 +375,7 @@ export const WelcomePage = memo(function WelcomePage({
       : personaStarterPrompts.length > 0
         ? personaStarterPrompts
         : defaultSuggestions;
-  const displayCards = mentionQuery ? filteredCards : roleCards;
+  const displayCards = mentionQuery ? filteredCards : recommendedPersonaCards;
   const displayTeamCards = mentionQuery ? filteredTeamCards : welcomeTeamCards;
   const shouldShowTeamSkeletons =
     showTeamCards && (teamCardsLoading || !teamCardsLoaded);
@@ -352,6 +397,8 @@ export const WelcomePage = memo(function WelcomePage({
   // Whether the gallery has real card content (used for container width variant)
   const showChoiceCards =
     (showPersonaCards && !isPersonaEmpty) || (showTeamCards && !isTeamEmpty);
+  const showPersonaRecommendations =
+    showPersonaCards && !mentionQuery && !isPersonaEmpty;
 
   return (
     <div
@@ -376,13 +423,11 @@ export const WelcomePage = memo(function WelcomePage({
           <WelcomeIcon className="welcome-icon hidden sm:inline-block size-12 xl:size-14 2xl:size-16 mr-4 align-text-bottom object-contain" />
           {greeting}
         </h1>
-        {/* Subtle subtitle prompt */}
-        <p
-          className="welcome-subtitle mt-1.5 sm:mt-2 md:mt-2.5 xl:mt-3 2xl:mt-3 text-sm sm:text-base md:text-[17px] xl:text-lg 2xl:text-lg text-center font-serif"
-          style={{ color: "var(--theme-text-secondary)" }}
-        >
-          {subtitle}
-        </p>
+        <AgentModePills
+          agents={agents}
+          currentAgent={currentAgent ?? ""}
+          onSelectAgent={onSelectAgent}
+        />
       </div>
 
       {/* ChatInput centered — the focal point */}
@@ -429,15 +474,39 @@ export const WelcomePage = memo(function WelcomePage({
                   ? isTeamEmpty
                     ? t("team.empty", "暂无团队")
                     : t("team.plaza", "团队广场")
-                  : showStarterPrompts || showTeamStarterPrompts
-                    ? starterPromptsLabel ||
-                      t("personaPresets.starterPrompts", "开始对话")
-                    : isPersonaEmpty
-                      ? t("persona.empty", "暂无角色")
-                      : personasLabel || t("personaPresets.title", "角色")}
+                  : showPersonaRecommendations
+                    ? t(
+                        "welcomeModes.recommendationTitle",
+                        "不知道用哪些专家，试试这些！",
+                      )
+                    : showStarterPrompts || showTeamStarterPrompts
+                      ? starterPromptsLabel ||
+                        t("personaPresets.starterPrompts", "开始对话")
+                      : isPersonaEmpty
+                        ? t("persona.empty", "暂无角色")
+                        : personasLabel || t("personaPresets.title", "专家")}
               </span>
             </div>
             <div className="flex items-center gap-2">
+              {showPersonaRecommendations &&
+                personaPresets.length > WELCOME_PERSONA_RECOMMENDATION_LIMIT && (
+                  <button
+                    type="button"
+                    onClick={handleShufflePersonaCards}
+                    aria-label={t("welcomeModes.shuffle", "换一批")}
+                    className="welcome-refresh-btn flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium transition-all duration-300 sm:text-[12px]"
+                    style={{
+                      color: "var(--theme-text-secondary)",
+                      backgroundColor: "transparent",
+                    }}
+                  >
+                    <RefreshCw
+                      size={12}
+                      className={isRefreshing ? "animate-spin" : ""}
+                    />
+                    <span>{t("welcomeModes.shuffle", "换一批")}</span>
+                  </button>
+                )}
               {showTeamCards && isTeamEmpty && (
                 <button
                   onClick={() => navigate("/team")}

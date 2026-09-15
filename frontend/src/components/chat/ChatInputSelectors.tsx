@@ -206,7 +206,12 @@ export function ChatInputSelectors({
         onToggleAgentOption &&
         Object.keys(agentOptions).length > 0 &&
         Object.entries(agentOptions)
-          .filter(([, opt]) => opt.options && opt.options.length > 0)
+          .filter(
+            ([key, opt]) =>
+              key !== "enable_thinking" &&
+              opt.options &&
+              opt.options.length > 0,
+          )
           .map(([key, option]) => (
             <AgentOptionButton
               key={key}
@@ -214,10 +219,6 @@ export function ChatInputSelectors({
               option={option}
               value={agentOptionValues[key] ?? option.default}
               onChange={(value) => onToggleAgentOption(key, value)}
-              isOpen={activePanel === "thinking"}
-              onOpenChange={(open) =>
-                onActivePanelChange(open ? "thinking" : null)
-              }
             />
           ))}
     </>

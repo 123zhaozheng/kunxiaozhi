@@ -5,6 +5,7 @@ export interface SkillBaseCardProps {
   title: string;
   description?: string;
   descriptionMaxLines?: 2 | 3;
+  /** @deprecated Cards no longer render a colored banner; kept for callers. */
   gradient?: string[];
   bannerLeadingOverlay?: ReactNode;
   bannerOverlay?: ReactNode;
@@ -28,7 +29,6 @@ export function SkillBaseCard({
   title,
   description,
   descriptionMaxLines = 2,
-  gradient,
   bannerLeadingOverlay,
   bannerOverlay,
   icon,
@@ -50,7 +50,7 @@ export function SkillBaseCard({
 
   return (
     <div
-      className={`scb group flex h-full flex-col overflow-hidden rounded-2xl bg-[var(--theme-bg-card)] shadow-sm dark:shadow-none dark:border dark:border-[var(--theme-border)] ${
+      className={`scb group flex h-full flex-col overflow-hidden bg-[var(--theme-bg-card)] ${
         muted ? "scb--muted" : ""
       } ${
         selected
@@ -73,76 +73,7 @@ export function SkillBaseCard({
           : onClick
       }
     >
-      {gradient && (
-        <div
-          className="scb__banner relative h-12 shrink-0"
-          style={{
-            background: `linear-gradient(45deg, ${gradient[0]}, ${gradient[1]}, ${gradient[2]})`,
-          }}
-        >
-          <div className="absolute inset-0 flex items-start justify-between px-2 py-2 z-[3]">
-            <div className="flex items-center gap-1.5">
-              {bannerLeadingOverlay}
-              {!bannerLeadingOverlay && selectionMode && onSelect && (
-                <div
-                  className={`transition-all duration-200 ${
-                    selected
-                      ? "scale-110"
-                      : "sm:scale-90 sm:group-hover:scale-100"
-                  }`}
-                >
-                  <Checkbox
-                    size="lg"
-                    checked={selected}
-                    onChange={() => onSelect()}
-                    className="shadow-sm sm:opacity-0 sm:group-hover:opacity-100"
-                  />
-                </div>
-              )}
-            </div>
-            <div className="ml-auto flex items-center gap-1.5">
-              {bannerLeadingOverlay && selectionMode && onSelect && (
-                <div
-                  className={`transition-all duration-200 ${
-                    selected
-                      ? "scale-110"
-                      : "sm:scale-90 sm:group-hover:scale-100"
-                  }`}
-                >
-                  <Checkbox
-                    size="lg"
-                    checked={selected}
-                    onChange={() => onSelect()}
-                    className="shadow-sm sm:opacity-0 sm:group-hover:opacity-100"
-                  />
-                </div>
-              )}
-              {bannerOverlay}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {!gradient && selectionMode && onSelect && (
-        <div
-          className={`absolute top-3 right-3 z-10 transition-all duration-200 ${
-            selected ? "scale-110" : "sm:scale-90 sm:group-hover:scale-100"
-          }`}
-        >
-          <Checkbox
-            size="lg"
-            checked={selected}
-            onChange={() => onSelect()}
-            className="shadow-sm sm:opacity-0 sm:group-hover:opacity-100"
-          />
-        </div>
-      )}
-
-      <div
-        className={`flex flex-1 flex-col p-4 ${
-          gradient ? "-mt-3 pt-5" : "sm:p-5"
-        }`}
-      >
+      <div className="flex flex-1 flex-col p-4 sm:p-5">
         <div className="flex items-start gap-3">
           {icon && <div className="scb__icon-ring shrink-0">{icon}</div>}
           <div className="min-w-0 flex-1">
@@ -150,6 +81,24 @@ export function SkillBaseCard({
               {title}
             </h3>
             {statusPills}
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+            {bannerLeadingOverlay}
+            {selectionMode && onSelect && (
+              <div
+                className={`shrink-0 transition-transform duration-200 ${
+                  selected ? "scale-110" : ""
+                }`}
+              >
+                <Checkbox
+                  size="lg"
+                  checked={selected}
+                  onChange={() => onSelect()}
+                  className="shadow-sm"
+                />
+              </div>
+            )}
+            {bannerOverlay}
           </div>
         </div>
 

@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { LucideIcon } from "lucide-react";
 
 interface MoreMenuItem {
@@ -29,6 +29,7 @@ export function MobileMoreMenuSheet({
   dragHandleRef,
 }: MobileMoreMenuSheetProps) {
   const { t } = useTranslation();
+  const location = useLocation();
   const navigate = useNavigate();
 
   if (!isOpen) return null;
@@ -39,7 +40,12 @@ export function MobileMoreMenuSheet({
     <button
       key={item.path}
       type="button"
-      className="sidebar-nav-btn w-full h-8 rounded-[10px] flex items-center gap-3 px-[9px] focus:outline-none transition-colors"
+      className={`sidebar-nav-btn w-full h-8 rounded-[10px] flex items-center gap-3 px-[9px] focus:outline-none transition-colors ${(item.matchPaths ?? [item.path]).includes(location.pathname) ? "is-active" : ""}`}
+      aria-current={
+        (item.matchPaths ?? [item.path]).includes(location.pathname)
+          ? "page"
+          : undefined
+      }
       onClick={() => {
         onClose();
         navigate(item.path);

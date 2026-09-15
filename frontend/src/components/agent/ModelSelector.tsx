@@ -9,6 +9,10 @@ import type { ModelOption } from "../../services/api/model";
 import { authApi } from "../../services/api";
 import { Tooltip } from "../common/Tooltip";
 import { PROVIDER_LABELS } from "../panels/AgentPanel/shared/providerLabels";
+import { useSettingsContext } from "../../contexts/SettingsContext";
+import { ThinkingEffortSlider } from "../chat/ThinkingEffortSlider";
+import type { AgentOption } from "../../types";
+import type { ThinkingLevel } from "../chat/thinkingLevels";
 
 const MAX_PINNED = 10;
 type ModelFilterKey = "all" | "pinned" | "vision" | `provider:${string}`;
@@ -267,19 +271,22 @@ const ModelItem = memo(function ModelItem({
 interface ModelSelectorProps {
   models: ModelOption[];
   currentModelId: string;
-  pinnedModelIds?: string[];
-  onTogglePinnedModel?: (modelId: string) => void;
   onSelectModel: (modelId: string, modelValue: string) => void;
+  thinkingOption?: AgentOption;
+  thinkingValue?: boolean | string | number;
+  onChangeThinking?: (value: ThinkingLevel) => void;
 }
 
 const ModelSelector = memo(function ModelSelector({
   models,
   currentModelId,
-  pinnedModelIds = [],
-  onTogglePinnedModel,
   onSelectModel,
+  thinkingOption,
+  thinkingValue,
+  onChangeThinking,
 }: ModelSelectorProps) {
   const { t } = useTranslation();
+  const { pinnedModelIds, togglePinnedModel } = useSettingsContext();
   const [showSelector, setShowSelector] = useState(false);
   const [activeFilter, setActiveFilter] = useState<ModelFilterKey>("all");
   const [modelSearch, setModelSearch] = useState("");
@@ -345,17 +352,31 @@ const ModelSelector = memo(function ModelSelector({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showSelector]);
 
+  const showThinkingSlider = Boolean(thinkingOption && onChangeThinking);
+  const thinkingLabel = thinkingOption?.label_key
+    ? t(thinkingOption.label_key)
+    : thinkingOption?.label;
+
   const dropdownStyle = (() => {
     if (!showSelector || !containerRef.current) return undefined;
     const rect = containerRef.current.getBoundingClientRect();
     const dropdownWidth = Math.min(384, window.innerWidth - 12);
-    return {
-      top: rect.bottom + 6,
-      left: Math.min(
-        Math.max(rect.left, 6),
-        window.innerWidth - dropdownWidth - 6,
-      ),
-    };
+    const left = Math.min(
+      Math.max(rect.left, 6),
+      window.innerWidth - dropdownWidth - 6,
+    );
+    const estimatedHeight = showThinkingSlider ? 520 : 400;
+    const opensAbove =
+      rect.bottom + estimatedHeight > window.innerHeight - 12 &&
+      rect.top > estimatedHeight;
+    const shouldPinToViewportTop =
+      !opensAbove && window.innerHeight - rect.bottom < 160;
+    if (opensAbove) {
+      return { bottom: window.innerHeight - rect.top + 6, left };
+    }
+    return shouldPinToViewportTop
+      ? { top: 8, left }
+      : { top: rect.bottom + 6, left };
   })();
 
   const pinnedSet = useMemo(() => new Set(pinnedModelIds), [pinnedModelIds]);
@@ -445,15 +466,18 @@ const ModelSelector = memo(function ModelSelector({
       onClick={(e) => e.stopPropagation()}
     >
       <button
+        type="button"
         onClick={toggleSelector}
-        className="flex items-center gap-1.5 hover:opacity-70 transition-opacity"
+        aria-haspopup="dialog"
+        aria-expanded={showSelector}
+        className="flex max-w-[10rem] items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-[var(--theme-text-secondary)] transition-colors hover:bg-[var(--theme-primary-light)] hover:text-[var(--theme-text)]"
       >
-        <span className="text-base font-semibold text-stone-600 dark:text-stone-300 max-w-[200px] truncate">
+        <span className="max-w-[8rem] truncate">
           {currentModelInfo?.label || currentModelId}
         </span>
         <ChevronDown
-          size={14}
-          className={`text-stone-400 dark:text-stone-300 transition-transform duration-200 ${
+          size={13}
+          className={`shrink-0 text-stone-400 dark:text-stone-300 transition-transform duration-200 ${
             showSelector ? "rotate-180" : ""
           }`}
         />
@@ -463,7 +487,7 @@ const ModelSelector = memo(function ModelSelector({
         createPortal(
           <div
             ref={dropdownRef}
-            className="fixed z-[301] w-[min(calc(100vw-0.75rem),24rem)] rounded-lg bg-white/95 dark:bg-stone-800/95 shadow-[0_14px_36px_-22px_rgba(0,0,0,0.45)] border border-stone-200/90 dark:border-stone-700/90 overflow-hidden backdrop-blur-sm animate-scale-in"
+            className="fixed z-[301] max-h-[min(80dvh,38rem)] w-[min(calc(100vw-0.75rem),24rem)] overflow-y-auto rounded-lg border border-stone-200/90 bg-white/95 shadow-[0_14px_36px_-22px_rgba(0,0,0,0.45)] backdrop-blur-sm animate-scale-in dark:border-stone-700/90 dark:bg-stone-800/95"
             style={dropdownStyle}
           >
             <div className="px-3 pt-2 pb-1.5">
@@ -514,6 +538,16 @@ const ModelSelector = memo(function ModelSelector({
               </div>
             </div>
 
+            {thinkingOption && onChangeThinking && (
+              <div className="border-t border-stone-100 px-3 py-3 dark:border-stone-700/70">
+                <ThinkingEffortSlider
+                  value={thinkingValue}
+                  onChange={onChangeThinking}
+                  label={thinkingLabel}
+                />
+              </div>
+            )}
+
             <div className="border-t border-stone-100 dark:border-stone-700/70">
               <div className="max-h-72 overflow-y-auto overscroll-contain py-1">
                 {filteredModels.length === 0 ? (
@@ -532,7 +566,7 @@ const ModelSelector = memo(function ModelSelector({
                         onSelect={() =>
                           handleSelectModel(model.id, model.value)
                         }
-                        onTogglePin={() => onTogglePinnedModel?.(model.id)}
+                        onTogglePin={() => togglePinnedModel(model.id)}
                         onSetDefault={() =>
                           handleSetDefault(model.id, model.value)
                         }
@@ -549,7 +583,7 @@ const ModelSelector = memo(function ModelSelector({
                         onSelect={() =>
                           handleSelectModel(model.id, model.value)
                         }
-                        onTogglePin={() => onTogglePinnedModel?.(model.id)}
+                        onTogglePin={() => togglePinnedModel(model.id)}
                         onSetDefault={() =>
                           handleSetDefault(model.id, model.value)
                         }

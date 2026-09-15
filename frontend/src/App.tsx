@@ -173,6 +173,15 @@ function SkillsPage() {
   return <AppContent key="skills" activeTab="skills" />;
 }
 
+function WorkspacePage() {
+  useSEO({
+    title: "workspaceHub.title",
+    description: "workspaceHub.subtitle",
+    path: "/workspace",
+  });
+  return <AppContent key="workspace" activeTab="workspace" />;
+}
+
 function MarketplacePage() {
   useSEO({
     title: "seo.marketplace.title",
@@ -437,6 +446,14 @@ function App() {
                   toastMessage={t("errors.noPermission")}
                 >
                   <SkillsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/workspace"
+              element={
+                <ProtectedRoute>
+                  <WorkspacePage />
                 </ProtectedRoute>
               }
             />

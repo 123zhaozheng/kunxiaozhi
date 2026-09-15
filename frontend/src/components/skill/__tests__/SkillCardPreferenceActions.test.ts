@@ -8,7 +8,7 @@ const componentSource = readFileSync(
   "utf8",
 );
 
-test("skill cards expose pin and favorite banner actions", () => {
+test("skill cards expose pin and favorite actions", () => {
   assert.match(componentSource, /Pin,/);
   assert.match(componentSource, /Star,/);
   assert.match(componentSource, /onTogglePreference\?:/);

@@ -11,6 +11,7 @@ import type {
   PersonaPresetSnapshot,
 } from "../../types";
 import type { ActiveGoalSpec } from "../../hooks/useAgent/types";
+import type { ModelOption } from "../../services/api/model";
 
 export interface ChatInputProps {
   onSend: (
@@ -73,6 +74,9 @@ export interface ChatInputProps {
   agentOptions?: Record<string, AgentOption>;
   agentOptionValues?: Record<string, boolean | string | number>;
   onToggleAgentOption?: (key: string, value: boolean | string | number) => void;
+  availableModels?: ModelOption[] | null;
+  currentModelId?: string;
+  onSelectModel?: (modelId: string, modelValue: string) => void;
   agents?: AgentInfo[];
   currentAgent?: string;
   onSelectAgent?: (id: string) => void;

@@ -86,6 +86,9 @@ export const ChatInput = memo(function ChatInput({
   agentOptions,
   agentOptionValues = {},
   onToggleAgentOption,
+  availableModels,
+  currentModelId,
+  onSelectModel,
   agents = [],
   currentAgent,
   onSelectAgent,
@@ -714,31 +717,9 @@ export const ChatInput = memo(function ChatInput({
     uploadFiles(files);
   };
 
-  const thinkingLabel = agentOptions
-    ? Object.entries(agentOptions)
-        .filter(([, opt]) => opt.options && opt.options.length > 0)
-        .map(([, opt]) => {
-          const val =
-            agentOptionValues[
-              Object.keys(agentOptions).find((k) => agentOptions[k] === opt)!
-            ] ?? opt.default;
-          const selected = opt.options?.find((o) => o.value === val);
-          return selected?.label_key
-            ? t(selected.label_key)
-            : selected?.label || String(val);
-        })[0]
-    : undefined;
-
-  const thinkingLevel = agentOptions
-    ? Object.entries(agentOptions)
-        .filter(([, opt]) => opt.options && opt.options.length > 0)
-        .map(([, opt]) => {
-          const val =
-            agentOptionValues[
-              Object.keys(agentOptions).find((k) => agentOptions[k] === opt)!
-            ] ?? opt.default;
-          return String(val);
-        })[0]
+  const thinkingOption = agentOptions?.enable_thinking;
+  const thinkingValue = thinkingOption
+    ? agentOptionValues.enable_thinking ?? thinkingOption.default
     : undefined;
 
   return (
@@ -972,16 +953,16 @@ export const ChatInput = memo(function ChatInput({
             personaName={selectedPersonaName}
             hasAgentSelector={agents.length > 1 && !!onSelectAgent}
             agentName={agents.find((a) => a.id === currentAgent)?.name}
-            agentIcon={agents.find((a) => a.id === currentAgent)?.icon}
-            hasThinkingOption={
-              !!(
-                agentOptions &&
-                onToggleAgentOption &&
-                Object.keys(agentOptions).length > 0
-              )
+            availableModels={availableModels}
+            currentModelId={currentModelId}
+            onSelectModel={onSelectModel}
+            thinkingOption={thinkingOption}
+            thinkingValue={thinkingValue}
+            onChangeThinking={
+              onToggleAgentOption
+                ? (value) => onToggleAgentOption("enable_thinking", value)
+                : undefined
             }
-            thinkingLabel={thinkingLabel}
-            thinkingLevel={thinkingLevel}
             uploadCategories={uploadCategories}
             uploadLimits={uploadLimits}
             uploadFiles={uploadFiles}

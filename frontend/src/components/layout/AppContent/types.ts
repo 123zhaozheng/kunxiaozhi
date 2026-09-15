@@ -1,6 +1,7 @@
 export type TabType =
   | "chat"
   | "persona"
+  | "workspace"
   | "skills"
   | "marketplace"
   | "builtin"

@@ -278,11 +278,17 @@ html[data-mobile-keyboard="true"] #root {
   line-height: 1.25rem;
 }
 .sidebar-nav-btn:hover {
-  background-color: var(
-    --glass-bg-subtle,
-    color-mix(in srgb, var(--theme-bg) 80%, white)
-  );
+  background-color: var(--theme-sidebar-hover);
   color: var(--theme-text);
+}
+
+/* Active nav entry — the sidebar is the only grey plane, so the selected
+   state has to be a step darker than hover to stay legible. */
+.sidebar-nav-btn[aria-current="page"],
+.sidebar-nav-btn.is-active {
+  background-color: var(--theme-sidebar-active);
+  color: var(--theme-text);
+  font-weight: 600;
 }
 
 /* Sidebar rail button — theme-aware hover */
@@ -290,10 +296,12 @@ html[data-mobile-keyboard="true"] #root {
   color: var(--theme-text-secondary);
 }
 .sidebar-rail-btn:hover {
-  background-color: var(
-    --glass-bg-subtle,
-    color-mix(in srgb, var(--theme-bg) 80%, white)
-  );
+  background-color: var(--theme-sidebar-hover);
+  color: var(--theme-text);
+}
+.sidebar-rail-btn[aria-current="page"],
+.sidebar-rail-btn.is-active {
+  background-color: var(--theme-sidebar-active);
   color: var(--theme-text);
 }
 

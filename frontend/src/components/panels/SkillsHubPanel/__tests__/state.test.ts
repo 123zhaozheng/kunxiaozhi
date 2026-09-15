@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveSkillsHubTab } from "../state.ts";
+import { resolveSkillsHubTab, resolveWorkspaceHubTab } from "../state.ts";
 
 test("keeps the requested tab when both permissions are available", () => {
   assert.equal(resolveSkillsHubTab(undefined, true, true), "skills");
@@ -28,4 +28,12 @@ test("returns null when neither tab is accessible", () => {
   assert.equal(resolveSkillsHubTab(undefined, false, false), null);
   assert.equal(resolveSkillsHubTab("skills", false, false), null);
   assert.equal(resolveSkillsHubTab("marketplace", false, false), null);
+});
+
+test("resolves the workspace tab while respecting feature permissions", () => {
+  assert.equal(resolveWorkspaceHubTab(undefined, true, true), "expert");
+  assert.equal(resolveWorkspaceHubTab("skills", true, true), "skills");
+  assert.equal(resolveWorkspaceHubTab("connectors", true, true), "connectors");
+  assert.equal(resolveWorkspaceHubTab("skills", false, true), "expert");
+  assert.equal(resolveWorkspaceHubTab("connectors", true, false), "expert");
 });

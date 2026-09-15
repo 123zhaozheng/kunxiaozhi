@@ -81,6 +81,10 @@
     "selectMode": "모드 선택",
     "selectModeDesc": "에이전트 모드 전환"
   },
+  "welcomeModes": {
+    "recommendationTitle": "어떤 전문가를 써야 할지 모르겠다면, 이것을 사용해 보세요!",
+    "shuffle": "다른 추천"
+  },
   "agentConfig": {
     "addFirstModel": "첫 번째 모델 추가",
     "addModel": "모델 추가",
@@ -249,16 +253,16 @@
   },
   "agents": {
     "fast": {
-      "description": "샌드박스 없음, 빠른 응답, 일상 대화용",
-      "name": "Fast Agent"
+      "description": "샌드박스 없이 더 빠른 응답. 일상적인 질문과 짧은 대화에 적합",
+      "name": "빠른 질의응답"
     },
     "search": {
-      "description": "코드 인터프리터 & 샌드박스 지원, 복잡한 작업용",
-      "name": "Search Agent"
+      "description": "웹 검색·코드 인터프리터·샌드박스 지원. 문서, 데이터 및 복잡한 작업에 적합",
+      "name": "일상 업무"
     },
     "team": {
-      "description": "역할 기반 서브 에이전트에 작업을 라우팅합니다. 팀 미설정 시 단일 에이전트 모드로 폴백합니다.",
-      "name": "Team Agent"
+      "description": "역할별 서브 에이전트에 분배. 팀 미선택 시 단일 에이전트로 폴백",
+      "name": "팀 협업"
     }
   },
   "analytics": {
@@ -1564,6 +1568,15 @@
     "hideCode": "코드 숨기기",
     "showCode": "코드 보기"
   },
+  "workspaceHub": {
+    "subtitle": "전문가를 찾고 스킬을 관리하며 커넥터를 설정하세요",
+    "tabs": {
+      "connectors": "커넥터",
+      "expert": "전문가",
+      "skills": "스킬"
+    },
+    "title": "전문가 · 스킬 · 커넥터"
+  },
   "nav": {
     "adminMarketplace": "관리자 마켓플레이스",
     "agents": "설정",
@@ -1587,7 +1600,8 @@
     "systemSettings": "시스템 설정",
     "team": "팀 빌더",
     "userSettings": "사용자 관리",
-    "users": "사용자"
+    "users": "사용자",
+    "workspace": "전문가 · 스킬 · 커넥터"
   },
   "navDesc": {
     "agents": "AI 에이전트 설정 및 관리",
@@ -2814,7 +2828,7 @@
     "deleted": "삭제됨",
     "retryUpload": "업로드 재시도",
     "resultReleased": "해제됨: {{bytes}}",
-    "resultPhysical": "\ubb3c\ub9ac \uc815\ub9ac: {{status}}",
+    "resultPhysical": "물리 정리: {{status}}",
     "sources": {
       "chat": "채팅",
       "wecom": "WeCom",
@@ -2834,5 +2848,4 @@
       "missing": "누락"
     }
   }
-
 }

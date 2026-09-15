@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { MCPServerResponse } from "../../types";
-import { nameToGradient } from "../common/cardUtils";
 
 interface MCPServerCardProps {
   server: MCPServerResponse;
@@ -50,8 +49,6 @@ export function MCPServerCard({
   const transportColor =
     TRANSPORT_COLORS[server.transport] || DEFAULT_TRANSPORT_COLOR;
 
-  const gradient = nameToGradient(server.name);
-
   return (
     <div
       className={`pps-card group flex h-full flex-col overflow-hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-card)] shadow-sm dark:shadow-none cursor-pointer transition-all duration-200 ${
@@ -63,45 +60,37 @@ export function MCPServerCard({
         }
       }}
     >
-      <div
-        className="pps-card__banner relative h-12 shrink-0"
-        style={{
-          background: `linear-gradient(45deg, ${gradient[0]}, ${gradient[1]}, ${gradient[2]})`,
-        }}
-      >
-        <div className="absolute inset-0 flex items-center justify-end px-2 z-[3]">
-          <div className="flex gap-1.5">
-            {server.is_internal && (
-              <span className="scb__status-pill scb__status-pill--installed">
-                {t("mcp.card.internal", "Internal")}
-              </span>
-            )}
-            {server.is_system && !server.is_internal && (
-              <span className="scb__status-pill scb__status-pill--installed">
-                {t("mcp.card.system")}
-              </span>
-            )}
-            {!server.enabled && (
-              <span className="scb__status-pill scb__status-pill--danger">
-                {t("mcp.card.disabled")}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-1 flex-col p-4 pt-5">
+      <div className="flex flex-1 flex-col p-4 sm:p-5">
         <div className="flex items-start gap-3">
           <div className="scb__icon-ring shrink-0">
             <Server size={16} className="text-stone-500 dark:text-stone-400" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3
-              className="truncate text-base font-semibold text-[var(--theme-text)] leading-tight"
-              title={server.name}
-            >
-              {server.name}
-            </h3>
+            <div className="flex items-start gap-2">
+              <h3
+                className="min-w-0 flex-1 truncate text-base font-semibold text-[var(--theme-text)] leading-tight"
+                title={server.name}
+              >
+                {server.name}
+              </h3>
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                {server.is_internal && (
+                  <span className="scb__status-pill scb__status-pill--installed">
+                    {t("mcp.card.internal", "Internal")}
+                  </span>
+                )}
+                {server.is_system && !server.is_internal && (
+                  <span className="scb__status-pill scb__status-pill--installed">
+                    {t("mcp.card.system")}
+                  </span>
+                )}
+                {!server.enabled && (
+                  <span className="scb__status-pill scb__status-pill--danger">
+                    {t("mcp.card.disabled")}
+                  </span>
+                )}
+              </div>
+            </div>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               <span
                 className={`rounded-full px-2 py-0.5 text-[11px] font-medium tracking-wide ${transportColor}`}

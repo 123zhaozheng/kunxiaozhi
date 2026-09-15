@@ -92,6 +92,9 @@ export function ChatView({
   agents,
   currentAgent,
   onSelectAgent,
+  availableModels,
+  currentModelId,
+  onSelectModel,
   selectedTeamId,
   onSelectTeam,
   onOpenTeamBuilder,
@@ -444,6 +447,9 @@ export function ChatView({
     agents,
     currentAgent,
     onSelectAgent,
+    availableModels,
+    currentModelId,
+    onSelectModel,
     selectedTeamId,
     onSelectTeam,
     onOpenTeamBuilder,
@@ -468,11 +474,8 @@ export function ChatView({
           ) : (
             <WelcomePage
               greeting={greeting}
-              subtitle={
-                t("chat.welcomeSubtitle") ?? "How can I help you today?"
-              }
               refreshLabel={t("chat.welcomeRefresh") ?? "Refresh"}
-              personasLabel={t("personaPresets.title", "角色")}
+              personasLabel={t("personaPresets.title", "专家")}
               starterPromptsLabel={t(
                 "personaPresets.starterPrompts",
                 "开始对话",
@@ -486,6 +489,8 @@ export function ChatView({
               selectedPersonaSnapshot={selectedPersonaSnapshot}
               personaPresetsLoading={personaPresetsLoading}
               personaPresetsMutating={personaPresetsMutating}
+              agents={agents}
+              onSelectAgent={chatInputProps.onSelectAgent}
               currentAgent={currentAgent}
               selectedTeamId={selectedTeamId}
               canSendMessage={canSendMessage}

@@ -1,5 +1,7 @@
 export type SkillsHubTab = "skills" | "marketplace" | "builtin";
 
+export type WorkspaceHubTab = "expert" | "skills" | "connectors";
+
 export function resolveSkillsHubTab(
   requestedTab: SkillsHubTab | undefined,
   canReadSkills: boolean,
@@ -18,4 +20,15 @@ export function resolveSkillsHubTab(
   }
 
   return null;
+}
+
+export function resolveWorkspaceHubTab(
+  requestedTab: string | null | undefined,
+  canReadSkills: boolean,
+  canReadConnectors: boolean,
+): WorkspaceHubTab {
+  if (requestedTab === "skills" && canReadSkills) return "skills";
+  if (requestedTab === "connectors" && canReadConnectors) return "connectors";
+
+  return "expert";
 }

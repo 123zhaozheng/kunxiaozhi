@@ -138,7 +138,7 @@ export function PersonaPlazaPanel() {
     <div className="skill-theme-shell flex h-full min-h-0 flex-col">
       <PanelHeader
         className="skill-panel-header"
-        title={t("personaPresets.title", "角色广场")}
+        title={t("personaPresets.title", "专家广场")}
         subtitle={t("personaPresets.subtitle", "选择一个角色开始对话")}
         icon={
           <UserRound size={18} className="text-stone-600 dark:text-stone-400" />

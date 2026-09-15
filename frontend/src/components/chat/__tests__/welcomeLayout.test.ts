@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  getRandomWelcomePersonaCards,
   getSelectedPersonaStarterPrompts,
   getSelectedTeamStarterPrompts,
   getWelcomePersonaCards,
@@ -55,6 +56,13 @@ test("keeps welcome content centered on mobile when suggestions are visible", ()
   assert.doesNotMatch(
     welcomeCss,
     /@media \(max-width: 639px\) \{[\s\S]*\.welcome-root\s*\{[\s\S]*justify-content: flex-start;/,
+  );
+});
+
+test("enlarges only the welcome composer textarea", () => {
+  assert.match(
+    welcomeCss,
+    /\.welcome-input textarea\s*\{[\s\S]*min-height:\s*3rem;/,
   );
 });
 
@@ -120,6 +128,39 @@ test("shows all welcome persona cards with pinned and favorite cards first", () 
   assert.deepEqual(
     cards.map((card) => card.id),
     ["pinned", "favorite", "normal"],
+  );
+});
+
+test("picks four random persona recommendations and rerolls to a different set", () => {
+  const personas = Array.from({ length: 6 }, (_, index) => ({
+    id: `persona-${index}`,
+    name: `Persona ${index}`,
+    starter_prompts: [],
+  }));
+  const first = getRandomWelcomePersonaCards(personas);
+  const second = getRandomWelcomePersonaCards(
+    personas,
+    first.map((persona) => persona.id),
+  );
+
+  assert.equal(first.length, 4);
+  assert.equal(new Set(first.map((persona) => persona.id)).size, 4);
+  assert.equal(second.length, 4);
+  assert.equal(
+    second.some((persona) => !first.some((item) => item.id === persona.id)),
+    true,
+  );
+});
+
+test("returns every available persona when fewer than four exist", () => {
+  const personas = [
+    { id: "writer", name: "Writer", starter_prompts: [] },
+    { id: "coder", name: "Coder", starter_prompts: [] },
+  ];
+
+  assert.deepEqual(
+    getRandomWelcomePersonaCards(personas).map((persona) => persona.id).sort(),
+    ["coder", "writer"],
   );
 });
 
