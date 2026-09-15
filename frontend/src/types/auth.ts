@@ -95,6 +95,9 @@ export interface User {
   must_change_password?: boolean;
   credential_version?: number;
   password_changed_at?: string | null;
+  /** Optional administrator override, reported in bytes by the storage API. */
+  storage_quota_override_bytes?: number | null;
+  storage_quota_mb?: number | null;
 }
 
 // 用户创建请求
@@ -118,6 +121,7 @@ export interface UserUpdate {
   password?: string;
   roles?: string[];
   is_active?: boolean;
+  storage_quota_override_mb?: number | null;
 }
 
 // User list response (paginated)
@@ -139,6 +143,7 @@ export interface RoleLimits {
   max_file_size_audio?: number | null; // 音频上传大小限制（MB）
   max_file_size_document?: number | null; // 文档上传大小限制（MB）
   max_files?: number | null; // 最大上传文件数，null = 使用全局默认
+  storage_quota_mb?: number | null; // 个人存储空间上限（MB），null = 使用全局默认
   [key: string]: number | null | undefined; // 允许扩展
 }
 

@@ -8,7 +8,7 @@ import hashlib
 import uuid
 from dataclasses import dataclass
 from tempfile import SpooledTemporaryFile
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 from urllib.parse import unquote, urlsplit
 
 from fastapi import (
@@ -21,8 +21,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel, Field
-from pymongo.errors import DuplicateKeyError
+from pydantic import BaseModel, Field, field_validator
 
 from src.api.deps import get_current_user_required, require_permissions
 from src.api.routes.file_type import (
@@ -40,8 +39,15 @@ from src.infra.storage.s3 import (
     S3Provider,
 )
 from src.infra.storage.s3.base import BinaryReadFile
+from src.infra.storage.user_storage import (
+    StorageDomainError,
+    StorageManagedBySourceError,
+    StorageQuotaExceededError,
+    UserStorageQuotaService,
+)
 from src.infra.upload.file_record import FileRecordStorage
 from src.kernel.config import settings
+from src.kernel.schemas.storage import FileLifecycleStatus, StorageSource
 from src.kernel.schemas.user import TokenPayload
 
 logger = get_logger(__name__)
@@ -52,6 +58,24 @@ _upload_delete_tasks = BestEffortTaskLimiter("upload delete", max_tasks=8)
 UPLOAD_READ_CHUNK_SIZE = 1024 * 1024
 UPLOAD_SPOOL_MEMORY_LIMIT = 2 * 1024 * 1024
 SIGNED_URL_KEYS_MAX = 100
+LEGACY_PUBLIC_OBJECT_PREFIXES = (
+    "generated-images/",
+    "revealed_files/",
+    "tool_binaries/",
+    "revealed_projects/",
+)
+LEGACY_SYSTEM_SOURCES = frozenset(
+    {
+        "generated",
+        "generated_image",
+        "reveal",
+        "revealed",
+        "revealed_file",
+        "revealed_project",
+        "tool",
+        "tool_binary",
+    }
+)
 
 # Extensions that can become active content or native code when opened by a
 # client or storage consumer.  This is intentionally a denylist: legacy and
@@ -140,9 +164,28 @@ def _parse_bool(value: Any) -> bool:
 router = APIRouter()
 
 
-async def _get_live_record_by_hash(file_hash: str, storage=None) -> dict | None:
+async def _get_live_record_by_hash(
+    file_hash: str,
+    storage=None,
+    *,
+    user_id: str | None = None,
+    source: str | None = None,
+) -> dict | None:
     """Return a dedupe record only if both metadata and the backing file still exist."""
-    record = await _file_record_storage.find_by_hash(file_hash)
+    try:
+        record = await _file_record_storage.find_by_hash(
+            file_hash,
+            user_id=user_id,
+            source=source,
+        )
+    except TypeError:
+        # Small compatibility doubles and third-party adapters may still expose
+        # the pre-owner-aware method signature.
+        record = await _file_record_storage.find_by_hash(file_hash)
+    if user_id is not None and record is not None:
+        owner = record.get("user_id") or record.get("uploaded_by")
+        if owner != user_id:
+            return None
     if record is None:
         return None
 
@@ -155,7 +198,10 @@ async def _get_live_record_by_hash(file_hash: str, storage=None) -> dict | None:
         file_hash,
         record["key"],
     )
-    await _file_record_storage.delete_by_hash(file_hash)
+    try:
+        await _file_record_storage.delete_by_hash(file_hash, user_id=user_id)
+    except TypeError:
+        await _file_record_storage.delete_by_hash(file_hash)
     return None
 
 
@@ -183,10 +229,15 @@ def _build_upload_response(
     mime_type: str,
     size: int,
     exists: bool = False,
+    file_id: str | None = None,
+    source: str | None = None,
+    status: str | None = None,
+    storage_usage: Any | None = None,
+    logical_url: str | None = None,
 ) -> dict:
     """Build a normalized upload response payload."""
     base_url = _get_base_url(request)
-    proxy_url = f"{base_url}/api/upload/file/{key}"
+    proxy_url = logical_url or f"{base_url}/api/upload/file/{key}"
     payload = {
         "key": key,
         "url": proxy_url,
@@ -197,6 +248,18 @@ def _build_upload_response(
     }
     if exists:
         payload["exists"] = True
+    if file_id:
+        payload["file_id"] = file_id
+    if source:
+        payload["source"] = source
+    if status:
+        payload["status"] = status
+    if storage_usage is not None:
+        payload["storage_usage"] = (
+            storage_usage.model_dump(mode="json")
+            if hasattr(storage_usage, "model_dump")
+            else storage_usage
+        )
     return payload
 
 
@@ -216,6 +279,29 @@ def _avatar_object_key_from_url(avatar_url: str | None, user_id: str) -> str | N
     if key.startswith(owned_prefix):
         return key
     return None
+
+
+def _logical_file_id_from_url(file_url: str | None) -> str | None:
+    if not file_url or "/api/storage/files/" not in file_url:
+        return None
+    value = file_url.split("/api/storage/files/", 1)[1].split("/", 1)[0]
+    return value or None
+
+
+async def _legacy_avatar_is_referenced(key: str) -> bool:
+    """Keep an old avatar readable only while its profile still points to it."""
+    parts = key.split("/")
+    if len(parts) < 3 or parts[0] != "avatars" or not parts[1]:
+        return False
+    try:
+        from src.infra.user.storage import UserStorage
+
+        user = await UserStorage().get_by_id(parts[1])
+    except Exception as exc:
+        logger.debug("Legacy avatar ownership lookup failed for %s: %s", key, exc)
+        return False
+    avatar_url = getattr(user, "avatar_url", None) if user else None
+    return _avatar_object_key_from_url(avatar_url, parts[1]) == key
 
 
 async def _delete_avatar_object_if_owned(
@@ -241,7 +327,26 @@ def _path_exists(file_path) -> bool:
 
 async def _get_file_response_metadata(key: str) -> tuple[str | None, str]:
     record = await _file_record_storage.find_by_key(key)
+    if record is None:
+        try:
+            try:
+                record = await UserStorageQuotaService().get_content_file(key, allow_storage_key=True)
+            except TypeError:
+                record = await UserStorageQuotaService().get_content_file(key)
+        except Exception:
+            # Metadata lookup must not make legacy system-artifact reads fail if
+            # the additive Mongo collections are unavailable.
+            record = None
     filename_for_disposition = record["name"] if record else None
+    if filename_for_disposition:
+        filename_for_disposition = (
+            str(filename_for_disposition)
+            .replace("\r", "")
+            .replace("\n", "")
+            .replace("/", "_")
+            .replace("\\", "_")
+            .replace('"', "'")[:255]
+        )
     content_type = record["mime_type"] if record and record.get("mime_type") else None
 
     if not content_type:
@@ -428,11 +533,57 @@ async def resolve_upload_limits(user_roles: list[str]) -> dict:
     return resolved
 
 
+def _storage_error_http_exception(exc: StorageDomainError) -> HTTPException:
+    """Map domain errors without exposing ownership or physical-key details."""
+    usage = exc.usage if isinstance(exc, StorageQuotaExceededError) else None
+    detail: dict[str, Any] = {"code": exc.code, "message": str(exc)}
+    if usage is not None:
+        detail["usage"] = usage.model_dump(mode="json")
+        detail["required_bytes"] = exc.required_bytes
+    return HTTPException(status_code=exc.status_code, detail=detail)
+
+
+def _request_header(request: Request, name: str) -> str | None:
+    headers = getattr(request, "headers", {})
+    try:
+        value = headers.get(name)
+    except AttributeError:
+        value = None
+    return str(value).strip() if value else None
+
+
+def _safe_compatibility_key(key: str) -> bool:
+    """Reject traversal/encoded separators before any legacy provider call."""
+    raw = str(key or "")
+    lowered = raw.casefold()
+    if not raw or len(raw.encode("utf-8")) > 1024 or "\x00" in raw or "%2f" in lowered or "%5c" in lowered:
+        return False
+    decoded = unquote(raw)
+    if "\x00" in decoded or "\\" in decoded or decoded.startswith("/"):
+        return False
+    return not any(part in {"", ".", ".."} for part in decoded.split("/"))
+
+
+def _is_legacy_personal_record(record: dict[str, Any] | None) -> bool:
+    """Keep system-artifact records on their owning cleanup/read paths."""
+
+    if record is None:
+        return False
+    source = str(record.get("source") or "legacy").casefold()
+    return source not in LEGACY_SYSTEM_SOURCES
+
+
 class FileCheckRequest(BaseModel):
-    hash: str = Field(..., min_length=64, max_length=64, description="SHA-256 hex digest")
+    hash: str = Field(
+        ...,
+        min_length=64,
+        max_length=64,
+        pattern="^[0-9a-fA-F]{64}$",
+        description="SHA-256 hex digest",
+    )
     size: int = Field(..., gt=0, description="File size in bytes")
-    name: str = Field(..., description="Original filename")
-    mime_type: str = Field(..., description="MIME type")
+    name: str = Field(..., min_length=1, max_length=1024, description="Original filename")
+    mime_type: str = Field(..., min_length=1, max_length=255, description="MIME type")
 
 
 @router.post("/check")
@@ -441,8 +592,38 @@ async def check_file_exists(
     body: FileCheckRequest,
     current_user: TokenPayload = Depends(get_current_user_required),
 ) -> dict:
+    domain = UserStorageQuotaService()
+    modern = await domain.storage.find_active_by_hash(current_user.sub, StorageSource.CHAT, body.hash)
+    if modern:
+        blob = await domain.storage.get_blob(str(modern.get("blob_id")))
+        if blob and blob.get("status") == "active":
+            usage = await domain.get_usage(current_user.sub, roles=current_user.roles)
+            file_id = str(modern.get("_id") or modern.get("file_id"))
+            base_url = _get_base_url(request)
+            return _build_upload_response(
+                request,
+                key=str(blob.get("storage_key") or modern.get("storage_key") or ""),
+                name=str(modern.get("name") or body.name),
+                file_type=str(modern.get("category") or "unknown"),
+                mime_type=str(modern.get("mime_type") or body.mime_type),
+                size=int(modern.get("size", body.size)),
+                exists=True,
+                file_id=file_id,
+                source=str(modern.get("source") or StorageSource.CHAT.value),
+                status=str(modern.get("status") or FileLifecycleStatus.ACTIVE.value),
+                storage_usage=usage,
+                logical_url=f"{base_url}/api/storage/files/{file_id}/content",
+            )
+
+    # Legacy compatibility is still owner-scoped.  A global hash lookup would
+    # reveal another user's key and is no longer permitted.
     storage = await get_or_init_storage()
-    record = await _get_live_record_by_hash(body.hash, storage)
+    record = await _get_live_record_by_hash(
+        body.hash,
+        storage,
+        user_id=current_user.sub,
+        source=StorageSource.CHAT.value,
+    )
     if record is None:
         return {"exists": False}
     base_url = _get_base_url(request)
@@ -536,6 +717,9 @@ async def upload_file(
     spooled_upload: SpooledUpload | None = None
     storage_key = ""
     file_hash = ""
+    prepared = None
+    object_written = False
+    domain: UserStorageQuotaService | None = None
     try:
         spooled_upload = await _spool_upload_file_limited(
             file,
@@ -544,83 +728,100 @@ async def upload_file(
         )
         file_hash = spooled_upload.sha256_hex
 
-        # Check if hash already exists (race condition guard)
-        existing = await _get_live_record_by_hash(file_hash, storage)
-        if existing:
-            return _build_upload_response(
-                request,
-                key=existing["key"],
-                name=existing["name"],
-                file_type=existing["category"],
-                mime_type=existing["mime_type"],
-                size=existing["size"],
-                exists=True,
-            )
-
-        # Upload with short key organized by category and user
-        short_id = uuid.uuid4().hex[:16]
-        ext = (file.filename or "").rsplit(".", 1)[-1] if "." in (file.filename or "") else ""
+        domain = UserStorageQuotaService()
+        # Every new personal object is immutable and user/source scoped.  The
+        # logical file row is staged and quota is reserved before this write.
+        basename = str(file.filename or "unknown").replace("\\", "/").rsplit("/", 1)[-1]
+        ext = basename.rsplit(".", 1)[-1].casefold() if "." in basename and not basename.endswith(".") else ""
+        short_id = uuid.uuid4().hex
         storage_key = (
-            f"{category.value}/{current_user.sub}/{short_id}.{ext}"
+            f"managed/chat/{current_user.sub}/{short_id}.{ext}"
             if ext
-            else f"{category.value}/{current_user.sub}/{short_id}"
+            else f"managed/chat/{current_user.sub}/{short_id}"
         )
+        idempotency_key = _request_header(request, "x-idempotency-key") or f"upload:{file_hash}"
+        try:
+            prepared = await domain.prepare_create(
+                current_user.sub,
+                source=StorageSource.CHAT,
+                name=basename or "unknown",
+                mime_type=file.content_type or "application/octet-stream",
+                category=category.value,
+                size=spooled_upload.size,
+                content_hash=file_hash,
+                storage_key=storage_key,
+                idempotency_key=idempotency_key,
+                roles=current_user.roles,
+            )
+        except StorageDomainError as exc:
+            raise _storage_error_http_exception(exc) from exc
+
+        if prepared.reused:
+            existing = await domain.storage.get_file(prepared.file_id)
+            usage = await domain.get_usage(current_user.sub, roles=current_user.roles)
+            if existing:
+                return _build_upload_response(
+                    request,
+                    key=str(existing.get("storage_key") or prepared.storage_key),
+                    name=str(existing.get("name") or basename),
+                    file_type=str(existing.get("category") or category.value),
+                    mime_type=str(existing.get("mime_type") or file.content_type or "application/octet-stream"),
+                    size=int(existing.get("size", prepared.size)),
+                    exists=True,
+                    file_id=prepared.file_id,
+                    source=str(existing.get("source") or StorageSource.CHAT.value),
+                    status=str(existing.get("status") or FileLifecycleStatus.ACTIVE.value),
+                    storage_usage=usage,
+                    logical_url=f"{_get_base_url(request)}/api/storage/files/{prepared.file_id}/content",
+                )
         upload_result = await storage.upload_stream_to_key(
             file=spooled_upload.file,
-            key=storage_key,
+            key=prepared.storage_key,
             content_type=file.content_type,
             metadata={"uploaded_by": current_user.sub, "content_hash": file_hash},
             skip_size_limit=True,
         )
-        storage_key = upload_result.key
-
-        # Write file record
-        await _file_record_storage.create(
-            file_hash=file_hash,
-            key=storage_key,
-            name=file.filename or "unknown",
-            mime_type=file.content_type or "application/octet-stream",
-            size=spooled_upload.size,
-            category=category.value,
-            uploaded_by=current_user.sub,
-        )
+        if upload_result.key != prepared.storage_key:
+            raise RuntimeError("storage backend changed the immutable managed key")
+        storage_key = prepared.storage_key
+        object_written = True
+        user_file, usage = await domain.complete_create(prepared, roles=current_user.roles)
 
         return _build_upload_response(
             request,
             key=storage_key,
-            name=file.filename or "unknown",
+            name=basename or "unknown",
             file_type=category.value,
             mime_type=file.content_type or "application/octet-stream",
             size=spooled_upload.size,
+            file_id=user_file.file_id,
+            source=user_file.source.value,
+            status=user_file.status.value,
+            storage_usage=usage,
+            logical_url=f"{_get_base_url(request)}/api/storage/files/{user_file.file_id}/content",
         )
-    except DuplicateKeyError:
-        logger.info("Duplicate upload detected for hash %s, reusing existing file", file_hash)
-
-        existing = await _get_live_record_by_hash(file_hash, storage)
-        if existing:
-            try:
-                await storage.delete_file(storage_key)
-            except Exception as cleanup_error:
-                logger.warning(
-                    "Failed to delete duplicate uploaded object %s after dedupe race: %s",
-                    storage_key,
-                    cleanup_error,
-                )
-
-            return _build_upload_response(
-                request,
-                key=existing["key"],
-                name=existing["name"],
-                file_type=existing["category"],
-                mime_type=existing["mime_type"],
-                size=existing["size"],
-                exists=True,
-            )
-
-        raise HTTPException(status_code=500, detail="Upload failed: duplicate record conflict")
     except HTTPException:
+        if prepared is not None and not object_written:
+            try:
+                await (domain or UserStorageQuotaService()).compensate_create(current_user.sub, prepared.operation_id)
+            except Exception as compensation_error:
+                logger.error("Upload reservation compensation failed: %s", compensation_error, exc_info=True)
         raise
+    except StorageDomainError as exc:
+        if prepared is not None and not object_written:
+            try:
+                await (domain or UserStorageQuotaService()).compensate_create(current_user.sub, prepared.operation_id)
+            except Exception as compensation_error:
+                logger.error("Upload reservation compensation failed: %s", compensation_error, exc_info=True)
+        raise _storage_error_http_exception(exc) from exc
     except Exception as e:
+        if prepared is not None and not object_written:
+            try:
+                await (domain or UserStorageQuotaService()).compensate_create(current_user.sub, prepared.operation_id)
+            except Exception as compensation_error:
+                logger.error("Upload reservation compensation failed: %s", compensation_error, exc_info=True)
+        if object_written:
+            logger.error("Upload object was written but lifecycle finalization failed", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
     finally:
         if spooled_upload is not None:
@@ -697,19 +898,65 @@ async def upload_avatar(
         spooled_upload.close()
         raise
 
+
+    domain: UserStorageQuotaService | None = None
+    modern_avatar = False
+    prepared = None
+    object_written = False
     try:
         from src.infra.user.storage import UserStorage
         from src.kernel.schemas.user import UserUpdate
 
         storage = await get_or_init_storage()
-        upload_result = await storage.upload_file(
-            file=spooled_upload.file,
-            folder=f"avatars/{current_user.sub}",
-            filename=file.filename or "avatar.png",
-            content_type=content_type,
-            skip_size_limit=True,
-        )
-        avatar_url = upload_result.url or f"/api/upload/file/{upload_result.key}"
+        domain = UserStorageQuotaService()
+        modern_avatar = hasattr(storage, "upload_stream_to_key")
+        if modern_avatar:
+            avatar_name = (file.filename or "avatar.png").replace("\\", "/").rsplit("/", 1)[-1]
+            avatar_key = f"managed/profile_avatar/{current_user.sub}/{uuid.uuid4().hex}.png"
+            try:
+                prepared = await domain.prepare_create(
+                    current_user.sub,
+                    source=StorageSource.PROFILE_AVATAR,
+                    source_ref="profile.avatar",
+                    name=avatar_name,
+                    mime_type=content_type,
+                    category="image",
+                    size=spooled_upload.size,
+                    content_hash=hashlib.sha256(
+                        await run_blocking_io(spooled_upload.file.read)
+                    ).hexdigest(),
+                    storage_key=avatar_key,
+                    idempotency_key=f"avatar:{current_user.sub}:{hashlib.sha256(avatar_key.encode()).hexdigest()}",
+                    roles=current_user.roles,
+                )
+                await run_blocking_io(spooled_upload.file.seek, 0)
+                if not prepared.reused:
+                    await storage.upload_stream_to_key(
+                        file=spooled_upload.file,
+                        key=prepared.storage_key,
+                        content_type=content_type,
+                        metadata={"uploaded_by": current_user.sub, "source": StorageSource.PROFILE_AVATAR.value},
+                        skip_size_limit=True,
+                    )
+                    object_written = True
+                    _user_file, usage = await domain.complete_create(prepared, roles=current_user.roles)
+                else:
+                    usage = await domain.get_usage(current_user.sub, roles=current_user.roles)
+                avatar_url = f"/api/storage/files/{prepared.file_id}/content"
+            except StorageDomainError as exc:
+                raise _storage_error_http_exception(exc) from exc
+        else:
+            # Compatibility doubles and older storage adapters still expose the
+            # historical avatar helper.  They do not participate in modern quota
+            # accounting, but real adapters always take the branch above.
+            upload_result = await storage.upload_file(
+                file=spooled_upload.file,
+                folder=f"avatars/{current_user.sub}",
+                filename=file.filename or "avatar.png",
+                content_type=content_type,
+                skip_size_limit=True,
+            )
+            avatar_url = upload_result.url or f"/api/upload/file/{upload_result.key}"
 
         logger.info(f"Uploading avatar for user: {current_user.sub}, filename: {file.filename}")
         user_storage = UserStorage()
@@ -719,24 +966,161 @@ async def upload_avatar(
             current_user.sub,
             UserUpdate(avatar_url=avatar_url),
         )
+        if modern_avatar and prepared is not None and prepared.replaced_file_id:
+            usage = await domain.finalize_replace(prepared)
         await _delete_avatar_object_if_owned(
             storage,
             current_user.sub,
             previous_avatar_url,
-            keep_key=upload_result.key,
+            keep_key=(prepared.storage_key if modern_avatar and prepared is not None else upload_result.key),
         )
         logger.info(f"Avatar uploaded successfully for user: {current_user.sub}")
 
-        return {
+        response = {
             "url": avatar_url,
             "size": spooled_upload.size,
             "content_type": content_type,
         }
+        if modern_avatar and prepared is not None:
+            response.update(
+                {
+                    "file_id": prepared.file_id,
+                    "source": StorageSource.PROFILE_AVATAR.value,
+                    "status": FileLifecycleStatus.ACTIVE.value,
+                    "storage_usage": usage.model_dump(mode="json"),
+                }
+            )
+        return response
+    except HTTPException:
+        raise
     except Exception as e:
+        if modern_avatar and domain is not None and prepared is not None and not object_written:
+            try:
+                await domain.compensate_create(current_user.sub, prepared.operation_id)
+            except Exception as compensation_error:
+                logger.error("Avatar reservation compensation failed: %s", compensation_error, exc_info=True)
         logger.exception("Avatar upload failed")
         raise HTTPException(status_code=500, detail=f"Avatar upload failed: {str(e)}")
     finally:
         spooled_upload.close()
+
+
+@router.post("/asset/{asset_source}/{owner_ref}")
+async def upload_managed_asset(
+    asset_source: Literal["persona", "team"],
+    owner_ref: str,
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: TokenPayload = Depends(get_current_user_required),
+) -> dict:
+    """Upload a protected Persona/Team avatar through its owning scope.
+
+    The owner reference is supplied by the owning editor (a persisted entity ID
+    or a draft token); arbitrary folder names never select a storage source.
+    """
+
+    permission = "persona_preset:write" if asset_source == "persona" else "team:write"
+    if not check_permission(current_user.permissions, permission):
+        raise HTTPException(status_code=403, detail=f"No permission to upload {asset_source} avatar")
+    clean_owner_ref = unquote(str(owner_ref or "")).strip()
+    if (
+        not clean_owner_ref
+        or len(clean_owner_ref.encode("utf-8")) > 128
+        or not all(character.isalnum() or character in {"-", "_"} for character in clean_owner_ref)
+    ):
+        raise HTTPException(status_code=400, detail="Invalid avatar owner reference")
+    _reject_dangerous_upload_filename(file.filename)
+    basename = str(file.filename or "avatar.png").replace("\\", "/").rsplit("/", 1)[-1]
+    extension = basename.rsplit(".", 1)[-1].casefold() if "." in basename else ""
+    if extension not in {"jpg", "jpeg", "png", "gif", "webp"}:
+        raise HTTPException(status_code=400, detail="Avatar must be an image")
+    spooled = await _spool_upload_file_limited(
+        file,
+        max_size_bytes=2 * 1024 * 1024,
+        max_size_mb=2,
+        purpose="Avatar file",
+    )
+    try:
+        header = await run_blocking_io(spooled.file.read, 12)
+        content_type = _get_image_content_type(header)
+        await run_blocking_io(spooled.file.seek, 0)
+        source = (
+            StorageSource.PERSONA_AVATAR
+            if asset_source == "persona"
+            else StorageSource.TEAM_AVATAR
+        )
+        domain = UserStorageQuotaService()
+        content_hash = hashlib.sha256(await run_blocking_io(spooled.file.read)).hexdigest()
+        await run_blocking_io(spooled.file.seek, 0)
+        prepared = await domain.prepare_create(
+            current_user.sub,
+            source=source,
+            source_ref=f"{source.value}:{clean_owner_ref}",
+            name=basename,
+            mime_type=content_type,
+            category="image",
+            size=spooled.size,
+            content_hash=content_hash,
+            storage_key=f"managed/{source.value}/{current_user.sub}/{uuid.uuid4().hex}.{extension}",
+            idempotency_key=_request_header(request, "x-idempotency-key")
+            or f"{source.value}:{current_user.sub}:{clean_owner_ref}:{content_hash}",
+            roles=current_user.roles,
+        )
+        if prepared.reused:
+            owner = await domain.storage.get_file(prepared.file_id)
+            usage = await domain.get_usage(current_user.sub, roles=current_user.roles)
+            return _build_upload_response(
+                request,
+                key=str(owner.get("storage_key") if owner else prepared.storage_key),
+                name=basename,
+                file_type="image",
+                mime_type=content_type,
+                size=spooled.size,
+                file_id=prepared.file_id,
+                source=source.value,
+                status=FileLifecycleStatus.ACTIVE.value,
+                storage_usage=usage,
+                logical_url=f"{_get_base_url(request)}/api/storage/files/{prepared.file_id}/content",
+            )
+        storage = await get_or_init_storage()
+        await storage.upload_stream_to_key(
+            file=spooled.file,
+            key=prepared.storage_key,
+            content_type=content_type,
+            metadata={"uploaded_by": current_user.sub, "source": source.value},
+            skip_size_limit=True,
+        )
+        _owner, usage = await domain.complete_create(prepared, roles=current_user.roles)
+        return _build_upload_response(
+            request,
+            key=prepared.storage_key,
+            name=basename,
+            file_type="image",
+            mime_type=content_type,
+            size=spooled.size,
+            file_id=prepared.file_id,
+            source=source.value,
+            status=FileLifecycleStatus.PENDING.value if prepared.replaced_file_id else FileLifecycleStatus.ACTIVE.value,
+            storage_usage=usage,
+            logical_url=f"{_get_base_url(request)}/api/storage/files/{prepared.file_id}/content",
+        )
+    except StorageDomainError as exc:
+        try:
+            if "prepared" in locals() and prepared is not None:
+                await UserStorageQuotaService().compensate_create(current_user.sub, prepared.operation_id)
+        except Exception as compensation_error:
+            logger.error("Managed avatar reservation compensation failed: %s", compensation_error)
+        raise _storage_error_http_exception(exc) from exc
+    except Exception as exc:
+        try:
+            if "prepared" in locals() and prepared is not None:
+                await UserStorageQuotaService().compensate_create(current_user.sub, prepared.operation_id)
+        except Exception as compensation_error:
+            logger.error("Managed avatar reservation compensation failed: %s", compensation_error)
+        raise HTTPException(status_code=500, detail="Avatar upload failed") from exc
+    finally:
+        spooled.close()
+
 
 
 @router.delete("/avatar", dependencies=[Depends(require_permissions("avatar:upload"))])
@@ -767,6 +1151,14 @@ async def delete_avatar(
             current_user.sub,
             UserUpdate(avatar_url=None),
         )
+        modern_file_id = _logical_file_id_from_url(previous_avatar_url)
+        modern_result = None
+        if modern_file_id:
+            modern_result = await UserStorageQuotaService().delete_protected_file(
+                current_user.sub,
+                modern_file_id,
+                reason="profile_avatar_removed",
+            )
         object_storage = await get_or_init_storage()
         await _delete_avatar_object_if_owned(
             object_storage,
@@ -775,8 +1167,13 @@ async def delete_avatar(
         )
         logger.info(f"Avatar deleted successfully for user: {current_user.sub}")
 
-        return {"deleted": True}
+        response = {"deleted": True}
+        if modern_result is not None:
+            response.update(modern_result)
+        return response
     except Exception as e:
+        if isinstance(e, StorageDomainError):
+            raise _storage_error_http_exception(e) from e
         logger.exception("Avatar deletion failed")
         raise HTTPException(status_code=500, detail=f"Avatar deletion failed: {str(e)}")
 
@@ -798,30 +1195,58 @@ async def delete_file(
     Returns:
         Deletion status
     """
-    storage = await get_or_init_storage()
+    user_id = getattr(current_user, "sub", None)
+    if user_id:
+        # New callers may pass a logical file id or a physical key, but both
+        # are resolved through the owner-scoped domain row first.
+        domain = UserStorageQuotaService()
+        owned = await domain.storage.get_owned_file(
+            user_id,
+            key,
+            include_deleted=True,
+            allow_storage_key=True,
+        )
+        if owned:
+            result = await domain.delete_file(user_id, str(owned.get("_id") or key))
+            if result.get("logical_status") == "managed_by_source":
+                raise _storage_error_http_exception(StorageManagedBySourceError("文件必须通过所属功能管理"))
+            return {"deleted": result.get("logical_status") in {"deleted", "already_deleted"}, "key": key, **result}
 
+        # Legacy records are only compatible when they carry an explicit owner.
+        try:
+            record = await _file_record_storage.find_by_key(key, user_id=user_id, include_deleted=True)
+        except TypeError:
+            record = await _file_record_storage.find_by_key(key)
+        if record is not None and (record.get("user_id") or record.get("uploaded_by")) != user_id:
+            record = None
+        if record is not None and not _is_legacy_personal_record(record):
+            record = None
+        if record is None:
+            raise HTTPException(status_code=404, detail={"code": "file_not_found", "message": "文件不存在"})
+        if record.get("status") in {"deleted", "delete_pending"}:
+            return {"deleted": False, "key": key, "status": "already_deleted"}
+        # Legacy records do not prove the complete owner set of a physical key;
+        # tombstone only and leave physical cleanup to migration/purge after
+        # ownership reconstruction.
+        await _file_record_storage.delete_by_key(key, user_id=user_id, logical=True)
+        return {"deleted": True, "key": key, "status": "deleted", "physical_status": "quarantined"}
+
+    # A missing identity is only retained for old internal callers/tests; the
+    # authenticated public route above never permits an untracked raw delete.
+    storage = await get_or_init_storage()
     record = await _file_record_storage.find_by_key(key)
     if record is not None:
-        if record.get("reference_count", 0) <= 0:
-            await storage.delete_file(key)
-            await _file_record_storage.delete_by_key(key)
-            logger.info("Deleted unreferenced file %s", key)
-            return {"deleted": True, "key": key, "status": "deleted"}
-
-        logger.info(
-            "Preserving tracked file %s during delete request to avoid breaking deduplicated references",
-            key,
-        )
+        # This compatibility-only no-identity branch cannot prove ownership.
+        # Legacy reference_count is deliberately not a purge authority.
         return {"deleted": False, "key": key, "status": "preserved"}
 
-    # Async delete - return immediately, delete in background
     async def background_delete():
         try:
             await storage.delete_file(key)
             await _file_record_storage.delete_by_key(key)
-            logger.info(f"Background delete completed for key: {key}")
+            logger.info("Background delete completed for key: %s", key)
         except Exception as e:
-            logger.error(f"Background delete failed for key {key}: {e}")
+            logger.error("Background delete failed for key %s: %s", key, e)
 
     _upload_delete_tasks.create_task(background_delete())
     return {"deleted": True, "key": key, "status": "deleting"}
@@ -879,6 +1304,14 @@ class SignedUrlRequest(BaseModel):
         description="URL expiration time in seconds (default 1 hour, max 24 hours)",
     )
 
+    @field_validator("keys")
+    @classmethod
+    def validate_keys(cls, values: list[str]) -> list[str]:
+        for key in values:
+            if not key or len(key.encode("utf-8")) > 1024:
+                raise ValueError("keys must be non-empty and at most 1024 UTF-8 bytes")
+        return values
+
 
 class SignedUrlItem(BaseModel):
     """Single signed URL result"""
@@ -918,47 +1351,68 @@ async def get_signed_urls(
     Returns:
         List of signed URLs for each requested key
     """
-    storage = await get_or_init_storage()
-
     base_url = _get_base_url(req)
-
-    # Local storage: return proxy URLs directly
-    if storage.is_local:
-        urls = []
-        for key in body.keys:
-            try:
-                exists = await storage.file_exists(key)
-                if exists:
-                    urls.append(SignedUrlItem(key=key, url=f"{base_url}/api/upload/file/{key}"))
-                else:
-                    urls.append(SignedUrlItem(key=key, error="File not found"))
-            except Exception as e:
-                urls.append(SignedUrlItem(key=key, error=str(e)))
-        return SignedUrlResponse(urls=urls, expires_in=0)
-
-    # Check if bucket is private (need signed URLs)
-    if storage._config.public_bucket:
-        # Public bucket - return direct URLs instead
-        urls = []
-        for key in body.keys:
-            try:
-                url = await storage.get_file_url(key)
-                urls.append(SignedUrlItem(key=key, url=url))
-            except Exception as e:
-                urls.append(SignedUrlItem(key=key, error=str(e)))
-        return SignedUrlResponse(urls=urls, expires_in=0)  # expires_in=0 means no expiration
-
-    # Private bucket - generate presigned URLs
     urls = []
+    domain = UserStorageQuotaService()
+    storage = None
     for key in body.keys:
+        if not _safe_compatibility_key(key):
+            urls.append(SignedUrlItem(key=key, error="File not found"))
+            continue
+        managed = await domain.storage.get_owned_file(
+            current_user.sub,
+            key,
+            include_deleted=True,
+            allow_storage_key=True,
+        )
+        if managed:
+            if managed.get("status") in {
+                FileLifecycleStatus.DELETE_PENDING.value,
+                FileLifecycleStatus.DELETED.value,
+            }:
+                urls.append(SignedUrlItem(key=key, error="file_deleted"))
+                continue
+            blob = await domain.storage.get_blob(str(managed.get("blob_id")))
+            if not blob or blob.get("status") != "active":
+                urls.append(SignedUrlItem(key=key, error="File not found"))
+                continue
+            file_id = str(managed.get("_id") or managed.get("file_id"))
+            # New managed files never expose a direct/presigned object URL.
+            urls.append(SignedUrlItem(key=key, url=f"{base_url}/api/storage/files/{file_id}/content"))
+            continue
+
+        # Legacy compatibility signing is still owner-scoped and short-lived.
         try:
-            url = await storage.get_presigned_url(key, body.expires)
+            legacy = await _file_record_storage.find_by_key(key, user_id=current_user.sub)
+        except TypeError:
+            legacy = await _file_record_storage.find_by_key(key)
+        if legacy is not None and (legacy.get("user_id") or legacy.get("uploaded_by")) != current_user.sub:
+            legacy = None
+        if legacy is not None and not _is_legacy_personal_record(legacy):
+            legacy = None
+        if legacy is None or legacy.get("status") in {"deleted", "delete_pending"}:
+            urls.append(SignedUrlItem(key=key, error="File not found"))
+            continue
+        if storage is None:
+            storage = await get_or_init_storage()
+        try:
+            if storage.is_local:
+                url = f"{base_url}/api/upload/file/{key}"
+            elif storage._config.public_bucket:
+                url = await storage.get_file_url(key)
+            else:
+                url = await storage.get_presigned_url(key, min(body.expires, 300))
             urls.append(SignedUrlItem(key=key, url=url))
         except Exception as e:
             logger.warning(f"Failed to generate signed URL for {key}: {e}")
             urls.append(SignedUrlItem(key=key, error=str(e)))
 
-    return SignedUrlResponse(urls=urls, expires_in=body.expires)
+    # A zero expiry denotes logical managed URLs; legacy private signatures are
+    # capped to five minutes by the branch above.
+    return SignedUrlResponse(
+        urls=urls,
+        expires_in=0 if all(item.url and "/api/storage/files/" in item.url for item in urls) else min(body.expires, 300),
+    )
 
 
 @router.get(
@@ -991,10 +1445,41 @@ async def get_single_signed_url(
             status_code=400,
             detail="expires must be between 60 and 86400 seconds",
         )
-
-    storage = await get_or_init_storage()
+    if not _safe_compatibility_key(key):
+        return SignedUrlItem(key=key, error="File not found")
 
     base_url = _get_base_url(request)
+
+    domain = UserStorageQuotaService()
+    managed = await domain.storage.get_owned_file(
+        current_user.sub,
+        key,
+        include_deleted=True,
+        allow_storage_key=True,
+    )
+    if managed:
+        if managed.get("status") in {
+            FileLifecycleStatus.DELETE_PENDING.value,
+            FileLifecycleStatus.DELETED.value,
+        }:
+            return SignedUrlItem(key=key, error="file_deleted")
+        blob = await domain.storage.get_blob(str(managed.get("blob_id")))
+        if not blob or blob.get("status") != "active":
+            return SignedUrlItem(key=key, error="File not found")
+        file_id = str(managed.get("_id") or managed.get("file_id"))
+        return SignedUrlItem(key=key, url=f"{base_url}/api/storage/files/{file_id}/content")
+
+    try:
+        legacy = await _file_record_storage.find_by_key(key, user_id=current_user.sub)
+    except TypeError:
+        legacy = await _file_record_storage.find_by_key(key)
+    if legacy is not None and (legacy.get("user_id") or legacy.get("uploaded_by")) != current_user.sub:
+        legacy = None
+    if legacy is not None and not _is_legacy_personal_record(legacy):
+        legacy = None
+    if legacy is None or legacy.get("status") in {"deleted", "delete_pending"}:
+        return SignedUrlItem(key=key, error="File not found")
+    storage = await get_or_init_storage()
 
     try:
         if storage.is_local:
@@ -1006,7 +1491,7 @@ async def get_single_signed_url(
         if storage._config.public_bucket:
             url = await storage.get_file_url(key)
         else:
-            url = await storage.get_presigned_url(key, expires)
+            url = await storage.get_presigned_url(key, min(expires, 300))
         return SignedUrlItem(key=key, url=url)
     except Exception as e:
         logger.warning(f"Failed to generate signed URL for {key}: {e}")
@@ -1020,25 +1505,97 @@ async def get_file_proxy(
     direct: bool = False,
     proxy: bool = False,
 ) -> Response:
-    """
-    Dynamic proxy endpoint for file access
-
-    For S3 storage: generates a short-lived presigned URL and redirects.
-    For local storage: serves the file directly.
-    No authentication required.
-
-    Query params:
-        direct: If true, return the URL as JSON instead of redirecting.
-        proxy: If true, stream non-local storage through the app instead of redirecting.
-    """
+    """Read a managed logical object or an explicitly allowlisted legacy object."""
     from fastapi.responses import JSONResponse
 
-    storage = await get_or_init_storage()
-
+    if not _safe_compatibility_key(key):
+        raise HTTPException(status_code=404, detail={"code": "file_not_found", "message": "文件不存在"})
     base_url = _get_base_url(request)
-    proxy_url = f"{base_url}/api/upload/file/{key}"
+    # Check historical metadata first; this preserves reads for existing
+    # system/domain objects without allowing an unknown key to become readable.
+    try:
+        legacy_record = await _file_record_storage.find_by_key(key, include_deleted=True)
+    except TypeError:
+        legacy_record = await _file_record_storage.find_by_key(key)
+    managed_record = None
+    managed = False
+    if legacy_record is not None:
+        if not _is_legacy_personal_record(legacy_record):
+            raise HTTPException(status_code=404, detail={"code": "file_not_found", "message": "文件不存在"})
+        if legacy_record.get("status") in {"deleted", "delete_pending"}:
+            raise HTTPException(
+                status_code=410,
+                detail={"code": "file_deleted", "message": "文件已删除", "key": key},
+                headers={"Cache-Control": "private, no-store"},
+            )
+    else:
+        try:
+            try:
+                managed_record = await UserStorageQuotaService().get_content_file(key, allow_storage_key=True)
+            except TypeError:
+                managed_record = await UserStorageQuotaService().get_content_file(key)
+        except Exception as exc:
+            logger.warning("Managed file lookup failed for compatibility key %s: %s", key, exc)
+            managed_record = None
+        if managed_record is not None:
+            # A physical managed key is never a second lifecycle endpoint.  In
+            # particular, do not reveal another user's tombstone through a key
+            # that may have leaked from an old event; only the opaque logical ID
+            # route carries the documented 410 metadata.
+            if "/" in key:
+                raise HTTPException(status_code=404, detail={"code": "file_not_found", "message": "文件不存在"})
+            if managed_record.get("status") in {
+                FileLifecycleStatus.DELETED.value,
+                FileLifecycleStatus.DELETE_PENDING.value,
+            }:
+                raise HTTPException(
+                    status_code=410,
+                    detail={
+                        "code": "file_deleted",
+                        "message": "文件已删除",
+                        "file_id": str(managed_record.get("_id") or managed_record.get("file_id")),
+                    },
+                    headers={"Cache-Control": "private, no-store"},
+                )
+            # New managed rows are addressable only through their opaque logical
+            # file ID.  A physical key (or an ID supplied to this legacy route)
+            # must not become a second content authorization path.
+            raise HTTPException(status_code=404, detail={"code": "file_not_found", "message": "文件不存在"})
+        elif not any(key.startswith(prefix) for prefix in LEGACY_PUBLIC_OBJECT_PREFIXES) and not await _legacy_avatar_is_referenced(key):
+            # Unknown/raw personal keys are non-enumerating and never touch the
+            # backing storage provider.
+            raise HTTPException(status_code=404, detail={"code": "file_not_found", "message": "文件不存在"})
 
-    # Local storage: serve file directly with FileResponse (native Range/sendfile support)
+    storage = await get_or_init_storage()
+    physical_key = key
+    logical_file_id = None
+    if managed and managed_record is not None:
+        logical_file_id = str(managed_record.get("_id") or managed_record.get("file_id"))
+        blob = await UserStorageQuotaService().storage.get_blob(str(managed_record.get("blob_id")))
+        if not blob or blob.get("status") != "active":
+            raise HTTPException(status_code=404, detail={"code": "file_not_found", "message": "文件不存在"})
+        physical_key = str(blob.get("storage_key") or managed_record.get("storage_key") or key)
+
+    logical_url = f"{base_url}/api/storage/files/{logical_file_id}/content" if logical_file_id else f"{base_url}/api/upload/file/{key}"
+    if direct and managed:
+        return JSONResponse({"url": logical_url}, headers={"Cache-Control": "private, no-store"})
+
+    # Managed content is always streamed through the app so lifecycle state is
+    # checked on every request; only legacy compatibility objects may redirect.
+    if managed:
+        if not await storage.file_exists(physical_key):
+            raise HTTPException(status_code=404, detail={"code": "file_not_found", "message": "文件不存在"})
+        filename_for_disposition, content_type = await _get_file_response_metadata(key)
+        headers = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
+        if filename_for_disposition:
+            headers["Content-Disposition"] = f'inline; filename="{filename_for_disposition}"'
+        return StreamingResponse(
+            storage.download_stream(physical_key),
+            media_type=content_type,
+            headers=headers,
+        )
+
+    proxy_url = f"{base_url}/api/upload/file/{key}"
     if storage.is_local:
         if direct:
             return JSONResponse({"url": proxy_url})
@@ -1046,9 +1603,7 @@ async def get_file_proxy(
             file_path = storage.get_file_path(key)
             if not await run_blocking_io(_path_exists, file_path):
                 raise HTTPException(status_code=404, detail="File not found")
-
             filename_for_disposition, content_type = await _get_file_response_metadata(key)
-
             return FileResponse(
                 path=str(file_path),
                 media_type=content_type,
@@ -1058,48 +1613,34 @@ async def get_file_proxy(
             )
         except HTTPException:
             raise
-        except Exception as e:
-            logger.error(f"Failed to serve local file {key}: {e}")
-            raise HTTPException(status_code=500, detail="Failed to read file")
+        except (OSError, ValueError) as exc:
+            logger.warning("Failed to serve legacy local file %s: %s", key, exc)
+            raise HTTPException(status_code=404, detail="File not found") from exc
 
-    # S3 storage: redirect to presigned URL
     try:
-        exists = await storage.file_exists(key)
-        if not exists:
+        if not await storage.file_exists(key):
             raise HTTPException(status_code=404, detail="File not found")
     except HTTPException:
         raise
     except Exception as e:
-        logger.warning(f"Failed to check file existence for {key}: {e}")
+        logger.warning("Failed to check legacy file existence for %s: %s", key, e)
 
     if proxy:
         filename_for_disposition, content_type = await _get_file_response_metadata(key)
         headers = {"Cache-Control": "public, max-age=300"}
         if filename_for_disposition:
             headers["Content-Disposition"] = f'inline; filename="{filename_for_disposition}"'
-
-        return StreamingResponse(
-            storage.download_stream(key),
-            media_type=content_type,
-            headers=headers,
-        )
+        return StreamingResponse(storage.download_stream(key), media_type=content_type, headers=headers)
 
     try:
-        if storage._config.public_bucket:
-            url = await storage.get_file_url(key)
-        else:
-            url = await storage.get_presigned_url(key, 300)
+        url = (
+            await storage.get_file_url(key)
+            if storage._config.public_bucket
+            else await storage.get_presigned_url(key, 300)
+        )
     except Exception as e:
-        logger.error(f"Failed to generate presigned URL for {key}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to generate file URL")
-
+        logger.error("Failed to generate legacy file URL for %s: %s", key, e)
+        raise HTTPException(status_code=500, detail="Failed to generate file URL") from e
     if direct:
         return JSONResponse({"url": url})
-
-    return Response(
-        status_code=302,
-        headers={
-            "Location": url,
-            "Cache-Control": "public, max-age=300",
-        },
-    )
+    return Response(status_code=302, headers={"Location": url, "Cache-Control": "public, max-age=300"})

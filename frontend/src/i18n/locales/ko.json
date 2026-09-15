@@ -1862,7 +1862,9 @@
     "usernamePlaceholder": "사용자 이름을 입력하세요",
     "usernameUpdateFailed": "사용자 이름 업데이트 실패",
     "usernameUpdated": "사용자 이름이 업데이트되었습니다",
-    "termsItem2": "버그를 발견하거나 피드백이 필요하면 기업 위챗 소K를 통해 조정통에게 연락해 주세요."
+    "termsItem2": "버그를 발견하거나 피드백이 필요하면 기업 위챗 소K를 통해 조정통에게 연락해 주세요.",
+    "storageTab": "저장 공간",
+    "tabsLabel": "프로필 섹션"
   },
   "project": {
     "code": "코드",
@@ -1938,6 +1940,7 @@
     "updated": "업데이트됨",
     "uploadLimitsHint": "비워두면 시스템 기본값 사용",
     "uploadLimitsTitle": "업로드 제한",
+    "storageQuotaMb": "저장 공간 할당량(MB)",
     "validation": {
       "enterName": "역할 이름을 입력해주세요",
       "selectPermission": "최소 하나의 권한을 선택해주세요"
@@ -2759,6 +2762,9 @@
     "updateSuccess": "사용자가 성공적으로 업데이트되었습니다",
     "user": "프로필",
     "username": "사용자 이름",
+    "storageQuotaMb": "개인 저장 공간 할당량(MB)",
+    "storageQuotaPlaceholder": "역할/기본 할당량 사용",
+    "storageQuotaHint": "비워 두면 가장 넉넉한 역할 또는 전역 할당량을 상속합니다.",
     "usernamePlaceholder": "사용자 이름 입력",
     "validation": {
       "enterEmail": "이메일을 입력해주세요",
@@ -2766,5 +2772,67 @@
       "enterUsername": "사용자 이름을 입력해주세요",
       "passwordMinLength": "비밀번호는 6자 이상이어야 합니다"
     }
+  },
+  "storage": {
+    "summaryTitle": "개인 저장 공간",
+    "status": {
+      "normal": "정상",
+      "warning": "저장 공간 경고",
+      "full": "저장 공간 가득 참",
+      "overQuota": "할당량 초과"
+    },
+    "remaining": "남음",
+    "usageProgress": "저장 공간 사용량",
+    "warningHint": "저장 공간 대부분을 사용했습니다. 사용하지 않는 파일을 정리하세요.",
+    "fullHint": "저장 공간을 확보할 때까지 새 업로드가 차단됩니다.",
+    "filesTitle": "내 파일",
+    "filesHint": "채팅 파일은 여기서 삭제할 수 있습니다. 아바타와 Skill 파일은 보호됩니다.",
+    "loadFailed": "저장 공간을 불러올 수 없습니다.",
+    "deleteComplete": "파일이 개인 저장 공간에서 제거되었습니다.",
+    "partialDelete": "일부 파일을 제거하지 못했습니다.",
+    "deleteFailed": "파일을 제거할 수 없습니다.",
+    "confirmBatchTitle": "선택한 파일을 삭제할까요?",
+    "confirmBatchMessage": "선택한 {{count}}개 파일을 삭제할까요? 되돌릴 수 없습니다.",
+    "confirmDeleteTitle": "이 파일을 삭제할까요?",
+    "confirmDeleteMessage": "앞으로 파일에 접근할 수 없지만 과거 메시지에는 삭제된 첨부 표시가 남습니다. 되돌릴 수 없습니다.",
+    "searchPlaceholder": "파일 검색",
+    "sourceFilter": "소스로 필터",
+    "statusFilter": "상태로 필터",
+    "selectedCount": "{{count}}개 선택됨",
+    "fileCount": "{{count}}개 파일",
+    "selectAll": "삭제 가능한 파일 모두 선택",
+    "selectFile": "{{name}} 선택",
+    "protected": "보호됨",
+    "protectedHint": "이 파일은 해당 기능에서 관리하세요.",
+    "deleteFile": "{{name}} 삭제",
+    "page": "페이지",
+    "emptyTitle": "관리할 파일이 없습니다",
+    "emptyHint": "업로드한 파일이 여기에 표시됩니다.",
+    "partialDetails": "일부 파일이 보호되어 있거나 다시 정리해야 합니다.",
+    "releaseDetails": "논리 삭제가 완료되었습니다. 물리 삭제 상태는 서버에서 추적합니다.",
+    "quotaExceeded": "저장 공간이 부족합니다. 정리 후 다시 시도하세요.",
+    "deleted": "삭제됨",
+    "retryUpload": "업로드 재시도",
+    "resultReleased": "해제됨: {{bytes}}",
+    "resultPhysical": "\ubb3c\ub9ac \uc815\ub9ac: {{status}}",
+    "sources": {
+      "chat": "채팅",
+      "wecom": "WeCom",
+      "profile_avatar": "프로필 아바타",
+      "persona_avatar": "Persona 아바타",
+      "team_avatar": "팀 아바타",
+      "skill": "Skill",
+      "legacy": "레거시"
+    },
+    "fileStatuses": {
+      "active": "활성",
+      "pending": "처리 중",
+      "delete_pending": "삭제 중",
+      "deleted": "삭제됨",
+      "migration_required": "마이그레이션 필요",
+      "failed": "실패",
+      "missing": "누락"
+    }
   }
+
 }

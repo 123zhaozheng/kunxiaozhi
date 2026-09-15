@@ -154,6 +154,26 @@ async def _download_to_bytes(
             await run_blocking_io(file_obj.seek, 0)
             content = await run_blocking_io(file_obj.read)
         return content, None
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+        error_code = {
+            410: "file_deleted",
+            403: "file_forbidden",
+            404: "file_missing",
+        }.get(status_code, "file_download_failed")
+        logger.warning(
+            "[read_document] lifecycle HTTP failure for %s: status=%s code=%s",
+            url,
+            status_code,
+            error_code,
+        )
+        return None, error_code
+    except httpx.TimeoutException:
+        logger.warning("[read_document] transient timeout for %s", url)
+        return None, "file_transient"
+    except httpx.RequestError as exc:
+        logger.warning("[read_document] transient request failure for %s: %s", url, exc)
+        return None, "file_transient"
     except Exception as exc:  # noqa: BLE001 — surface as a typed error string
         logger.warning("[read_document] download failed for %s: %s", url, exc)
         return None, f"Document download failed: {exc}"
@@ -307,6 +327,14 @@ async def read_document(
         resolved_url, max_download_bytes
     )
     if download_error is not None:
+        if download_error in {"file_deleted", "file_forbidden", "file_missing", "file_transient"}:
+            return await _json_dumps_result(
+                {
+                    "error": download_error,
+                    "code": download_error,
+                    "reupload_required": download_error == "file_deleted",
+                }
+            )
         return await _json_dumps_result({"error": download_error})
     assert content is not None  # download succeeded: content is populated
 

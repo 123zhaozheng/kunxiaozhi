@@ -22,7 +22,11 @@ export {
 } from "./api/token";
 
 // Auth fetch / refresh errors
-export { authFetch } from "./api/fetch";
+export {
+  authFetch,
+  ApiRequestError,
+  isSandboxCapacityError,
+} from "./api/fetch";
 export { TokenRefreshError } from "./api/tokenManager";
 
 // API modules
@@ -45,6 +49,13 @@ export { mcpApi } from "./api/mcp";
 export { memoryApi } from "./api/memory";
 export { envvarApi } from "./api/envvar";
 export { uploadApi } from "./api/upload";
+export {
+  storageApi,
+  buildStorageFilesUrl,
+  getStorageErrorCode,
+  getStorageErrorMessage,
+  parseStorageError,
+} from "./api/storage";
 export { versionApi } from "./api/version";
 export { healthApi } from "./api/health";
 export { teamApi } from "./api/team";

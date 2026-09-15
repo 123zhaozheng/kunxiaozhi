@@ -12,6 +12,7 @@ import shutil
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Optional, cast
+from urllib.parse import unquote
 
 from src.infra.async_utils import run_blocking_io
 from src.infra.logging import get_logger
@@ -39,9 +40,25 @@ class LocalStorageBackend(S3StorageBackend):
 
     def _get_file_path(self, key: str) -> Path:
         """Get the local file path for a given key, preventing path traversal."""
-        target = (self._base_path / key).resolve()
-        if not str(target).startswith(str(self._base_path)):
+        raw_key = str(key or "")
+        if not raw_key or "\x00" in raw_key:
+            raise ValueError("Invalid key: empty or NUL-containing path")
+        # A URL-encoded separator can become traversal after a proxy decodes it.
+        lowered = raw_key.casefold()
+        if "%2f" in lowered or "%5c" in lowered:
+            raise ValueError(f"Invalid key: encoded separator detected: {key}")
+        decoded_key = unquote(raw_key)
+        if decoded_key != raw_key or "\x00" in decoded_key:
+            raise ValueError(f"Invalid key: encoded path detected: {key}")
+        if Path(decoded_key).is_absolute() or "\\" in decoded_key:
+            raise ValueError(f"Invalid key: absolute or platform path detected: {key}")
+        if any(part in {"", ".", ".."} for part in Path(decoded_key).parts):
             raise ValueError(f"Invalid key: path traversal detected: {key}")
+        target = (self._base_path / decoded_key).resolve()
+        try:
+            target.relative_to(self._base_path)
+        except ValueError as exc:
+            raise ValueError(f"Invalid key: path traversal detected: {key}") from exc
         return target
 
     async def upload(
@@ -198,7 +215,13 @@ class LocalStorageBackend(S3StorageBackend):
         return f"/api/upload/file/{key}"
 
     async def list_objects(self, prefix: str = "") -> list[str]:
-        prefix_path = self._base_path / prefix
+        if prefix:
+            # Use the same boundary check as object reads/writes.  Prefix scans
+            # are also provider-facing input and must not walk a sibling path.
+            normalized_prefix = str(prefix).rstrip("/")
+            prefix_path = self._get_file_path(normalized_prefix)
+        else:
+            prefix_path = self._base_path
 
         def _list():
             if not prefix_path.exists():

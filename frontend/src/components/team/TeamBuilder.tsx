@@ -28,6 +28,7 @@ import { teamApi } from "../../services/api/team";
 import { personaPresetApi } from "../../services/api/personaPreset";
 import { uploadApi } from "../../services/api";
 import { compressImageFile } from "../../utils/imageCompression";
+import { uuid } from "../../utils/uuid";
 import toast from "react-hot-toast";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import {
@@ -124,6 +125,7 @@ export const TeamBuilder = forwardRef<TeamBuilderHandle, TeamBuilderProps>(
     const [defaultMemberId, setDefaultMemberId] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [existingTeamId, setExistingTeamId] = useState<string | null>(null);
+    const draftAvatarOwnerRef = useRef(`draft-${uuid()}`);
     const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const [rolePickerOpen, setRolePickerOpen] = useState(false);
@@ -317,6 +319,10 @@ export const TeamBuilder = forwardRef<TeamBuilderHandle, TeamBuilderProps>(
         const compressed = await compressImageFile(file);
         const upload = uploadApi.uploadFile(compressed, {
           folder: "persona-avatars",
+          managedAsset: {
+            kind: "team",
+            ownerRef: existingTeamId ?? draftAvatarOwnerRef.current,
+          },
         });
         const result = await upload.promise;
         setTeamAvatar(result.url);

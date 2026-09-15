@@ -28,6 +28,7 @@ from src.infra.upload.file_record import FileRecordStorage
 # Re-export public API for backward compatibility
 from src.infra.writer.presenter_config import (  # noqa: F401
     PresenterConfig,
+    _extract_attachment_file_ids,
     _extract_attachment_keys,
     _generate_run_id,
     _generate_trace_id,
@@ -168,7 +169,17 @@ class Presenter(EventPresenterMixin, StoragePresenterMixin):
         message_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """输出用户消息并保存"""
-        event = self.present_user_message(content, attachments, message_id=message_id)
+        from src.infra.agent.attachments import normalize_attachments
+
+        normalized_attachments = await normalize_attachments(
+            attachments,
+            user_id=self.config.user_id,
+        )
+        event = self.present_user_message(
+            content,
+            normalized_attachments,
+            message_id=message_id,
+        )
         await self.save_event(event)
         if self.config.session_id:
             try:
@@ -180,7 +191,22 @@ class Presenter(EventPresenterMixin, StoragePresenterMixin):
                 )
             except Exception as e:
                 logger.warning("Failed to update session search index for user message: %s", e)
-        attachment_keys = _extract_attachment_keys(attachments)
+        attachment_keys = _extract_attachment_keys(normalized_attachments)
+        attachment_file_ids = _extract_attachment_file_ids(normalized_attachments)
+        if attachment_file_ids and self.config.session_id and self.config.user_id:
+            from src.infra.storage.managed_integration import register_managed_message_refs
+
+            registered = await register_managed_message_refs(
+                event_id=str(event.get("data", {}).get("message_id") or self.run_id),
+                session_id=self.config.session_id,
+                user_id=self.config.user_id,
+                file_ids=attachment_file_ids,
+            )
+            if not registered:
+                logger.debug(
+                    "Managed attachment refs were not registered for message %s",
+                    event.get("data", {}).get("message_id"),
+                )
         if attachment_keys:
             try:
                 await FileRecordStorage().add_references(attachment_keys)

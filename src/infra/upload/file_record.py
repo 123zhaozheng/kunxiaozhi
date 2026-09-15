@@ -1,6 +1,7 @@
 """File record storage for content-hash based deduplication."""
 
-from typing import Optional
+import asyncio
+from typing import Any, Optional
 
 from src.infra.logging import get_logger
 from src.infra.utils.datetime import utc_now
@@ -14,13 +15,38 @@ def _bounded_unique_keys(keys: list[str], *, limit: int = REFERENCE_KEYS_MAX) ->
     seen = set()
     for key in keys:
         clean = str(key).strip() if key else ""
-        if not clean or clean in seen:
+        if not clean or len(clean.encode("utf-8")) > 1024 or clean in seen:
             continue
         seen.add(clean)
         unique_keys.append(clean)
         if len(unique_keys) >= limit:
             break
     return unique_keys
+
+
+def _owner_scope(user_id: str, source: str | None = None) -> dict[str, Any]:
+    """Match both additive and pre-migration owner fields without leaking rows."""
+    owners = ("user_id", "uploaded_by")
+    if source is None:
+        return {"$or": [{field: user_id} for field in owners]}
+
+    # Older file_records documents have no source field.  They were created by
+    # the main upload path, so they remain eligible only in that user's scope;
+    # never fall back to a global hash/key lookup.
+    return {
+        "$or": [
+            {field: user_id, "source": source}
+            for field in owners
+        ]
+        + [
+            {field: user_id, "source": {"$exists": False}}
+            for field in owners
+        ]
+        + [
+            {field: user_id, "source": "legacy"}
+            for field in owners
+        ]
+    }
 
 
 class FileRecordStorage:
@@ -30,6 +56,8 @@ class FileRecordStorage:
 
     def __init__(self):
         self._collection = None
+        self._indexes_ensured = False
+        self._indexes_task: asyncio.Task[bool] | None = None
 
     @property
     def collection(self):
@@ -44,24 +72,49 @@ class FileRecordStorage:
 
     async def ensure_indexes_if_needed(self):
         """Ensure indexes exist (called lazily on first use)."""
-        if not hasattr(self, "_indexes_ensured"):
-            self._indexes_ensured = True
-            import asyncio
-
+        if self._indexes_ensured:
+            return
+        task = self._indexes_task
+        if task is None or task.done():
             task = asyncio.create_task(self._ensure_indexes())
-            task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
+            self._indexes_task = task
+        try:
+            succeeded = await task
+        except Exception:
+            if task is self._indexes_task:
+                self._indexes_task = None
+            raise
+        if task is self._indexes_task:
+            self._indexes_ensured = succeeded
+            if succeeded:
+                self._indexes_task = None
 
-    async def _ensure_indexes(self):
+    async def _ensure_indexes(self) -> bool:
         """Create required indexes on the file_records collection."""
+        succeeded = True
         try:
             collection = self.collection
             await collection.create_index("hash", unique=True, background=True)
             await collection.create_index("key", unique=True, background=True)
             await collection.create_index("uploaded_by", background=True)
+            # These indexes are additive.  The legacy global hash uniqueness is
+            # intentionally retained as migration input; managed uploads use
+            # user_files for owner-scoped deduplication.
+            await collection.create_index([("user_id", 1), ("source", 1), ("hash", 1)], background=True)
+            await collection.create_index([("user_id", 1), ("status", 1), ("created_at", -1)], background=True)
         except Exception as e:
             get_logger(__name__).warning(f"Failed to create file_records indexes: {e}")
+            succeeded = False
+        return succeeded
 
-    async def find_by_hash(self, file_hash: str) -> Optional[dict]:
+    async def find_by_hash(
+        self,
+        file_hash: str,
+        *,
+        user_id: str | None = None,
+        source: str | None = None,
+        include_deleted: bool = False,
+    ) -> Optional[dict]:
         """Look up a file record by content hash.
 
         Args:
@@ -71,12 +124,25 @@ class FileRecordStorage:
             Document dict with ``id`` (instead of ``_id``), or None.
         """
         await self.ensure_indexes_if_needed()
-        doc = await self.collection.find_one({"hash": file_hash})
+        query: dict[str, Any] = {"hash": file_hash}
+        if user_id is not None:
+            query.update(_owner_scope(user_id, source))
+        elif source is not None:
+            query["source"] = source
+        if not include_deleted:
+            query["status"] = {"$nin": ["deleted", "delete_pending"]}
+        doc = await self.collection.find_one(query)
         if doc:
             doc["id"] = str(doc.pop("_id"))
         return doc
 
-    async def find_by_key(self, key: str) -> Optional[dict]:
+    async def find_by_key(
+        self,
+        key: str,
+        *,
+        user_id: str | None = None,
+        include_deleted: bool = False,
+    ) -> Optional[dict]:
         """Look up a file record by storage key.
 
         Args:
@@ -86,7 +152,12 @@ class FileRecordStorage:
             Document dict with ``id`` (instead of ``_id``), or None.
         """
         await self.ensure_indexes_if_needed()
-        doc = await self.collection.find_one({"key": key})
+        query: dict[str, Any] = {"key": key}
+        if user_id is not None:
+            query.update(_owner_scope(user_id))
+        if not include_deleted:
+            query["status"] = {"$nin": ["deleted", "delete_pending"]}
+        doc = await self.collection.find_one(query)
         if doc:
             doc["id"] = str(doc.pop("_id"))
         return doc
@@ -100,6 +171,11 @@ class FileRecordStorage:
         size: int,
         category: str,
         uploaded_by: str,
+        *,
+        user_id: str | None = None,
+        source: str = "legacy",
+        file_id: str | None = None,
+        status: str = "active",
     ) -> dict:
         """Insert a new file record.
 
@@ -125,6 +201,10 @@ class FileRecordStorage:
             "size": size,
             "category": category,
             "uploaded_by": uploaded_by,
+            "user_id": user_id or uploaded_by,
+            "source": source,
+            "file_id": file_id,
+            "status": status,
             "reference_count": 0,
             "created_at": now,
             "updated_at": now,
@@ -162,7 +242,13 @@ class FileRecordStorage:
         )
         return result.modified_count
 
-    async def delete_by_key(self, key: str) -> bool:
+    async def delete_by_key(
+        self,
+        key: str,
+        *,
+        user_id: str | None = None,
+        logical: bool = False,
+    ) -> bool:
         """Delete a file record by storage key.
 
         Args:
@@ -172,10 +258,20 @@ class FileRecordStorage:
             True if a document was deleted, False otherwise.
         """
         await self.ensure_indexes_if_needed()
-        result = await self.collection.delete_one({"key": key})
+        query: dict[str, Any] = {"key": key}
+        if user_id is not None:
+            query.update(_owner_scope(user_id))
+        if logical:
+            result = await self.collection.update_one(
+                {**query, "status": {"$nin": ["deleted", "delete_pending"]}},
+                {"$set": {"status": "deleted", "deleted_at": utc_now(), "updated_at": utc_now()}},
+            )
+            return bool(getattr(result, "modified_count", 0))
+        else:
+            result = await self.collection.delete_one(query)
         return result.deleted_count > 0
 
-    async def delete_by_hash(self, file_hash: str) -> bool:
+    async def delete_by_hash(self, file_hash: str, *, user_id: str | None = None) -> bool:
         """Delete a file record by content hash.
 
         Args:
@@ -185,5 +281,57 @@ class FileRecordStorage:
             True if a document was deleted, False otherwise.
         """
         await self.ensure_indexes_if_needed()
-        result = await self.collection.delete_one({"hash": file_hash})
+        query: dict[str, Any] = {"hash": file_hash}
+        if user_id is not None:
+            query.update(_owner_scope(user_id))
+        result = await self.collection.delete_one(query)
         return result.deleted_count > 0
+
+    async def list_for_user(
+        self,
+        user_id: str,
+        *,
+        limit: int = 50,
+        cursor: Any = None,
+        source: str | None = None,
+        status: str | None = None,
+    ) -> list[dict]:
+        """List legacy records only within one owner scope."""
+        await self.ensure_indexes_if_needed()
+        limit = max(1, min(int(limit), 100))
+        query: dict[str, Any] = _owner_scope(user_id)
+        if source:
+            query["source"] = source
+        if status:
+            query["status"] = status
+        elif status is None:
+            query["status"] = {"$nin": ["deleted"]}
+        if cursor is not None:
+            query["_id"] = {"$lt": cursor}
+        cursor_obj = self.collection.find(query).sort("_id", -1).limit(limit)
+        records: list[dict] = []
+        async for doc in cursor_obj:
+            doc["id"] = str(doc.pop("_id"))
+            records.append(doc)
+        return records
+
+    async def status_for_user(self, user_id: str, keys: list[str]) -> list[dict]:
+        """Return bounded status rows without revealing other owners."""
+        clean_keys = list(
+            dict.fromkeys(
+                clean
+                for key in keys
+                if (clean := str(key).strip()) and len(clean.encode("utf-8")) <= 1024
+            )
+        )[:100]
+        if not clean_keys:
+            return []
+        await self.ensure_indexes_if_needed()
+        owner_query = _owner_scope(user_id)
+        owner_query["key"] = {"$in": clean_keys}
+        cursor = self.collection.find(owner_query)
+        rows: list[dict] = []
+        async for doc in cursor:
+            doc["id"] = str(doc.pop("_id"))
+            rows.append(doc)
+        return rows

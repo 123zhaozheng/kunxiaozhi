@@ -1,4 +1,5 @@
 import type { MessageAttachment } from "../../types";
+import { isDeletedAttachmentStatus } from "../../types/storage";
 import { createSingletonStore } from "./ChatMessage/items/createSingletonStore";
 import {
   registerPanelCapture,
@@ -33,6 +34,7 @@ export function openAttachmentPreview(
   attachment: MessageAttachment,
   source: AttachmentPreviewSource,
 ): void {
+  if (isDeletedAttachmentStatus(attachment)) return;
   pushCurrentPanelToHistory();
   store.set({ attachment, source });
 }

@@ -40,6 +40,7 @@ from src.api.routes import (
     session,
     share,
     skill,
+    storage,
     team,
     trace_migration,
     upload,
@@ -92,6 +93,7 @@ _LIFESPAN_BACKGROUND_TASK_NAMES = (
     "models_preload_task",
     "stale_task_cleanup_task",
     "wecom_task",
+    "storage_maintenance_task",
 )
 
 
@@ -311,6 +313,27 @@ def _schedule_wecom_startup(app: FastAPI) -> asyncio.Task[None] | None:
     return task
 
 
+def _schedule_storage_maintenance(app: FastAPI) -> asyncio.Task[None]:
+    """Run bounded storage reconciliation/purge passes independently of Redis."""
+
+    async def _run() -> None:
+        from src.infra.storage.jobs import run_storage_maintenance
+
+        interval = max(10.0, float(getattr(settings, "USER_STORAGE_MAINTENANCE_INTERVAL_SECONDS", 60.0)))
+        while True:
+            try:
+                await run_storage_maintenance()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.warning("Personal storage maintenance failed: %s", exc)
+            await asyncio.sleep(interval)
+
+    task = asyncio.create_task(_run(), name="storage:maintenance")
+    app.state.storage_maintenance_task = task
+    return task
+
+
 async def _cancel_lifespan_background_tasks_for_shutdown(app: FastAPI) -> None:
     await _cancel_background_tasks(app, *_LIFESPAN_BACKGROUND_TASK_NAMES)
 
@@ -377,6 +400,12 @@ def _startup_index_initializers():
 
         await WeComNotifyBindingStorage().create_indexes()
 
+    async def _init_storage_domain() -> None:
+        from src.infra.storage.user_storage import UserStorageQuotaStorage
+
+        await UserStorageQuotaStorage().ensure_indexes()
+        logger.info("Personal storage domain indexes initialized")
+
     return [
         ("agent_config_storage", _init_agent_config_storage),
         ("model_storage", _init_model_storage),
@@ -387,6 +416,7 @@ def _startup_index_initializers():
         ("notification_storage", _init_notification_storage),
         ("analytics_storage", _init_analytics_storage),
         ("wecom_notify_bindings", _init_wecom_notify_bindings),
+        ("storage_domain", _init_storage_domain),
     ]
 
 
@@ -486,6 +516,10 @@ async def lifespan(app: FastAPI):
 
     # 后台恢复/清理残留任务；恢复逻辑自身有分布式锁与 heartbeat 判断。
     _schedule_stale_task_cleanup(app)
+
+    # Quota/lifecycle recovery is Mongo-backed and must continue even when Redis
+    # is evicted or restarted.
+    _schedule_storage_maintenance(app)
 
     # 后台预加载模型列表；请求路径仍有 memory -> Redis -> DB 懒加载兜底。
     _schedule_models_cache_warmup(app)
@@ -758,6 +792,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(envvar.router, prefix="/api/env-vars", tags=["Environment Variables"])
     app.include_router(upload.router, prefix="/api/upload", tags=["Upload"])
+    app.include_router(storage.router, prefix="/api/storage", tags=["Storage"])
     app.include_router(revealed_file.router, prefix="/api/files", tags=["Files"])
     app.include_router(human.router, prefix="/human", tags=["Human"])
     app.include_router(feedback.router, prefix="/api/feedback", tags=["Feedback"])

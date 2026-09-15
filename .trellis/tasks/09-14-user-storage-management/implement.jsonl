@@ -1,0 +1,15 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend package entry point and pre-development contract."}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Mongo storage classes, additive schema evolution, indexes and async data-access conventions."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Stable domain/HTTP error mapping for quota, ownership and tombstones."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Backend typing, async, security and test requirements."}
+{"file":".trellis/spec/backend/upload-dangerous-extensions.md","reason":"Preserve the required early dangerous-suffix upload ordering and regression contract."}
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend package entry point and relevant guideline map."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Profile panel/component, theme, responsive and export conventions."}
+{"file":".trellis/spec/frontend/state-management.md","reason":"API server-state and local lifecycle update patterns without introducing a global state library."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Typed API and backward-compatible attachment contract conventions."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"i18n, accessibility, responsive, dark-mode and frontend test requirements."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"The feature spans upload, Mongo, URLs, Agent history and React rendering."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Reuse upload, profile, notification, storage and cleanup abstractions instead of duplicating them."}
+{"file":".trellis/tasks/09-14-user-storage-management/research/backend-storage.md","reason":"Exact upload/storage/attachment call chains, security gaps, data-model and test research."}
+{"file":".trellis/tasks/09-14-user-storage-management/research/frontend-storage.md","reason":"Exact profile, upload, history, attachment UI, i18n and frontend test research."}
+{"file":".trellis/tasks/09-14-user-storage-management/research/local-preview.md","reason":"MongoDB/Redis requirements, startup commands, ports and clickable Preview constraints."}

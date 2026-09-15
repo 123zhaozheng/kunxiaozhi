@@ -13,6 +13,10 @@ from urllib.parse import quote
 from langchain_core.messages import HumanMessage
 
 from src.infra.agent import AgentEventProcessor
+from src.infra.agent.attachments import (
+    attachment_is_unavailable,
+    attachment_reupload_context,
+)
 from src.infra.async_utils import run_blocking_io
 from src.infra.logging import get_logger
 
@@ -167,6 +171,16 @@ async def inline_image_attachments_as_data_urls(
             inlined.append(attachment)
             continue
 
+        if attachment_is_unavailable(attachment):
+            inlined.append(
+                {
+                    **attachment,
+                    "data_url": "",
+                    "reupload_context": attachment_reupload_context(attachment),
+                }
+            )
+            continue
+
         if attachment.get("url") or attachment.get("data_url"):
             inlined.append(attachment)
             continue
@@ -245,6 +259,21 @@ def _format_attachment_summary(text: str, attachments: list[dict]) -> str:
         mime_type = attachment.get("mime_type") or attachment.get("mimeType") or ""
         size = attachment.get("size", 0)
         vision_description = attachment.get("vision_description", "")
+        unavailable_context = attachment_reupload_context(attachment)
+
+        if unavailable_context:
+            enhanced_text += f"\n\n**[{name}]**"
+            enhanced_text += f"\n- 类型: {file_type}"
+            if mime_type:
+                enhanced_text += f" ({mime_type})"
+            size_str = _format_size(size)
+            if size_str:
+                enhanced_text += f"\n- 大小: {size_str}"
+            enhanced_text += (
+                f"\n- 文件不可用（{unavailable_context['code']}），"
+                "请让用户重新上传。"
+            )
+            continue
 
         # 有 vision 描述的图片：渲染描述块。不附带 URL——描述已是图片内容，
         # URL 是内网地址（127.0.0.1/k8s internal），主模型无法 fetch，附带只会
@@ -314,7 +343,7 @@ def build_human_message(
                     "image_url": {"url": image_url},
                 }
             )
-        elif url or attachment.get("vision_description"):
+        elif url or attachment.get("vision_description") or attachment_reupload_context(attachment):
             text_summary_attachments.append(attachment)
 
     enhanced_text = _format_attachment_summary(text, text_summary_attachments)

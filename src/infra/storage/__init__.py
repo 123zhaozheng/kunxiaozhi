@@ -12,6 +12,7 @@ from src.infra.storage.postgres import (
     get_connection_pool,
 )
 from src.infra.storage.redis import RedisStorage
+from src.infra.storage.user_storage import UserStorageQuotaService, UserStorageQuotaStorage
 
 __all__ = [
     "StorageBase",
@@ -20,4 +21,6 @@ __all__ = [
     "get_connection_pool",
     "create_postgres_store",
     "close_connection_pool",
+    "UserStorageQuotaService",
+    "UserStorageQuotaStorage",
 ]

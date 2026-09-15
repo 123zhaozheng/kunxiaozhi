@@ -20,6 +20,7 @@ from src.api.deps import get_current_user_required, require_permissions
 from src.api.routes.auth.utils import _get_language
 from src.api.routes.chat_validation import validate_team_agent_request
 from src.api.routes.session import verify_session_ownership
+from src.infra.agent.attachments import normalize_attachments
 from src.infra.async_utils import run_blocking_io
 from src.infra.chat.user_message_timestamp import format_user_message_with_timestamp
 from src.infra.goal import GoalSpec, coerce_goal_spec
@@ -444,9 +445,13 @@ async def chat_stream(
     run_id = _generate_run_id()
 
     # Prepare attachments (needed for both queued and direct paths)
-    attachments_data = (
+    raw_attachments = (
         [a.model_dump() for a in request.attachments] if request.attachments else None
     )
+    # Resolve lifecycle state once before any direct, queued, or ARQ submission.
+    # The same projection is stored in every task payload; Presenter performs a
+    # second defensive projection for non-HTTP callers such as WeCom/recovery.
+    attachments_data = await normalize_attachments(raw_attachments, user_id=user.sub)
 
     # Build task context for queued dispatch (stored in Redis, multi-worker safe)
     # trace_id is generated early so it can be passed to the executor for trace reuse

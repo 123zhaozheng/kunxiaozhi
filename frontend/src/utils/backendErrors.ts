@@ -9,6 +9,10 @@ const BACKEND_ERROR_KEYS: Record<string, string> = {
   model_not_found: "errors.modelNotFound",
   model_disabled: "errors.modelDisabled",
   model_not_allowed: "errors.modelNotAllowed",
+  storage_quota_exceeded: "storage.quotaExceeded",
+  storage_operation_too_large: "storage.quotaExceeded",
+  file_deleted: "storage.deleted",
+  managed_by_source: "storage.protectedHint",
 
   // Stable HTTPException detail strings
   未提供认证信息: "backendErrors.authMissing",

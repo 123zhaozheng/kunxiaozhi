@@ -1,4 +1,4 @@
-import { getFullUrl, uploadApi } from "../../services/api";
+import { getFullUrl } from "../../services/api";
 import { AttachmentCard } from "../common/AttachmentCard";
 import { openAttachmentPreview } from "./attachmentPreviewStore";
 import type { MessageAttachment } from "../../types";
@@ -11,6 +11,7 @@ interface ChatInputAttachmentsProps {
       | ((prev: MessageAttachment[]) => MessageAttachment[]),
   ) => void;
   onCancelUpload: (id: string) => void;
+  onRetryUpload?: (id: string) => void;
   onImageViewerOpen: (url: string) => void;
 }
 
@@ -18,6 +19,7 @@ export function ChatInputAttachments({
   attachments,
   onAttachmentsChange,
   onCancelUpload,
+  onRetryUpload,
   onImageViewerOpen,
 }: ChatInputAttachmentsProps) {
   if (attachments.length === 0) return null;
@@ -29,12 +31,13 @@ export function ChatInputAttachments({
           attachment.mimeType?.startsWith("image/") && attachment.url;
 
         const handleRemove = () => {
+          if (attachment.uploadError) {
+            onCancelUpload(attachment.id);
+            return;
+          }
           onAttachmentsChange((prev) =>
             prev.filter((a) => a.id !== attachment.id),
           );
-          uploadApi.deleteFile(attachment.key).catch((error) => {
-            console.error("Failed to delete file from server:", error);
-          });
         };
 
         return (
@@ -52,6 +55,11 @@ export function ChatInputAttachments({
               }
             }}
             onRemove={handleRemove}
+            onRetry={
+              attachment.uploadError && onRetryUpload
+                ? () => onRetryUpload(attachment.id)
+                : undefined
+            }
             onCancel={
               attachment.isUploading
                 ? () => onCancelUpload(attachment.id)

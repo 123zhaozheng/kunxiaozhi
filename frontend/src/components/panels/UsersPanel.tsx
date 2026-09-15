@@ -23,7 +23,7 @@ import { LoadingSpinner } from "../common/LoadingSpinner";
 import { PanelLoadingState } from "../common/PanelLoadingState";
 import { EditorSidebar } from "../common/EditorSidebar";
 import { ConfirmDialog } from "../common/ConfirmDialog";
-import { getFullUrl } from "../../services/api";
+import { getFullUrl, storageApi } from "../../services/api";
 import { Checkbox } from "../common/Checkbox";
 import { Pagination } from "../common/Pagination";
 import { userApi, roleApi } from "../../services/api";
@@ -87,7 +87,10 @@ function useDebounce<T>(value: T, delay: number): T {
 interface UserFormModalProps {
   user?: UserType | null;
   roles: Role[];
-  onSave: (data: UserCreate | UserUpdate) => Promise<void>;
+  onSave: (
+    data: UserCreate | UserUpdate,
+    storageQuotaMb: number | "",
+  ) => Promise<void>;
   onClose: () => void;
   isLoading: boolean;
 }
@@ -107,6 +110,11 @@ function UserFormModal({
     user?.roles || [],
   );
   const [isActive, setIsActive] = useState(user?.is_active ?? true);
+  const [storageQuotaMb, setStorageQuotaMb] = useState<number | "">(
+    user?.storage_quota_override_bytes != null
+      ? Math.round(user.storage_quota_override_bytes / (1024 * 1024))
+      : user?.storage_quota_mb ?? "",
+  );
   const [error, setError] = useState<string | null>(null);
 
   const isEditing = !!user;
@@ -149,7 +157,7 @@ function UserFormModal({
         if (password) {
           updateData.password = password;
         }
-        await onSave(updateData);
+        await onSave(updateData, storageQuotaMb);
       } else {
         const createData: UserCreate = {
           username: username.trim(),
@@ -157,7 +165,7 @@ function UserFormModal({
           password,
           roles: selectedRoles,
         };
-        await onSave(createData);
+        await onSave(createData, storageQuotaMb);
       }
       onClose();
     } catch (err) {
@@ -244,6 +252,26 @@ function UserFormModal({
               placeholder={t("users.usernamePlaceholder")}
             />
           </div>
+        </div>
+
+        {/* 个人存储配额 */}
+        <div className="es-field">
+          <label className="es-label">{t("users.storageQuotaMb")}</label>
+          <input
+            type="number"
+            min="1"
+            value={storageQuotaMb}
+            onChange={(event) =>
+              setStorageQuotaMb(
+                event.target.value === "" ? "" : Number(event.target.value),
+              )
+            }
+            className="glass-input es-input px-3"
+            placeholder={t("users.storageQuotaPlaceholder", "Use role/default quota")}
+          />
+          <p className="es-hint">
+            {t("users.storageQuotaHint", "Leave blank to inherit the most permissive role or global quota.")}
+          </p>
         </div>
 
         {/* 邮箱 */}
@@ -406,14 +434,29 @@ export function UsersPanel() {
   }, [debouncedSearch]);
 
   // 保存用户
-  const handleSaveUser = async (data: UserCreate | UserUpdate) => {
+  const handleSaveUser = async (
+    data: UserCreate | UserUpdate,
+    storageQuotaMb: number | "",
+  ) => {
     setIsSaving(true);
     try {
       if (editingUser) {
-        await userApi.update(editingUser.id, data as UserUpdate);
+        const updatedUser = await userApi.update(editingUser.id, data as UserUpdate);
+        await storageApi.setUserQuota(editingUser.id, {
+          quota_mb:
+            storageQuotaMb === "" ? null : Math.round(Number(storageQuotaMb)),
+        });
+        setUsers((previous) =>
+          previous.map((user) => (user.id === updatedUser.id ? updatedUser : user)),
+        );
         toast.success(t("users.updateSuccess"));
       } else {
-        await userApi.create(data as UserCreate);
+        const createdUser = await userApi.create(data as UserCreate);
+        if (storageQuotaMb !== "") {
+          await storageApi.setUserQuota(createdUser.id, {
+            quota_mb: Math.round(Number(storageQuotaMb)),
+          });
+        }
         toast.success(t("users.createSuccess"));
       }
       loadData();

@@ -555,7 +555,14 @@ async def upload_skill_binary_file(
     return {
         "message": "Binary file uploaded",
         "storage_key": binary_ref.storage_key,
-        "url": f"/api/upload/file/{binary_ref.storage_key}",
+        "url": (
+            f"/api/storage/files/{binary_ref.file_id}/content"
+            if binary_ref.file_id
+            else f"/api/upload/file/{binary_ref.storage_key}"
+        ),
+        "file_id": binary_ref.file_id,
+        "status": binary_ref.status,
+        "source": binary_ref.source or "skill",
         "mime_type": binary_ref.mime_type,
         "size": binary_ref.size,
     }

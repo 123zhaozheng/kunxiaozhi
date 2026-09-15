@@ -1,8 +1,9 @@
-import { memo, useMemo } from "react";
-import { X, Loader2 } from "lucide-react";
+import { memo, useEffect, useMemo, useState } from "react";
+import { Ban, Loader2, RotateCcw, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import clsx from "clsx";
 import type { MessageAttachment } from "../../types";
+import { isDeletedAttachmentStatus } from "../../types/storage";
 import { ImageWithSkeleton } from "../chat/ChatMessage/ImageWithSkeleton";
 import { ExcalidrawThumbnail } from "./ExcalidrawThumbnail";
 import {
@@ -11,6 +12,11 @@ import {
   isExcalidrawFile,
 } from "../documents/utils";
 import { getFullUrl } from "../../services/api";
+import {
+  STORAGE_LIFECYCLE_EVENT,
+  matchesStorageLifecycleEvent,
+  type StorageLifecycleEventDetail,
+} from "../../services/storageLifecycle";
 
 // Re-export formatFileSize for external use
 // eslint-disable-next-line react-refresh/only-export-components
@@ -38,17 +44,19 @@ export function getAttachmentIconInfo(
 
 export interface AttachmentCardProps {
   attachment: MessageAttachment;
-  /** 点击卡片时的回调（预览） */
+  /** Click callback for preview. Ignored for deleted attachments. */
   onClick?: () => void;
-  /** 删除按钮点击回调 */
+  /** Delete button callback. */
   onRemove?: () => void;
-  /** 取消上传按钮点击回调 */
+  /** Cancel upload button callback. */
   onCancel?: () => void;
-  /** 显示模式：editable 显示删除按钮，preview 显示预览指示器 */
+  /** Retry a retained upload after a quota or admission error. */
+  onRetry?: () => void;
+  /** Display mode: editable shows removal controls, preview shows a card. */
   variant?: "editable" | "preview";
-  /** 尺寸：compact 更紧凑，适合输入框区域 */
+  /** Compact size for the composer. */
   size?: "default" | "compact";
-  /** Whether upload is in progress */
+  /** Whether upload is in progress. */
   isUploading?: boolean;
 }
 
@@ -57,218 +65,303 @@ export const AttachmentCard = memo(function AttachmentCard({
   onClick,
   onRemove,
   onCancel,
+  onRetry,
   variant = "preview",
   size = "default",
   isUploading = false,
 }: AttachmentCardProps) {
   const { t } = useTranslation();
+  const [lifecycleStatus, setLifecycleStatus] = useState(
+    attachment.lifecycleStatus ?? attachment.status,
+  );
+  const [available, setAvailable] = useState(attachment.available);
+
+  useEffect(() => {
+    setLifecycleStatus(attachment.lifecycleStatus ?? attachment.status);
+    setAvailable(attachment.available);
+  }, [attachment.available, attachment.lifecycleStatus, attachment.status]);
+
+  useEffect(() => {
+    const handleLifecycle = (event: Event) => {
+      const detail = (event as CustomEvent<StorageLifecycleEventDetail>).detail;
+      if (
+        !matchesStorageLifecycleEvent(detail, attachment.fileId, attachment.key)
+      ) {
+        return;
+      }
+      setLifecycleStatus(detail.status);
+      if (detail.status === "deleted" || detail.status === "delete_pending") {
+        setAvailable(false);
+      }
+    };
+    window.addEventListener(STORAGE_LIFECYCLE_EVENT, handleLifecycle);
+    return () => window.removeEventListener(STORAGE_LIFECYCLE_EVENT, handleLifecycle);
+  }, [attachment.fileId, attachment.key]);
+
   const {
     icon: FileIcon,
     bgColor,
     iconColor,
     label,
   } = getAttachmentIconInfo(attachment.mimeType, attachment.name);
-  const attachmentUrl = attachment.url
+  const isDeleted = isDeletedAttachmentStatus({
+    ...attachment,
+    lifecycleStatus,
+    available,
+  });
+  const hasUploadError = Boolean(attachment.uploadError);
+  const lifecycleError = attachment.lifecycleError;
+  const isLifecycleUnavailable = [
+    "pending",
+    "delete_pending",
+    "forbidden",
+    "missing",
+    "transient",
+  ].includes(String(lifecycleStatus ?? ""));
+  const isUnavailable = isDeleted || hasUploadError || isLifecycleUnavailable;
+  const attachmentUrl = !isUnavailable && attachment.url
     ? getFullUrl(attachment.url) ?? attachment.url
     : "";
   const isImage =
-    attachment.mimeType?.startsWith("image/") && Boolean(attachmentUrl);
+    !isUnavailable &&
+    attachment.mimeType?.startsWith("image/") &&
+    Boolean(attachmentUrl);
   const fileExt = useMemo(() => {
     const idx = attachment.name?.lastIndexOf(".");
     return idx != null && idx > 0
-      ? attachment.name!.slice(idx + 1).toLowerCase()
+      ? attachment.name.slice(idx + 1).toLowerCase()
       : "";
   }, [attachment.name]);
-  const isExcalidraw = isExcalidrawFile(fileExt) && Boolean(attachmentUrl);
+  const isExcalidraw =
+    !isUnavailable && isExcalidrawFile(fileExt) && Boolean(attachmentUrl);
   const isThumbnail = isImage || isExcalidraw;
   const isCompact = size === "compact";
 
   const handleClick = () => {
-    onClick?.();
+    if (!isUnavailable) onClick?.();
   };
 
-  const handleRemove = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleRemove = (event: React.MouseEvent) => {
+    event.stopPropagation();
     onRemove?.();
   };
 
-  // 紧凑模式样式（用于 ChatInput）
-  if (isCompact) {
-    return (
-      <div
-        onClick={handleClick}
+  const handleRetry = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    onRetry?.();
+  };
+
+  const renderVisual = (compact: boolean) => (
+    <div
+      className={clsx(
+        "shrink-0 flex items-center justify-center overflow-hidden",
+        compact ? "rounded-lg size-10" : "size-12 sm:size-14 rounded-l-2xl sm:rounded-l-xl",
+        isThumbnail ? "relative" : bgColor,
+        isUnavailable && "bg-red-50 dark:bg-red-950/30",
+      )}
+    >
+      {isDeleted ? (
+        <Trash2 size={compact ? 18 : 20} className="text-red-500 dark:text-red-400" />
+      ) : hasUploadError ? (
+        <Ban size={compact ? 18 : 20} className="text-amber-500 dark:text-amber-400" />
+      ) : isLifecycleUnavailable ? (
+        <Ban size={compact ? 18 : 20} className="text-amber-500 dark:text-amber-400" />
+      ) : isUploading ? (
+        <Loader2 size={18} className={clsx(iconColor, "animate-spin")} />
+      ) : isImage ? (
+        compact ? (
+          <ImageWithSkeleton
+            src={attachmentUrl}
+            alt={attachment.name}
+            skipUrlResolve
+            inline
+          />
+        ) : (
+          <img
+            src={attachmentUrl}
+            alt={attachment.name}
+            referrerPolicy="no-referrer"
+            className="w-full h-full object-cover"
+          />
+        )
+      ) : isExcalidraw ? (
+        <ExcalidrawThumbnail
+          url={attachmentUrl}
+          alt={attachment.name}
+          className={compact ? undefined : "w-full h-full object-cover"}
+        />
+      ) : (
+        <FileIcon size={18} className={iconColor} />
+      )}
+    </div>
+  );
+
+  const renderStatus = (compact: boolean) => (
+    <>
+      <span
         className={clsx(
-          "group relative flex items-center gap-2.5 px-3 py-2",
-          "rounded-xl border border-stone-200/60 dark:border-stone-700/60",
-          "bg-gradient-to-br from-white to-stone-50/80 dark:from-stone-800 dark:to-stone-900",
-          "shadow-sm cursor-pointer select-none",
-          "transition-all duration-200 ease-out",
-          "hover:shadow-md hover:shadow-stone-200/40 dark:hover:shadow-stone-900/40",
-          "hover:border-stone-300/70 dark:hover:border-stone-600/70",
-          "hover:-translate-y-0.5",
-          "active:scale-[0.98]",
-          isUploading && !onCancel && "pointer-events-none",
+          compact
+            ? "text-[13px] font-medium truncate max-w-[120px] sm:max-w-[160px] leading-tight"
+            : "text-[13px] sm:text-sm font-medium truncate leading-tight",
+          isDeleted
+            ? "text-red-700 dark:text-red-300 line-through decoration-red-500 decoration-2"
+            : "text-stone-800 dark:text-stone-100",
         )}
       >
-        {/* 图标/图片 */}
-        <div
-          className={clsx(
-            "shrink-0 flex items-center justify-center rounded-lg overflow-hidden",
-            "transition-transform duration-200",
-            !isUploading && "group-hover:scale-105",
-            isThumbnail
-              ? "size-10 relative overflow-hidden"
-              : clsx("size-10", bgColor),
-          )}
-        >
-          {isUploading ? (
-            <Loader2 size={18} className={clsx(iconColor, "animate-spin")} />
-          ) : isImage ? (
-            <ImageWithSkeleton
-              src={attachmentUrl}
-              alt={attachment.name}
-              skipUrlResolve
-              inline
-            />
-          ) : isExcalidraw ? (
-            <ExcalidrawThumbnail url={attachmentUrl} alt={attachment.name} />
-          ) : (
-            <FileIcon size={18} className={iconColor} />
-          )}
-        </div>
-
-        {/* 文件信息 */}
-        <div className="flex flex-col min-w-0 flex-1">
-          <span className="text-[13px] font-medium text-stone-800 dark:text-stone-100 truncate max-w-[120px] sm:max-w-[160px] leading-tight">
-            {attachment.name}
+        {attachment.name}
+      </span>
+      <span
+        className={clsx(
+          "mt-0.5",
+          compact
+            ? "text-xs text-stone-400 dark:text-stone-500"
+            : "flex items-center justify-between text-[11px] sm:text-xs text-stone-400 dark:text-stone-500 sm:mt-1",
+        )}
+      >
+        {isDeleted ? (
+          <span className="inline-flex items-center gap-1 font-medium text-red-600 dark:text-red-400">
+            <Trash2 size={compact ? 12 : 13} aria-hidden="true" />
+            {t("storage.deleted", "Deleted")}
           </span>
-          <span className="text-xs text-stone-400 dark:text-stone-500 mt-0.5">
-            {isUploading
-              ? `${attachment.uploadProgress ?? 0}%`
-              : formatFileSize(attachment.size)}
+        ) : hasUploadError ? (
+          <span className="inline-flex max-w-full items-center gap-1 text-amber-700 dark:text-amber-300">
+            <Ban size={compact ? 12 : 13} aria-hidden="true" />
+            <span className="truncate">{attachment.uploadError}</span>
           </span>
-        </div>
+        ) : isLifecycleUnavailable ? (
+          <span className="inline-flex max-w-full items-center gap-1 text-amber-700 dark:text-amber-300">
+            <Ban size={compact ? 12 : 13} aria-hidden="true" />
+            <span className="truncate">
+              {t(
+                `storage.fileStatuses.${lifecycleStatus}`,
+                lifecycleError || t("storage.fileUnavailable", "File unavailable"),
+              )}
+            </span>
+          </span>
+        ) : compact ? (
+          isUploading
+            ? `${attachment.uploadProgress ?? 0}%`
+            : formatFileSize(attachment.size)
+        ) : (
+          <>
+            <span className="capitalize truncate">{label}</span>
+            <span className="shrink-0 ml-2">
+              {isUploading
+                ? t("fileUpload.uploading")
+                : formatFileSize(attachment.size)}
+            </span>
+          </>
+        )}
+      </span>
+    </>
+  );
 
-        {/* 删除/取消按钮 */}
-        {variant === "editable" &&
-          (isUploading && onCancel ? (
+  const action =
+    variant === "editable" && !isDeleted
+      ? isUploading && onCancel
+        ? (
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
+              onClick={(event) => {
+                event.stopPropagation();
                 onCancel();
               }}
-              className={clsx(
-                "shrink-0 size-6 rounded-full flex items-center justify-center",
-                "bg-red-100/80 dark:bg-red-900/30",
-                "text-red-500 dark:text-red-400",
-                "opacity-100",
-                "transition-all duration-200",
-                "hover:bg-red-200 dark:hover:bg-red-900/50",
-              )}
+              className="shrink-0 size-6 rounded-full flex items-center justify-center bg-red-100/80 dark:bg-red-900/30 text-red-500 dark:text-red-400"
               title={t("fileUpload.cancelUpload")}
+              aria-label={t("fileUpload.cancelUpload")}
             >
               <X size={12} />
             </button>
-          ) : (
-            onRemove && (
+          )
+        : hasUploadError && onRetry
+          ? (
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium text-amber-700 dark:text-amber-300 bg-amber-100/80 dark:bg-amber-900/30"
+                title={t("storage.retryUpload", "Retry upload")}
+              >
+                <RotateCcw size={12} />
+                {t("common.retry", "Retry")}
+              </button>
+            )
+          : onRemove && (
               <button
                 type="button"
                 onClick={handleRemove}
-                className={clsx(
-                  "shrink-0 size-6 rounded-full flex items-center justify-center",
-                  "bg-stone-100/80 dark:bg-stone-700/80",
-                  "text-stone-400 dark:text-stone-500",
-                  "opacity-100 sm:opacity-0 sm:group-hover:opacity-100",
-                  "transition-all duration-200",
-                  "hover:bg-red-100 dark:hover:bg-red-900/30",
-                  "hover:text-red-500 dark:hover:text-red-400",
-                )}
+                className="shrink-0 size-6 rounded-full flex items-center justify-center bg-stone-100/80 dark:bg-stone-700/80 text-stone-400 dark:text-stone-500 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-500 dark:hover:text-red-400"
+                title={t("fileUpload.removeAttachment")}
+                aria-label={t("fileUpload.removeAttachment")}
               >
                 <X size={12} />
               </button>
             )
-          ))}
+      : null;
+
+  if (isCompact) {
+    return (
+      <div
+        onClick={handleClick}
+        role={isUnavailable ? "group" : undefined}
+        aria-disabled={isUnavailable ? true : undefined}
+        data-lifecycle-status={lifecycleStatus}
+        className={clsx(
+          "group relative flex items-center gap-2.5 px-3 py-2 rounded-xl border",
+          "border-stone-200/60 dark:border-stone-700/60 bg-gradient-to-br from-white to-stone-50/80 dark:from-stone-800 dark:to-stone-900 shadow-sm select-none",
+          !isUnavailable && "cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98]",
+          isUnavailable && "cursor-not-allowed border-red-200/80 dark:border-red-900/50",
+          isUploading && !onCancel && "pointer-events-none",
+        )}
+      >
+        {renderVisual(true)}
+        <div className="flex flex-col min-w-0 flex-1">{renderStatus(true)}</div>
+        {action}
       </div>
     );
   }
 
-  // 默认模式样式（用于 ChatMessage）
+  const cardContent = (
+    <>
+      {renderVisual(false)}
+      <div className="flex flex-col justify-center px-3 sm:px-3.5 py-2 min-w-0 flex-1">
+        {renderStatus(false)}
+      </div>
+    </>
+  );
+
+  const className = clsx(
+    "group relative flex items-center overflow-hidden h-12 sm:h-14 min-w-[200px] max-w-[280px] sm:min-w-[240px] sm:max-w-[320px]",
+    "bg-gradient-to-br from-white to-stone-50/80 dark:from-stone-800 dark:to-stone-900 rounded-2xl sm:rounded-xl border shadow-sm text-left select-none",
+    isUnavailable
+      ? "border-red-200/80 dark:border-red-900/50 cursor-not-allowed"
+      : "border-stone-200/60 dark:border-stone-700/60 cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 hover:scale-[1.02] active:scale-[0.98]",
+    isUploading && "pointer-events-none",
+  );
+
+  if (isUnavailable) {
+    return (
+      <div
+        onClick={handleClick}
+        role="group"
+        aria-disabled="true"
+        data-lifecycle-status={lifecycleStatus}
+        className={className}
+      >
+        {cardContent}
+        {action}
+      </div>
+    );
+  }
+
   return (
     <button
       onClick={handleClick}
-      className={clsx(
-        "group relative flex items-center overflow-hidden",
-        "h-12 sm:h-14 min-w-[200px] max-w-[280px] sm:min-w-[240px] sm:max-w-[320px]",
-        "bg-gradient-to-br from-white to-stone-50/80",
-        "dark:from-stone-800 dark:to-stone-900",
-        "rounded-2xl sm:rounded-xl",
-        "border border-stone-200/60 dark:border-stone-700/60",
-        "shadow-sm",
-        "text-left cursor-pointer select-none",
-        "transition-all duration-300 ease-out",
-        "hover:shadow-lg hover:shadow-stone-200/50 dark:hover:shadow-stone-900/50",
-        "hover:border-stone-300/80 dark:hover:border-stone-600/80",
-        "hover:-translate-y-0.5 hover:scale-[1.02]",
-        "active:scale-[0.98] active:shadow-sm",
-        isUploading && "pointer-events-none",
-      )}
+      className={className}
       type="button"
+      aria-disabled={isUploading ? true : undefined}
     >
-      {/* 左侧图标/图片区域 */}
-      <div
-        className={clsx(
-          "shrink-0 flex items-center justify-center",
-          "transition-transform duration-300",
-          !isUploading && "group-hover:scale-105",
-          isThumbnail
-            ? "size-12 sm:size-14 rounded-l-2xl sm:rounded-l-xl overflow-hidden"
-            : clsx("size-12 sm:size-14 rounded-l-2xl sm:rounded-l-xl", bgColor),
-        )}
-      >
-        {isUploading ? (
-          <Loader2 size={18} className={clsx(iconColor, "animate-spin")} />
-        ) : isImage ? (
-          <>
-            <img
-              src={attachmentUrl}
-              alt={attachment.name}
-              referrerPolicy="no-referrer"
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-          </>
-        ) : isExcalidraw ? (
-          <ExcalidrawThumbnail
-            url={attachmentUrl}
-            alt={attachment.name}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <FileIcon
-            size={18}
-            className={clsx(
-              iconColor,
-              "transition-transform duration-300 group-hover:scale-110",
-            )}
-          />
-        )}
-      </div>
-
-      {/* 文件信息 */}
-      <div className="flex flex-col justify-center px-3 sm:px-3.5 py-2 min-w-0 flex-1">
-        <div className="text-[13px] sm:text-sm font-medium truncate text-stone-800 dark:text-stone-100 leading-tight">
-          {attachment.name}
-        </div>
-        <div className="flex items-center justify-between mt-0.5 sm:mt-1 text-[11px] sm:text-xs text-stone-400 dark:text-stone-500">
-          <span className="capitalize truncate">{label}</span>
-          <span className="shrink-0 ml-2">
-            {isUploading
-              ? t("fileUpload.uploading")
-              : formatFileSize(attachment.size)}
-          </span>
-        </div>
-      </div>
+      {cardContent}
+      {action}
     </button>
   );
 });

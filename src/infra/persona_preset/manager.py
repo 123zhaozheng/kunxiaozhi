@@ -6,6 +6,7 @@ from src.infra.logging import get_logger
 from src.infra.persona_preset.storage import PersonaPresetStorage
 from src.infra.skill.marketplace import MarketplaceStorage
 from src.infra.skill.parser import parse_skill_md
+from src.infra.storage.user_storage import UserStorageQuotaService
 from src.infra.utils.datetime import utc_now
 from src.kernel.exceptions import AuthorizationError, NotFoundError
 from src.kernel.schemas.persona_preset import (
@@ -20,6 +21,14 @@ from src.kernel.schemas.persona_preset import (
 )
 
 logger = get_logger(__name__)
+
+
+def _managed_file_id(value: object) -> str | None:
+    text = str(value or "")
+    marker = "/api/storage/files/"
+    if marker not in text:
+        return None
+    return text.split(marker, 1)[1].split("/", 1)[0] or None
 
 
 class PersonaSkillBindingError(ValueError):
@@ -168,7 +177,18 @@ class PersonaPresetManager:
             }
         )
         created = await self.storage.create(data)
-        return PersonaPreset(**created)
+        result = PersonaPreset(**created)
+        file_id = _managed_file_id(result.avatar)
+        if file_id:
+            try:
+                await UserStorageQuotaService().bind_protected_file(
+                    user_id,
+                    file_id,
+                    f"persona_avatar:{result.id}",
+                )
+            except Exception as exc:
+                logger.warning("Failed to bind Persona avatar %s: %s", file_id, exc)
+        return result
 
     async def batch_create_presets(
         self,
@@ -303,6 +323,17 @@ class PersonaPresetManager:
         updated = await self.storage.update(preset_id, update)
         if not updated:
             raise NotFoundError("persona_preset_not_found")
+        file_id = _managed_file_id(update.get("avatar"))
+        if file_id:
+            try:
+                await UserStorageQuotaService().bind_protected_file(
+                    user_id,
+                    file_id,
+                    f"persona_avatar:{preset_id}",
+                )
+                await UserStorageQuotaService().finalize_replacement_for_file(user_id, file_id)
+            except Exception as exc:
+                logger.warning("Failed to finalize Persona avatar %s: %s", file_id, exc)
         return PersonaPreset(**updated)
 
     async def delete_preset(self, preset_id: str, *, user_id: str, is_admin: bool) -> bool:
@@ -311,6 +342,13 @@ class PersonaPresetManager:
             raise NotFoundError("persona_preset_not_found")
         if not self._can_edit(doc, user_id=user_id, is_admin=is_admin):
             raise AuthorizationError("persona_preset_no_delete_permission")
+        file_id = _managed_file_id(doc.get("avatar"))
+        if file_id:
+            await UserStorageQuotaService().delete_protected_file(
+                user_id,
+                file_id,
+                reason="persona_deleted",
+            )
         return await self.storage.delete(preset_id)
 
     async def copy_preset(

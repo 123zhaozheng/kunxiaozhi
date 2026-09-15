@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from src.api.deps import get_current_user_required
+from src.infra.agent.attachments import normalize_attachment_events
 from src.infra.folder.storage import get_project_storage
 from src.infra.logging import get_logger
 from src.infra.session.favorites import is_session_favorite, normalize_session_metadata
@@ -331,6 +332,13 @@ async def get_session_events(
         )
     except InvalidHistoryCursor as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    # Lifecycle projection is read-time only: immutable historical events are
+    # preserved while cards receive the current server-authoritative status.
+    page["events"] = await normalize_attachment_events(
+        page.get("events", []),
+        user_id=user.sub,
+    )
 
     # 获取 session 的 current_run_id 用于响应
     current_run_id = session.metadata.get("current_run_id") if session.metadata else None

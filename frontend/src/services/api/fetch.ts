@@ -128,16 +128,18 @@ export async function authFetch<T>(
     // 处理 detail 为对象或字符串的情况
     let errorMessage: string;
     if (typeof errorData.detail === "object" && errorData.detail !== null) {
-      // 如果 detail 是对象，提取 message 字段
+      // FastAPI detail may be either a historical string or the typed storage
+      // envelope. Keep the full object on the error for callers that need usage.
       errorMessage =
         errorData.detail.message || JSON.stringify(errorData.detail);
     } else {
       errorMessage =
         errorData.detail || `Request failed: ${response.statusText}`;
     }
-    const code = typeof errorData.detail === "object" && errorData.detail !== null
-      ? errorData.detail.error
-      : errorData.error;
+    const code =
+      typeof errorData.detail === "object" && errorData.detail !== null
+        ? errorData.detail.code || errorData.detail.error
+        : errorData.code || errorData.error;
     throw new ApiRequestError(
       translateBackendError(errorMessage, i18n.t.bind(i18n)),
       response.status,
