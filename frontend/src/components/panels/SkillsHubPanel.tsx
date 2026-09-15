@@ -294,8 +294,8 @@ export function SkillsHubPanel({ embedded = false }: SkillsHubPanelProps) {
     <div className="skill-theme-shell flex h-full min-h-0 flex-col">
       <PanelHeader
         className="skill-panel-header"
-        title={t("workspaceHub.title")}
-        subtitle={t("workspaceHub.subtitle")}
+        title={t("skillsHub.title")}
+        subtitle={t("skillsHub.subtitle")}
         icon={
           <Sparkles size={20} className="text-stone-600 dark:text-stone-400" />
         }
