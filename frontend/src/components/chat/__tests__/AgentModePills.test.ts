@@ -10,7 +10,9 @@ const chatViewSource = readFileSync(
 
 test("renders the API agent list with shared presentation and catalog resolvers", () => {
   assert.match(source, /sortAgentModes\(agents\)/);
-  assert.match(source, /resolveAgentModeIcon\(agent\)/);
+  // Mode icons must come from AgentModeIcon (flat lucide set), never from
+  // DynamicIcon/AgentIcon which resolve ASCII names to 3D emoji assets.
+  assert.match(source, /<AgentModeIcon agentId=\{agent\.id\}/);
   assert.match(
     source,
     /resolveAgentDisplayName\(agent,\s*i18n\.language,\s*t\)/,
