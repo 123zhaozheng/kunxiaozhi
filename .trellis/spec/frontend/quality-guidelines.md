@@ -133,6 +133,14 @@ app.mount("/emoji-assets", StaticFiles(directory=str(emoji_dir)), name="emoji-as
 
 ---
 
+## Web Crypto (`crypto.subtle`) is secure-context only
+
+**Problem**: `crypto.subtle` is `undefined` outside secure contexts (HTTPS or `http://localhost`). The intranet k8s deployment is plain `http://<node-ip>:30080`, so any code path touching `crypto.subtle` throws there (e.g. upload hashing crashed with `Cannot read properties of undefined (reading 'digest')` for months because dev/prod验证 all ran on HTTPS/localhost).
+
+**Rule**: Guard every `crypto.subtle` usage: `if (typeof crypto !== "undefined" && crypto.subtle) { native } else { fallback }`. The upload hash worker falls back to `src/workers/sha256.ts` (pure-JS FIPS 180-4, pinned by `src/workers/__tests__/sha256.test.ts` against `node:crypto`). Same caution applies to `crypto.randomUUID()` — use the `uuid()` util in insecure contexts.
+
+---
+
 ## Testing
 
 ### Framework
