@@ -58,8 +58,8 @@ function UserAvatar({
   }
 
   return (
-    <div className="flex size-[22px] items-center justify-center bg-gradient-to-br from-amber-400 to-orange-500 rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.15)]">
-      <span className="text-[10px] font-bold text-white leading-none">
+    <div className="flex size-[22px] items-center justify-center bg-[radial-gradient(circle,#ffffff_25%,#bbf7d0_100%)] rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.15)]">
+      <span className="text-[10px] font-bold text-emerald-600 leading-none">
         {username.charAt(0).toUpperCase() || "U"}
       </span>
     </div>

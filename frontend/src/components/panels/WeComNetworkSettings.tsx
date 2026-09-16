@@ -262,7 +262,7 @@ export function WeComNetworkSettings({ canManage }: Props) {
             className={inputClass}
             value={form.ca_bundle_path}
             disabled={fieldDisabled}
-            placeholder="/etc/lambchat/certs/bank-ca.pem"
+            placeholder="/etc/kunxiaozhi/certs/bank-ca.pem"
             onChange={(event) => update("ca_bundle_path", event.target.value)}
           />
           <span className="mt-1 block text-xs font-normal text-stone-400">

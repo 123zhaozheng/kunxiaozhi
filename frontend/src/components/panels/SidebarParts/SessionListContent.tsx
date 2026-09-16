@@ -499,8 +499,8 @@ export function SessionListContent({
                 draggable={false}
               />
             ) : (
-              <div className="flex w-full h-full items-center justify-center bg-gradient-to-br from-amber-400 to-orange-500 rounded-full">
-                <span className="text-xs font-semibold text-white font-serif">
+              <div className="flex w-full h-full items-center justify-center bg-[radial-gradient(circle,#ffffff_25%,#bbf7d0_100%)] rounded-full">
+                <span className="text-xs font-semibold text-emerald-600 font-serif">
                   {user?.username?.charAt(0).toUpperCase() || "U"}
                 </span>
               </div>
