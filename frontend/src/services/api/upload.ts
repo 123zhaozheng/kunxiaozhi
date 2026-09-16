@@ -2,6 +2,7 @@
  * Upload API - 文件上传
  */
 
+import i18n from "i18next";
 import type { FileCheckResult, UploadConfig, UploadResult } from "../../types";
 import { API_BASE, getFullUrl } from "./config";
 import { ApiRequestError, authFetch } from "./fetch";
@@ -155,7 +156,11 @@ export const uploadApi = {
           const envelope = getErrorEnvelope(errorData);
           reject(
             new ApiRequestError(
-              envelope.message || `Upload failed: ${xhr.statusText}`,
+              envelope.message ||
+                i18n.t("backendErrors.uploadFailed", {
+                  status: xhr.status,
+                  defaultValue: "Upload failed (HTTP {{status}})",
+                }),
               xhr.status,
               envelope.code,
               envelope.detail,
@@ -250,7 +255,11 @@ export const uploadApi = {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(
-        errorData.detail || `Upload failed: ${response.statusText}`,
+        errorData.detail ||
+          i18n.t("backendErrors.uploadFailed", {
+            status: response.status,
+            defaultValue: "Upload failed (HTTP {{status}})",
+          }),
       );
     }
 
@@ -272,7 +281,11 @@ export const uploadApi = {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(
-        errorData.detail || `Delete failed: ${response.statusText}`,
+        errorData.detail ||
+          i18n.t("backendErrors.deleteFailed", {
+            status: response.status,
+            defaultValue: "Delete failed.",
+          }),
       );
     }
 
@@ -342,7 +355,11 @@ export const uploadApi = {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(
-        errorData.detail || `Delete failed: ${response.statusText}`,
+        errorData.detail ||
+          i18n.t("backendErrors.deleteFailed", {
+            status: response.status,
+            defaultValue: "Delete failed.",
+          }),
       );
     }
 

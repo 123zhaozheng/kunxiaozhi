@@ -33,6 +33,8 @@ test("translates backend error patterns", () => {
 test("keeps generic password policy details on the safe fallback", () => {
   const policyMessages = [
     "Password must be text",
+    "Password must be 8-64 characters",
+    "Password must contain uppercase, lowercase, digit, and special characters",
     "Password must be 12-64 characters",
     "Password exceeds the 72-byte limit",
     "Password exceeds bcrypt's 72-byte limit",

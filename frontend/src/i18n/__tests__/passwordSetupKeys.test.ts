@@ -75,7 +75,7 @@ test("Chinese password setup translations do not use English fallbacks", () => {
       changePassword: "修改密码",
       changePasswordRequired: "设置新密码",
       changePasswordRequiredHint: "请设置一个高强度密码后继续。",
-      passwordPolicy: "请使用 12-64 个字符，并至少包含大写字母、小写字母、数字或符号中的三种。",
+      passwordPolicy: "请使用 8-64 个字符，并同时包含大写字母、小写字母、数字和特殊字符。",
     },
   );
 
@@ -83,7 +83,7 @@ test("Chinese password setup translations do not use English fallbacks", () => {
     "Change password",
     "Set a new password",
     "Choose a strong password to continue.",
-    "Use 12-64 characters with at least three character types.",
+    "Use 8-64 characters with uppercase, lowercase, digit, and a special character.",
   ];
   for (const key of requiredKeys) {
     assert.notEqual(

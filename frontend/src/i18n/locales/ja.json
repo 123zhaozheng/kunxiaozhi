@@ -446,9 +446,9 @@
       "open": "パスワード要件を表示",
       "close": "パスワード要件を非表示",
       "title": "パスワード要件",
-      "length": "Unicode文字を12～64文字使用し、UTF-8で72バイト以内にしてください。",
+      "length": "Unicode文字を8～64文字使用し、UTF-8で72バイト以内にしてください。",
       "characters": "先頭または末尾の空白や制御文字は使用しないでください。",
-      "composition": "大文字、小文字、数字、記号のうち3種類以上を含めてください。",
+      "composition": "大文字、小文字、数字、記号をすべて1種類以上含めてください。",
       "identifiers": "ユーザー名やメールアドレスの一部を含めないでください。",
       "currentPassword": "現在のパスワードは再利用しないでください。",
       "strength": "一般的なパスワード、同じ文字の繰り返し、123やabcなどの予測しやすい並びは避けてください。全体の強度が不足する場合があります。"
@@ -513,7 +513,7 @@
     "passwordMismatch": "パスワードが一致しません",
     "passwordPlaceholder": "パスワードを入力",
     "passwordRequired": "パスワードを入力してください",
-    "passwordTooShort": "パスワードは6文字以上である必要があります",
+    "passwordTooShort": "パスワードは8文字以上である必要があります",
     "pleaseLoginWithEmail": "登録したメールアドレスでログインして認証を完了してください",
     "pleaseWait": "お待ちください...",
     "poweredBy": "Powered by",
@@ -550,13 +550,13 @@
     "usernameOrEmailPlaceholder": "ユーザー名またはメールを入力",
     "usernamePlaceholder": "ユーザー名を入力",
     "validation": {
-      "passwordPolicy": "12～64文字で、大文字・小文字・数字・記号のうち3種類以上を含むパスワードを使用してください。",
+      "passwordPolicy": "8～64文字で、大文字・小文字・数字・特殊文字をすべて含むパスワードを使用してください。",
       "email": "メール",
       "enterEmail": "メールアドレスを入力してください",
       "enterPassword": "パスワードを入力してください",
       "enterUsername": "ユーザー名を入力してください",
       "invalidEmail": "有効なメールアドレスを入力してください",
-      "passwordMinLength": "パスワードは6文字以上である必要があります",
+      "passwordMinLength": "パスワードは8文字以上である必要があります",
       "passwordMismatch": "パスワードが一致しません"
     },
     "verificationEmailSent": "確認メールを送信しました",
@@ -585,6 +585,7 @@
     "emailTooManyRequests": "このメールへのリクエストが多すぎます。しばらくしてから再試行してください。",
     "emailVerificationRequired": "ログインする前にメールを認証してください。",
     "emptyFile": "ファイルが空です。",
+    "exportFailed": "エクスポートに失敗しました（HTTP {{status}}）",
     "favoriteUpdateFailed": "お気に入り状態の更新に失敗しました。",
     "fileNotFound": "ファイルが見つかりません。",
     "fileReadFailed": "ファイルの読み込みに失敗しました。",
@@ -634,6 +635,7 @@
     "refreshTokenMissing": "リフレッシュトークンがありません。",
     "registrationClosed": "登録は停止されています。",
     "repositoryOrBranchNotFound": "リポジトリまたはブランチが見つかりません。",
+    "requestFailed": "リクエストに失敗しました（HTTP {{status}}）",
     "resetTokenExpired": "リセットトークンの有効期限が切れています。",
     "roleNotFound": "ロールが見つかりません。",
     "sessionAccessDenied": "このセッションにアクセスする権限がありません。",
@@ -659,6 +661,7 @@
     "unauthenticated": "ユーザーは認証されていません。",
     "updateFailed": "更新に失敗しました。",
     "uploadDuplicateConflict": "アップロードに失敗しました。重複レコードがあります。",
+    "uploadFailed": "アップロードに失敗しました（HTTP {{status}}）",
     "userNotFound": "ユーザーが見つかりません。",
     "zipRequired": "ファイルはZIP形式である必要があります。"
   },
@@ -2784,7 +2787,7 @@
       "enterEmail": "メールアドレスを入力してください",
       "enterPassword": "パスワードを入力してください",
       "enterUsername": "ユーザー名を入力してください",
-      "passwordMinLength": "パスワードは6文字以上である必要があります"
+      "passwordMinLength": "パスワードは8文字以上である必要があります"
     }
   },
   "storage": {

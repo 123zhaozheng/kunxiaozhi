@@ -2,6 +2,7 @@
  * Analytics API - 全局统计看板数据接口
  */
 
+import i18n from "i18next";
 import { authenticatedRequest } from "./authenticatedRequest";
 import { authFetch } from "./fetch";
 import { API_BASE } from "./config";
@@ -85,7 +86,10 @@ async function downloadCsv(url: string, fallbackFilename: string): Promise<void>
     const detail =
       typeof (errorData as { detail?: unknown })?.detail === "string"
         ? (errorData as { detail: string }).detail
-        : `Export failed: ${response.statusText}`;
+        : i18n.t("backendErrors.exportFailed", {
+            status: response.status,
+            defaultValue: "Export failed (HTTP {{status}})",
+          });
     throw new Error(detail);
   }
   const blob = await response.blob();

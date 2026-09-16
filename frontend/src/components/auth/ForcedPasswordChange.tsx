@@ -27,7 +27,7 @@ export function ForcedPasswordChange() {
     event.preventDefault();
     setError("");
     if (passwordPolicyError(password)) {
-      setError(t("auth.validation.passwordPolicy", "Use 12-64 characters with at least three character types."));
+      setError(t("auth.validation.passwordPolicy", "Use 8-64 characters with uppercase, lowercase, digit, and a special character."));
       return;
     }
     if (confirm !== password) {

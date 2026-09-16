@@ -35,13 +35,13 @@ authApi.changePassword(oldPassword: string | null, newPassword: string): Promise
 
 - After local, OAuth, or OA tokens are stored, fetch `/api/auth/me`; the returned user flag is authoritative.
 - `ProtectedRoute` redirects every restricted user to `/auth/change-password` before permission checks or business rendering. The password route must not redirect back to itself.
-- Mirror the backend's 12-64 character, 72 UTF-8 byte, Unicode upper/lower, digit/symbol, identifier, control/whitespace policy for immediate feedback. Backend errors remain authoritative.
+- Mirror the backend's 8-64 character, 72 UTF-8 byte, Unicode upper/lower, digit/symbol, identifier, control/whitespace policy for immediate feedback. Backend errors remain authoritative.
 - Do not decode JWT/localStorage to decide the forced state.
 - HTTP 403 `PASSWORD_CHANGE_REQUIRED` is a valid restricted session, not an authentication failure. Only 401 enters the invalid-token flow.
 - After first-login or ordinary profile password change succeeds, clear access/refresh tokens and auth state across tabs, then require a fresh login because the backend incremented `credential_version`.
 - Preserve the exact OA `Accesstoken` parsing, legacy aliases, and query stripping contract.
 - Every first-login password UI key above must have an explicit non-empty value in `en`, `zh`, `ja`, `ko`, and `ru`. Do not rely on an inline English `defaultValue` to cover missing locale resources.
-- `auth.validation.passwordPolicy` is shared by registration, reset, profile, first-login, and administrator password forms. Its meaning must stay consistent: 12-64 characters and at least three of uppercase, lowercase, digit, and symbol character types.
+- `auth.validation.passwordPolicy` is shared by registration, reset, profile, first-login, and administrator password forms. Its meaning must stay consistent: 8-64 characters and all of uppercase, lowercase, digit, and symbol character types.
 - The forced-password form offers a localized secondary logout action beside the primary password-change action. The logout control uses `auth.logout`, has `type="button"`, calls the shared `useAuth().logout()` cleanup, and navigates to `/auth/login` with history replacement. It must not submit the password form or trigger password validation; the action row stacks responsively on narrow screens.
 - Registration, reset, forced first-login, profile, and administrator new-password fields render one shared `PasswordRequirementsHelp` control in the label row. Do not put it inside `PasswordInput` (the eye toggle owns that slot) or duplicate it on login, current-password, or confirmation fields. `context="profile"` may add current-password reuse guidance; other contexts show only the general rules. Help copy must stay on i18n keys in `en`, `zh`, `ja`, `ko`, and `ru`. Do not claim that a substring such as `123` is always forbidden.
 

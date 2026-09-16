@@ -446,9 +446,9 @@
       "open": "Show password requirements",
       "close": "Hide password requirements",
       "title": "Password requirements",
-      "length": "Use 12-64 Unicode characters and no more than 72 UTF-8 bytes.",
+      "length": "Use 8-64 Unicode characters and no more than 72 UTF-8 bytes.",
       "characters": "Do not use leading or trailing whitespace or control characters.",
-      "composition": "Include at least three of uppercase, lowercase, digit, and symbol.",
+      "composition": "Include at least one uppercase letter, lowercase letter, digit, and symbol.",
       "identifiers": "Do not include username or email fragments.",
       "currentPassword": "Do not reuse your current password.",
       "strength": "Avoid common passwords, repeated characters, and predictable sequences such as 123 or abc; these patterns can make the full password too weak."
@@ -513,7 +513,7 @@
     "passwordMismatch": "Passwords do not match",
     "passwordPlaceholder": "Enter password",
     "passwordRequired": "Please enter password",
-    "passwordTooShort": "Password must be at least 6 characters",
+    "passwordTooShort": "Password must be at least 8 characters",
     "pleaseLoginWithEmail": "Please login with your registered email to complete verification",
     "pleaseWait": "Please wait...",
     "poweredBy": "Powered by",
@@ -550,13 +550,13 @@
     "usernameOrEmailPlaceholder": "Enter username or email",
     "usernamePlaceholder": "Enter username",
     "validation": {
-      "passwordPolicy": "Use 12-64 characters with at least three character types.",
+      "passwordPolicy": "Use 8-64 characters with uppercase, lowercase, digit, and a special character.",
       "email": "Email",
       "enterEmail": "Please enter email",
       "enterPassword": "Please enter password",
       "enterUsername": "Please enter username",
       "invalidEmail": "Please enter a valid email address",
-      "passwordMinLength": "Password must be at least 6 characters",
+      "passwordMinLength": "Password must be at least 8 characters",
       "passwordMismatch": "Passwords do not match"
     },
     "verificationEmailSent": "Verification email sent",
@@ -585,6 +585,7 @@
     "emailTooManyRequests": "Too many requests for this email. Please try again later.",
     "emailVerificationRequired": "Please verify your email before signing in.",
     "emptyFile": "The file is empty.",
+    "exportFailed": "Export failed (HTTP {{status}})",
     "favoriteUpdateFailed": "Failed to update favorite status.",
     "fileNotFound": "File not found.",
     "fileReadFailed": "Failed to read file.",
@@ -634,6 +635,7 @@
     "refreshTokenMissing": "Refresh token is missing.",
     "registrationClosed": "Registration is closed.",
     "repositoryOrBranchNotFound": "Repository or branch not found.",
+    "requestFailed": "Request failed (HTTP {{status}})",
     "resetTokenExpired": "Reset token has expired.",
     "roleNotFound": "Role not found.",
     "sessionAccessDenied": "You do not have access to this session.",
@@ -659,6 +661,7 @@
     "unauthenticated": "User is not authenticated.",
     "updateFailed": "Update failed.",
     "uploadDuplicateConflict": "Upload failed due to a duplicate record conflict.",
+    "uploadFailed": "Upload failed (HTTP {{status}})",
     "userNotFound": "User not found.",
     "zipRequired": "File must be a ZIP archive."
   },
@@ -2989,7 +2992,7 @@
       "enterEmail": "Please enter email",
       "enterPassword": "Please enter password",
       "enterUsername": "Please enter username",
-      "passwordMinLength": "Password must be at least 6 characters"
+      "passwordMinLength": "Password must be at least 8 characters"
     }
   },
   "storage": {

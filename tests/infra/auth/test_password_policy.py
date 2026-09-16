@@ -12,6 +12,22 @@ def test_password_policy_boundaries_and_context():
     validate_password("A-little-more-secure1", username="alice", email="alice@example.com")
 
 
+def test_password_policy_requires_eight_characters_and_all_character_classes():
+    validate_password("Abcd123!")
+
+    for password in (
+        "Abcd12!",
+        "abcd1234!",
+        "ABCD1234!",
+        "Abcdefg!",
+        "Abcd12345",
+        "P@ssw0rd",
+        "12345678",
+    ):
+        with pytest.raises(PasswordPolicyError):
+            validate_password(password)
+
+
 def test_bcrypt_rejects_new_overlong_values_but_keeps_legacy_verification():
     with pytest.raises(ValueError):
         hash_password("A" * 72 + "1!")
