@@ -585,6 +585,7 @@
     "emailTooManyRequests": "このメールへのリクエストが多すぎます。しばらくしてから再試行してください。",
     "emailVerificationRequired": "ログインする前にメールを認証してください。",
     "emptyFile": "ファイルが空です。",
+    "exportFailed": "エクスポートに失敗しました（HTTP {{status}}）",
     "favoriteUpdateFailed": "お気に入り状態の更新に失敗しました。",
     "fileNotFound": "ファイルが見つかりません。",
     "fileReadFailed": "ファイルの読み込みに失敗しました。",
@@ -634,6 +635,7 @@
     "refreshTokenMissing": "リフレッシュトークンがありません。",
     "registrationClosed": "登録は停止されています。",
     "repositoryOrBranchNotFound": "リポジトリまたはブランチが見つかりません。",
+    "requestFailed": "リクエストに失敗しました（HTTP {{status}}）",
     "resetTokenExpired": "リセットトークンの有効期限が切れています。",
     "roleNotFound": "ロールが見つかりません。",
     "sessionAccessDenied": "このセッションにアクセスする権限がありません。",
@@ -659,6 +661,7 @@
     "unauthenticated": "ユーザーは認証されていません。",
     "updateFailed": "更新に失敗しました。",
     "uploadDuplicateConflict": "アップロードに失敗しました。重複レコードがあります。",
+    "uploadFailed": "アップロードに失敗しました（HTTP {{status}}）",
     "userNotFound": "ユーザーが見つかりません。",
     "zipRequired": "ファイルはZIP形式である必要があります。"
   },

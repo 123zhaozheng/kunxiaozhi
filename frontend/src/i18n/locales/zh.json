@@ -585,6 +585,7 @@
     "emailTooManyRequests": "该邮箱请求过于频繁，请稍后再试",
     "emailVerificationRequired": "请先验证邮箱后再登录",
     "emptyFile": "文件为空",
+    "exportFailed": "导出失败（HTTP {{status}}）",
     "favoriteUpdateFailed": "收藏状态更新失败",
     "fileNotFound": "文件不存在",
     "fileReadFailed": "读取文件失败",
@@ -634,6 +635,7 @@
     "refreshTokenMissing": "缺少刷新令牌",
     "registrationClosed": "注册已关闭",
     "repositoryOrBranchNotFound": "仓库或分支不存在",
+    "requestFailed": "请求失败（HTTP {{status}}）",
     "resetTokenExpired": "重置令牌已过期",
     "roleNotFound": "角色不存在",
     "sessionAccessDenied": "无权访问此会话",
@@ -659,6 +661,7 @@
     "unauthenticated": "用户未认证",
     "updateFailed": "更新失败",
     "uploadDuplicateConflict": "上传失败：记录冲突",
+    "uploadFailed": "上传失败（HTTP {{status}}）",
     "userNotFound": "用户不存在",
     "zipRequired": "文件必须是 ZIP 压缩包"
   },

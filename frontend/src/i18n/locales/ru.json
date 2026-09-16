@@ -585,6 +585,7 @@
     "emailTooManyRequests": "Слишком много запросов для этого email. Попробуйте позже.",
     "emailVerificationRequired": "Подтвердите email перед входом.",
     "emptyFile": "Файл пуст.",
+    "exportFailed": "Не удалось экспортировать данные (HTTP {{status}})",
     "favoriteUpdateFailed": "Не удалось обновить статус избранного.",
     "fileNotFound": "Файл не найден.",
     "fileReadFailed": "Не удалось прочитать файл.",
@@ -634,6 +635,7 @@
     "refreshTokenMissing": "Refresh token отсутствует.",
     "registrationClosed": "Регистрация закрыта.",
     "repositoryOrBranchNotFound": "Репозиторий или ветка не найдены.",
+    "requestFailed": "Не удалось выполнить запрос (HTTP {{status}})",
     "resetTokenExpired": "Токен сброса истёк.",
     "roleNotFound": "Роль не найдена.",
     "sessionAccessDenied": "У вас нет доступа к этой сессии.",
@@ -659,6 +661,7 @@
     "unauthenticated": "Пользователь не аутентифицирован.",
     "updateFailed": "Не удалось обновить.",
     "uploadDuplicateConflict": "Ошибка загрузки: конфликт дублирующейся записи.",
+    "uploadFailed": "Не удалось загрузить файл (HTTP {{status}})",
     "userNotFound": "Пользователь не найден.",
     "zipRequired": "Файл должен быть ZIP-архивом."
   },

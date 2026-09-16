@@ -134,7 +134,11 @@ export async function authFetch<T>(
         errorData.detail.message || JSON.stringify(errorData.detail);
     } else {
       errorMessage =
-        errorData.detail || `Request failed: ${response.statusText}`;
+        errorData.detail ||
+        i18n.t("backendErrors.requestFailed", {
+          status: response.status,
+          defaultValue: "Request failed (HTTP {{status}})",
+        });
     }
     const code =
       typeof errorData.detail === "object" && errorData.detail !== null

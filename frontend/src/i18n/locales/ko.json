@@ -585,6 +585,7 @@
     "emailTooManyRequests": "이 이메일 요청이 너무 많습니다. 나중에 다시 시도하세요.",
     "emailVerificationRequired": "로그인하기 전에 이메일을 인증하세요.",
     "emptyFile": "파일이 비어 있습니다.",
+    "exportFailed": "내보내기에 실패했습니다(HTTP {{status}})",
     "favoriteUpdateFailed": "즐겨찾기 상태 업데이트에 실패했습니다.",
     "fileNotFound": "파일을 찾을 수 없습니다.",
     "fileReadFailed": "파일 읽기에 실패했습니다.",
@@ -634,6 +635,7 @@
     "refreshTokenMissing": "새로고침 토큰이 없습니다.",
     "registrationClosed": "가입이 닫혀 있습니다.",
     "repositoryOrBranchNotFound": "저장소 또는 브랜치를 찾을 수 없습니다.",
+    "requestFailed": "요청에 실패했습니다(HTTP {{status}})",
     "resetTokenExpired": "재설정 토큰이 만료되었습니다.",
     "roleNotFound": "역할을 찾을 수 없습니다.",
     "sessionAccessDenied": "이 세션에 접근할 권한이 없습니다.",
@@ -659,6 +661,7 @@
     "unauthenticated": "사용자가 인증되지 않았습니다.",
     "updateFailed": "업데이트 실패",
     "uploadDuplicateConflict": "업로드 실패: 중복 레코드 충돌",
+    "uploadFailed": "업로드에 실패했습니다(HTTP {{status}})",
     "userNotFound": "사용자를 찾을 수 없습니다.",
     "zipRequired": "파일은 ZIP 압축 파일이어야 합니다."
   },

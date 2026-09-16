@@ -585,6 +585,7 @@
     "emailTooManyRequests": "Too many requests for this email. Please try again later.",
     "emailVerificationRequired": "Please verify your email before signing in.",
     "emptyFile": "The file is empty.",
+    "exportFailed": "Export failed (HTTP {{status}})",
     "favoriteUpdateFailed": "Failed to update favorite status.",
     "fileNotFound": "File not found.",
     "fileReadFailed": "Failed to read file.",
@@ -634,6 +635,7 @@
     "refreshTokenMissing": "Refresh token is missing.",
     "registrationClosed": "Registration is closed.",
     "repositoryOrBranchNotFound": "Repository or branch not found.",
+    "requestFailed": "Request failed (HTTP {{status}})",
     "resetTokenExpired": "Reset token has expired.",
     "roleNotFound": "Role not found.",
     "sessionAccessDenied": "You do not have access to this session.",
@@ -659,6 +661,7 @@
     "unauthenticated": "User is not authenticated.",
     "updateFailed": "Update failed.",
     "uploadDuplicateConflict": "Upload failed due to a duplicate record conflict.",
+    "uploadFailed": "Upload failed (HTTP {{status}})",
     "userNotFound": "User not found.",
     "zipRequired": "File must be a ZIP archive."
   },
