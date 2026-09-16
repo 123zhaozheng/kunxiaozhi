@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  getRandomWelcomePersonaCards,
   getSelectedPersonaStarterPrompts,
   getSelectedTeamStarterPrompts,
   getWelcomePersonaCards,
@@ -18,6 +19,30 @@ const welcomeCss = readFileSync(
   resolve(currentDir, "../../../styles/welcome.css"),
   "utf8",
 );
+const tokensCss = readFileSync(
+  resolve(currentDir, "../../../styles/tokens.css"),
+  "utf8",
+);
+
+test("uses a dedicated accessible text token for unselected mode pills", () => {
+  assert.match(tokensCss, /--theme-mode-track-text:\s*#696972;/);
+  assert.match(
+    tokensCss,
+    /\.dark\s*\{[\s\S]*--theme-mode-track-text:\s*#d6d3d1;/,
+  );
+  assert.match(welcomeCss, /color:\s*var\(--theme-mode-track-text\);/);
+});
+
+test("does not apply hover feedback to locked mode pills", () => {
+  assert.match(
+    welcomeCss,
+    /\.welcome-mode-pill:not\(:disabled\):not\(\[aria-disabled="true"\]\):hover/,
+  );
+  assert.match(
+    welcomeCss,
+    /\.welcome-mode-pill\[aria-disabled="true"\]\s*\{[\s\S]*opacity:\s*0\.58;/,
+  );
+});
 
 test("keeps every welcome persona card reachable on mobile", () => {
   const className = getWelcomePersonaCardClass(3);
@@ -55,6 +80,13 @@ test("keeps welcome content centered on mobile when suggestions are visible", ()
   assert.doesNotMatch(
     welcomeCss,
     /@media \(max-width: 639px\) \{[\s\S]*\.welcome-root\s*\{[\s\S]*justify-content: flex-start;/,
+  );
+});
+
+test("enlarges only the welcome composer textarea", () => {
+  assert.match(
+    welcomeCss,
+    /\.welcome-input textarea\s*\{[\s\S]*min-height:\s*3rem;/,
   );
 });
 
@@ -120,6 +152,39 @@ test("shows all welcome persona cards with pinned and favorite cards first", () 
   assert.deepEqual(
     cards.map((card) => card.id),
     ["pinned", "favorite", "normal"],
+  );
+});
+
+test("picks four random persona recommendations and rerolls to a different set", () => {
+  const personas = Array.from({ length: 6 }, (_, index) => ({
+    id: `persona-${index}`,
+    name: `Persona ${index}`,
+    starter_prompts: [],
+  }));
+  const first = getRandomWelcomePersonaCards(personas);
+  const second = getRandomWelcomePersonaCards(
+    personas,
+    first.map((persona) => persona.id),
+  );
+
+  assert.equal(first.length, 4);
+  assert.equal(new Set(first.map((persona) => persona.id)).size, 4);
+  assert.equal(second.length, 4);
+  assert.equal(
+    second.some((persona) => !first.some((item) => item.id === persona.id)),
+    true,
+  );
+});
+
+test("returns every available persona when fewer than four exist", () => {
+  const personas = [
+    { id: "writer", name: "Writer", starter_prompts: [] },
+    { id: "coder", name: "Coder", starter_prompts: [] },
+  ];
+
+  assert.deepEqual(
+    getRandomWelcomePersonaCards(personas).map((persona) => persona.id).sort(),
+    ["coder", "writer"],
   );
 });
 

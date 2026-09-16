@@ -610,54 +610,6 @@ export function TeamBuilderWrapper() {
                   className="team-card scb group flex h-full flex-col overflow-hidden border border-[var(--theme-border)] bg-[var(--theme-bg-card)] shadow-sm dark:shadow-none"
                   style={{ "--team-accent": colors[0] } as React.CSSProperties}
                 >
-                  {/* Gradient Banner */}
-                  <div
-                    className="scb__banner relative h-12 shrink-0"
-                    style={{
-                      background: `linear-gradient(45deg, ${colors[0]}, ${colors[1]}, ${colors[2]})`,
-                    }}
-                  >
-                    <div className="absolute left-2 top-2 flex gap-1.5">
-                      <button
-                        type="button"
-                        className={`pps-card__icon-action ${
-                          team.is_pinned
-                            ? "pps-card__icon-action--active-pin"
-                            : ""
-                        }`}
-                        title={t("personaPresets.pin", "Pin")}
-                        onClick={() =>
-                          handleTogglePreference(team, {
-                            is_pinned: !team.is_pinned,
-                          })
-                        }
-                      >
-                        <Pin size={12} />
-                      </button>
-                      <button
-                        type="button"
-                        className={`pps-card__icon-action ${
-                          team.is_favorite
-                            ? "pps-card__icon-action--active-fav"
-                            : ""
-                        }`}
-                        title={t("personaPresets.favorite", "Favorite")}
-                        onClick={() =>
-                          handleTogglePreference(team, {
-                            is_favorite: !team.is_favorite,
-                          })
-                        }
-                      >
-                        <Star size={12} />
-                      </button>
-                    </div>
-                    <div className="absolute top-2 right-2 flex gap-1.5">
-                      <span className="scb__status-pill scb__status-pill--installed">
-                        {t("team.activeStatus", { count: activeCount })}
-                      </span>
-                    </div>
-                  </div>
-
                   {/* Card Body */}
                   <div className="flex flex-1 flex-col p-4 pt-5">
                     {/* Title row with avatar */}
@@ -689,6 +641,43 @@ export function TeamBuilderWrapper() {
                             {t("team.active", { count: activeCount })}
                           </span>
                         </div>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          className={`pps-card__icon-action ${
+                            team.is_pinned
+                              ? "pps-card__icon-action--active-pin"
+                              : ""
+                          }`}
+                          title={t("personaPresets.pin", "Pin")}
+                          onClick={() =>
+                            handleTogglePreference(team, {
+                              is_pinned: !team.is_pinned,
+                            })
+                          }
+                        >
+                          <Pin size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          className={`pps-card__icon-action ${
+                            team.is_favorite
+                              ? "pps-card__icon-action--active-fav"
+                              : ""
+                          }`}
+                          title={t("personaPresets.favorite", "Favorite")}
+                          onClick={() =>
+                            handleTogglePreference(team, {
+                              is_favorite: !team.is_favorite,
+                            })
+                          }
+                        >
+                          <Star size={12} />
+                        </button>
+                        <span className="scb__status-pill scb__status-pill--installed">
+                          {t("team.activeStatus", { count: activeCount })}
+                        </span>
                       </div>
                     </div>
 

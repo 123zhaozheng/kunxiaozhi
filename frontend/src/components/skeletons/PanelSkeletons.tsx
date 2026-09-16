@@ -14,21 +14,8 @@ export function SkillsPanelSkeleton() {
         <div className="skill-grid grid auto-grid-cols gap-4">
           {Array.from({ length: 12 }).map((_, i) => (
             <div key={i} className="scb">
-              {/* Banner */}
-              <div
-                className="h-12 w-full shrink-0 relative"
-                style={{
-                  background: `linear-gradient(135deg, ${
-                    [
-                      "var(--theme-primary-light)",
-                      "color-mix(in srgb, var(--theme-primary-light) 60%, var(--theme-bg))",
-                      "var(--theme-bg-card)",
-                    ][i % 3]
-                  }, var(--theme-bg-card))`,
-                }}
-              />
               {/* Card body */}
-              <div className="flex flex-1 flex-col -mt-3 pt-5 p-4">
+              <div className="flex flex-1 flex-col pt-5 p-4">
                 {/* Icon + name */}
                 <div className="flex items-start gap-3">
                   <div className="scb__icon-ring shrink-0 skeleton-line" />
@@ -96,21 +83,8 @@ export function MarketplacePanelSkeleton() {
         <div className="grid auto-grid-cols gap-5">
           {Array.from({ length: 12 }).map((_, i) => (
             <div key={i} className="scb">
-              {/* Banner */}
-              <div
-                className="h-12 w-full shrink-0 relative"
-                style={{
-                  background: `linear-gradient(135deg, ${
-                    [
-                      "var(--theme-primary-light)",
-                      "color-mix(in srgb, var(--theme-primary-light) 60%, var(--theme-bg))",
-                      "var(--theme-bg-card)",
-                    ][i % 3]
-                  }, var(--theme-bg-card))`,
-                }}
-              />
               {/* Card body */}
-              <div className="flex flex-1 flex-col -mt-3 pt-5 p-3 sm:p-4">
+              <div className="flex flex-1 flex-col pt-5 p-3 sm:p-4">
                 <div className="flex items-start gap-2.5 sm:gap-3">
                   {/* Icon overlapping banner */}
                   <div className="scb__icon-ring shrink-0 skeleton-line" />
@@ -342,33 +316,8 @@ export function MCPPanelSkeleton() {
               key={i}
               className="pps-card group flex h-full flex-col overflow-hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-card)] shadow-sm"
             >
-              {/* Banner */}
-              <div
-                className="pps-card__banner relative h-12 shrink-0"
-                style={{
-                  background: `linear-gradient(135deg, ${
-                    [
-                      "var(--theme-primary-light)",
-                      "color-mix(in srgb, var(--theme-primary-light) 60%, var(--theme-bg))",
-                      "var(--theme-bg-card)",
-                    ][i % 3]
-                  }, var(--theme-bg-card))`,
-                }}
-              >
-                {/* Status badges on banner */}
-                <div className="absolute bottom-1.5 left-3 flex gap-1">
-                  <SkeletonLine
-                    width="w-10 sm:w-12"
-                    className="!h-3.5 !rounded-full"
-                  />
-                  <SkeletonLine
-                    width="w-8 sm:w-10"
-                    className="!h-3.5 !rounded-full"
-                  />
-                </div>
-              </div>
               {/* Card body */}
-              <div className="flex flex-1 flex-col -mt-3 pt-5 p-3">
+              <div className="flex flex-1 flex-col pt-5 p-3">
                 <div className="flex items-start gap-2.5">
                   <div className="scb__icon-ring shrink-0 skeleton-line" />
                   <div className="min-w-0 flex-1">
@@ -527,21 +476,8 @@ export function ChannelsGridSkeleton() {
           <div className="grid auto-grid-cols gap-4 p-3 sm:p-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="scb">
-                {/* Banner */}
-                <div
-                  className="h-12 w-full shrink-0 relative"
-                  style={{
-                    background: `linear-gradient(135deg, ${
-                      [
-                        "var(--theme-primary-light)",
-                        "color-mix(in srgb, var(--theme-primary-light) 60%, var(--theme-bg))",
-                        "var(--theme-bg-card)",
-                      ][i % 3]
-                    }, var(--theme-bg-card))`,
-                  }}
-                />
                 {/* Card body */}
-                <div className="flex flex-1 flex-col -mt-3 pt-5 p-4">
+                <div className="flex flex-1 flex-col pt-5 p-4">
                   {/* Icon + name */}
                   <div className="flex items-start gap-3">
                     <div className="scb__icon-ring shrink-0 skeleton-line" />

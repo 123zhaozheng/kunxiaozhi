@@ -81,6 +81,11 @@
     "selectMode": "モード選択",
     "selectModeDesc": "エージェントモードを切り替え"
   },
+  "welcomeModes": {
+    "recommendationTitle": "どの専門家を使うか迷ったら、こちらをお試しください！",
+    "shuffle": "入れ替える",
+    "lockedReason": "専門家プリセットを選択中はモードを切り替えられません。"
+  },
   "agentConfig": {
     "addFirstModel": "最初のモデルを追加",
     "addModel": "モデルを追加",
@@ -249,16 +254,16 @@
   },
   "agents": {
     "fast": {
-      "description": "サンドボックスなし、高速レスポンス、日常会話向け",
-      "name": "Fast Agent"
+      "description": "サンドボックスなしで高速応答。日常的な質問や短い会話向け",
+      "name": "クイック回答"
     },
     "search": {
-      "description": "コードインタープリター＆サンドボックス対応、複雑なタスク向け",
-      "name": "Search Agent"
+      "description": "Web検索・コードインタプリタ・サンドボックス対応。文書やデータ、複雑なタスク向け",
+      "name": "日常業務"
     },
     "team": {
-      "description": "ロールベースでサブエージェントにタスクをルーティング。チーム未設定時は単一エージェントモードにフォールバック。",
-      "name": "Team Agent"
+      "description": "役割ごとにサブエージェントを割り当て。チーム未選択時は単一エージェントにフォールバック",
+      "name": "チーム協働"
     }
   },
   "analytics": {
@@ -893,7 +898,6 @@
     "on": "オン",
     "page": "{{page}}ページ",
     "permissionRequired": "権限が必要です",
-    "poweredBy": "Clivia 搭載",
     "prev": "前へ",
     "previous": "前へ",
     "readMode": "読み取り専用",
@@ -1564,6 +1568,15 @@
     "hideCode": "コードを隠す",
     "showCode": "コードを表示"
   },
+  "workspaceHub": {
+    "subtitle": "専門家を見つけ、スキルを管理し、コネクタを設定",
+    "tabs": {
+      "connectors": "コネクタ",
+      "expert": "専門家",
+      "skills": "スキル"
+    },
+    "title": "専門家・スキル・コネクタ"
+  },
   "nav": {
     "adminMarketplace": "管理マーケット",
     "agents": "設定",
@@ -1587,7 +1600,8 @@
     "systemSettings": "システム設定",
     "team": "チームビルダー",
     "userSettings": "ユーザー管理",
-    "users": "ユーザー"
+    "users": "ユーザー",
+    "workspace": "専門家・スキル・コネクタ"
   },
   "navDesc": {
     "agents": "AIエージェントの設定と管理",
@@ -2786,7 +2800,7 @@
     "warningHint": "ストレージの大部分を使用しています。不要なファイルを削除してください。",
     "fullHint": "空き容量を確保するまで新しいアップロードはブロックされます。",
     "filesTitle": "自分のファイル",
-    "filesHint": "チャットファイルはここで削除できます。アバターとSkillは保護されています。",
+    "filesHint": "会話でアップロードしたファイルをここで確認・削除できます。",
     "loadFailed": "ストレージを読み込めません。",
     "deleteComplete": "ファイルを個人ストレージから削除しました。",
     "partialDelete": "一部のファイルを削除できませんでした。",
@@ -2814,14 +2828,10 @@
     "deleted": "削除済み",
     "retryUpload": "アップロードを再試行",
     "resultReleased": "解放済み：{{bytes}}",
-    "resultPhysical": "\u7269\u7406\u30af\u30ea\u30fc\u30f3\u30a2\u30c3\u30d7\uff1a{{status}}",
+    "resultPhysical": "物理クリーンアップ：{{status}}",
     "sources": {
       "chat": "チャット",
       "wecom": "WeCom",
-      "profile_avatar": "プロフィール画像",
-      "persona_avatar": "Persona画像",
-      "team_avatar": "チーム画像",
-      "skill": "Skill",
       "legacy": "レガシー"
     },
     "fileStatuses": {
@@ -2834,5 +2844,4 @@
       "missing": "欠落"
     }
   }
-
 }

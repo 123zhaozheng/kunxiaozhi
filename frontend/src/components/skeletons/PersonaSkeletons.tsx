@@ -9,30 +9,8 @@ export function PersonaPlazaSkeleton() {
         <div className="grid auto-grid-cols gap-4 sm:gap-5">
           {Array.from({ length: 12 }).map((_, i) => (
             <div key={i} className="scb">
-              {/* Banner */}
-              <div
-                className="h-12 w-full shrink-0 relative"
-                style={{
-                  background: `linear-gradient(135deg, ${
-                    [
-                      "var(--theme-primary-light)",
-                      "color-mix(in srgb, var(--theme-primary-light) 60%, var(--theme-bg))",
-                      "var(--theme-bg-card)",
-                    ][i % 3]
-                  }, var(--theme-bg-card))`,
-                }}
-              >
-                {/* Banner overlay — status pill + pin/favorite buttons */}
-                <div className="absolute bottom-1.5 left-3">
-                  <SkeletonLine width="w-10" className="!h-3.5 !rounded-full" />
-                </div>
-                <div className="absolute bottom-1.5 right-3 flex gap-1">
-                  <div className="skeleton-line size-5 rounded" />
-                  <div className="skeleton-line size-5 rounded" />
-                </div>
-              </div>
               {/* Card body */}
-              <div className="flex flex-1 flex-col -mt-3 pt-5 p-5">
+              <div className="flex flex-1 flex-col pt-5 p-5">
                 <div className="flex items-start gap-3">
                   <div className="scb__icon-ring shrink-0 skeleton-line" />
                   <div className="min-w-0 flex-1">

@@ -1,0 +1,40 @@
+{
+  "id": "workbuddy-ui-revamp",
+  "name": "workbuddy-ui-revamp",
+  "title": "WorkBuddy 风格 UI 改造",
+  "description": "将三个 Agent 模式中文化并前置到首页，左栏合并为专家·技能·连接器，模型选择器移入输入框并新增思考强度滑杆，整体改为白底+灰侧栏并去除卡片彩虹头。纯前端改动，不触及后端与接口契约。",
+  "status": "in_progress",
+  "dev_type": "feature",
+  "scope": "frontend",
+  "package": "frontend",
+  "priority": "P2",
+  "creator": "hoplite",
+  "assignee": "hoplite",
+  "createdAt": "2026-09-15",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": "a35f8f58",
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "frontend/src/components/chat/AgentModePills.tsx",
+    "frontend/src/components/chat/ThinkingEffortSlider.tsx",
+    "frontend/src/components/agent/AgentModeIcon.tsx",
+    "frontend/src/components/agent/agentModePresentation.ts",
+    "frontend/src/components/chat/thinkingLevels.ts",
+    "frontend/src/components/panels/SkillsHubPanel.tsx",
+    "frontend/src/components/common/SkillBaseCard.tsx",
+    "frontend/src/styles/tokens.css"
+  ],
+  "notes": "外部 review 后修复：banner !important 盖坏 4 个未迁移组件（唯一消费者就是这 4 处，规则无收益已删）；AgentModePills 测试断言过期（根因：5e1dbe4f 改图标后只重跑了 tsc/eslint/build，未重跑测试，因此此前的'零回归'结论当时已失效，现已重新全量对照）；模式药丸对比度 4.05→4.56:1；侧栏搜索按钮补 focus-visible；/workspace tab 改 replace；删除死代码 resolveAgentModeIcon。\n未接线：AgentModePills 的 lockedReason（persona 锁定态反馈），需在 ChatAppContent 传入才生效。",
+  "meta": {
+    "upstream_repo": "https://github.com/123zhaozheng/kunxiaozhi.git",
+    "base_commit": "2aafaf39321b1d2fa500b405004a289be2653497",
+    "files_changed": 61,
+    "tests": "815 total / 779 pass / 36 pre-existing failures (zero regression vs main baseline)"
+  }
+}

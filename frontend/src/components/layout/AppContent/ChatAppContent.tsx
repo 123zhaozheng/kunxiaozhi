@@ -787,9 +787,6 @@ export function ChatAppContent({
       projectManager={projectManager}
       onNewSession={handleNewSessionWithReset}
       onShowProfile={onShowProfile}
-      availableModels={filteredModels}
-      currentModelId={currentModelId}
-      onSelectModel={handleSelectModel}
       sessionId={sessionId}
       showOutlineButton={shouldShowMessageOutline(messages)}
       onToggleOutline={handleToggleOutline}
@@ -890,6 +887,9 @@ export function ChatAppContent({
           agents={agents}
           currentAgent={currentAgent}
           onSelectAgent={switchAgent}
+          availableModels={filteredModels}
+          currentModelId={currentModelId}
+          onSelectModel={handleSelectModel}
           selectedTeamId={selectedTeamId}
           onSelectTeam={selectTeam}
           approvals={approvals}

@@ -28,6 +28,8 @@ export interface WelcomeStarterPrompt {
   text: string;
 }
 
+export const WELCOME_PERSONA_RECOMMENDATION_LIMIT = 4;
+
 export function getWelcomePersonaCardClass(_index: number): string {
   return [
     "welcome-card",
@@ -105,6 +107,40 @@ export function getWelcomePersonaCards<T extends WelcomePersonaLike>(
   return typeof limit === "number" ? cards.slice(0, limit) : cards;
 }
 
+export function getRandomWelcomePersonaCards<T extends WelcomePersonaLike>(
+  personas: readonly T[],
+  previousIds: readonly string[] = [],
+): T[] {
+  const count = Math.min(
+    WELCOME_PERSONA_RECOMMENDATION_LIMIT,
+    personas.length,
+  );
+  if (count === 0) return [];
+
+  const previousIdSet = new Set(previousIds);
+  const hasDifferentSelection = (cards: T[]) =>
+    previousIds.length !== count ||
+    cards.some((card) => !previousIdSet.has(card.id));
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const shuffled = shuffle([...personas]);
+    const next = shuffled.slice(0, count);
+    if (hasDifferentSelection(next)) return next;
+  }
+
+  // A deterministic rotation keeps the shuffle useful even when random picks
+  // happen to return the same subset repeatedly.
+  const firstPreviousIndex = previousIds
+    .map((id) => personas.findIndex((persona) => persona.id === id))
+    .find((index) => index >= 0);
+  const offset =
+    firstPreviousIndex === undefined
+      ? 0
+      : (firstPreviousIndex + 1) % personas.length;
+  const rotated = [...personas.slice(offset), ...personas.slice(0, offset)];
+  return rotated.slice(0, count);
+}
+
 export function getWelcomeTeamCards<T extends WelcomeTeamLike>(
   teams: T[],
   selectedTeamId: string | null | undefined,
@@ -119,6 +155,14 @@ function timeValue(value: string | null | undefined): number {
   if (!value) return 0;
   const time = Date.parse(value);
   return Number.isFinite(time) ? time : 0;
+}
+
+function shuffle<T>(items: T[]): T[] {
+  for (let index = items.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
+  }
+  return items;
 }
 
 export function compareWelcomePersonas<

@@ -495,8 +495,8 @@ export function PersonaEditorModal({
       if (!saved) {
         toast.error(
           editingPreset
-            ? t("personaPresets.updateFailed", "角色更新失败")
-            : t("personaPresets.createFailed", "角色创建失败"),
+            ? t("personaPresets.updateFailed", "专家更新失败")
+            : t("personaPresets.createFailed", "专家创建失败"),
         );
         return;
       }
@@ -504,10 +504,10 @@ export function PersonaEditorModal({
       onClose();
       toast.success(
         editingPreset
-          ? t("personaPresets.updateSuccess", "角色「{{name}}」已更新", {
+          ? t("personaPresets.updateSuccess", "专家「{{name}}」已更新", {
               name: normalizedDraft.name,
             })
-          : t("personaPresets.createSuccess", "角色「{{name}}」已创建", {
+          : t("personaPresets.createSuccess", "专家「{{name}}」已创建", {
               name: normalizedDraft.name,
             }),
       );

@@ -69,6 +69,10 @@ class _Collection:
                 if not any(cls._matches(document, branch) for branch in expected):
                     return False
                 continue
+            if key == "$and":
+                if not all(cls._matches(document, branch) for branch in expected):
+                    return False
+                continue
             value = cls._get(document, key)
             if isinstance(expected, dict):
                 for operator, operand in expected.items():

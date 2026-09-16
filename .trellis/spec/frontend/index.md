@@ -30,6 +30,7 @@ This directory contains guidelines for frontend development. Fill in each file w
 | [SOP History Restoration](./sop-history-restoration.md) | Latest-snapshot authority, approval-envelope metadata merge, canonical ordering, and live/history parity | Filled |
 | [Composer Mention and Slash Skills](./composer-mention-slash-skills.md) | Welcome `@` popup must not hide behind card filter; `/` prefixes must-use text without changing `enabled_skills` | Filled |
 | [Analytics Dashboard](./analytics-dashboard.md) | One-fetch panel structure, pure YYYY-MM-DD params, KPI↔donut same-source accessors, contract tests | Filled |
+| [WorkBuddy Card Banner Ban](./workbuddy-card-banner.md) | No gradient banners on cards incl. pseudo-element strips; delete elements, never CSS-mask; regression test | Filled |
 
 ---
 

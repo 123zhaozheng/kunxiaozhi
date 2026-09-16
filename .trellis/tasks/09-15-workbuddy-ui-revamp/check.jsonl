@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "验收口径：lint/typecheck/build 全绿，且不得引入外部资源依赖"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "复查新增组件是否符合既有组件与样式令牌约定"}
+{"file": ".trellis/spec/frontend/composer-mention-slash-skills.md", "reason": "回归点：输入框改造后 @ 提及与 / 技能仍需正常"}

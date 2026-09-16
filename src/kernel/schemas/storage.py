@@ -54,6 +54,44 @@ class StorageSource(StrEnum):
     LEGACY = "legacy"
 
 
+# The personal storage feature covers exactly one thing: files the user uploaded
+# through a conversation. Avatars and skill files are out of scope entirely — they
+# are neither listed nor billed.
+#
+# Billable and listable MUST stay identical. A source that is billed but hidden
+# recreates the original bug this feature had: a quota filling up with bytes the
+# user can neither see nor delete. If you add a source to one set, add it to the
+# other or justify the asymmetry here.
+STORAGE_LISTABLE_SOURCES = frozenset(
+    {
+        StorageSource.CHAT,
+        StorageSource.WECOM,
+        # LEGACY rows are migrated real user uploads (migration.py tags them when
+        # the original record had no source). They are shown and billed so the
+        # user can actually reclaim that space.
+        StorageSource.LEGACY,
+    }
+)
+
+QUOTA_BILLABLE_SOURCES = STORAGE_LISTABLE_SOURCES
+
+
+def in_scope_source_clause() -> dict[str, object]:
+    """Mongo clause selecting only in-scope personal-storage rows.
+
+    Rows written before `source` was tagged have no field at all; they are real
+    user uploads, so they stay in scope rather than silently vanishing from both
+    the inventory and the usage total.
+    """
+    return {
+        "$or": [
+            {"source": {"$in": sorted(source.value for source in STORAGE_LISTABLE_SOURCES)}},
+            {"source": {"$exists": False}},
+            {"source": None},
+        ]
+    }
+
+
 class BlobStatus(StrEnum):
     STAGED = "staged"
     ACTIVE = "active"

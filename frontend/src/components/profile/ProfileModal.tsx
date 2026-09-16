@@ -179,9 +179,6 @@ export function ProfileModal({
           <span className="ml-1 opacity-70">v{versionInfo.app_version}</span>
         )}
       </span>
-      <span className="px-1.5 sm:px-2 text-[11px] font-medium text-stone-400 dark:text-stone-500 py-1 rounded-md shrink-0 font-serif">
-        {t("common.poweredBy")}
-      </span>
     </div>
   );
 

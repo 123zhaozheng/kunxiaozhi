@@ -29,6 +29,7 @@ from src.kernel.schemas.storage import (
     MAX_OPERATION_MANIFEST_BYTES,
     MAX_OPERATION_TEXT_BYTES,
     MAX_STORAGE_QUOTA_BYTES,
+    STORAGE_LISTABLE_SOURCES,
     BlobStatus,
     FileLifecycleStatus,
     OperationManifestItem,
@@ -40,6 +41,7 @@ from src.kernel.schemas.storage import (
     StorageUsage,
     StorageUsageState,
     UserFile,
+    in_scope_source_clause,
     manifest_size_bytes,
 )
 
@@ -440,8 +442,20 @@ class UserStorageQuotaStorage:
 
     async def list_files(self, user_id: str, query: StorageFileListQuery) -> tuple[list[dict[str, Any]], bool]:
         mongo_query: dict[str, Any] = {"user_id": user_id}
-        if query.source:
+        empty_source_filter = False
+        if query.source is None:
+            # Keep the inventory scope authoritative in Mongo so pagination never
+            # counts out-of-scope rows before they are filtered out. Shares one
+            # clause with usage reconciliation so the list and the total can
+            # never disagree about what is in scope.
+            mongo_query.update(in_scope_source_clause())
+        elif query.source in STORAGE_LISTABLE_SOURCES:
             mongo_query["source"] = query.source.value
+        else:
+            # An explicit out-of-scope source is a valid filter with no rows here.
+            # `$in: []` avoids disclosing whether such files exist.
+            mongo_query["source"] = {"$in": []}
+            empty_source_filter = True
         if query.category:
             mongo_query["category"] = query.category
         if query.search:
@@ -457,17 +471,28 @@ class UserStorageQuotaStorage:
                 FileLifecycleStatus.DELETED.value,
                 FileLifecycleStatus.MIGRATION_REQUIRED.value,
             ]}
-        if query.cursor:
+        if query.cursor and not empty_source_filter:
             decoded_cursor = _decode_storage_cursor(query.cursor, query)
             if decoded_cursor is None:
                 mongo_query["_id"] = {"$lt" if query.descending else "$gt": query.cursor}
             else:
                 cursor_value, cursor_id = decoded_cursor
                 comparison = "$lt" if query.descending else "$gt"
-                mongo_query["$or"] = [
+                cursor_clause = [
                     {query.sort: {comparison: cursor_value}},
                     {query.sort: cursor_value, "_id": {comparison: cursor_id}},
                 ]
+                # The scope clause already owns the top-level `$or`; assigning
+                # another one here would silently drop it and leak out-of-scope
+                # rows on every page after the first. Combine under `$and`.
+                existing_or = mongo_query.pop("$or", None)
+                if existing_or is None:
+                    mongo_query["$or"] = cursor_clause
+                else:
+                    mongo_query["$and"] = [
+                        {"$or": existing_or},
+                        {"$or": cursor_clause},
+                    ]
         direction = -1 if query.descending else 1
         cursor = self.file_collection.find(mongo_query)
         try:
@@ -799,7 +824,7 @@ class UserStorageQuotaService:
 
         active_rows = await self._active_files_for_reconciliation(user_id)
         used_bytes = sum(int(row.get("size", 0)) for row in active_rows)
-        active_count = len(active_rows)
+        active_count = self._listable_file_count(active_rows)
         uncertain = (
             any(row.get("status") == FileLifecycleStatus.MIGRATION_REQUIRED.value for row in active_rows)
             or int(initial.get("pending_bytes", 0)) > 0
@@ -839,6 +864,8 @@ class UserStorageQuotaService:
         return (await self.storage.get_usage(user_id)) or initial
 
     async def _active_files_for_reconciliation(self, user_id: str) -> list[dict[str, Any]]:
+        # Filter in the query, not in Python, so a user with many out-of-scope
+        # files does not pull their whole file set into memory.
         query = {
             "user_id": user_id,
             "status": {"$in": [
@@ -847,9 +874,19 @@ class UserStorageQuotaService:
                 FileLifecycleStatus.DELETE_PENDING.value,
                 FileLifecycleStatus.MIGRATION_REQUIRED.value,
             ]},
+            **in_scope_source_clause(),
         }
         cursor = self.storage.file_collection.find(query)
         return await _cursor_documents(cursor)
+
+    @staticmethod
+    def _is_listable_source(source: Any) -> bool:
+        value = getattr(source, "value", source)
+        return value in {item.value for item in STORAGE_LISTABLE_SOURCES}
+
+    @classmethod
+    def _listable_file_count(cls, rows: Iterable[dict[str, Any]]) -> int:
+        return sum(cls._is_listable_source(row.get("source")) for row in rows)
 
     def _usage_model(self, document: dict[str, Any], policy: StoragePolicy | None = None) -> StorageUsage:
         try:
@@ -937,7 +974,7 @@ class UserStorageQuotaService:
                 "$set": {
                     "state": target_state,
                     "used_bytes": used_bytes,
-                    "active_file_count": len(rows),
+                    "active_file_count": self._listable_file_count(rows),
                     "quota_bytes": policy.quota_bytes,
                     "reconciled_at": utc_now(),
                     "updated_at": utc_now(),
@@ -1991,6 +2028,10 @@ class UserStorageQuotaService:
             for item in operation_items
             if item.get("replaced_file_id")
         ]
+        listable_item_count = sum(self._is_listable_source(item.get("source")) for item in operation_items)
+        listable_replacement_count = sum(
+            self._is_listable_source(item.get("source")) for item in operation_items if item.get("replaced_file_id")
+        )
         state = str(operation.get("state"))
         if state == StorageOperationState.RESERVED.value:
             await self._set_operation_state(
@@ -2005,7 +2046,7 @@ class UserStorageQuotaService:
                 user_id,
                 first.operation_id,
                 commit_bytes=int(operation.get("commit_bytes", 0)),
-                active_file_delta=len(prepared),
+                active_file_delta=listable_item_count,
                 roles=effective_roles,
             )
             await self._set_operation_state(
@@ -2060,7 +2101,7 @@ class UserStorageQuotaService:
                 user_id,
                 release_operation_id,
                 int(operation.get("release_bytes", 0)),
-                active_file_delta=-len(replacement_ids),
+                active_file_delta=-listable_replacement_count,
             )
             await self._prune_committed_marker(user_id, release_operation_id)
         await self._set_operation_state(
@@ -2097,6 +2138,7 @@ class UserStorageQuotaService:
             raise StorageOperationLeaseError("operation is terminal and cannot be completed")
         if not operation:
             raise StorageOwnershipNotFoundError("operation not found")
+        listable_source = self._is_listable_source(owner.get("source"))
 
         lease_owner = prepared.lease_owner or str(operation.get("lease_owner") or uuid.uuid4().hex)
         operation = await self._claim_operation_lease(prepared.operation_id, lease_owner)
@@ -2131,6 +2173,7 @@ class UserStorageQuotaService:
                 user_id,
                 prepared.operation_id,
                 commit_bytes=(prepared.commit_bytes if prepared.commit_bytes is not None else prepared.size),
+                active_file_delta=int(listable_source),
                 roles=effective_roles,
             )
             operation = await self._set_operation_state(
@@ -2243,7 +2286,7 @@ class UserStorageQuotaService:
             user_id,
             release_operation_id,
             prepared.release_bytes,
-            active_file_delta=-1,
+            active_file_delta=-int(self._is_listable_source(owner.get("source"))),
         )
         await self._prune_committed_marker(user_id, release_operation_id)
         if operation:
@@ -2437,7 +2480,12 @@ class UserStorageQuotaService:
                     durable_operation_id = operation_id
                 else:
                     return {"file_id": file_id, "logical_status": "busy", "released_bytes": 0, "physical_status": "queued"}
-        await self.release(user_id, operation_id, int(owner.get("size", 0)))
+        await self.release(
+            user_id,
+            operation_id,
+            int(owner.get("size", 0)),
+            active_file_delta=-int(self._is_listable_source(owner.get("source"))),
+        )
         await self.storage.update_file(
             {"_id": file_id, "user_id": user_id, "status": FileLifecycleStatus.DELETE_PENDING.value},
             {"$set": {"status": FileLifecycleStatus.DELETED.value, "quota_released": True, "deleted_at": utc_now(), "updated_at": utc_now()}},

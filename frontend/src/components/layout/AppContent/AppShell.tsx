@@ -59,18 +59,6 @@ export interface AppShellProps {
   onShowProfile: () => void;
   sidebar?: ReactNode;
   children: ReactNode;
-  // Model selection
-  availableModels?:
-    | {
-        id: string;
-        value: string;
-        provider?: string;
-        label: string;
-        description?: string;
-      }[]
-    | null;
-  currentModelId?: string;
-  onSelectModel?: (modelId: string, modelValue: string) => void;
   // Share
   sessionId?: string | null;
   // Outline
@@ -90,9 +78,6 @@ export function AppShell({
   onShowProfile,
   sidebar,
   children,
-  availableModels,
-  currentModelId,
-  onSelectModel,
   sessionId,
   showOutlineButton,
   onToggleOutline,
@@ -307,9 +292,6 @@ export function AppShell({
             projectManager={projectManager}
             onNewSession={onNewSession}
             onShowProfile={onShowProfile}
-            availableModels={availableModels}
-            currentModelId={currentModelId}
-            onSelectModel={onSelectModel}
             sessionId={sessionId}
             showOutlineButton={showOutlineButton}
             onToggleOutline={onToggleOutline}

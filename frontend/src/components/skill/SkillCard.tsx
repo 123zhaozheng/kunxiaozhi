@@ -17,7 +17,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { SkillBaseCard } from "../common/SkillBaseCard";
 import { Tooltip } from "../common/Tooltip";
-import { getCategoryIcon, nameToGradient } from "../common/cardUtils";
+import { getCategoryIcon } from "../common/cardUtils";
 import type { SkillResponse } from "../../types";
 import { formatDate } from "../../utils/datetime";
 
@@ -58,7 +58,6 @@ export function SkillCard({
   selectionMode = false,
 }: SkillCardProps) {
   const { t } = useTranslation();
-  const gradient = nameToGradient(skill.name);
   const primaryTag = skill.tags[0];
   const CategoryIcon = primaryTag ? getCategoryIcon(primaryTag) : Sparkles;
   const sourceLabel = t(`skillSelector.sources.${skill.source}`, skill.source);
@@ -68,7 +67,6 @@ export function SkillCard({
       title={skill.name}
       description={skill.description || t("skills.noDescription")}
       descriptionMaxLines={2}
-      gradient={gradient}
       icon={<CategoryIcon size={20} className="text-[var(--theme-primary)]" />}
       muted={!skill.enabled}
       selected={selected}
@@ -85,6 +83,8 @@ export function SkillCard({
                 className={`pps-card__icon-action ${
                   skill.is_pinned ? "pps-card__icon-action--active-pin" : ""
                 }`}
+                aria-label={t("personaPresets.pin", "置顶")}
+                title={t("personaPresets.pin", "置顶")}
                 onClick={(event) => {
                   event.stopPropagation();
                   onTogglePreference(skill, {
@@ -101,6 +101,8 @@ export function SkillCard({
                 className={`pps-card__icon-action ${
                   skill.is_favorite ? "pps-card__icon-action--active-fav" : ""
                 }`}
+                aria-label={t("personaPresets.favorite", "收藏")}
+                title={t("personaPresets.favorite", "收藏")}
                 onClick={(event) => {
                   event.stopPropagation();
                   onTogglePreference(skill, {

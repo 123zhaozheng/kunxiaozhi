@@ -170,8 +170,8 @@ export function ProfileInfoTab() {
               onError={() => setImgError(true)}
             />
           ) : (
-            <div className="size-16 sm:size-20 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center border-4 border-white dark:border-stone-700 shadow-lg ring-2 ring-stone-100 dark:ring-stone-600">
-              <span className="text-3xl font-bold text-white font-serif">
+            <div className="size-16 sm:size-20 rounded-full bg-[radial-gradient(circle,#ffffff_25%,#bbf7d0_100%)] flex items-center justify-center border-4 border-white dark:border-stone-700 shadow-lg ring-2 ring-stone-100 dark:ring-stone-600">
+              <span className="text-3xl font-bold text-emerald-600 font-serif">
                 {user?.username?.charAt(0).toUpperCase() || "U"}
               </span>
             </div>

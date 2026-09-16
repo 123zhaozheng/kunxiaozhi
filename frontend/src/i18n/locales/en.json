@@ -81,6 +81,11 @@
     "selectMode": "Select Mode",
     "selectModeDesc": "Switch agent mode"
   },
+  "welcomeModes": {
+    "recommendationTitle": "Not sure which expert to use? Try these!",
+    "shuffle": "Shuffle",
+    "lockedReason": "Agent mode switching is unavailable while an expert preset is selected."
+  },
   "agentConfig": {
     "addFirstModel": "Add your first model",
     "addModel": "Add Model",
@@ -249,16 +254,16 @@
   },
   "agents": {
     "fast": {
-      "description": "No sandbox, faster response, for daily chat",
-      "name": "Fast Agent"
+      "description": "No sandbox, faster responses — best for everyday questions and short chats",
+      "name": "Quick Answer"
     },
     "search": {
-      "description": "With code interpreter & sandbox, for complex tasks",
-      "name": "Search Agent"
+      "description": "Web search, code interpreter and sandbox — best for documents, data and complex tasks",
+      "name": "Daily Work"
     },
     "team": {
-      "description": "Routes tasks to role-based sub-agents. Falls back to single agent mode when no team is configured.",
-      "name": "Team Agent"
+      "description": "Dispatches role-based sub-agents; falls back to a single agent when no team is selected",
+      "name": "Team Collaboration"
     }
   },
   "analytics": {
@@ -487,7 +492,7 @@
       "expired": "OA session expired. Please re-enter from the portal",
       "failedGeneric": "OA sign-in failed. Please open again from the portal",
       "howToStep1": "Sign in to the enterprise OA portal",
-      "howToStep2": "Open LambChat from the app menu",
+      "howToStep2": "Open 昆小智 from the app menu",
       "howToStep3": "You will be signed in automatically",
       "howToTitle": "Sign in via OA",
       "noAccount": "No account for this employee ID. Contact your administrator",
@@ -927,7 +932,6 @@
     "on": "On",
     "page": "Page {{page}}",
     "permissionRequired": "Permission required",
-    "poweredBy": "Powered by Clivia",
     "prev": "Previous",
     "previous": "Previous",
     "readMode": "Read-only",
@@ -1598,6 +1602,15 @@
     "hideCode": "Hide code",
     "showCode": "Show code"
   },
+  "workspaceHub": {
+    "subtitle": "Discover experts, manage skills, and configure connectors",
+    "tabs": {
+      "connectors": "Connectors",
+      "expert": "Experts",
+      "skills": "Skills"
+    },
+    "title": "Experts · Skills · Connectors"
+  },
   "nav": {
     "adminMarketplace": "Admin Marketplace",
     "agents": "Configuration",
@@ -1622,7 +1635,8 @@
     "systemSettings": "System Settings",
     "team": "Team Builder",
     "userSettings": "User Management",
-    "users": "Users"
+    "users": "Users",
+    "workspace": "Experts · Skills · Connectors"
   },
   "navDesc": {
     "agents": "Configure and manage AI agents",
@@ -2991,7 +3005,7 @@
     "warningHint": "You are using most of your storage. Remove unused files before uploading more.",
     "fullHint": "New uploads are blocked until you free storage space.",
     "filesTitle": "Your files",
-    "filesHint": "Chat files can be removed here. Avatars and Skills stay protected.",
+    "filesHint": "Files uploaded in conversations appear here and can be removed.",
     "loadFailed": "Unable to load storage.",
     "deleteComplete": "File removed from your storage.",
     "partialDelete": "Some files could not be removed.",
@@ -3023,10 +3037,6 @@
     "sources": {
       "chat": "Chat",
       "wecom": "WeCom",
-      "profile_avatar": "Profile avatar",
-      "persona_avatar": "Persona avatar",
-      "team_avatar": "Team avatar",
-      "skill": "Skill",
       "legacy": "Legacy"
     },
     "fileStatuses": {
@@ -3039,5 +3049,4 @@
       "missing": "Missing"
     }
   }
-
 }

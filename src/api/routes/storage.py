@@ -18,6 +18,7 @@ from src.infra.storage.user_storage import (
     UserStorageQuotaService,
     encode_storage_cursor,
 )
+from src.infra.user.storage import UserStorage
 from src.kernel.schemas.storage import (
     BatchDeleteRequest,
     FileLifecycleStatus,
@@ -202,6 +203,30 @@ async def set_storage_quota(
         if body.quota_mb is None:
             return await service.clear_user_quota(user_id, roles=current_user.roles)
         return await service.set_user_quota(user_id, body.quota_mb * 1024 * 1024)
+    except StorageDomainError as exc:
+        raise _storage_http_error(exc) from exc
+
+
+@router.post("/admin/users/{user_id}/reconcile", response_model=StorageUsage)
+async def reconcile_storage_user(
+    user_id: str,
+    current_user: TokenPayload = Depends(get_current_user_required),
+    _: None = Depends(require_permissions("user:write")),
+    service: UserStorageQuotaService = Depends(get_storage_service),
+) -> StorageUsage:
+    """Recompute one user's ledger from their current in-scope files.
+
+    Needed because a ledger already in READY state is never recomputed on its
+    own, so users provisioned before a scope change keep a stale total.
+    """
+    try:
+        # Reconciliation rewrites quota_bytes from resolve_policy(), so it must
+        # run with the TARGET user's roles. Passing the caller's roles here would
+        # overwrite the user's role-derived quota with the admin's.
+        target = await UserStorage().get_by_id(user_id)
+        if target is None:
+            raise HTTPException(status_code=404, detail="user not found")
+        return await service.reconcile_user(user_id, roles=target.roles or ())
     except StorageDomainError as exc:
         raise _storage_http_error(exc) from exc
 

@@ -10,7 +10,7 @@ import {
   getEmojiAvatarUrl,
 } from "./personaAvatar";
 import { getPersonaPresetCapabilities } from "./personaPresetAccess";
-import { getCategoryIcon, nameToGradient } from "../common/cardUtils";
+import { getCategoryIcon } from "../common/cardUtils";
 import { WeComConnectionIndicator } from "./WeComConnectionIndicator";
 
 interface PersonaPresetCardProps {
@@ -58,7 +58,6 @@ export function PersonaPresetCard({
   onAnalyze,
 }: PersonaPresetCardProps) {
   const { t } = useTranslation();
-  const gradient = nameToGradient(preset.name);
   const primaryTag = preset.tags[0];
   const preferredAgentId = resolvePersonaAgentId(
     preset.preferred_agent_id ?? DEFAULT_PREFERRED_AGENT_ID,
@@ -72,71 +71,8 @@ export function PersonaPresetCard({
   const showWeComLive = showWeComBadge && Boolean(canManageChannel);
 
   return (
-    <div className="scb group flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-card)] shadow-sm dark:shadow-none">
-      {/* Gradient Banner */}
-      <div
-        className="scb__banner relative h-12 shrink-0"
-        style={{
-          background: `linear-gradient(45deg, ${gradient[0]}, ${gradient[1]}, ${gradient[2]})`,
-        }}
-      >
-        <div className="absolute top-2 right-2 flex flex-wrap items-center justify-end gap-1.5">
-          {showWeComBadge && (
-            <span className="scb__status-pill scb__status-pill--inactive pps-wecom-badge">
-              {t("personaPresets.wecom.connection.badge", "已接企微")}
-            </span>
-          )}
-          {showWeComLive && (
-            <WeComConnectionIndicator
-              status={wecomStatus}
-              reconnecting={wecomReconnecting}
-              onReconnect={
-                onWeComReconnect
-                  ? () => onWeComReconnect(preset)
-                  : undefined
-              }
-            />
-          )}
-          {selected && (
-            <span className="scb__status-pill scb__status-pill--installed">
-              {t("personaPresets.using", "使用中")}
-            </span>
-          )}
-        </div>
-        {onTogglePreference && (
-          <div className="absolute left-2 top-2 flex gap-1.5">
-            <button
-              type="button"
-              className={`pps-card__icon-action ${
-                preset.is_pinned ? "pps-card__icon-action--active-pin" : ""
-              }`}
-              title={t("personaPresets.pin", "置顶")}
-              onClick={() =>
-                onTogglePreference(preset, { is_pinned: !preset.is_pinned })
-              }
-            >
-              <Pin size={12} />
-            </button>
-            <button
-              type="button"
-              className={`pps-card__icon-action ${
-                preset.is_favorite ? "pps-card__icon-action--active-fav" : ""
-              }`}
-              title={t("personaPresets.favorite", "收藏")}
-              onClick={() =>
-                onTogglePreference(preset, {
-                  is_favorite: !preset.is_favorite,
-                })
-              }
-            >
-              <Star size={12} />
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Card Body */}
-      <div className="flex flex-1 flex-col p-4 pt-5">
+    <div className="scb group flex h-full flex-col overflow-hidden bg-[var(--theme-bg-card)]">
+      <div className="flex flex-1 flex-col p-4 sm:p-5">
         {/* Title row with avatar or icon */}
         <div className="flex items-start gap-3">
           {isPersonaImageAvatar(preset.avatar) ||
@@ -172,7 +108,7 @@ export function PersonaPresetCard({
             >
               {preset.name}
             </h3>
-            <div className="mt-1.5 flex items-center gap-2 text-[11px] text-[var(--theme-text-secondary)]">
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--theme-text-secondary)]">
               <span>
                 {preset.scope === "global"
                   ? t("personaPresets.official", "官方")
@@ -205,6 +141,27 @@ export function PersonaPresetCard({
                   {t(`personaPresets.agent.${preferredAgentId}`, preferredAgentId)}
                 </span>
               </>
+              {showWeComBadge && (
+                <span className="scb__status-pill scb__status-pill--inactive pps-wecom-badge">
+                  {t("personaPresets.wecom.connection.badge", "已接企微")}
+                </span>
+              )}
+              {showWeComLive && (
+                <WeComConnectionIndicator
+                  status={wecomStatus}
+                  reconnecting={wecomReconnecting}
+                  onReconnect={
+                    onWeComReconnect
+                      ? () => onWeComReconnect(preset)
+                      : undefined
+                  }
+                />
+              )}
+              {selected && (
+                <span className="scb__status-pill scb__status-pill--installed">
+                  {t("personaPresets.using", "使用中")}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -251,9 +208,47 @@ export function PersonaPresetCard({
 
         {/* Meta & Actions */}
         <div className="mt-4 flex items-center justify-between gap-2 border-t border-[var(--theme-border)] pt-3">
-          <div className="flex items-center gap-2 text-[11px] text-[var(--theme-text-secondary)]">
+          <div className="flex min-w-0 items-center gap-1.5">
+            {onTogglePreference && (
+              <>
+                <button
+                  type="button"
+                  className={`pps-card__icon-action ${
+                    preset.is_pinned
+                      ? "pps-card__icon-action--active-pin"
+                      : ""
+                  }`}
+                  aria-label={t("personaPresets.pin", "置顶")}
+                  title={t("personaPresets.pin", "置顶")}
+                  onClick={() =>
+                    onTogglePreference(preset, {
+                      is_pinned: !preset.is_pinned,
+                    })
+                  }
+                >
+                  <Pin size={12} />
+                </button>
+                <button
+                  type="button"
+                  className={`pps-card__icon-action ${
+                    preset.is_favorite
+                      ? "pps-card__icon-action--active-fav"
+                      : ""
+                  }`}
+                  aria-label={t("personaPresets.favorite", "收藏")}
+                  title={t("personaPresets.favorite", "收藏")}
+                  onClick={() =>
+                    onTogglePreference(preset, {
+                      is_favorite: !preset.is_favorite,
+                    })
+                  }
+                >
+                  <Star size={12} />
+                </button>
+              </>
+            )}
             {preset.skill_names.length > 0 && (
-              <span className="inline-flex items-center gap-1">
+              <span className="ml-1 inline-flex items-center gap-1 text-[11px] text-[var(--theme-text-secondary)]">
                 <Sparkles size={11} />
                 {preset.skill_names.length}{" "}
                 {t("personaPresets.skillsCount", "skills")}

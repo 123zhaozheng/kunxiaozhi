@@ -58,6 +58,9 @@ export const AgentOptionButton = memo(function AgentOptionButton({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showDropdown, externalOnOpenChange, setShowDropdown]);
 
+  // Thinking uses the composer model popover slider, not this legacy control.
+  if (_optionKey === "enable_thinking") return null;
+
   if (externalOnOpenChange) {
     if (option.type === "boolean") return null;
     const options = option.options;

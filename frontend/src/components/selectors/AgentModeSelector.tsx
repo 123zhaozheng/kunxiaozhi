@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Bot, X } from "lucide-react";
 import i18n from "../../i18n";
 import { useSwipeToClose } from "../../hooks/useSwipeToClose";
-import { AgentIcon } from "../agent/AgentIcon";
+import { AgentModeIcon } from "../agent/AgentModeIcon";
 import {
   resolveAgentDescription,
   resolveAgentDisplayName,
@@ -94,10 +94,10 @@ export function AgentModeSelector({
                 >
                   <div className="absolute left-1/2 -translate-x-1/2 top-2 w-10 h-1 rounded-full bg-stone-300 dark:bg-stone-600 sm:hidden" />
                   <div className="flex items-center gap-3 mt-2 sm:mt-0">
-                    <div className="size-9 sm:size-10 rounded-xl bg-gradient-to-br from-stone-100 to-stone-200 dark:from-amber-500/20 dark:to-orange-500/20 flex items-center justify-center">
+                    <div className="size-9 sm:size-10 rounded-xl bg-[var(--theme-bg-subtle)] border border-[var(--theme-border)] flex items-center justify-center">
                       <Bot
                         size={16}
-                        className="text-stone-500 dark:text-amber-400 sm:w-[18px] sm:h-[18px]"
+                        className="text-[var(--theme-text-secondary)] sm:w-[18px] sm:h-[18px]"
                       />
                     </div>
                     <div>
@@ -140,7 +140,7 @@ export function AgentModeSelector({
                         type="button"
                         className={`flex w-full items-center gap-3 px-3 sm:px-3.5 py-3 sm:py-3.5 rounded-xl text-left transition-all duration-200 ${
                           isActive
-                            ? "bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/15"
+                            ? "bg-[var(--theme-bg-subtle)] hover:bg-[var(--theme-sidebar-hover)]"
                             : "hover:bg-stone-50 dark:hover:bg-stone-700/30 active:bg-stone-100/80 dark:active:bg-stone-600/40"
                         }`}
                         onClick={() => {
@@ -149,21 +149,21 @@ export function AgentModeSelector({
                         }}
                       >
                         <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 bg-white dark:bg-stone-700 shadow-sm border border-stone-100 dark:border-stone-600 overflow-hidden">
-                          <AgentIcon
-                            icon={agent.icon || "Bot"}
-                            size={24}
-                            className={`sm:w-[26px] sm:h-[26px] ${
+                          <AgentModeIcon
+                            agentId={agent.id}
+                            size={22}
+                            className={
                               isActive
-                                ? "text-amber-600 dark:text-amber-400"
-                                : "text-stone-500 dark:text-stone-400"
-                            }`}
+                                ? "text-[var(--theme-text)]"
+                                : "text-[var(--theme-text-secondary)]"
+                            }
                           />
                         </div>
                         <div className="flex-1 min-w-0">
                           <span
                             className={`text-[13px] sm:text-sm font-medium truncate block ${
                               isActive
-                                ? "text-amber-700 dark:text-amber-400"
+                                ? "text-[var(--theme-text)]"
                                 : "text-stone-700 dark:text-stone-200"
                             }`}
                           >
@@ -176,14 +176,14 @@ export function AgentModeSelector({
                           )}
                         </div>
                         {isActive && (
-                          <div className="w-5 h-5 rounded-full bg-amber-500 dark:bg-amber-500 flex items-center justify-center shrink-0">
+                          <div className="w-5 h-5 rounded-full bg-[var(--theme-mode-active)] flex items-center justify-center shrink-0">
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
                               width="12"
                               height="12"
                               viewBox="0 0 24 24"
                               fill="none"
-                              stroke="white"
+                              stroke="var(--theme-mode-active-text)"
                               strokeWidth="3"
                               strokeLinecap="round"
                               strokeLinejoin="round"
@@ -222,7 +222,7 @@ export function AgentModeSelector({
         className="chat-tool-btn"
         title={currentName}
       >
-        <AgentIcon icon={current?.icon || "Bot"} size={18} />
+        <AgentModeIcon agentId={current?.id ?? ""} size={18} />
       </button>
 
       {open &&
@@ -251,10 +251,10 @@ export function AgentModeSelector({
                 >
                   <div className="absolute left-1/2 -translate-x-1/2 top-2 w-10 h-1 rounded-full bg-stone-300 dark:bg-stone-600 sm:hidden" />
                   <div className="flex items-center gap-3 mt-2 sm:mt-0">
-                    <div className="size-9 sm:size-10 rounded-xl bg-gradient-to-br from-stone-100 to-stone-200 dark:from-amber-500/20 dark:to-orange-500/20 flex items-center justify-center">
+                    <div className="size-9 sm:size-10 rounded-xl bg-[var(--theme-bg-subtle)] border border-[var(--theme-border)] flex items-center justify-center">
                       <Bot
                         size={16}
-                        className="text-stone-500 dark:text-amber-400 sm:w-[18px] sm:h-[18px]"
+                        className="text-[var(--theme-text-secondary)] sm:w-[18px] sm:h-[18px]"
                       />
                     </div>
                     <div>
@@ -297,7 +297,7 @@ export function AgentModeSelector({
                         type="button"
                         className={`flex w-full items-center gap-3 px-3 sm:px-3.5 py-3 sm:py-3.5 rounded-xl text-left transition-all duration-200 ${
                           isActive
-                            ? "bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/15"
+                            ? "bg-[var(--theme-bg-subtle)] hover:bg-[var(--theme-sidebar-hover)]"
                             : "hover:bg-stone-50 dark:hover:bg-stone-700/30 active:bg-stone-100/80 dark:active:bg-stone-600/40"
                         }`}
                         onClick={() => {
@@ -306,21 +306,21 @@ export function AgentModeSelector({
                         }}
                       >
                         <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 bg-white dark:bg-stone-700 shadow-sm border border-stone-100 dark:border-stone-600 overflow-hidden">
-                          <AgentIcon
-                            icon={agent.icon || "Bot"}
-                            size={24}
-                            className={`sm:w-[26px] sm:h-[26px] ${
+                          <AgentModeIcon
+                            agentId={agent.id}
+                            size={22}
+                            className={
                               isActive
-                                ? "text-amber-600 dark:text-amber-400"
-                                : "text-stone-500 dark:text-stone-400"
-                            }`}
+                                ? "text-[var(--theme-text)]"
+                                : "text-[var(--theme-text-secondary)]"
+                            }
                           />
                         </div>
                         <div className="flex-1 min-w-0">
                           <span
                             className={`text-[13px] sm:text-sm font-medium truncate block ${
                               isActive
-                                ? "text-amber-700 dark:text-amber-400"
+                                ? "text-[var(--theme-text)]"
                                 : "text-stone-700 dark:text-stone-200"
                             }`}
                           >
@@ -333,14 +333,14 @@ export function AgentModeSelector({
                           )}
                         </div>
                         {isActive && (
-                          <div className="w-5 h-5 rounded-full bg-amber-500 dark:bg-amber-500 flex items-center justify-center shrink-0">
+                          <div className="w-5 h-5 rounded-full bg-[var(--theme-mode-active)] flex items-center justify-center shrink-0">
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
                               width="12"
                               height="12"
                               viewBox="0 0 24 24"
                               fill="none"
-                              stroke="white"
+                              stroke="var(--theme-mode-active-text)"
                               strokeWidth="3"
                               strokeLinecap="round"
                               strokeLinejoin="round"

@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Plus, Search, Settings2, Sparkles, UsersRound, X } from "lucide-react";
-import { nameToGradient } from "../panels/MarketplacePanel/constants";
 import { teamApi } from "../../services/api/team";
 import type { Team } from "../../types/team";
 import { TeamAvatar } from "./TeamAvatar";
@@ -219,7 +218,6 @@ export function TeamPickerModal({
             <div className="grid auto-grid-cols gap-3">
               {filteredTeams.map((team, index) => {
                 const selected = selectedTeamId === team.id;
-                const gradient = nameToGradient(team.name);
                 const activeCount = team.members.filter(
                   (m) => m.enabled,
                 ).length;
@@ -229,18 +227,6 @@ export function TeamPickerModal({
                     className="pps-card group flex h-full flex-col overflow-hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-card)] shadow-sm dark:shadow-none"
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
-                    <div
-                      className="pps-card__banner relative h-12 shrink-0"
-                      style={{
-                        background: `linear-gradient(45deg, ${gradient[0]}, ${gradient[1]}, ${gradient[2]})`,
-                      }}
-                    >
-                      {selected && (
-                        <span className="scb__status-pill scb__status-pill--installed absolute top-1.5 right-2">
-                          {t("personaPresets.using", "使用中")}
-                        </span>
-                      )}
-                    </div>
                     <div className="flex flex-1 flex-col p-4 pt-5">
                       <div className="flex items-start gap-3">
                         <TeamAvatar
@@ -263,6 +249,11 @@ export function TeamPickerModal({
                             </span>
                           </div>
                         </div>
+                        {selected && (
+                          <span className="scb__status-pill scb__status-pill--installed shrink-0">
+                            {t("personaPresets.using", "使用中")}
+                          </span>
+                        )}
                       </div>
 
                       <p className="mt-3 text-[13px] leading-relaxed text-[var(--theme-text-secondary)] line-clamp-2 min-h-[3.25em]">

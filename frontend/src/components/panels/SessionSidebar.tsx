@@ -15,11 +15,10 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
-import { Server, Brain, Sparkles } from "lucide-react";
+import { Brain } from "lucide-react";
 import { sessionApi, type BackendSession } from "../../services/api";
 import { useAuth } from "../../hooks/useAuth";
 import { useSettingsContext } from "../../contexts/SettingsContext";
-import { Permission } from "../../types";
 import { useProjectSessionList } from "../../hooks/useSession";
 import { useProjectManager } from "../../hooks/useProjectManager";
 import { useTouchDrag } from "../../hooks/useTouchDrag";
@@ -113,25 +112,10 @@ export const SessionSidebar = forwardRef<
     top: number;
     left: number;
   } | null>(null);
-  const { hasAnyPermission } = useAuth();
   const { enableMemory } = useSettingsContext();
 
-  const canReadMCP = hasAnyPermission([Permission.MCP_READ]);
   const canReadMemory = enableMemory;
-  const canReadSkills = hasAnyPermission([Permission.SKILL_READ]);
   const moreMenuFeatureItems = [
-    {
-      path: "/skills",
-      label: t("nav.skills"),
-      icon: Sparkles,
-      show: canReadSkills,
-    },
-    {
-      path: "/mcp",
-      label: t("nav.mcp"),
-      icon: Server,
-      show: canReadMCP,
-    },
     {
       path: "/memory",
       label: t("nav.memory"),
@@ -764,9 +748,8 @@ export const SessionSidebar = forwardRef<
             }}
             onOpenRecentChats={() => setIsRecentChatsOpen(true)}
             onOpenFileLibrary={() => navigate("/files")}
-            onOpenPersonaPlaza={() => navigate("/persona")}
+            onOpenWorkspace={() => navigate("/workspace")}
             onOpenTeamBuilder={() => navigate("/team")}
-            onOpenSkills={() => navigate("/skills")}
             hasMoreMenuItems={hasMoreMenuItems}
             onToggleMoreMenu={() => {
               setIsMoreMenuOpen((prev) => !prev);

@@ -13,12 +13,65 @@
 
 /* ── Content layers ── */
 .welcome-greeting,
-.welcome-subtitle,
 .welcome-input,
 .welcome-suggestions {
   position: relative;
   z-index: 1;
   flex-shrink: 0;
+}
+
+.welcome-mode-pills {
+  margin-top: 0.625rem;
+}
+
+/* Grey track holding all modes; only the active one gets a filled pill. */
+.welcome-mode-track {
+  background-color: var(--theme-mode-track);
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.welcome-mode-track::-webkit-scrollbar {
+  display: none;
+}
+
+.welcome-mode-pill {
+  min-height: 2.25rem;
+  white-space: nowrap;
+  border: 0;
+  background-color: transparent;
+  color: var(--theme-mode-track-text);
+}
+
+.welcome-mode-pill:not(:disabled):not([aria-disabled="true"]):hover {
+  color: var(--theme-text);
+}
+
+.welcome-mode-pill[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.welcome-mode-pill[data-active="true"] {
+  background-color: var(--theme-mode-active);
+  color: var(--theme-mode-active-text);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--theme-text) 14%, transparent);
+}
+
+.welcome-mode-pill[data-active="true"]:not(:disabled):not(
+    [aria-disabled="true"]
+  ):hover {
+  color: var(--theme-mode-active-text);
+}
+
+.welcome-input textarea {
+  min-height: 3rem;
+}
+
+@media (min-width: 640px) {
+  .welcome-input textarea {
+    min-height: 3.25rem;
+  }
 }
 
 /* ── Icon subtle pulse ── */

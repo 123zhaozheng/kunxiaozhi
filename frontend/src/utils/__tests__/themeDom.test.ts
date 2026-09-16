@@ -61,7 +61,7 @@ test("applyThemeToDocument synchronously toggles dark class and browser chrome",
   applyThemeToDocument("light", documentLike);
 
   assert.equal(classes.has("dark"), false);
-  assert.equal(metaValues.get('meta[name="theme-color"]:default'), "#f5f5f4");
+  assert.equal(metaValues.get('meta[name="theme-color"]:default'), "#ffffff");
   assert.equal(
     metaValues.get('meta[name="apple-mobile-web-app-status-bar-style"]'),
     "default",

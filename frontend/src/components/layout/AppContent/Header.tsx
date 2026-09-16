@@ -14,12 +14,10 @@ import {
   ChevronLeft,
   ListTree,
 } from "lucide-react";
-import { ModelSelector } from "../../agent/ModelSelector";
 import { UserMenu } from "../UserMenu";
 import { ShareDialog } from "../../share/ShareDialog";
 import { useAuth } from "../../../hooks/useAuth";
 import { useTheme } from "../../../contexts/ThemeContext";
-import { useSettingsContext } from "../../../contexts/SettingsContext";
 import { authApi } from "../../../services/api";
 import { notificationApi } from "../../../services/api/notification";
 import { useSessionTitle } from "../../../hooks/useSessionTitle";
@@ -36,17 +34,6 @@ interface HeaderProps {
   projectManager: { projects: Project[] };
   onNewSession: () => void;
   onShowProfile: () => void;
-  availableModels?:
-    | {
-        id: string;
-        value: string;
-        provider?: string;
-        label: string;
-        description?: string;
-      }[]
-    | null;
-  currentModelId?: string;
-  onSelectModel?: (modelId: string, modelValue: string) => void;
   sessionId?: string | null;
   onToggleOutline?: () => void;
   showOutlineButton?: boolean;
@@ -59,9 +46,6 @@ export function Header({
   projectManager,
   onNewSession,
   onShowProfile,
-  availableModels,
-  currentModelId,
-  onSelectModel,
   sessionId,
   onToggleOutline,
   showOutlineButton,
@@ -70,7 +54,6 @@ export function Header({
   const navigate = useNavigate();
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const { pinnedModelIds, togglePinnedModel } = useSettingsContext();
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
@@ -170,18 +153,6 @@ export function Header({
                   />
                 </svg>
               </button>
-
-              {availableModels &&
-                availableModels.length > 0 &&
-                onSelectModel && (
-                  <ModelSelector
-                    models={availableModels}
-                    currentModelId={currentModelId || ""}
-                    pinnedModelIds={pinnedModelIds}
-                    onTogglePinnedModel={togglePinnedModel}
-                    onSelectModel={onSelectModel}
-                  />
-                )}
 
               {currentProjectId &&
                 (() => {
