@@ -446,9 +446,9 @@
       "open": "查看密码要求",
       "close": "隐藏密码要求",
       "title": "密码要求",
-      "length": "请使用 12-64 个 Unicode 字符，且 UTF-8 编码不超过 72 个字节。",
+      "length": "请使用 8-64 个 Unicode 字符，且 UTF-8 编码不超过 72 个字节。",
       "characters": "请勿使用首尾空白字符或控制字符。",
-      "composition": "至少包含大写字母、小写字母、数字和符号中的三种。",
+      "composition": "必须同时包含大写字母、小写字母、数字和符号。",
       "identifiers": "请勿包含用户名或邮箱中的片段。",
       "currentPassword": "新密码不能与当前密码相同。",
       "strength": "请避免常见密码、重复字符以及 123 或 abc 等可预测序列；这些模式可能导致完整密码强度不足。"
@@ -513,7 +513,7 @@
     "passwordMismatch": "两次输入的密码不一致",
     "passwordPlaceholder": "请输入密码",
     "passwordRequired": "请输入密码",
-    "passwordTooShort": "密码长度至少为 6 个字符",
+    "passwordTooShort": "密码长度至少为 8 个字符",
     "pleaseLoginWithEmail": "请使用注册邮箱登录以完成验证",
     "pleaseWait": "请稍候...",
     "poweredBy": "Powered by",
@@ -550,13 +550,13 @@
     "usernameOrEmailPlaceholder": "请输入用户名或邮箱",
     "usernamePlaceholder": "请输入用户名",
     "validation": {
-      "passwordPolicy": "请使用 12-64 个字符，并至少包含大写字母、小写字母、数字或符号中的三种。",
+      "passwordPolicy": "请使用 8-64 个字符，并同时包含大写字母、小写字母、数字和特殊字符。",
       "email": "邮箱",
       "enterEmail": "请输入邮箱",
       "enterPassword": "请输入密码",
       "enterUsername": "请输入用户名",
       "invalidEmail": "请输入有效的邮箱地址",
-      "passwordMinLength": "密码至少需要6个字符",
+      "passwordMinLength": "密码至少需要8个字符",
       "passwordMismatch": "两次输入的密码不一致"
     },
     "verificationEmailSent": "验证邮件已发送",
@@ -2989,7 +2989,7 @@
       "enterEmail": "请输入邮箱",
       "enterPassword": "请输入密码",
       "enterUsername": "请输入用户名",
-      "passwordMinLength": "密码至少需要6个字符"
+      "passwordMinLength": "密码至少需要8个字符"
     }
   },
   "storage": {

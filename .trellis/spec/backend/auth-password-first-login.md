@@ -50,8 +50,8 @@ TokenPayload.credential_version: int = 0 for legacy tokens
 
 ### 3. Contracts
 
-- Human-selected passwords are 12-64 Unicode characters, at most 72 UTF-8 bytes, and contain at least three of uppercase, lowercase, digit, and non-whitespace symbol.
-- Reject control characters, leading/trailing whitespace, account identifiers of at least three characters, the current password, and offline `zxcvbn` scores 0-1. Hash the original value; normalization is comparison-only.
+- Human-selected passwords are 8-64 Unicode characters, at most 72 UTF-8 bytes, and contain uppercase, lowercase, digit, and non-whitespace symbol characters.
+- Reject control characters, leading/trailing whitespace, account identifiers of at least three characters, the current password, and offline `zxcvbn` score 0. Hash the original value; normalization is comparison-only.
 - Generated OA/OAuth secrets may bypass human policy only through the explicit internal `generated_password` path. Every new local/admin/OAuth/OA account persists `must_change_password=true`.
 - Missing fields on legacy users resolve to `must_change_password=false`, `credential_version=0`. Do not lock existing users during rollout.
 - Authentication ordering is `JWT -> idle session -> current user -> credential_version -> must_change_password -> RBAC/business`.
@@ -84,7 +84,7 @@ TokenPayload.credential_version: int = 0 for legacy tokens
 
 ### 6. Tests Required
 
-- Password policy: 12/64 characters, 72/73 UTF-8 bytes, Unicode casing, controls/whitespace, three-of-four classes, identifiers, zxcvbn, and legacy bcrypt truncation compatibility.
+- Password policy: 8/64 characters, 72/73 UTF-8 bytes, Unicode casing, controls/whitespace, all four character classes, identifiers, zxcvbn, and legacy bcrypt truncation compatibility.
 - Account channels: local/admin/OAuth/OA new users set the flag; generated-secret bypass cannot be used by caller-supplied passwords.
 - Dependencies/refresh: request-state and token-cache paths still check version/flag; 403 is distinct from 401/503.
 - Change/reset: old-password rules, atomic expected-version update, reset expiry/replay, flag clear, version increment, and token invalidation.

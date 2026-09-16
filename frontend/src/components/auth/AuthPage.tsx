@@ -246,7 +246,7 @@ export function AuthPage({ onSuccess, initialMode }: AuthPageProps) {
       setError(
         t(
           "auth.validation.passwordPolicy",
-          "Use 12-64 characters with at least three character types.",
+          "Use 8-64 characters with uppercase, lowercase, digit, and a special character.",
         ),
       );
       return;

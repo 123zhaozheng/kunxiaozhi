@@ -124,6 +124,10 @@ const BACKEND_ERROR_KEYS: Record<string, string> = {
 
   // Password policy details (the backend remains authoritative).
   "Password must be text": "backendErrors.passwordPolicy",
+  "Password must be 8-64 characters": "backendErrors.passwordPolicy",
+  "Password must contain uppercase, lowercase, digit, and special characters":
+    "backendErrors.passwordPolicy",
+  // Keep legacy keys during the independent frontend/backend rollout window.
   "Password must be 12-64 characters": "backendErrors.passwordPolicy",
   "Password exceeds the 72-byte limit": "backendErrors.passwordPolicy",
   "Password exceeds bcrypt's 72-byte limit": "backendErrors.passwordPolicy",

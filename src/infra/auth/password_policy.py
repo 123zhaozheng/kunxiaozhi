@@ -6,7 +6,7 @@ import unicodedata
 
 from zxcvbn import zxcvbn
 
-MIN_PASSWORD_LENGTH = 12
+MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 64
 MAX_PASSWORD_BYTES = 72
 
@@ -26,7 +26,7 @@ def validate_password(
     if not isinstance(password, str):
         raise PasswordPolicyError("Password must be text")
     if not MIN_PASSWORD_LENGTH <= len(password) <= MAX_PASSWORD_LENGTH:
-        raise PasswordPolicyError("Password must be 12-64 characters")
+        raise PasswordPolicyError("Password must be 8-64 characters")
     if len(password.encode("utf-8")) > MAX_PASSWORD_BYTES:
         raise PasswordPolicyError("Password exceeds the 72-byte limit")
     if password != password.strip() or any(
@@ -39,17 +39,21 @@ def validate_password(
         "digit": any(char.isdigit() for char in password),
         "special": any(not char.isalnum() and not char.isspace() for char in password),
     }
-    if sum(categories.values()) < 3:
-        raise PasswordPolicyError("Password must contain at least three character classes")
+    if not all(categories.values()):
+        raise PasswordPolicyError(
+            "Password must contain uppercase, lowercase, digit, and special characters"
+        )
     if current_password is not None and password == current_password:
         raise PasswordPolicyError("New password must differ from the current password")
 
     comparison = unicodedata.normalize("NFKC", password).casefold()
-    inputs = [value for value in (username, email, email.split("@", 1)[0] if email else None) if value]
+    inputs = [
+        value for value in (username, email, email.split("@", 1)[0] if email else None) if value
+    ]
     for value in inputs:
         token = unicodedata.normalize("NFKC", str(value)).casefold()
         if len(token) >= 3 and token in comparison:
             raise PasswordPolicyError("Password cannot contain account identifiers")
     result = zxcvbn(comparison, user_inputs=inputs)
-    if result.get("score", 0) <= 1:
+    if result.get("score", 0) <= 0:
         raise PasswordPolicyError("Password is too weak")

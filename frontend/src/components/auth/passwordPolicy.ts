@@ -1,4 +1,4 @@
-export const PASSWORD_MIN_LENGTH = 12;
+export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_MAX_LENGTH = 64;
 
 export function passwordPolicyError(password: string): string | null {
@@ -12,5 +12,5 @@ export function passwordPolicyError(password: string): string | null {
     return "whitespace";
   }
   const classes = [/\p{Lu}/u, /\p{Ll}/u, /\d/, /[^\p{L}\p{N}\s]/u].filter((pattern) => pattern.test(password));
-  return classes.length >= 3 ? null : "composition";
+  return classes.length === 4 ? null : "composition";
 }
