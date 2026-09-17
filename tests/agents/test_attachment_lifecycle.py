@@ -130,3 +130,55 @@ async def test_history_projection_does_not_mutate_original_event() -> None:
 
     assert event["data"]["attachments"][0]["url"] == "legacy-url"
     assert projected[0]["data"]["attachments"][0]["url"] == "/managed/f1"
+
+
+@pytest.mark.asyncio
+async def test_active_managed_row_without_url_gets_prefixed_content_url(monkeypatch) -> None:
+    from src.kernel.config import settings
+
+    class _RowService:
+        async def status_for_user(self, _user_id, _file_ids, _keys):
+            return [
+                {
+                    "file_id": "f9",
+                    "status": "active",
+                    "name": "x.xlsx",
+                    "mime_type": "application/vnd.ms-excel",
+                    "size": 5,
+                }
+            ]
+
+    monkeypatch.setattr(settings, "APP_BASE_URL", "http://example.com:3000")
+    set_managed_storage_service(_RowService())
+    try:
+        projected = await normalize_attachments(
+            [{"file_id": "f9", "name": "x.xlsx", "mime_type": "application/vnd.ms-excel", "size": 5}],
+            user_id="u1",
+        )
+    finally:
+        set_managed_storage_service(None)
+
+    assert projected[0]["url"] == "http://example.com:3000/api/storage/files/f9/content"
+
+
+@pytest.mark.asyncio
+async def test_content_url_stays_relative_without_app_base_url() -> None:
+    from src.kernel.config import settings
+
+    class _RowService:
+        async def status_for_user(self, _user_id, _file_ids, _keys):
+            return [{"file_id": "f9", "status": "active", "name": "x.xlsx", "size": 5}]
+
+    monkeypatch = __import__("pytest").MonkeyPatch()
+    monkeypatch.setattr(settings, "APP_BASE_URL", "")
+    set_managed_storage_service(_RowService())
+    try:
+        projected = await normalize_attachments(
+            [{"file_id": "f9", "name": "x.xlsx", "size": 5}],
+            user_id="u1",
+        )
+    finally:
+        set_managed_storage_service(None)
+        monkeypatch.undo()
+
+    assert projected[0]["url"] == "/api/storage/files/f9/content"

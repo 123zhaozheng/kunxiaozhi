@@ -30,6 +30,21 @@ _STATUS_MESSAGES = {
 }
 
 
+def _absolute_storage_url(path: str) -> str:
+    """给相对内容路径补 APP_BASE_URL 前缀；未配置或已是绝对 URL 时原样返回。
+
+    沙箱/工具链无请求上下文，相对 URL 无法解析，必须依赖显式前缀。
+    """
+    from src.kernel.config import settings
+
+    if not str(path).startswith("/"):
+        return str(path)
+    base = (getattr(settings, "APP_BASE_URL", "") or "").strip()
+    if base.startswith(("http://", "https://")):
+        return f"{base.rstrip('/')}{path}"
+    return str(path)
+
+
 def _get(value: Any, *names: str, default: Any = None) -> Any:
     if isinstance(value, Mapping):
         for name in names:
@@ -102,9 +117,11 @@ def _status_projection(
             projected["key"] = str(server_key)
         if file_id:
             projected["key"] = ""
-            projected["url"] = str(server_url or f"/api/storage/files/{file_id}/content")
+            projected["url"] = _absolute_storage_url(
+                str(server_url) if server_url else f"/api/storage/files/{file_id}/content"
+            )
         elif server_url:
-            projected["url"] = str(server_url)
+            projected["url"] = _absolute_storage_url(str(server_url))
         projected.pop("lifecycle_error", None)
         projected.pop("reupload_required", None)
         return projected
