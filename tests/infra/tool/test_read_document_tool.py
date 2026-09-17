@@ -608,3 +608,90 @@ async def test_read_document_plain_text_rejects_oversize_download(
     )
 
     assert result["error"] == "Document exceeds 10 bytes"
+
+
+def test_filename_from_headers_prefers_rfc5987_filename() -> None:
+    from src.infra.tool.read_document_tool import _filename_from_headers
+
+    headers = {
+        "content-disposition": "attachment; filename*=UTF-8''%E6%B1%87%E6%80%BB.xlsx"
+    }
+    assert _filename_from_headers(headers) == "汇总.xlsx"
+
+
+def test_filename_from_headers_plain_filename_and_content_type_fallback() -> None:
+    from src.infra.tool.read_document_tool import _filename_from_headers
+
+    assert (
+        _filename_from_headers({"content-disposition": 'attachment; filename="report.pdf"'})
+        == "report.pdf"
+    )
+    assert (
+        _filename_from_headers(
+            {"content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+        )
+        == "file.xlsx"
+    )
+    assert _filename_from_headers({}) is None
+
+
+@pytest.mark.asyncio
+async def test_read_document_recovers_filename_from_logical_content_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Extension-less /content URLs recover the real filename from headers."""
+    from src.infra.tool import read_document_tool
+
+    monkeypatch.setattr(read_document_tool.settings, "ENABLE_DOCUMENT_PARSE", True)
+    monkeypatch.setattr(
+        read_document_tool.settings, "MINERU_API_BASE_URL", "http://mineru.local:8000"
+    )
+    _patch_backend(monkeypatch, object())
+    _patch_mineru_client(
+        monkeypatch, exc=AssertionError("must not call MinerU for data files")
+    )
+
+    class _RecoveryResponse:
+        status_code = 200
+        headers = {
+            "content-disposition": "attachment; filename*=UTF-8''%E6%B1%87%E6%80%BB.xlsx"
+        }
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        def raise_for_status(self) -> None:
+            return None
+
+        async def aiter_bytes(self):  # pragma: no cover - data files never download
+            yield b""
+
+    class _RecoveryClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        def stream(self, method: str, request_url: str):
+            assert method == "GET"
+            return _RecoveryResponse()
+
+    monkeypatch.setattr(
+        read_document_tool.httpx, "AsyncClient", lambda **kwargs: _RecoveryClient()
+    )
+
+    result = json.loads(
+        await read_document_tool.read_document.coroutine(
+            url="https://app.example.com/api/storage/files/f9/content",
+            runtime=_Runtime("user-1"),
+        )
+    )
+
+    assert result["success"] is False
+    assert result["format"] == "xlsx"
+    assert result["filename"] == "汇总.xlsx"
+    assert "/workspace/汇总.xlsx" in result["guidance"]

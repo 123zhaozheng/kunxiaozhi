@@ -49,12 +49,19 @@ export function AttachmentPreviewHost() {
       {attachment && (
         <LazyDocumentPreview
           path={attachment.name}
-          s3Key={attachment.key}
+          s3Key={attachment.key || undefined}
+          // Managed files project no physical key; fall back to the logical
+          // content URL so the preview still loads.
+          signedUrl={
+            !attachment.key && attachment.url
+              ? getFullUrl(attachment.url) ?? attachment.url
+              : undefined
+          }
           fileSize={attachment.size}
           mimeType={attachment.mimeType}
           registryKey={`attachment-preview:${
             previewState?.source ?? "unknown"
-          }:${attachment.key}`}
+          }:${attachment.key || attachment.fileId}`}
           imageUrl={
             attachment.type === "image" ? getFullUrl(attachment.url) : undefined
           }

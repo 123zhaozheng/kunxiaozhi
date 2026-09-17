@@ -14,10 +14,11 @@ The tool is registered only when ENABLE_DOCUMENT_PARSE is on.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from tempfile import SpooledTemporaryFile
 from typing import TYPE_CHECKING, Annotated, Any
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 import httpx
 from charset_normalizer import from_bytes
@@ -68,6 +69,19 @@ _FILE_KIND_MINERU = "mineru"
 _FILE_KIND_PLAIN_TEXT = "plain_text"
 _FILE_KIND_DATA = "data"
 
+# Logical content URLs (/api/storage/files/{id}/content) carry no filename in
+# the path; the streaming endpoint is authoritative for the real name/mime.
+_EXTENSION_BY_CONTENT_TYPE: dict[str, str] = {
+    **{mime: ext for ext, mime in _MINERU_EXTENSIONS.items()},
+    "application/vnd.ms-excel": ".xlsx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "text/csv": ".csv",
+    "text/plain": ".txt",
+    "text/markdown": ".md",
+    "application/json": ".json",
+    "text/x-python": ".py",
+}
+
 
 async def _json_dumps_result(data: dict[str, Any]) -> str:
     return await run_blocking_io(json.dumps, data, ensure_ascii=False)
@@ -86,6 +100,33 @@ def _resolve_url(url: str, runtime: ToolRuntime | None) -> str:
 def _guess_filename(url: str) -> str:
     path = urlparse(url).path.rstrip("/")
     return path.split("/")[-1] if path else "document"
+
+
+def _filename_from_headers(headers: Any) -> str | None:
+    """Recover the real filename from a content response's headers."""
+    disposition = str(headers.get("content-disposition", "") or "")
+    match = re.search(r"filename\*=(?:utf-8|UTF-8)''([^;]+)", disposition)
+    if match:
+        return unquote(match.group(1).strip().strip('"'))
+    match = re.search(r'filename="?([^";]+)"?', disposition)
+    if match:
+        return match.group(1).strip()
+    content_type = str(headers.get("content-type", "") or "").split(";")[0].strip().lower()
+    ext = _EXTENSION_BY_CONTENT_TYPE.get(content_type)
+    return f"file{ext}" if ext else None
+
+
+async def _recover_filename(url: str) -> str | None:
+    """Probe response headers (without consuming the body) for the real filename."""
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15) as http_client:
+            async with http_client.stream("GET", url) as response:
+                if response.status_code >= 400:
+                    return None
+                return _filename_from_headers(response.headers)
+    except Exception as exc:
+        logger.warning("[read_document] filename recovery failed for %s: %s", url, exc)
+        return None
 
 
 def _classify_file(filename: str) -> str | None:
@@ -300,6 +341,13 @@ async def read_document(
     resolved_url = _resolve_url(url, runtime)
     filename = _guess_filename(resolved_url)
     file_kind = _classify_file(filename)
+    if file_kind is None and "." not in filename:
+        # Logical content URLs end in /content with no extension; ask the
+        # content endpoint for the real filename before giving up.
+        recovered = await _recover_filename(resolved_url)
+        if recovered:
+            filename = recovered
+            file_kind = _classify_file(filename)
     if file_kind is None:
         return await _json_dumps_result({"error": "Unsupported file type"})
 
