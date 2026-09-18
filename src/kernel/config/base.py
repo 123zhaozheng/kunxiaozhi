@@ -229,6 +229,12 @@ class Settings(BaseSettings):
     CHECKPOINT_PG_POOL_MIN_SIZE: int = 2
     CHECKPOINT_PG_POOL_MAX_SIZE: int = 10
 
+    # Checkpoint Retention Settings
+    CHECKPOINT_CLEANUP_ENABLED: bool = False
+    CHECKPOINT_CLEANUP_RETENTION_DAYS: int = 30
+    CHECKPOINT_CLEANUP_INTERVAL_HOURS: int = 24
+    CHECKPOINT_CLEANUP_BATCH_LIMIT: int = 200
+
     # Sandbox Settings
     ENABLE_SANDBOX: bool = True
     SANDBOX_PLATFORM: str = "daytona"

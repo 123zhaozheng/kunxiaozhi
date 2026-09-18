@@ -451,6 +451,45 @@ EXTRA_SETTING_DEFINITIONS: dict[str, dict] = {
         "depends_on": {"key": "CHECKPOINT_BACKEND", "value": "postgres"},
     },
     # ============================================
+    # Checkpoint Retention Settings
+    # ============================================
+    "CHECKPOINT_CLEANUP_ENABLED": {
+        "type": SettingType.BOOLEAN,
+        "category": SettingCategory.CHECKPOINT,
+        "subcategory": "cleanup",
+        "description": "settingDesc.CHECKPOINT_CLEANUP_ENABLED",
+        "default": False,
+        "frontend_visible": True,
+    },
+    "CHECKPOINT_CLEANUP_RETENTION_DAYS": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.CHECKPOINT,
+        "subcategory": "cleanup",
+        "description": "settingDesc.CHECKPOINT_CLEANUP_RETENTION_DAYS",
+        "default": 30,
+        "minimum": 7,
+        "frontend_visible": True,
+        "depends_on": "CHECKPOINT_CLEANUP_ENABLED",
+    },
+    "CHECKPOINT_CLEANUP_INTERVAL_HOURS": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.CHECKPOINT,
+        "subcategory": "cleanup",
+        "description": "settingDesc.CHECKPOINT_CLEANUP_INTERVAL_HOURS",
+        "default": 24,
+        "minimum": 1,
+        "depends_on": "CHECKPOINT_CLEANUP_ENABLED",
+    },
+    "CHECKPOINT_CLEANUP_BATCH_LIMIT": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.CHECKPOINT,
+        "subcategory": "cleanup",
+        "description": "settingDesc.CHECKPOINT_CLEANUP_BATCH_LIMIT",
+        "default": 200,
+        "minimum": 1,
+        "depends_on": "CHECKPOINT_CLEANUP_ENABLED",
+    },
+    # ============================================
     # User Management Settings
     # ============================================
     "DEFAULT_USER_ROLE": {

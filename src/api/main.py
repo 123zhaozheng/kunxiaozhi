@@ -88,6 +88,7 @@ _LIFESPAN_BACKGROUND_TASK_NAMES = (
     "session_search_backfill_task",
     "analytics_backfill_task",
     "analytics_daily_freeze_task",
+    "checkpoint_cleanup_task",
     "memory_monitor_startup_reset_task",
     "agent_discovery_task",
     "models_preload_task",
@@ -580,6 +581,23 @@ async def lifespan(app: FastAPI):
             await worker.close()
 
     app.state.analytics_daily_freeze_task = asyncio.create_task(_freeze_daily_analytics())
+
+    # Reclaim LangGraph checkpoints for long-inactive sessions. History and
+    # analytics live in traces/sessions, so this only drops resumable state.
+    async def _cleanup_checkpoints() -> None:
+        from src.infra.checkpoint.cleanup_worker import CheckpointCleanupWorker
+
+        worker = CheckpointCleanupWorker()
+        try:
+            await worker.run_forever()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("Checkpoint cleanup worker failed: %s", exc)
+        finally:
+            await worker.close()
+
+    app.state.checkpoint_cleanup_task = asyncio.create_task(_cleanup_checkpoints())
 
     # Start embedded WeCom in a background task. External/disabled modes never
     # import the SDK into the FastAPI process.

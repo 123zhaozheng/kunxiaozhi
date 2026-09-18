@@ -693,6 +693,37 @@ class SessionStorage:
                 rebuilt += 1
         return rebuilt
 
+    async def list_inactive_session_ids(
+        self,
+        *,
+        cutoff: datetime,
+        limit: int,
+        exclude_ids: set[str] | None = None,
+    ) -> list[str]:
+        """List session ids whose last activity predates ``cutoff``.
+
+        ``updated_at`` is refreshed on every persisted turn, so it is the
+        activity signal for retention. Oldest first, so repeated bounded runs
+        drain the backlog instead of rescanning the same head.
+        """
+        await self.ensure_indexes_if_needed()
+        limit = max(int(limit), 1)
+        cursor = (
+            self.collection.find({"updated_at": {"$lt": cutoff}}, {"session_id": 1, "_id": 1})
+            .sort("updated_at", 1)
+            .limit(limit)
+        )
+        docs = await cursor.to_list(length=limit)
+        session_ids: list[str] = []
+        for doc in docs:
+            session_id = doc.get("session_id") or str(doc.get("_id"))
+            if not session_id:
+                continue
+            if exclude_ids and session_id in exclude_ids:
+                continue
+            session_ids.append(session_id)
+        return session_ids
+
     async def _find_doc(
         self,
         session_id: str,
