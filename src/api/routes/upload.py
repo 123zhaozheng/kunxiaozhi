@@ -34,6 +34,7 @@ from src.infra.async_utils import run_blocking_io
 from src.infra.async_utils.background_tasks import BestEffortTaskLimiter
 from src.infra.auth.rbac import check_permission
 from src.infra.logging import get_logger
+from src.infra.storage.content_url import build_content_url
 from src.infra.storage.s3 import (
     S3Config,
     S3Provider,
@@ -612,7 +613,7 @@ async def check_file_exists(
                 source=str(modern.get("source") or StorageSource.CHAT.value),
                 status=str(modern.get("status") or FileLifecycleStatus.ACTIVE.value),
                 storage_usage=usage,
-                logical_url=f"{base_url}/api/storage/files/{file_id}/content",
+                logical_url=build_content_url(base_url, file_id, str(modern.get("name") or body.name)),
             )
 
     # Legacy compatibility is still owner-scoped.  A global hash lookup would
@@ -772,7 +773,7 @@ async def upload_file(
                     source=str(existing.get("source") or StorageSource.CHAT.value),
                     status=str(existing.get("status") or FileLifecycleStatus.ACTIVE.value),
                     storage_usage=usage,
-                    logical_url=f"{_get_base_url(request)}/api/storage/files/{prepared.file_id}/content",
+                    logical_url=build_content_url(_get_base_url(request), prepared.file_id, str(existing.get("name") or basename)),
                 )
         upload_result = await storage.upload_stream_to_key(
             file=spooled_upload.file,
@@ -798,7 +799,7 @@ async def upload_file(
             source=user_file.source.value,
             status=user_file.status.value,
             storage_usage=usage,
-            logical_url=f"{_get_base_url(request)}/api/storage/files/{user_file.file_id}/content",
+            logical_url=build_content_url(_get_base_url(request), user_file.file_id, user_file.name),
         )
     except HTTPException:
         if prepared is not None and not object_written:
@@ -942,7 +943,7 @@ async def upload_avatar(
                     _user_file, usage = await domain.complete_create(prepared, roles=current_user.roles)
                 else:
                     usage = await domain.get_usage(current_user.sub, roles=current_user.roles)
-                avatar_url = f"/api/storage/files/{prepared.file_id}/content"
+                avatar_url = build_content_url("", prepared.file_id, avatar_name)
             except StorageDomainError as exc:
                 raise _storage_error_http_exception(exc) from exc
         else:
@@ -1080,7 +1081,7 @@ async def upload_managed_asset(
                 source=source.value,
                 status=FileLifecycleStatus.ACTIVE.value,
                 storage_usage=usage,
-                logical_url=f"{_get_base_url(request)}/api/storage/files/{prepared.file_id}/content",
+                logical_url=build_content_url(_get_base_url(request), prepared.file_id, basename),
             )
         storage = await get_or_init_storage()
         await storage.upload_stream_to_key(
@@ -1102,7 +1103,7 @@ async def upload_managed_asset(
             source=source.value,
             status=FileLifecycleStatus.PENDING.value if prepared.replaced_file_id else FileLifecycleStatus.ACTIVE.value,
             storage_usage=usage,
-            logical_url=f"{_get_base_url(request)}/api/storage/files/{prepared.file_id}/content",
+            logical_url=build_content_url(_get_base_url(request), prepared.file_id, basename),
         )
     except StorageDomainError as exc:
         try:
@@ -1378,7 +1379,7 @@ async def get_signed_urls(
                 continue
             file_id = str(managed.get("_id") or managed.get("file_id"))
             # New managed files never expose a direct/presigned object URL.
-            urls.append(SignedUrlItem(key=key, url=f"{base_url}/api/storage/files/{file_id}/content"))
+            urls.append(SignedUrlItem(key=key, url=build_content_url(base_url, file_id, managed.get("name"))))
             continue
 
         # Legacy compatibility signing is still owner-scoped and short-lived.
@@ -1467,7 +1468,7 @@ async def get_single_signed_url(
         if not blob or blob.get("status") != "active":
             return SignedUrlItem(key=key, error="File not found")
         file_id = str(managed.get("_id") or managed.get("file_id"))
-        return SignedUrlItem(key=key, url=f"{base_url}/api/storage/files/{file_id}/content")
+        return SignedUrlItem(key=key, url=build_content_url(base_url, file_id, managed.get("name")))
 
     try:
         legacy = await _file_record_storage.find_by_key(key, user_id=current_user.sub)
@@ -1576,7 +1577,11 @@ async def get_file_proxy(
             raise HTTPException(status_code=404, detail={"code": "file_not_found", "message": "文件不存在"})
         physical_key = str(blob.get("storage_key") or managed_record.get("storage_key") or key)
 
-    logical_url = f"{base_url}/api/storage/files/{logical_file_id}/content" if logical_file_id else f"{base_url}/api/upload/file/{key}"
+    logical_url = (
+        build_content_url(base_url, logical_file_id, managed_record.get("name") if managed_record else None)
+        if logical_file_id
+        else f"{base_url}/api/upload/file/{key}"
+    )
     if direct and managed:
         return JSONResponse({"url": logical_url}, headers={"Cache-Control": "private, no-store"})
 

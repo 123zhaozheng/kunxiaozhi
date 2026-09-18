@@ -19,6 +19,7 @@ from src.infra.agent.attachments import normalize_attachments
 from src.infra.agent.wecom.collector import WeComResponseCollector
 from src.infra.agent.wecom.manager import WeComBotManager
 from src.infra.logging import get_logger
+from src.infra.storage.content_url import build_content_url
 from src.infra.storage.managed_integration import (
     commit_managed_files,
     compensate_managed_files,
@@ -613,7 +614,7 @@ async def _build_single_attachment(
     logical_url = _attachment_url_from_key(storage_key) if _app_base_url_configured() else ""
     if reservation is not None and file_id:
         base_url = (getattr(settings, "APP_BASE_URL", "") or "").rstrip("/")
-        logical_url = f"{base_url}/api/storage/files/{file_id}/content" if base_url else f"/api/storage/files/{file_id}/content"
+        logical_url = build_content_url(base_url, file_id, file_name)
     if committed_plan and committed_plan.raw is not None:
         logical_url = str(
             getattr(committed_plan.raw, "url", None)

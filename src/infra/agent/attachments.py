@@ -6,6 +6,7 @@ from copy import deepcopy
 from typing import Any, Mapping
 
 from src.infra.logging import get_logger
+from src.infra.storage.content_url import build_content_url
 from src.infra.storage.managed_integration import (
     ManagedStorageError,
     resolve_managed_attachment_statuses,
@@ -118,7 +119,9 @@ def _status_projection(
         if file_id:
             projected["key"] = ""
             projected["url"] = _absolute_storage_url(
-                str(server_url) if server_url else f"/api/storage/files/{file_id}/content"
+                str(server_url)
+                if server_url
+                else build_content_url("", str(file_id), projected.get("name"))
             )
         elif server_url:
             projected["url"] = _absolute_storage_url(str(server_url))

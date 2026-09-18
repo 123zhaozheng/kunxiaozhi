@@ -142,6 +142,18 @@ def _clean_idempotency_key(value: str) -> str:
     return value
 
 
+def _derive_retry_idempotency_key(key: str, marker: str) -> str:
+    """Return a bounded derived key so a hash-derived upload key can be reused.
+
+    Mirrors the truncation rule used when retrying a compensated operation:
+    the suffix must survive, so the original prefix is what gets clipped.
+    """
+    suffix = f":{marker}:{uuid.uuid4().hex}"
+    prefix_bytes = max(1, MAX_IDEMPOTENCY_KEY_BYTES - len(suffix.encode("utf-8")))
+    prefix = str(key).encode("utf-8")[:prefix_bytes].decode("utf-8", "ignore")
+    return f"{prefix}{suffix}"
+
+
 def _clean_operation_id(value: str) -> str:
     clean = str(value or "").strip()
     if (
@@ -1350,10 +1362,7 @@ class UserStorageQuotaService:
                 # A failed intent has no active charge.  Keep its audit row and
                 # use a bounded retry key so a hash-derived upload idempotency
                 # key can be retried after compensation.
-                suffix = f":retry:{uuid.uuid4().hex}"
-                prefix_bytes = max(1, MAX_IDEMPOTENCY_KEY_BYTES - len(suffix.encode("utf-8")))
-                prefix = key.encode("utf-8")[:prefix_bytes].decode("utf-8", "ignore")
-                key = f"{prefix}{suffix}"
+                key = _derive_retry_idempotency_key(key, "retry")
                 existing = None
             else:
                 if existing.get("manifest_digest") not in (None, "", digest):
@@ -1565,6 +1574,26 @@ class UserStorageQuotaService:
                 return
             raise StorageOperationBusyError("storage completion marker conflicted with another worker")
 
+    async def _operation_owner_is_reusable(self, item: dict[str, Any] | None) -> bool:
+        """Whether a completed create operation still points at a usable owner.
+
+        A completed operation is only safe to replay while its logical file is
+        still live.  Once that file is deleted (or its row is gone), replaying
+        would hand the caller a tombstone instead of a new file.
+        """
+        if not item:
+            return False
+        file_id = str(item.get("file_id") or "")
+        if not file_id:
+            return False
+        owner = await self.storage.get_file(file_id, include_deleted=True)
+        if not owner:
+            return False
+        return str(owner.get("status")) not in {
+            FileLifecycleStatus.DELETED.value,
+            FileLifecycleStatus.DELETE_PENDING.value,
+        }
+
     async def prepare_create(
         self,
         user_id: str,
@@ -1594,6 +1623,22 @@ class UserStorageQuotaService:
         if resume_operation and existing_operation:
             retry_items = await self.storage.get_operation_items(str(existing_operation.get("_id")))
             persisted_retry_item = retry_items[0] if retry_items else None
+        if (
+            resume_operation
+            and existing_operation
+            and existing_operation.get("state") == StorageOperationState.COMPLETED.value
+            and not await self._operation_owner_is_reusable(persisted_retry_item)
+        ):
+            # Re-uploading content whose previous logical file was deleted: the
+            # completed create operation must not be replayed, otherwise
+            # complete_create returns the old tombstone and the user can never
+            # re-add the file.  A derived key yields a fresh operation, file_id,
+            # blob_id and immutable object key, so the purge-queued old key is
+            # never overwritten.
+            resume_operation = False
+            persisted_retry_item = None
+            idempotency_key = _derive_retry_idempotency_key(operation_key, "resurrect")
+            operation_key = _clean_idempotency_key(idempotency_key)
         existing = (
             await self.storage.find_active_by_hash(user_id, source, content_hash)
             if not resume_operation and (source in {StorageSource.CHAT, StorageSource.WECOM} or not source_ref)

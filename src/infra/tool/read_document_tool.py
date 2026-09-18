@@ -30,6 +30,10 @@ from src.infra.tool.backend_utils import (
     get_backend_from_runtime,
     get_base_url_from_runtime,
 )
+from src.infra.tool.document_source import (
+    read_backend_bytes,
+    resolve_document_source,
+)
 from src.infra.tool.mineru_client import MinerUClient, MinerUError
 from src.kernel.config import settings
 
@@ -65,7 +69,20 @@ _PLAIN_TEXT_EXTENSIONS: frozenset[str] = frozenset(
 # Spreadsheet extensions: not parsed here; the agent is routed to the sandbox.
 _DATA_EXTENSIONS: frozenset[str] = frozenset({".xlsx", ".csv"})
 
+# MinerU converts an image to a single-page PDF and runs the normal pipeline,
+# so images use the same endpoint but need their own MIME table.
+_IMAGE_EXTENSIONS: dict[str, str] = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".bmp": "image/bmp",
+    ".tiff": "image/tiff",
+}
+
 _FILE_KIND_MINERU = "mineru"
+_FILE_KIND_IMAGE = "image"
 _FILE_KIND_PLAIN_TEXT = "plain_text"
 _FILE_KIND_DATA = "data"
 
@@ -133,6 +150,8 @@ def _classify_file(filename: str) -> str | None:
     lower = filename.lower()
     if any(lower.endswith(ext) for ext in _MINERU_EXTENSIONS):
         return _FILE_KIND_MINERU
+    if any(lower.endswith(ext) for ext in _IMAGE_EXTENSIONS):
+        return _FILE_KIND_IMAGE
     if any(lower.endswith(ext) for ext in _PLAIN_TEXT_EXTENSIONS):
         return _FILE_KIND_PLAIN_TEXT
     if any(lower.endswith(ext) for ext in _DATA_EXTENSIONS):
@@ -142,6 +161,9 @@ def _classify_file(filename: str) -> str | None:
 
 def _content_type_for(filename: str) -> str | None:
     lower = filename.lower()
+    for ext, content_type in _IMAGE_EXTENSIONS.items():
+        if lower.endswith(ext):
+            return content_type
     for ext, content_type in _MINERU_EXTENSIONS.items():
         if lower.endswith(ext):
             return content_type
@@ -338,8 +360,13 @@ async def read_document(
             {"error": "URL is empty, APP_BASE_URL may not be configured"}
         )
 
-    resolved_url = _resolve_url(url, runtime)
-    filename = _guess_filename(resolved_url)
+    source = resolve_document_source(url, runtime)
+    if source.failed:
+        return await _json_dumps_result(
+            {"error": source.error, "code": source.error, "reupload_required": False}
+        )
+    resolved_url = source.url or source.backend_path or url
+    filename = source.filename or _guess_filename(resolved_url)
     file_kind = _classify_file(filename)
     if file_kind is None and "." not in filename:
         # Logical content URLs end in /content with no extension; ask the
@@ -366,14 +393,17 @@ async def read_document(
     # missing base URL short-circuits without touching the network). Plain text
     # deliberately does NOT require MinerU to be configured.
     base_url = getattr(settings, "MINERU_API_BASE_URL", "") or ""
-    if file_kind == _FILE_KIND_MINERU and not base_url:
+    if file_kind in {_FILE_KIND_MINERU, _FILE_KIND_IMAGE} and not base_url:
         return await _json_dumps_result(
             {"error": "MINERU_API_BASE_URL is not configured"}
         )
 
-    content, download_error = await _download_to_bytes(
-        resolved_url, max_download_bytes
-    )
+    if source.backend_path:
+        content, download_error = await read_backend_bytes(source.backend_path, runtime)
+    else:
+        content, download_error = await _download_to_bytes(
+            resolved_url, max_download_bytes
+        )
     if download_error is not None:
         if download_error in {"file_deleted", "file_forbidden", "file_missing", "file_transient"}:
             return await _json_dumps_result(
@@ -391,9 +421,9 @@ async def read_document(
             content, max_output_chars, resolved_url, filename
         )
 
-    # file_kind == _FILE_KIND_MINERU
+    # file_kind is _FILE_KIND_MINERU or _FILE_KIND_IMAGE
     content_type = _content_type_for(filename)
-    assert content_type is not None  # filename is a known MinerU extension
+    assert content_type is not None  # classified filenames always map to a MIME type
     client = MinerUClient(
         base_url=base_url,
         api_key=getattr(settings, "MINERU_API_KEY", "") or None,

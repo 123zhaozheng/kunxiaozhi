@@ -64,7 +64,7 @@ _DEFAULT_TOOLS = {
     "memory_retain": "存储跨会话记忆。仅收高价值非临时信息；过短、似提问、像代码或重复近期记忆会被拒。优先存用户偏好、项目约束、反馈、外部链接，用 user_identity/project_constraint/feedback_rule/reference_link 等显式标签。",
     "memory_recall": "按语义检索跨会话记忆；返回与查询概念相关的历史记录。",
     "memory_delete": "按 ID 删除记忆；ID 取 memory_recall 输出。",
-    "read_document": "下载附件文档并返回文本：pdf/docx/pptx 走 MinerU 转 Markdown；txt/md/log/json/py 直接解码；xlsx/csv 不转文本，返回沙箱处理指引。",
+    "read_document": "下载文档或图片并返回文本：pdf/docx/pptx 与 png/jpg/jpeg/webp/gif/bmp/tiff 走 MinerU（PDF 内的图表会附带图片内容的文字描述）；txt/md/log/json/py 直接解码；xlsx/csv 不转文本，返回沙箱处理指引。若文件在沙箱中，仅 pdf 和图片推荐用本工具，其他类型直接用沙箱读文件/命令工具。",
     "list_dify_knowledge_bases": "列出当前 persona 绑定的 Dify 知识库（若无则返回系统默认）：返回 [{id, name, description}]。\n先调用此工具获取可用知识库列表。",
     "query_dify_knowledge_base": "按原始查询语句检索指定 Dify 知识库片段（不改写）：输入 query 和 dataset_id，返回 segments、score、document 等信息。\n用法：先调用 list_dify_knowledge_bases 获取 dataset_id，再调用此工具进行检索。",
     "audio_transcribe": "按 URL 下载音频并转写为文本。",
@@ -99,7 +99,7 @@ _DEFAULT_FIELDS = {
     "memory_retain": {"content": "要存储的记忆内容（事实、观察、经验）。", "title": "短标题（≤25 字符）。", "summary": "简述（≤80 字符）。", "context": "可选上下文/分类（如 user_identity、project_constraint、feedback_rule、reference_link）。", "tags": "关键词标签（最多 5 个）。", "existing_memory_id": "更新指定记忆 ID，避免模糊去重。"},
     "memory_recall": {"query": "搜索查询。", "max_results": "返回条数上限（默认 5）。", "memory_types": "按记忆类型过滤；不传返回全部。"},
     "memory_delete": {"memory_id": "要删除的记忆 ID。"},
-    "read_document": {"url": "文档附件 URL（绝对 URL 或 /api/upload/file/<key> 路径）。"},
+    "read_document": {"url": "文档或图片位置：绝对 URL、/api 路径、沙箱内绝对路径（如 /workspace/a.pdf）或 /skills/... 路径；不接受不带前导斜杠的存储 key。"},
     "list_dify_knowledge_bases": {},
     "query_dify_knowledge_base": {
         "query": "用户原始查询语句（最多 250 字符，超出会自动截断）。",

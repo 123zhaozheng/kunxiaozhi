@@ -35,6 +35,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Announcement Login Popup](./announcement-login-popup.md) | `popup` / `should_popup`, forever vs snooze dismissals, `/active?popup_eligible`, auto vs bell dialog | Filled |
 | [Agent Harness Localization](./agent-harness.md) | Default Chinese concise harness localization, model-view schema localization, dynamic task/todo contracts, import boundary | Filled |
 | [read_document Dispatch](./read-document-dispatch.md) | File-type dispatch (MinerU / plain-text / sandbox-guidance), charset-normalizer short-CJK gotcha | Filled |
+| [Managed Storage Content URL](./managed-storage-url.md) | Filename-bearing `/content/{filename}` address, file_id-only authorization, exact-match auth exemption, RFC 5987 disposition, parser back-compat | Filled |
 | [Idle Login Sessions](./auth-idle-sessions.md) | Redis-backed per-login idle timeout, JWT `sid`, atomic activity, refresh/HTTP/SSE/WebSocket enforcement | Filled |
 | [Strong Password & First Login](./auth-password-first-login.md) | Unified strong-password policy, restricted first-login state, credential-version revocation, OA/OAuth parity | Filled |
 | [Main Upload Dangerous Extensions](./upload-dangerous-extensions.md) | Early server-side final-suffix denylist for `POST /api/upload/file` and its explicit limits | Filled |

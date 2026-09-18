@@ -53,10 +53,15 @@ async def test_parse_bytes_returns_first_md_content(monkeypatch: pytest.MonkeyPa
     assert captured["url"] == "http://mineru.local:8000/file_parse"
     assert captured["headers"]["ngrok-skip-browser-warning"] == "true"
     assert captured["headers"]["Authorization"] == "Bearer sk-test"
+    # backend/effort/image_analysis are now explicit: the server defaults hybrid
+    # effort to "medium", which force-disables figure/image analysis.
     assert captured["data"] == {
         "return_md": "true",
         "return_content_list": "false",
         "return_images": "false",
+        "backend": "hybrid-engine",
+        "effort": "high",
+        "image_analysis": "true",
     }
     assert captured["files"]["files"][0] == "report.pdf"
     assert captured["files"]["files"][1] == b"%PDF-1.4"

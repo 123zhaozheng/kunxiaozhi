@@ -158,7 +158,7 @@ async def test_active_managed_row_without_url_gets_prefixed_content_url(monkeypa
     finally:
         set_managed_storage_service(None)
 
-    assert projected[0]["url"] == "http://example.com:3000/api/storage/files/f9/content"
+    assert projected[0]["url"] == "http://example.com:3000/api/storage/files/f9/content/x.xlsx"
 
 
 @pytest.mark.asyncio
@@ -181,4 +181,4 @@ async def test_content_url_stays_relative_without_app_base_url() -> None:
         set_managed_storage_service(None)
         monkeypatch.undo()
 
-    assert projected[0]["url"] == "/api/storage/files/f9/content"
+    assert projected[0]["url"] == "/api/storage/files/f9/content/x.xlsx"

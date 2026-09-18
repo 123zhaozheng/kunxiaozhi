@@ -439,6 +439,12 @@ class Settings(BaseSettings):
     ENABLE_DOCUMENT_PARSE: bool = False
     MINERU_API_BASE_URL: str = "http://localhost:8000"
     MINERU_API_KEY: str = ""
+    # hybrid "medium" force-disables figure analysis server-side, so the default
+    # effort must be "high" for PDF figures/images to be described at all.
+    MINERU_BACKEND: str = "hybrid-engine"
+    MINERU_PARSE_EFFORT: str = "high"
+    MINERU_IMAGE_ANALYSIS: bool = True
+    MINERU_RETURN_IMAGES: bool = False
     DOCUMENT_PARSE_MAX_BYTES: int = 52428800
     DOCUMENT_PARSE_MAX_OUTPUT_CHARS: int = 50000
 

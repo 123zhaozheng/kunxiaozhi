@@ -2,6 +2,8 @@
 认证中间件
 """
 
+import re
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -61,6 +63,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/static/",
     )
 
+    # Exact-match exemptions for capability-token style reads.  A broad
+    # "/api/storage/files/" prefix would also exempt files/status,
+    # files/{id} DELETE and files/batch-delete, so the pattern is pinned to the
+    # content endpoint of a 128-bit hex file_id.
+    PUBLIC_PATH_PATTERNS = (
+        re.compile(r"^/api/storage/files/[0-9a-f]{32}/content(?:/.*)?$"),
+    )
+
     @staticmethod
     def _is_browser_page_request(request: Request) -> bool:
         """
@@ -91,6 +101,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Prefix match for known public prefixes
         for prefix in self.PUBLIC_PREFIXES:
             if path.startswith(prefix):
+                return await call_next(request)
+
+        # Exact-pattern public endpoints (unauthenticated capability reads).
+        for pattern in self.PUBLIC_PATH_PATTERNS:
+            if pattern.match(path):
                 return await call_next(request)
 
         # Let browser page navigations reach the SPA fallback / redirect route.

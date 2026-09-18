@@ -19,6 +19,7 @@ from src.infra.storage.user_storage import (
 )
 from src.infra.utils.datetime import utc_now
 from src.kernel.schemas.storage import (
+    FileLifecycleStatus,
     OperationManifestItem,
     StorageFileListQuery,
     StorageOperationKind,
@@ -334,3 +335,91 @@ async def test_protected_shrinking_replace_releases_only_after_finalize(
     assert (await service.get_usage("user-a")).used_bytes == 10
     await service.finalize_replace(replacement)
     assert (await service.get_usage("user-a")).used_bytes == 4
+
+
+@pytest.mark.asyncio
+async def test_reupload_after_delete_creates_new_file(service: UserStorageQuotaService) -> None:
+    """Deleting a file must not make its content permanently un-reuploadable."""
+    kwargs = {
+        "source": StorageSource.CHAT,
+        "name": "again.txt",
+        "mime_type": "text/plain",
+        "category": "document",
+        "size": 7,
+        "content_hash": "d" * 64,
+        # The frontend sends no idempotency header, so the key is hash-derived
+        # and therefore identical across the two uploads.
+        "idempotency_key": "upload:" + "d" * 64,
+    }
+    first = await service.prepare_create(
+        "user-a", storage_key="managed/chat/user-a/again-1", **kwargs
+    )
+    created, _ = await service.complete_create(first)
+    await service.delete_file("user-a", created.file_id)
+
+    second = await service.prepare_create(
+        "user-a", storage_key="managed/chat/user-a/again-2", **kwargs
+    )
+    assert second.reused is False
+    assert second.file_id != first.file_id
+    assert second.blob_id != first.blob_id
+    assert second.storage_key == "managed/chat/user-a/again-2"
+
+    recreated, usage = await service.complete_create(second)
+    assert recreated.status == FileLifecycleStatus.ACTIVE
+    assert recreated.file_id == second.file_id
+    assert usage.used_bytes == 7
+
+
+@pytest.mark.asyncio
+async def test_reupload_after_delete_row_is_listable(service: UserStorageQuotaService) -> None:
+    kwargs = {
+        "source": StorageSource.CHAT,
+        "name": "listed.txt",
+        "mime_type": "text/plain",
+        "category": "document",
+        "size": 3,
+        "content_hash": "e" * 64,
+        "idempotency_key": "upload:" + "e" * 64,
+    }
+    first = await service.prepare_create(
+        "user-a", storage_key="managed/chat/user-a/listed-1", **kwargs
+    )
+    created, _ = await service.complete_create(first)
+    await service.delete_file("user-a", created.file_id)
+
+    second = await service.prepare_create(
+        "user-a", storage_key="managed/chat/user-a/listed-2", **kwargs
+    )
+    recreated, _ = await service.complete_create(second)
+
+    files, _, _ = await service.list_files("user-a", StorageFileListQuery())
+    active_ids = [
+        item.file_id for item in files if item.status == FileLifecycleStatus.ACTIVE
+    ]
+    assert recreated.file_id in active_ids
+
+
+@pytest.mark.asyncio
+async def test_pending_owner_still_resumes(service: UserStorageQuotaService) -> None:
+    """A genuine in-flight retry must keep reusing its persisted generation."""
+    kwargs = {
+        "source": StorageSource.CHAT,
+        "name": "inflight.txt",
+        "mime_type": "text/plain",
+        "category": "document",
+        "size": 4,
+        "content_hash": "f" * 64,
+        "storage_key": "managed/chat/user-a/inflight",
+        "idempotency_key": "upload:" + "f" * 64,
+    }
+    first = await service.prepare_create("user-a", **kwargs)
+    await service.storage.update_operation(
+        {"_id": first.operation_id},
+        {"$set": {"lease_expires_at": utc_now() - timedelta(seconds=1)}},
+    )
+
+    retried = await service.prepare_create("user-a", **kwargs)
+    assert retried.operation_id == first.operation_id
+    assert retried.file_id == first.file_id
+    assert retried.blob_id == first.blob_id

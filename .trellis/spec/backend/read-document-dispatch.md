@@ -12,8 +12,13 @@
 
 - Tool: `src/infra/tool/read_document_tool.py` (`read_document`, registered
   only when `ENABLE_DOCUMENT_PARSE` is on).
-- Loaded by **Fast Agent + Search Agent** via `get_internal_tools_for_user`
-  (`build_internal_tools`). Team Agent does **NOT** load it.
+- Loaded by **Fast Agent, Search Agent and Team Agent** via
+  `get_internal_tools_for_user` (`build_internal_tools`). Team Agent inherits it
+  from `FastAgentContext` and `TEAM_ROUTER_EXCLUDED_TOOLS`
+  (`src/agents/team_agent/context.py`) deliberately omits `read_document`;
+  `tests/agents/test_team_context_sandbox_tools.py` asserts it stays loaded.
+  (An earlier revision of this spec claimed Team Agent did not load it — that
+  was stale from before the team-agent refactor.)
 - Trigger: changing which extension routes to which path, or the result
   envelope of any branch.
 
