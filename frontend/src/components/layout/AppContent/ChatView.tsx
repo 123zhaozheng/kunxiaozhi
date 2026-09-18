@@ -9,6 +9,7 @@ import { RevealPreviewHost } from "../../chat/ChatMessage/items/RevealPreviewHos
 import { SessionImageGalleryProvider } from "../../chat/ChatMessage/sessionImageGallery";
 import { PersistentToolPanelHost } from "../../chat/ChatMessage/items/persistentToolPanelState";
 import { ChatInput } from "../../chat/ChatInput";
+import { CheckpointRetentionNotice } from "../../chat/CheckpointRetentionNotice";
 import { WelcomePage } from "../../chat/WelcomePage";
 import { Virtuoso, type ListRange } from "react-virtuoso";
 import { ApprovalPanel } from "../../panels/ApprovalPanel";
@@ -46,6 +47,7 @@ export function ChatView({
   currentRunId,
   isLoading,
   isLoadingHistory,
+  checkpointsCleaned,
   connectionStatus,
   canSendMessage,
   tools,
@@ -338,6 +340,8 @@ export function ChatView({
           </div>
         );
       },
+      Header: () =>
+        checkpointsCleaned ? <CheckpointRetentionNotice /> : null,
       Footer: () => (
         <>
           {showStreamingFooterSkeleton && (
@@ -353,7 +357,7 @@ export function ChatView({
       ),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [showStreamingFooterSkeleton],
+    [showStreamingFooterSkeleton, checkpointsCleaned],
   );
 
   const virtuosoItemContent = useCallback(
@@ -369,6 +373,9 @@ export function ChatView({
         latestAutoPreview={latestAutoPreview}
         onOpenPreview={handleOpenPreview}
         onForkMessage={handleForkMessage}
+        forkDisabledReason={
+          checkpointsCleaned ? t("chat.retention.forkDisabled") : null
+        }
         onRecommendQuestionClick={handleRecommendQuestionClick}
         onRetryCancelledMessage={handleRetryCancelledMessage}
         activeGoal={
@@ -391,6 +398,8 @@ export function ChatView({
       handleRetryCancelledMessage,
       visibleActiveGoal,
       goalsByRunId,
+      checkpointsCleaned,
+      t,
     ],
   );
 

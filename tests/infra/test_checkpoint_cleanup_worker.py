@@ -41,6 +41,9 @@ class _SessionStorage:
         self.calls.append({"cutoff": cutoff, "limit": limit})
         return list(self.session_ids)
 
+    async def mark_checkpoints_cleaned(self, session_id: str, cleaned_at):
+        return True
+
 
 class _ApprovalStorage:
     def __init__(self, pending_sessions: set[str] | None = None) -> None:
@@ -183,3 +186,48 @@ async def test_delete_failure_does_not_abort_batch(monkeypatch) -> None:
 
     assert await worker.run_once() == 1
     assert deleted == ["s2"]
+
+
+class _StampingSessionStorage(_SessionStorage):
+    def __init__(self, session_ids: list[str]) -> None:
+        super().__init__(session_ids)
+        self.stamped: list[tuple[str, datetime]] = []
+
+    async def mark_checkpoints_cleaned(self, session_id: str, cleaned_at):
+        self.stamped.append((session_id, cleaned_at))
+        return True
+
+
+@pytest.mark.asyncio
+async def test_cleanup_stamps_sessions_for_the_ui(monkeypatch) -> None:
+    storage = _StampingSessionStorage(["s1", "s2"])
+    worker, deleted = _build_worker(monkeypatch, session_storage=storage)
+
+    assert await worker.run_once() == 2
+    assert [s for s, _ in storage.stamped] == ["s1", "s2"]
+    assert all(ts == NOW for _, ts in storage.stamped)
+
+
+@pytest.mark.asyncio
+async def test_failed_delete_is_not_stamped(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "src.infra.checkpoint.cleanup_worker.is_checkpoint_backend_enabled",
+        lambda: True,
+    )
+    storage = _StampingSessionStorage(["s1", "s2"])
+
+    async def _delete(thread_id: str) -> None:
+        if thread_id == "s1":
+            raise RuntimeError("mongo down")
+
+    worker = CheckpointCleanupWorker(
+        redis_client=_Redis(),
+        session_storage=storage,
+        approval_storage=_ApprovalStorage(),
+        now_factory=lambda: NOW,
+        delete_thread=_delete,
+    )
+
+    assert await worker.run_once() == 1
+    # s1's delete failed, so the UI must not claim its context was cleaned
+    assert [s for s, _ in storage.stamped] == ["s2"]

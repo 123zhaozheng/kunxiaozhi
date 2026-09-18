@@ -126,7 +126,8 @@ class CheckpointCleanupWorker:
             self._lock_lost = False
             self._renew_task = asyncio.create_task(self._renew_lock_loop())
 
-            cutoff = self._now_factory() - timedelta(days=self.retention_days)
+            now = self._now_factory()
+            cutoff = now - timedelta(days=self.retention_days)
             storage = self._get_session_storage()
             session_ids = await storage.list_inactive_session_ids(
                 cutoff=cutoff,
@@ -141,6 +142,9 @@ class CheckpointCleanupWorker:
                     continue
                 try:
                     await self._delete_thread(session_id)
+                    # Stamped after a successful delete so the UI only claims
+                    # cleanup for sessions whose state is actually gone.
+                    await storage.mark_checkpoints_cleaned(session_id, now)
                     cleaned += 1
                 except Exception as exc:
                     logger.warning(

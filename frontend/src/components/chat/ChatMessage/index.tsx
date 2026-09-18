@@ -83,6 +83,7 @@ interface ChatMessageProps {
     source?: RevealPreviewOpenSource,
   ) => boolean;
   onForkMessage?: (messageId: string) => void | Promise<void>;
+  forkDisabledReason?: string | null;
   onRecommendQuestionClick?: (question: string) => void;
   onRetryCancelledMessage?: (messageId: string) => void | Promise<void>;
   showFeedbackAndShareActions?: boolean;
@@ -439,6 +440,7 @@ export const ChatMessage = memo(function ChatMessage({
   latestAutoPreview,
   onOpenPreview,
   onForkMessage,
+  forkDisabledReason,
   onRecommendQuestionClick,
   onRetryCancelledMessage,
   showFeedbackAndShareActions = true,
@@ -641,14 +643,22 @@ export const ChatMessage = memo(function ChatMessage({
             </button>
             {sessionId && onForkMessage && (
               <button
-                onClick={() => void onForkMessage(getForkMessageId(message))}
+                onClick={() => {
+                  if (forkDisabledReason) return;
+                  void onForkMessage(getForkMessageId(message));
+                }}
+                aria-disabled={forkDisabledReason ? true : undefined}
                 className={clsx(
                   "p-1.5 rounded-md transition-colors",
                   !isLastMessage && "sm:opacity-0 sm:group-hover:opacity-100",
-                  "hover:bg-stone-200 dark:hover:bg-stone-700",
-                  "text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300",
+                  forkDisabledReason
+                    ? "cursor-default text-stone-300 dark:text-stone-600"
+                    : clsx(
+                        "hover:bg-stone-200 dark:hover:bg-stone-700",
+                        "text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300",
+                      ),
                 )}
-                title={t("chat.message.fork")}
+                title={forkDisabledReason || t("chat.message.fork")}
               >
                 <GitBranch size={16} />
               </button>

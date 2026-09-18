@@ -267,6 +267,8 @@ export interface UseAgentReturn {
   isLoading: boolean;
   isLoadingHistory: boolean;
   historyIncomplete: boolean;
+  /** Whether retention reclaimed this session's resumable AI context. */
+  checkpointsCleaned: boolean;
   historyError: string | null;
   error: string | null;
   sessionId: string | null;

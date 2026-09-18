@@ -695,6 +695,12 @@
     "vision_assist": "Vision Assist"
   },
   "chat": {
+    "retention": {
+      "noticeLead": "This conversation had not been used for a while, so its earlier content was cleared from the AI's memory. ",
+      "noticeKept": "Your chat history is fully preserved and can still be read",
+      "noticeTail": "; when you continue, the AI starts from a new context.",
+      "forkDisabled": "This message's conversation context was cleared, so it can no longer be forked"
+    },
     "assistant": "Assistant",
     "attachFile": "Attach file",
     "cancelled": "Cancelled",

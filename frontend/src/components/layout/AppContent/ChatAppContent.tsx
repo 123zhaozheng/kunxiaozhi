@@ -167,6 +167,7 @@ export function ChatAppContent({
     isLoading,
     isLoadingHistory,
     historyIncomplete,
+    checkpointsCleaned,
     historyError,
     agents,
     currentAgent,
@@ -840,6 +841,7 @@ export function ChatAppContent({
           isLoading={isLoading}
           isLoadingHistory={isLoadingHistory}
           historyIncomplete={historyIncomplete}
+          checkpointsCleaned={checkpointsCleaned}
           historyError={historyError}
           connectionStatus={connectionStatus}
           canSendMessage={canSendMessage}
