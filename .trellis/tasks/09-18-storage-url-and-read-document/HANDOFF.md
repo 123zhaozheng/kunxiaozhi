@@ -123,6 +123,14 @@ basename 冲突，导致 `pytest -q` 全量收集直接 Interrupted。**在 clea
 4. 非本地对象存储 + 非 ASCII 文件名的完整 ASGI 响应链路（单测覆盖了 header
    构造，建议起一次真实服务 curl 验证）。
 
+## 3.5 自查补漏（提交后发现并已修）
+
+首轮交付时 AC2 只做了一半：新 storage 内容路由已补 `Content-Disposition`，
+但 `/api/upload/file/{key}` 兼容代理的两处 `StreamingResponse`
+（`upload.py:1596`、`:1637`）仍是手写 `filename="..."`，非 ASCII 文件名
+依然会在 Starlette latin-1 编码阶段抛 `UnicodeEncodeError` 变 500。
+已改为复用 `content_disposition()` 并补回归测试（commit `ea90b52d`）。
+
 ## 4. 未做（明确 out of scope）
 
 - 图片识别失效的另一半：`node_utils.py:186` 与 `vision_assist.py:58` 都读
@@ -131,4 +139,9 @@ basename 冲突，导致 `pytest -q` 全量收集直接 Interrupted。**在 clea
   统一了 URL 契约。
 - 批量重算存量用户 `used_bytes`（`reconcile_user` 只覆盖有卡死 operation 的
   用户）。
+- **AC6 只做了一半**：PDF 内图表的「文字理解」已可用（MinerU 把 VLM 描述嵌进
+  `md_content` 的 `<details>`），但 `extract_images()` 这个取图片字节的函数
+  **尚未接入 `read_document` 的返回值**，`MINERU_RETURN_IMAGES` 默认也是 false。
+  也就是说：模型能「读懂」图里讲了什么，但拿不到图片本身。若后续需要把图片
+  资源一并返回，需在 read_document 的 MinerU 分支接上 `extract_images`。
 - Team Agent 工具装载变更（它已加载 read_document，本次只更正了过期 spec）。
