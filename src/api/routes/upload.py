@@ -34,7 +34,7 @@ from src.infra.async_utils import run_blocking_io
 from src.infra.async_utils.background_tasks import BestEffortTaskLimiter
 from src.infra.auth.rbac import check_permission
 from src.infra.logging import get_logger
-from src.infra.storage.content_url import build_content_url
+from src.infra.storage.content_url import build_content_url, content_disposition
 from src.infra.storage.s3 import (
     S3Config,
     S3Provider,
@@ -1593,7 +1593,7 @@ async def get_file_proxy(
         filename_for_disposition, content_type = await _get_file_response_metadata(key)
         headers = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
         if filename_for_disposition:
-            headers["Content-Disposition"] = f'inline; filename="{filename_for_disposition}"'
+            headers["Content-Disposition"] = content_disposition(filename_for_disposition)
         return StreamingResponse(
             storage.download_stream(physical_key),
             media_type=content_type,
@@ -1634,7 +1634,7 @@ async def get_file_proxy(
         filename_for_disposition, content_type = await _get_file_response_metadata(key)
         headers = {"Cache-Control": "public, max-age=300"}
         if filename_for_disposition:
-            headers["Content-Disposition"] = f'inline; filename="{filename_for_disposition}"'
+            headers["Content-Disposition"] = content_disposition(filename_for_disposition)
         return StreamingResponse(storage.download_stream(key), media_type=content_type, headers=headers)
 
     try:

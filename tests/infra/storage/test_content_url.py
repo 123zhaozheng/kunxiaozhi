@@ -86,3 +86,9 @@ def test_content_disposition_quotes_are_neutralized() -> None:
     value = content_disposition('a"b.pdf')
     assert value == 'inline; filename="a%22b.pdf"'
     value.encode("latin-1")
+
+
+def test_legacy_proxy_disposition_survives_latin1_encoding() -> None:
+    """The legacy /api/upload/file proxy must not 500 on a CJK filename."""
+    for name in ["汇总报告.pdf", "图表📊.png", "plain.pdf"]:
+        content_disposition(name).encode("latin-1")
