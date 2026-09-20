@@ -89,6 +89,8 @@ _LIFESPAN_BACKGROUND_TASK_NAMES = (
     "analytics_backfill_task",
     "analytics_daily_freeze_task",
     "checkpoint_cleanup_task",
+    "usage_hourly_flush_task",
+    "usage_hourly_backfill_task",
     "memory_monitor_startup_reset_task",
     "agent_discovery_task",
     "models_preload_task",
@@ -598,6 +600,42 @@ async def lifespan(app: FastAPI):
             await worker.close()
 
     app.state.checkpoint_cleanup_task = asyncio.create_task(_cleanup_checkpoints())
+
+    # Hourly usage pre-aggregate: a periodic flush of the in-process buckets and
+    # a one-way backfill from the frozen daily snapshots. Both are no-ops while
+    # ANALYTICS_USAGE_HOURLY_ENABLED is off.
+    async def _flush_usage_hourly() -> None:
+        from src.infra.analytics.usage_hourly import ensure_indexes
+        from src.infra.analytics.usage_hourly_recorder import get_usage_hourly_recorder
+
+        recorder = get_usage_hourly_recorder()
+        try:
+            if recorder.enabled:
+                await ensure_indexes()
+            await recorder.run_forever()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("Usage hourly flush worker failed: %s", exc)
+        finally:
+            await recorder.close()
+
+    app.state.usage_hourly_flush_task = asyncio.create_task(_flush_usage_hourly())
+
+    async def _backfill_usage_hourly() -> None:
+        from src.infra.analytics.usage_hourly_backfill import UsageHourlyBackfillWorker
+
+        worker = UsageHourlyBackfillWorker()
+        try:
+            await worker.run_forever()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("Usage hourly backfill worker failed: %s", exc)
+        finally:
+            await worker.close()
+
+    app.state.usage_hourly_backfill_task = asyncio.create_task(_backfill_usage_hourly())
 
     # Start embedded WeCom in a background task. External/disabled modes never
     # import the SDK into the FastAPI process.

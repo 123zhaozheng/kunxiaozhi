@@ -410,7 +410,9 @@
     "tokens": {
       "byModelHint": "モデルごとの総トークン数",
       "total": "総トークン",
-      "unit": "tokens"
+      "unit": "tokens",
+      "partial": "過去データにモデル次元がないため、モデル別内訳がある部分のみ表示します。",
+      "partialSince": "過去データにモデル次元がないため、モデル別内訳は {{date}} 以降で利用できます。"
     },
     "trend": {
       "activeUsers": "アクティブユーザー",
@@ -2056,7 +2058,8 @@
     "ARQ_WORKER_MAX_JOBS": "FastAPI プロセスごとの arq job 最大同時実行数。",
     "AUDIO_TRANSCRIPTION_MODEL_ID": "audio_transcribe ツールが使うモデルカード ID（kind=transcribe）。value が文字起こしモデルのカードを参照してください（例: gpt-4o-mini-transcribe や FunAudioLLM/SenseVoiceSmall）。空欄でツールは無効になります。",
     "ANALYTICS_USAGE_HOURLY_ENABLED": "Token 統計の時間単位プリ集計を有効にします。デフォルトは無効です。",
-    "ANALYTICS_USAGE_HOURLY_FLUSH_SECONDS": "リアルタイム時間統計を書き込む間隔（秒、最小 30 秒）。",
+    "ANALYTICS_USAGE_HOURLY_FLUSH_SECONDS": "時間別使用量集計のフラッシュ間隔（秒、30〜3600）。",
+    "ANALYTICS_USAGE_HOURLY_BACKFILL_INTERVAL_SECONDS": "日次スナップショットから時間別使用量をバックフィルする間隔（秒、最小 60）。",
     "ANALYTICS_USAGE_HOURLY_BACKFILL_BATCH_DAYS": "履歴スナップショットのバックフィルで 1 バッチに処理する日数（最小 1 日）。",
     "CHECKPOINT_BACKEND": "チェックポイントストレージバックエンド。長い会話でMongoDBの16MBドキュメント制限を回避するには'postgres'を使用。",
     "CHECKPOINT_CLEANUP_BATCH_LIMIT": "1 回の処理で整理するセッションの最大数。データベース負荷を抑えます。",

@@ -509,6 +509,15 @@ EXTRA_SETTING_DEFINITIONS: dict[str, dict] = {
         "minimum": 30,
         "depends_on": "ANALYTICS_USAGE_HOURLY_ENABLED",
     },
+    "ANALYTICS_USAGE_HOURLY_BACKFILL_INTERVAL_SECONDS": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.SESSION,
+        "subcategory": "analytics",
+        "description": "settingDesc.ANALYTICS_USAGE_HOURLY_BACKFILL_INTERVAL_SECONDS",
+        "default": 3600,
+        "minimum": 60,
+        "depends_on": "ANALYTICS_USAGE_HOURLY_ENABLED",
+    },
     "ANALYTICS_USAGE_HOURLY_BACKFILL_BATCH_DAYS": {
         "type": SettingType.NUMBER,
         "category": SettingCategory.SESSION,

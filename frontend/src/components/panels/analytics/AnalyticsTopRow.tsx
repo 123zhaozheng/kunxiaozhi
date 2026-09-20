@@ -39,6 +39,8 @@ export interface AnalyticsTopRowProps {
   sessionsByAgent: ByLabelItem[];
   sessionsByPersona: ByLabelItem[];
   tokensByModel: ByLabelItem[];
+  /** Set when the range predates per-model data, so the chart must say so. */
+  tokensByModelPartial?: { partial: boolean; since: string | null };
   feedbackSummary: FeedbackSummaryResponse | null;
   feedbackByPreset: ByPresetFeedbackItem[];
   isLoading: boolean;
@@ -61,6 +63,7 @@ export function AnalyticsTopRow({
   sessionsByAgent,
   sessionsByPersona,
   tokensByModel,
+  tokensByModelPartial,
   feedbackSummary,
   feedbackByPreset,
   isLoading,
@@ -128,6 +131,20 @@ export function AnalyticsTopRow({
             error={errors.tokensByModel}
             isEmpty={!isLoading && (tokensByModel?.length ?? 0) === 0}
           >
+            {tokensByModelPartial?.partial ? (
+              <p className="mb-2 rounded-lg bg-amber-50 px-2 py-1.5 text-[11px] text-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+                {tokensByModelPartial.since
+                  ? t(
+                      "analytics.tokens.partialSince",
+                      "历史数据没有模型维度，模型明细自 {{date}} 起可用。",
+                      { date: tokensByModelPartial.since },
+                    )
+                  : t(
+                      "analytics.tokens.partial",
+                      "历史数据没有模型维度，此处仅显示已有模型明细的部分。",
+                    )}
+              </p>
+            ) : null}
             <DonutBlock
               data={tokensByModel}
               centerValue={tokensCenter}

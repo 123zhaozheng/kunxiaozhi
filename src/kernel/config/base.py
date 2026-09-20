@@ -238,6 +238,7 @@ class Settings(BaseSettings):
     # Analytics Usage Settings
     ANALYTICS_USAGE_HOURLY_ENABLED: bool = False
     ANALYTICS_USAGE_HOURLY_FLUSH_SECONDS: int = 300
+    ANALYTICS_USAGE_HOURLY_BACKFILL_INTERVAL_SECONDS: int = 3600
     ANALYTICS_USAGE_HOURLY_BACKFILL_BATCH_DAYS: int = 7
 
     # Sandbox Settings

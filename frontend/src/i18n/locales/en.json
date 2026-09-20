@@ -410,7 +410,9 @@
     "tokens": {
       "byModelHint": "Total tokens per model",
       "total": "Total tokens",
-      "unit": "tokens"
+      "unit": "tokens",
+      "partial": "Historical data has no model dimension; only the portion with model detail is shown.",
+      "partialSince": "Historical data has no model dimension; per-model detail is available from {{date}}."
     },
     "trend": {
       "activeUsers": "Active users",
@@ -2189,7 +2191,8 @@
     "ARQ_WORKER_MAX_JOBS": "Maximum concurrent arq jobs per FastAPI process.",
     "AUDIO_TRANSCRIPTION_MODEL_ID": "Model card ID (kind=transcribe) used by the audio_transcribe tool. Reference a card whose value is a transcription model such as gpt-4o-mini-transcribe or FunAudioLLM/SenseVoiceSmall. Leave empty to disable the tool.",
     "ANALYTICS_USAGE_HOURLY_ENABLED": "Enable hourly pre-aggregation for token analytics; disabled by default.",
-    "ANALYTICS_USAGE_HOURLY_FLUSH_SECONDS": "How often live hourly analytics are flushed, in seconds (minimum 30).",
+    "ANALYTICS_USAGE_HOURLY_FLUSH_SECONDS": "Flush interval for the live hourly usage aggregate (seconds, 30-3600).",
+    "ANALYTICS_USAGE_HOURLY_BACKFILL_INTERVAL_SECONDS": "Interval between hourly-usage backfill passes over frozen daily snapshots (seconds, min 60).",
     "ANALYTICS_USAGE_HOURLY_BACKFILL_BATCH_DAYS": "Number of calendar days processed per historical snapshot backfill batch (minimum 1).",
     "CHECKPOINT_BACKEND": "Checkpoint storage backend. Use 'postgres' to avoid MongoDB's 16MB document size limit on long conversations.",
     "CHECKPOINT_CLEANUP_BATCH_LIMIT": "Maximum number of sessions cleaned per scan, to bound database load.",

@@ -234,7 +234,14 @@ async def test_hourly_response_marks_range_before_live_model_data(monkeypatch) -
 
 
 @pytest.mark.asyncio
-async def test_snapshot_rows_without_model_are_not_emitted_or_counted(monkeypatch) -> None:
+async def test_snapshot_only_range_falls_back_instead_of_returning_empty(
+    monkeypatch,
+) -> None:
+    """只有快照回填行(model=None)时必须回落原路径，而不是返回空图表。
+
+    回归防护：预聚合表里明明有 tokens，却因为全部是 model=None 而被模型过滤
+    清空，前端会显示"无数据"——这比慢更糟，也更难排查。
+    """
     hourly = _HourlyCollection(
         [
             {
@@ -246,8 +253,12 @@ async def test_snapshot_rows_without_model_are_not_emitted_or_counted(monkeypatc
         ]
     )
     storage = AnalyticsStorage()
-    storage._traces = _ExplodingCollection()
-    monkeypatch.setattr(storage_module.settings, "ANALYTICS_USAGE_HOURLY_ENABLED", True, raising=False)
+    storage._traces = _RawCollection(
+        [{"label": "gpt-4o", "value": 42.0}]
+    )
+    monkeypatch.setattr(
+        storage_module.settings, "ANALYTICS_USAGE_HOURLY_ENABLED", True, raising=False
+    )
     monkeypatch.setattr(
         "src.infra.analytics.storage.get_usage_hourly_collection",
         lambda: hourly,
@@ -256,6 +267,7 @@ async def test_snapshot_rows_without_model_are_not_emitted_or_counted(monkeypatc
     response = await _get_response(_StorageManager(storage))
 
     assert response.status_code == 200
-    assert response.json()["items"] == []
-    assert response.json()["partial"] is True
-    assert response.json()["model_data_since"] is None
+    body = response.json()
+    # 回落到 raw traces，给出真实数据而非空列表
+    assert [item["label"] for item in body["items"]] == ["gpt-4o"]
+    assert body["partial"] is False

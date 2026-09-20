@@ -30,6 +30,10 @@ export interface ByLabelItem {
 
 export interface ByLabelResponse {
   items: ByLabelItem[];
+  /** True when part of the range predates per-model data (snapshot backfill). */
+  partial?: boolean;
+  /** First date with model-level data, ISO yyyy-mm-dd. */
+  model_data_since?: string | null;
 }
 
 export interface SessionsTrendResponse {

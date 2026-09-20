@@ -513,6 +513,12 @@ class AnalyticsStorage:
             {"$project": {"_id": 0, "label": "$_id", "value": 1}},
         ]
         model_documents = await _aggregate_documents(collection, model_pipeline)
+        if not model_documents:
+            # Only snapshot-backfilled rows (model=None) cover this range, so the
+            # pre-aggregate cannot answer a per-model question. Returning [] here
+            # would render an empty chart while the data exists in traces, which
+            # is worse than being slow -- fall back to the raw path instead.
+            return None
 
         live_documents = await _aggregate_documents(
             collection,

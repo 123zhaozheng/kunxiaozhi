@@ -127,8 +127,10 @@ class UsageHourlyBackfillWorker:
 
     @property
     def interval_seconds(self) -> float:
-        configured = getattr(settings, "ANALYTICS_USAGE_HOURLY_FLUSH_SECONDS", 300)
-        return min(max(float(configured or 0), 1.0), 86400.0)
+        configured = getattr(
+            settings, "ANALYTICS_USAGE_HOURLY_BACKFILL_INTERVAL_SECONDS", 3600
+        )
+        return min(max(float(configured or 0), 60.0), 86400.0)
 
     async def run_once(self) -> int:
         """Process one bounded date range while holding the Redis lease."""

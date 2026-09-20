@@ -410,7 +410,9 @@
     "tokens": {
       "byModelHint": "每个模型的总 token 数",
       "total": "总 token",
-      "unit": "tokens"
+      "unit": "tokens",
+      "partial": "历史数据没有模型维度，此处仅显示已有模型明细的部分。",
+      "partialSince": "历史数据没有模型维度，模型明细自 {{date}} 起可用。"
     },
     "trend": {
       "activeUsers": "活跃用户",
@@ -2189,7 +2191,8 @@
     "ARQ_WORKER_MAX_JOBS": "每个 FastAPI 进程内 arq job 的最大并发数。",
     "AUDIO_TRANSCRIPTION_MODEL_ID": "audio_transcribe 工具使用的模型卡片 ID（kind=transcribe）。请引用 value 为转写模型的卡片，例如 gpt-4o-mini-transcribe 或 FunAudioLLM/SenseVoiceSmall。留空则禁用该工具。",
     "ANALYTICS_USAGE_HOURLY_ENABLED": "启用 Token 统计的小时级预聚合；默认关闭。",
-    "ANALYTICS_USAGE_HOURLY_FLUSH_SECONDS": "实时小时统计的刷写间隔（秒，最少 30 秒）。",
+    "ANALYTICS_USAGE_HOURLY_FLUSH_SECONDS": "实时小时用量聚合的刷写间隔（秒，30–3600）。",
+    "ANALYTICS_USAGE_HOURLY_BACKFILL_INTERVAL_SECONDS": "从每日冻结快照回填小时用量的扫描间隔（秒，最少 60）。",
     "ANALYTICS_USAGE_HOURLY_BACKFILL_BATCH_DAYS": "历史快照回填每批处理的日历天数（最少 1 天）。",
     "CHECKPOINT_BACKEND": "检查点存储后端。使用 'postgres' 避免 MongoDB 的 16MB 文档大小限制（长对话时）。",
     "CHECKPOINT_CLEANUP_BATCH_LIMIT": "每次扫描最多清理的会话数量，用于限制数据库负载。",
