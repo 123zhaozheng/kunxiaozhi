@@ -1558,3 +1558,30 @@ check 复核修 5 项：自定义按钮死 key、tooltip 英文硬编码、导�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 49: 合入 kunxiaozhi 09-18 存储URL交接包与 image-unify 并完成 review 修正
+
+**Date**: 2026-09-20
+**Task**: 合入 kunxiaozhi 09-18 存储URL交接包与 image-unify 并完成 review 修正
+**Branch**: `feat/user-storage-management`
+
+### Summary
+
+git am -3 合入 09-18 存储 URL 交接包（4 提交，attachments.py 冲突解=build_content_url+主机前缀叠加，auth 收敛精确正则，.developer 被覆盖已修复）；trellis-check review 4 项 🟡（探测收窄+HEAD、删 _resolve_url 孤儿、移除 no-op MINERU_RETURN_IMAGES 链路、@tool 契约同步）由 trellis-implement 修复并复验全过；再合 image-unify 删 vision_assist 统一图片链路。定向 266+206 passed、tsc/eslint 绿。k8s 待配 MINERU_BACKEND/EFFORT=high/IMAGE_ANALYSIS/APP_BASE_URL。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1b041089` | (see git log) |
+| `7f8d9c2f` | (see git log) |
+| `aa4f4232` | (see git log) |
+| `936adf1c` | (see git log) |
+| `1bdde899` | (see git log) |
+| `f7bb98a7` | (see git log) |
+| `8d53d7fa` | (see git log) |
+
+### Status
+
+[OK] **Completed**
