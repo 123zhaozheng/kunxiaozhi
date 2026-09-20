@@ -22,6 +22,7 @@ import { useTranslation } from "react-i18next";
 import { useSettingsContext } from "../../contexts/SettingsContext";
 import { JsonSchemaEditor } from "./JsonSchemaEditor";
 import { SystemHealthSection } from "./SystemHealthSection";
+import { MongoStorageSection } from "./MongoStorageSection";
 import { WeComNetworkSettings } from "./WeComNetworkSettings";
 import { OpenSandboxNodesPanel } from "./OpenSandboxNodesPanel";
 import { useAuth } from "../../hooks/useAuth";
@@ -672,6 +673,7 @@ export function SettingsPanel() {
           <div className="flex-1 overflow-y-auto py-2 sm:py-4 px-4">
             {/* System Health Monitor */}
             <SystemHealthSection />
+            <MongoStorageSection />
 
             {!searchQuery && activeCategory === "sandbox" && canManage && (
               <div className="mb-5">

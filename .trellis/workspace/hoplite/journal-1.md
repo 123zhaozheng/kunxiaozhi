@@ -26,3 +26,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 2: 后台配置页 MongoDB 存储指标面板
+
+**Date**: 2026-09-20
+**Task**: 后台配置页 MongoDB 存储指标面板
+**Branch**: `feat/user-storage-management`
+
+### Summary
+
+新增 GET /health/mongodb（settings:manage，dbStats + $collStats storageStats，元数据级读取、分片求和、分区块 fail-soft）与前端 MongoStorageSection 面板，挂载于 SettingsPanel SystemHealthSection 之后；checkpoint 两张集合（checkpoints/checkpoint_writes）抽常量并同屏展示清理配置与估算积压；5 locale 同步 mongoStorage namespace。后端 5 新测试通过，前端 tsc/eslint/vite build 通过，三态已截图验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `working-tree` | (see git log) |
+
+### Status
+
+[OK] **Completed**

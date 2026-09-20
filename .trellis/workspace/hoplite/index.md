@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 1
-- **Last Active**: 2026-09-18
+- **Total Sessions**: 2
+- **Last Active**: 2026-09-20
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~28 | Active |
+| `journal-1.md` | ~49 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 2 | 2026-09-20 | 后台配置页 MongoDB 存储指标面板 | working-tree | `feat/user-storage-management` |
 | 1 | 2026-09-18 | 存储 URL 回归文件名可读 + 删除后重传修复 + read_document 全路径与图片识别 | `3c19f393` | `task/09-18-storage-url-and-read-document` |
 <!-- @@@/auto:session-history -->
 

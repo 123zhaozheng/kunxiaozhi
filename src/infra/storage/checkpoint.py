@@ -34,6 +34,9 @@ from src.kernel.config import settings
 
 logger = get_logger(__name__)
 
+CHECKPOINT_COLLECTION_NAME = "checkpoints"
+CHECKPOINT_WRITES_COLLECTION_NAME = "checkpoint_writes"
+
 _MEMORY_SAVER_MAX_THREADS = max(int(getattr(settings, "MEMORY_SAVER_MAX_THREADS", 200) or 0), 1)
 _MEMORY_SAVER_TTL_SECONDS = max(
     int(getattr(settings, "MEMORY_SAVER_TTL_SECONDS", 3600) or 0),
@@ -132,7 +135,9 @@ async def reset_checkpointer_runtime_state() -> None:
     await close_pg_checkpointer()
 
 
-def get_mongo_checkpointer(collection_name: str = "checkpoints") -> BaseCheckpointSaver[Any] | None:
+def get_mongo_checkpointer(
+    collection_name: str = CHECKPOINT_COLLECTION_NAME,
+) -> BaseCheckpointSaver[Any] | None:
     """
     获取 MongoDB checkpointer 单例
 
