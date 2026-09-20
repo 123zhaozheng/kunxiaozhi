@@ -12,11 +12,13 @@ from typing import Any
 
 from src.infra.analytics.date_range import (
     _BUCKET_TZ,
+    CST,
     previous_range,
     range_to_date_strings,
     resolve_range,
 )
 from src.infra.analytics.snapshot import SNAPSHOT_COLLECTION_NAME, read_or_freeze
+from src.infra.analytics.usage_hourly import get_usage_hourly_collection
 from src.infra.analytics.usage_query import (
     UsageFilters,
     new_sessions_match,
@@ -58,6 +60,52 @@ logger = get_logger(__name__)
 
 _TOKEN_USAGE_EVENT = "token:usage"
 _TOP_PRESET_LIMIT = 10
+
+
+class _TokensByModelResult(list[ByLabelItem]):
+    """Legacy-compatible list carrying hourly model-dimension metadata."""
+
+    def __init__(
+        self,
+        items: list[ByLabelItem],
+        *,
+        partial: bool = False,
+        model_data_since: str | None = None,
+    ) -> None:
+        super().__init__(items)
+        self.partial = partial
+        self.model_data_since = model_data_since
+
+
+async def _aggregate_documents(
+    collection: Any,
+    pipeline: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Collect an async Motor cursor while remaining easy to fake in tests."""
+    cursor = collection.aggregate(pipeline)
+    if hasattr(cursor, "__await__"):
+        cursor = await cursor
+    if isinstance(cursor, list):
+        return cursor
+    if hasattr(cursor, "to_list"):
+        documents = cursor.to_list(length=None)
+        if hasattr(documents, "__await__"):
+            documents = await documents
+        return list(documents)
+    return [document async for document in cursor]
+
+
+def _bucket_date(value: Any) -> str | None:
+    """Format an hourly bucket using the analytics calendar timezone."""
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.date().isoformat()
+        return value.astimezone(CST).date().isoformat()
+    if isinstance(value, str) and value:
+        return value[:10]
+    if hasattr(value, "isoformat"):
+        return value.isoformat()[:10]
+    return None
 
 
 def _model_label(data: dict[str, Any]) -> str:
@@ -427,6 +475,79 @@ class AnalyticsStorage:
             total_sessions=total_sessions,
         )
 
+    async def _get_tokens_by_model_hourly(
+        self,
+        start: datetime,
+        end: datetime,
+    ) -> _TokensByModelResult | None:
+        """Read model totals from hourly aggregates, or signal unavailable data."""
+        collection = get_usage_hourly_collection()
+        bucket_match = {"bucket": {"$gte": start, "$lt": end}}
+        availability = await _aggregate_documents(
+            collection,
+            [{"$match": bucket_match}, {"$limit": 1}, {"$project": {"_id": 1}}],
+        )
+        if not availability:
+            return None
+        unknown_model_rows = await _aggregate_documents(
+            collection,
+            [
+                {"$match": bucket_match},
+                {"$match": {"model": None}},
+                {"$limit": 1},
+                {"$project": {"_id": 1}},
+            ],
+        )
+
+        model_pipeline: list[dict[str, Any]] = [
+            {"$match": bucket_match},
+            {"$match": {"model": {"$ne": None}}},
+            {
+                "$group": {
+                    "_id": "$model",
+                    "value": {"$sum": "$tokens"},
+                }
+            },
+            {"$sort": {"value": -1}},
+            {"$limit": 50},
+            {"$project": {"_id": 0, "label": "$_id", "value": 1}},
+        ]
+        model_documents = await _aggregate_documents(collection, model_pipeline)
+
+        live_documents = await _aggregate_documents(
+            collection,
+            [
+                {"$match": {"source": "live"}},
+                {"$sort": {"bucket": 1}},
+                {"$limit": 1},
+                {"$project": {"_id": 0, "bucket": 1}},
+            ],
+        )
+        model_data_since = (
+            _bucket_date(live_documents[0].get("bucket")) if live_documents else None
+        )
+        requested_start = start.astimezone(CST).date()
+        live_start = (
+            datetime.fromisoformat(model_data_since).date() if model_data_since else None
+        )
+        partial = (
+            bool(unknown_model_rows) or live_start is None or requested_start < live_start
+        )
+
+        items = [
+            ByLabelItem(
+                label=str(document.get("label", document.get("_id"))),
+                value=float(document.get("value", 0) or 0),
+            )
+            for document in model_documents
+            if document.get("label", document.get("_id")) is not None
+        ]
+        return _TokensByModelResult(
+            items,
+            partial=partial,
+            model_data_since=model_data_since,
+        )
+
     async def get_tokens_by_model(
         self,
         start: datetime,
@@ -436,6 +557,18 @@ class AnalyticsStorage:
         """按模型聚合 token 消耗。"""
         s = _ensure_datetime(start)
         e = _ensure_datetime(end)
+        # Filtered requests retain the legacy path because hourly rows have no role join.
+        if filters is None and bool(getattr(settings, "ANALYTICS_USAGE_HOURLY_ENABLED", False)):
+            try:
+                hourly_result = await self._get_tokens_by_model_hourly(s, e)
+            except Exception as ex:
+                logger.warning(
+                    "[Analytics] Hourly token aggregation failed, falling back to traces: %s",
+                    ex,
+                )
+            else:
+                if hourly_result is not None:
+                    return hourly_result
         if filters is None:
             pipeline: list[dict[str, Any]] = [
                 {

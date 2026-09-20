@@ -235,6 +235,11 @@ class Settings(BaseSettings):
     CHECKPOINT_CLEANUP_INTERVAL_HOURS: int = 24
     CHECKPOINT_CLEANUP_BATCH_LIMIT: int = 200
 
+    # Analytics Usage Settings
+    ANALYTICS_USAGE_HOURLY_ENABLED: bool = False
+    ANALYTICS_USAGE_HOURLY_FLUSH_SECONDS: int = 300
+    ANALYTICS_USAGE_HOURLY_BACKFILL_BATCH_DAYS: int = 7
+
     # Sandbox Settings
     ENABLE_SANDBOX: bool = True
     SANDBOX_PLATFORM: str = "daytona"

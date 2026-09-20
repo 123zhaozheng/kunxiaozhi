@@ -490,6 +490,35 @@ EXTRA_SETTING_DEFINITIONS: dict[str, dict] = {
         "depends_on": "CHECKPOINT_CLEANUP_ENABLED",
     },
     # ============================================
+    # Analytics Usage Settings
+    # ============================================
+    "ANALYTICS_USAGE_HOURLY_ENABLED": {
+        "type": SettingType.BOOLEAN,
+        "category": SettingCategory.SESSION,
+        "subcategory": "analytics",
+        "description": "settingDesc.ANALYTICS_USAGE_HOURLY_ENABLED",
+        "default": False,
+        "frontend_visible": True,
+    },
+    "ANALYTICS_USAGE_HOURLY_FLUSH_SECONDS": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.SESSION,
+        "subcategory": "analytics",
+        "description": "settingDesc.ANALYTICS_USAGE_HOURLY_FLUSH_SECONDS",
+        "default": 300,
+        "minimum": 30,
+        "depends_on": "ANALYTICS_USAGE_HOURLY_ENABLED",
+    },
+    "ANALYTICS_USAGE_HOURLY_BACKFILL_BATCH_DAYS": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.SESSION,
+        "subcategory": "analytics",
+        "description": "settingDesc.ANALYTICS_USAGE_HOURLY_BACKFILL_BATCH_DAYS",
+        "default": 7,
+        "minimum": 1,
+        "depends_on": "ANALYTICS_USAGE_HOURLY_ENABLED",
+    },
+    # ============================================
     # User Management Settings
     # ============================================
     "DEFAULT_USER_ROLE": {
