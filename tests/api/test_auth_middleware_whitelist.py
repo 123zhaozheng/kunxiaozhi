@@ -26,7 +26,9 @@ async def _sentinel(_request: Request) -> PlainTextResponse:
 
 
 async def test_managed_content_path_is_public_for_tokenless_fetchers() -> None:
-    result = await AuthMiddleware(None).dispatch(_request("/api/storage/files/abc123/content"), _sentinel)
+    result = await AuthMiddleware(None).dispatch(
+        _request("/api/storage/files/0123456789abcdef0123456789abcdef/content/report.pdf"), _sentinel
+    )
     assert result.status_code == 200
     assert result.body == b"ok"
 

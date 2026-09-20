@@ -48,9 +48,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/api/auth/verify-email",
         "/api/auth/resend-verification",
         "/api/upload/file/",
-        # 沙箱/工具链无凭据拉取逻辑文件内容；file_id 为 128 位随机 hex，
-        # 与 /api/upload/file/{key} 的能力令牌模型一致。
-        "/api/storage/files/",
         "/assets/",
         "/icons/",
         "/images/",
