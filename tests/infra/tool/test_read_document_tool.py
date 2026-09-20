@@ -5,13 +5,22 @@ import pytest
 
 from src.infra.tool.mineru_client import MinerUError
 
+# 32-hex file_id so the resolver classifies the URL as managed storage flavor.
+_MANAGED_FILE_ID = "a" * 32
+
 
 class _Runtime:
     def __init__(
-        self, user_id: str | None = None, base_url: str = "https://app.example.com"
+        self,
+        user_id: str | None = None,
+        base_url: str = "https://app.example.com",
+        backend: object | None = None,
     ) -> None:
         context = SimpleNamespace(user_id=user_id) if user_id is not None else None
-        self.config = {"configurable": {"context": context, "base_url": base_url}}
+        configurable: dict = {"context": context, "base_url": base_url}
+        if backend is not None:
+            configurable["backend"] = backend
+        self.config = {"configurable": configurable}
 
 
 def _fake_http_client(response_factory):
@@ -639,7 +648,7 @@ def test_filename_from_headers_plain_filename_and_content_type_fallback() -> Non
 async def test_read_document_recovers_filename_from_logical_content_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Extension-less /content URLs recover the real filename from headers."""
+    """Extension-less managed /content URLs recover the filename via a HEAD probe."""
     from src.infra.tool import read_document_tool
 
     monkeypatch.setattr(read_document_tool.settings, "ENABLE_DOCUMENT_PARSE", True)
@@ -650,6 +659,8 @@ async def test_read_document_recovers_filename_from_logical_content_url(
     _patch_mineru_client(
         monkeypatch, exc=AssertionError("must not call MinerU for data files")
     )
+
+    methods: list[str] = []
 
     class _RecoveryResponse:
         status_code = 200
@@ -663,12 +674,6 @@ async def test_read_document_recovers_filename_from_logical_content_url(
         async def __aexit__(self, *args):
             return None
 
-        def raise_for_status(self) -> None:
-            return None
-
-        async def aiter_bytes(self):  # pragma: no cover - data files never download
-            yield b""
-
     class _RecoveryClient:
         async def __aenter__(self):
             return self
@@ -677,7 +682,10 @@ async def test_read_document_recovers_filename_from_logical_content_url(
             return None
 
         def stream(self, method: str, request_url: str):
-            assert method == "GET"
+            methods.append(method)
+            assert request_url == (
+                f"https://app.example.com/api/storage/files/{_MANAGED_FILE_ID}/content"
+            )
             return _RecoveryResponse()
 
     monkeypatch.setattr(
@@ -686,12 +694,110 @@ async def test_read_document_recovers_filename_from_logical_content_url(
 
     result = json.loads(
         await read_document_tool.read_document.coroutine(
-            url="https://app.example.com/api/storage/files/f9/content",
+            url=f"/api/storage/files/{_MANAGED_FILE_ID}/content",
             runtime=_Runtime("user-1"),
         )
     )
 
+    assert methods == ["HEAD"]  # HEAD succeeded: no GET fallback
     assert result["success"] is False
     assert result["format"] == "xlsx"
     assert result["filename"] == "汇总.xlsx"
     assert "/workspace/汇总.xlsx" in result["guidance"]
+
+
+@pytest.mark.asyncio
+async def test_read_document_filename_recovery_falls_back_to_get_when_head_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-2xx HEAD probe falls back to a full GET for the real filename."""
+    from src.infra.tool import read_document_tool
+
+    monkeypatch.setattr(read_document_tool.settings, "ENABLE_DOCUMENT_PARSE", True)
+    monkeypatch.setattr(
+        read_document_tool.settings, "MINERU_API_BASE_URL", "http://mineru.local:8000"
+    )
+    _patch_backend(monkeypatch, object())
+    _patch_mineru_client(
+        monkeypatch, exc=AssertionError("must not call MinerU for data files")
+    )
+
+    methods: list[str] = []
+
+    class _ProbeResponse:
+        def __init__(self, status_code: int) -> None:
+            self.status_code = status_code
+            self.headers = (
+                {}
+                if status_code == 405
+                else {"content-disposition": 'attachment; filename="report.xlsx"'}
+            )
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+    class _ProbeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        def stream(self, method: str, request_url: str):
+            methods.append(method)
+            return _ProbeResponse(405 if method == "HEAD" else 200)
+
+    monkeypatch.setattr(
+        read_document_tool.httpx, "AsyncClient", lambda **kwargs: _ProbeClient()
+    )
+
+    result = json.loads(
+        await read_document_tool.read_document.coroutine(
+            url=f"/api/storage/files/{_MANAGED_FILE_ID}/content",
+            runtime=_Runtime("user-1"),
+        )
+    )
+
+    assert methods == ["HEAD", "GET"]
+    assert result["success"] is False
+    assert result["kind"] == "data_file"
+    assert result["filename"] == "report.xlsx"
+
+
+@pytest.mark.asyncio
+async def test_read_document_sandbox_path_without_extension_skips_probe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Extension-less sandbox paths must not trigger a filename probe."""
+    from src.infra.tool import read_document_tool
+
+    monkeypatch.setattr(read_document_tool.settings, "ENABLE_DOCUMENT_PARSE", True)
+    monkeypatch.setattr(
+        read_document_tool.settings, "MINERU_API_BASE_URL", "http://mineru.local:8000"
+    )
+
+    probe_calls: list[str] = []
+
+    async def record_probe(url: str) -> str | None:
+        probe_calls.append(url)
+        return None
+
+    monkeypatch.setattr(read_document_tool, "_recover_filename", record_probe)
+
+    def _no_http(**kwargs):
+        raise AssertionError("sandbox paths must not be probed over HTTP")
+
+    monkeypatch.setattr(read_document_tool.httpx, "AsyncClient", _no_http)
+
+    result = json.loads(
+        await read_document_tool.read_document.coroutine(
+            url="/workspace/Makefile",
+            runtime=_Runtime("user-1", backend=object()),
+        )
+    )
+
+    assert probe_calls == []
+    assert result == {"error": "Unsupported file type"}

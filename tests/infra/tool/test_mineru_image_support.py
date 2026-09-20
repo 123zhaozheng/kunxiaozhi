@@ -6,7 +6,6 @@ import pytest
 
 from src.infra.tool.mineru_client import (
     MinerUClient,
-    extract_images,
     strip_server_local_image_links,
 )
 from src.infra.tool.read_document_tool import (
@@ -75,7 +74,6 @@ def test_client_sends_effort_and_image_analysis() -> None:
     assert client.backend == "hybrid-engine"
     assert client.effort == "high"
     assert client.image_analysis is True
-    assert client.return_images is False
 
 
 def test_client_overrides_are_honoured() -> None:
@@ -84,38 +82,6 @@ def test_client_overrides_are_honoured() -> None:
         backend="pipeline",
         effort="medium",
         image_analysis=False,
-        return_images=True,
     )
     assert (client.backend, client.effort) == ("pipeline", "medium")
     assert client.image_analysis is False
-    assert client.return_images is True
-
-
-def test_extract_images_reads_first_result() -> None:
-    payload = {
-        "results": {
-            "doc.pdf": {
-                "md_content": "x",
-                "images": {"a.jpg": "data:image/jpeg;base64,AAA"},
-            }
-        }
-    }
-    assert extract_images(payload) == {"a.jpg": "data:image/jpeg;base64,AAA"}
-
-
-def test_extract_images_caps_count() -> None:
-    images = {f"{i}.jpg": "data:image/jpeg;base64,AAA" for i in range(30)}
-    out = extract_images({"results": {"d": {"images": images}}}, max_images=5)
-    assert len([k for k in out if k != "__truncated__"]) == 5
-    assert "__truncated__" in out
-
-
-def test_extract_images_caps_bytes() -> None:
-    images = {f"{i}.jpg": "d" * 1000 for i in range(10)}
-    out = extract_images({"results": {"d": {"images": images}}}, max_total_bytes=2500)
-    assert "__truncated__" in out
-
-
-def test_extract_images_tolerates_missing_field() -> None:
-    assert extract_images({"results": {"d": {"md_content": "x"}}}) == {}
-    assert extract_images({}) == {}

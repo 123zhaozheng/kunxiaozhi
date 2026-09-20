@@ -54,6 +54,15 @@ real error from a `data_file` guidance result.
 - The MinerU client contract (`src/infra/tool/mineru_client.py`) is untouched by
   dispatch changes — multipart byte upload only, MinerU never fetches URLs (see
   memory `mineru-internal-api`).
+- **Filename probing is narrow and HEAD-first.** `_recover_filename` fires only
+  when the source is the managed flavor AND the URL carries no filename segment
+  (`/api/storage/files/{32hex}/content` legacy shape). Sandbox paths, `/skills`
+  paths, third-party URLs and managed URLs that already carry a name must never
+  probe (a probe against a non-http path is a guaranteed exception + warning
+  log). The probe issues `HEAD` first and falls back to a full `GET` when HEAD
+  returns non-2xx or throws. Locked by
+  `test_read_document_sandbox_path_without_extension_skips_probe` and
+  `test_read_document_filename_recovery_falls_back_to_get_when_head_fails`.
 
 ### 4. Gotcha: charset-normalizer mis-detects very short CJK text
 

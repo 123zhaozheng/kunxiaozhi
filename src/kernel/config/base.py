@@ -441,7 +441,6 @@ class Settings(BaseSettings):
     MINERU_BACKEND: str = "hybrid-engine"
     MINERU_PARSE_EFFORT: str = "high"
     MINERU_IMAGE_ANALYSIS: bool = True
-    MINERU_RETURN_IMAGES: bool = False
     DOCUMENT_PARSE_MAX_BYTES: int = 52428800
     DOCUMENT_PARSE_MAX_OUTPUT_CHARS: int = 50000
 

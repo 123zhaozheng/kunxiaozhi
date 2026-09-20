@@ -26,11 +26,9 @@ from langchain_core.tools import BaseTool, InjectedToolArg
 
 from src.infra.async_utils import run_blocking_io
 from src.infra.logging import get_logger
-from src.infra.tool.backend_utils import (
-    get_backend_from_runtime,
-    get_base_url_from_runtime,
-)
+from src.infra.tool.backend_utils import get_backend_from_runtime
 from src.infra.tool.document_source import (
+    FLAVOR_MANAGED,
     read_backend_bytes,
     resolve_document_source,
 )
@@ -104,16 +102,6 @@ async def _json_dumps_result(data: dict[str, Any]) -> str:
     return await run_blocking_io(json.dumps, data, ensure_ascii=False)
 
 
-def _resolve_url(url: str, runtime: ToolRuntime | None) -> str:
-    if url.startswith(("http://", "https://")):
-        return url
-    if url.startswith("/"):
-        base_url = get_base_url_from_runtime(runtime)
-        if base_url:
-            return f"{base_url}{url}"
-    return url
-
-
 def _guess_filename(url: str) -> str:
     path = urlparse(url).path.rstrip("/")
     return path.split("/")[-1] if path else "document"
@@ -134,7 +122,15 @@ def _filename_from_headers(headers: Any) -> str | None:
 
 
 async def _recover_filename(url: str) -> str | None:
-    """Probe response headers (without consuming the body) for the real filename."""
+    """Probe response headers (HEAD first, GET fallback) for the real filename."""
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15) as http_client:
+            async with http_client.stream("HEAD", url) as response:
+                if 200 <= response.status_code < 300:
+                    return _filename_from_headers(response.headers)
+    except Exception as exc:
+        logger.debug("[read_document] HEAD probe failed for %s: %s", url, exc)
+    # HEAD unsupported or failed (non-2xx / error): fall back to a full GET.
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=15) as http_client:
             async with http_client.stream("GET", url) as response:
@@ -340,7 +336,9 @@ async def _handle_data_file(
 async def read_document(
     url: Annotated[
         str,
-        "Document attachment URL from the message summary. Absolute URL or /api/upload/file/<key> path.",
+        "Document or image location: an absolute URL, an /api path, an in-sandbox "
+        "absolute path (e.g. /workspace/a.pdf), or a /skills/... path. Bare storage "
+        "keys without a leading slash are rejected.",
     ],
     runtime: Annotated[ToolRuntime, InjectedToolArg] = None,  # type: ignore[assignment]
 ) -> str:
@@ -348,6 +346,8 @@ async def read_document(
 
     Dispatches by file type:
     - pdf / docx / pptx -> parsed by MinerU, returned as Markdown.
+    - png / jpg (on non-multimodal models) -> image analysis by MinerU returns
+      a text description of the image content.
     - txt / md / log / json / py -> decoded in-process and returned as plain text.
     - xlsx / csv -> NOT parsed to text. Returns guidance pointing to the sandbox
       (upload_url_to_sandbox + pandas via the sandbox execute tool). When no
@@ -368,9 +368,15 @@ async def read_document(
     resolved_url = source.url or source.backend_path or url
     filename = source.filename or _guess_filename(resolved_url)
     file_kind = _classify_file(filename)
-    if file_kind is None and "." not in filename:
-        # Logical content URLs end in /content with no extension; ask the
-        # content endpoint for the real filename before giving up.
+    if (
+        file_kind is None
+        and source.flavor == FLAVOR_MANAGED
+        and source.filename is None
+    ):
+        # Managed content URLs end in /content with no filename segment; ask
+        # the content endpoint for the real filename before giving up. Every
+        # other flavor (sandbox/skill paths, third-party URLs) carries its own
+        # name in the path, so probing it would be a wasted network call.
         recovered = await _recover_filename(resolved_url)
         if recovered:
             filename = recovered

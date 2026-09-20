@@ -58,7 +58,6 @@ async def test_parse_bytes_returns_first_md_content(monkeypatch: pytest.MonkeyPa
     assert captured["data"] == {
         "return_md": "true",
         "return_content_list": "false",
-        "return_images": "false",
         "backend": "hybrid-engine",
         "effort": "high",
         "image_analysis": "true",

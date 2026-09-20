@@ -47,7 +47,6 @@ class MinerUClient:
         backend: str | None = None,
         effort: str | None = None,
         image_analysis: bool | None = None,
-        return_images: bool | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -61,19 +60,12 @@ class MinerUClient:
             if image_analysis is None
             else bool(image_analysis)
         )
-        self.return_images = (
-            bool(getattr(settings, "MINERU_RETURN_IMAGES", False))
-            if return_images is None
-            else bool(return_images)
-        )
 
     async def parse_bytes(
         self,
         filename: str,
         content: bytes,
         content_type: str = "application/pdf",
-        *,
-        return_images: bool | None = None,
     ) -> str:
         """POST bytes to MinerU and return the parsed Markdown.
 
@@ -84,11 +76,9 @@ class MinerUClient:
         headers: dict[str, str] = {"ngrok-skip-browser-warning": "true"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        want_images = self.return_images if return_images is None else bool(return_images)
         data = {
             "return_md": "true",
             "return_content_list": "false",
-            "return_images": "true" if want_images else "false",
             # Sent explicitly: hybrid medium disables figure analysis server-side.
             "backend": self.backend,
             "effort": self.effort,
@@ -145,27 +135,3 @@ def strip_server_local_image_links(markdown: str) -> str:
     if not markdown:
         return markdown
     return _SERVER_LOCAL_IMAGE_LINK.sub("", markdown)
-
-
-def extract_images(result: dict, *, max_images: int = 20, max_total_bytes: int = 8 * 1024 * 1024) -> dict[str, str]:
-    """Return bounded `{name: data-uri}` figures when return_images was on."""
-    results = result.get("results", {})
-    first = next(iter(results.values()), {})
-    if not isinstance(first, dict):
-        return {}
-    images = first.get("images") or {}
-    if not isinstance(images, dict):
-        return {}
-    bounded: dict[str, str] = {}
-    total = 0
-    for name, value in images.items():
-        if len(bounded) >= max_images:
-            bounded["__truncated__"] = f"omitted {len(images) - len(bounded)} more figures"
-            break
-        text = str(value or "")
-        total += len(text)
-        if total > max_total_bytes:
-            bounded["__truncated__"] = "figure payload exceeded the byte budget"
-            break
-        bounded[str(name)] = text
-    return bounded
