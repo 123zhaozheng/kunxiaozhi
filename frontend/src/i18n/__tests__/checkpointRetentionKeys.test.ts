@@ -11,12 +11,7 @@ const localeFiles = ["en", "zh", "ja", "ko", "ru"].map((locale) =>
   resolve(frontendSrc, "i18n", "locales", `${locale}.json`),
 );
 
-const retentionKeys = [
-  "noticeLead",
-  "noticeKept",
-  "noticeTail",
-  "forkDisabled",
-] as const;
+const retentionKeys = ["noticeLead", "noticeKept", "forkDisabled"] as const;
 
 function readJson(path: string) {
   return JSON.parse(readFileSync(path, "utf8"));
@@ -41,13 +36,23 @@ test("checkpoint retention strings are available in every locale", () => {
 
 test("retention notice renders i18n keys instead of inline text", () => {
   const source = readFileSync(
-    resolve(frontendSrc, "components", "chat", "CheckpointRetentionNotice.tsx"),
+    resolve(
+      frontendSrc,
+      "components",
+      "layout",
+      "AppContent",
+      "ChatView.tsx",
+    ),
     "utf8",
   );
-  for (const key of ["noticeLead", "noticeKept", "noticeTail"]) {
+  for (const key of ["noticeLead", "noticeKept"]) {
     assert.ok(
       source.includes(`chat.retention.${key}`),
-      `notice should use chat.retention.${key}`,
+      `ChatView should use chat.retention.${key}`,
     );
   }
+  assert.ok(
+    source.includes("retentionNotice"),
+    "ChatView should pass the composed notice into ChatInput.retentionNotice",
+  );
 });

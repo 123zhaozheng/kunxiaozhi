@@ -9,7 +9,6 @@ import { RevealPreviewHost } from "../../chat/ChatMessage/items/RevealPreviewHos
 import { SessionImageGalleryProvider } from "../../chat/ChatMessage/sessionImageGallery";
 import { PersistentToolPanelHost } from "../../chat/ChatMessage/items/persistentToolPanelState";
 import { ChatInput } from "../../chat/ChatInput";
-import { CheckpointRetentionNotice } from "../../chat/CheckpointRetentionNotice";
 import { WelcomePage } from "../../chat/WelcomePage";
 import { Virtuoso, type ListRange } from "react-virtuoso";
 import { ApprovalPanel } from "../../panels/ApprovalPanel";
@@ -340,8 +339,6 @@ export function ChatView({
           </div>
         );
       },
-      Header: () =>
-        checkpointsCleaned ? <CheckpointRetentionNotice /> : null,
       Footer: () => (
         <>
           {showStreamingFooterSkeleton && (
@@ -357,7 +354,7 @@ export function ChatView({
       ),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [showStreamingFooterSkeleton, checkpointsCleaned],
+    [showStreamingFooterSkeleton],
   );
 
   const virtuosoItemContent = useCallback(
@@ -613,6 +610,12 @@ export function ChatView({
         <div className="relative px-2">
           <ChatInput
             {...chatInputProps}
+            disabled={checkpointsCleaned}
+            retentionNotice={
+              checkpointsCleaned
+                ? `${t("chat.retention.noticeLead")}${t("chat.retention.noticeKept")}`
+                : undefined
+            }
             activeGoal={visibleActiveGoal}
             onClearActiveGoal={onClearActiveGoal}
             goalLabel={t("chat.goal.active", "目标")}

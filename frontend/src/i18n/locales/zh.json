@@ -697,7 +697,6 @@
     "retention": {
       "noticeLead": "此会话早前的对话内容较久未使用，已从 AI 的记忆中清理。",
       "noticeKept": "聊天记录完整保留，可正常查看",
-      "noticeTail": "；继续对话时，AI 将从新的上下文开始。",
       "forkDisabled": "该消息的对话上下文已清理，无法从这里分叉"
     },
     "assistant": "助手",
