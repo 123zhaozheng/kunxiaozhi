@@ -796,31 +796,6 @@ SETTING_DEFINITIONS: dict[str, dict] = {
         "depends_on": "ENABLE_AUDIO_TRANSCRIPTION",
     },
     # ============================================
-    # Vision Assist Settings
-    # ============================================
-    "ENABLE_VISION_ASSIST": {
-        "type": SettingType.BOOLEAN,
-        "category": SettingCategory.VISION_ASSIST,
-        "description": "settingDesc.ENABLE_VISION_ASSIST",
-        "default": False,
-        "frontend_visible": True,
-    },
-    "VISION_ASSIST_MODEL_ID": {
-        "type": SettingType.STRING,
-        "category": SettingCategory.VISION_ASSIST,
-        "description": "settingDesc.VISION_ASSIST_MODEL_ID",
-        "default": "",
-        "depends_on": "ENABLE_VISION_ASSIST",
-        "frontend_visible": True,
-    },
-    "VISION_ASSIST_MAX_BYTES": {
-        "type": SettingType.NUMBER,
-        "category": SettingCategory.VISION_ASSIST,
-        "description": "settingDesc.VISION_ASSIST_MAX_BYTES",
-        "default": 10485760,
-        "depends_on": "ENABLE_VISION_ASSIST",
-    },
-    # ============================================
     # Document Parse Settings
     # ============================================
     "ENABLE_DOCUMENT_PARSE": {

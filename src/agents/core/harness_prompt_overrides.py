@@ -64,7 +64,7 @@ _DEFAULT_TOOLS = {
     "memory_retain": "存储跨会话记忆。仅收高价值非临时信息；过短、似提问、像代码或重复近期记忆会被拒。优先存用户偏好、项目约束、反馈、外部链接，用 user_identity/project_constraint/feedback_rule/reference_link 等显式标签。",
     "memory_recall": "按语义检索跨会话记忆；返回与查询概念相关的历史记录。",
     "memory_delete": "按 ID 删除记忆；ID 取 memory_recall 输出。",
-    "read_document": "下载文档或图片并返回文本：pdf/docx/pptx 与 png/jpg/jpeg/webp/gif/bmp/tiff 走 MinerU（PDF 内的图表会附带图片内容的文字描述）；txt/md/log/json/py 直接解码；xlsx/csv 不转文本，返回沙箱处理指引。若文件在沙箱中，仅 pdf 和图片推荐用本工具，其他类型直接用沙箱读文件/命令工具。",
+    "read_document": "下载文档或图片并返回文本：pdf/docx/pptx 与 png/jpg/jpeg/webp/gif/bmp/tiff 走 MinerU（PDF 内的图表会附带图片内容的文字描述）；txt/md/log/json/py 直接解码；xlsx/csv 不转文本，返回沙箱处理指引。**当附件是图片而你无法直接看到图像内容时，必须先用本工具读取它，不要凭文件名臆测。**若文件在沙箱中，仅 pdf 和图片推荐用本工具，其他类型直接用沙箱读文件/命令工具。",
     "list_dify_knowledge_bases": "列出当前 persona 绑定的 Dify 知识库（若无则返回系统默认）：返回 [{id, name, description}]。\n先调用此工具获取可用知识库列表。",
     "query_dify_knowledge_base": "按原始查询语句检索指定 Dify 知识库片段（不改写）：输入 query 和 dataset_id，返回 segments、score、document 等信息。\n用法：先调用 list_dify_knowledge_bases 获取 dataset_id，再调用此工具进行检索。",
     "audio_transcribe": "按 URL 下载音频并转写为文本。",

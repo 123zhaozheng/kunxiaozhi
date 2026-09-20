@@ -691,8 +691,7 @@
     "skills": "Skills",
     "tools": "Tools",
     "tracing": "Tracing",
-    "user": "Profile",
-    "vision_assist": "Vision Assist"
+    "user": "Profile"
   },
   "chat": {
     "retention": {
@@ -2254,7 +2253,6 @@
     "ENABLE_REGISTRATION": "Enable user registration",
     "ENABLE_SANDBOX": "Enable sandbox environment for running code",
     "ENABLE_SKILLS": "Enable skills feature",
-    "ENABLE_VISION_ASSIST": "Enable vision assist: when the main chat model does not support vision, use an auxiliary vision model to describe images and inject the description into the message. Requires VISION_ASSIST_MODEL_ID.",
     "EVENT_MERGE_BATCH_SIZE": "Event merge batch size",
     "EVENT_MERGE_CONCURRENCY": "Event merge concurrency",
     "EVENT_MERGE_INTERVAL": "Event merge interval in seconds",
@@ -2385,8 +2383,6 @@
     "TURNSTILE_REQUIRE_ON_REGISTER": "Require Turnstile verification on registration",
     "TURNSTILE_SECRET_KEY": "Cloudflare Turnstile secret key",
     "TURNSTILE_SITE_KEY": "Cloudflare Turnstile site key",
-    "VISION_ASSIST_MAX_BYTES": "Maximum image bytes to download for vision assist. Images exceeding this are skipped (degraded to URL-only summary). Default 10MB.",
-    "VISION_ASSIST_MODEL_ID": "Auxiliary vision model card ID (kind=chat with profile.supports_vision=true). Reference a card that supports image input, e.g. gpt-4o-mini or qwen-vl-plus. Leave empty to disable vision assist.",
     "WELCOME_SUGGESTIONS": "Welcome page suggestions displayed to users (multi-language JSON object keyed by language code)",
     "WELCOME_SUGGESTION_ICON": "Icon",
     "WELCOME_SUGGESTION_ITEM": "Suggestion",

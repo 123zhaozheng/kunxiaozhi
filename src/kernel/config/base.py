@@ -431,9 +431,6 @@ class Settings(BaseSettings):
     AUDIO_TRANSCRIPTION_MAX_DOWNLOAD_BYTES: int = 50 * 1024 * 1024
 
     # Vision assist settings (auxiliary vision model for non-vision main models)
-    ENABLE_VISION_ASSIST: bool = False
-    VISION_ASSIST_MODEL_ID: str = ""
-    VISION_ASSIST_MAX_BYTES: int = 10 * 1024 * 1024
 
     # Document parse tool settings (MinerU-backed document reader for non-sandbox agents)
     ENABLE_DOCUMENT_PARSE: bool = False

@@ -153,6 +153,23 @@ async def _download_image_as_data_url(
     return f"data:{mime_type};base64,{encoded}"
 
 
+def _absolutize(url: str, base_url: str) -> str:
+    """Prefix a root-relative URL with the request base or APP_BASE_URL."""
+    if not url.startswith("/"):
+        return url
+    base = (base_url or "").strip().rstrip("/")
+    if not base.startswith(("http://", "https://")):
+        from src.kernel.config import settings
+
+        base = (getattr(settings, "APP_BASE_URL", "") or "").strip().rstrip("/")
+    if base.startswith(("http://", "https://")):
+        return f"{base}{url}"
+    logger.warning(
+        "[attachments] no absolute base URL available; image stays relative: %s", url
+    )
+    return url
+
+
 async def inline_image_attachments_as_data_urls(
     attachments: list[dict] | None,
     *,
@@ -181,8 +198,15 @@ async def inline_image_attachments_as_data_urls(
             )
             continue
 
-        if attachment.get("url") or attachment.get("data_url"):
-            inlined.append(attachment)
+        existing_url = attachment.get("url")
+        if existing_url or attachment.get("data_url"):
+            if existing_url:
+                # Managed attachments are projected with a root-relative content
+                # URL; a model provider fetches image_url from its own network,
+                # so it must be absolute before it reaches the model.
+                inlined.append({**attachment, "url": _absolutize(str(existing_url), base_url)})
+            else:
+                inlined.append(attachment)
             continue
 
         key = attachment.get("key")
@@ -258,7 +282,6 @@ def _format_attachment_summary(text: str, attachments: list[dict]) -> str:
         file_type = attachment.get("type", "document")
         mime_type = attachment.get("mime_type") or attachment.get("mimeType") or ""
         size = attachment.get("size", 0)
-        vision_description = attachment.get("vision_description", "")
         unavailable_context = attachment_reupload_context(attachment)
 
         if unavailable_context:
@@ -273,20 +296,6 @@ def _format_attachment_summary(text: str, attachments: list[dict]) -> str:
                 f"\n- 文件不可用（{unavailable_context['code']}），"
                 "请让用户重新上传。"
             )
-            continue
-
-        # 有 vision 描述的图片：渲染描述块。不附带 URL——描述已是图片内容，
-        # URL 是内网地址（127.0.0.1/k8s internal），主模型无法 fetch，附带只会
-        # 诱导主模型用 read_file 之类的工具去读 URL 而失败。
-        if vision_description:
-            enhanced_text += f"\n\n**[{name}]**"
-            enhanced_text += f"\n- 类型: {file_type}"
-            if mime_type:
-                enhanced_text += f" ({mime_type})"
-            size_str = _format_size(size)
-            if size_str:
-                enhanced_text += f"\n- 大小: {size_str}"
-            enhanced_text += f"\n- 视觉描述:\n{vision_description}"
             continue
 
         if not url:
@@ -343,7 +352,7 @@ def build_human_message(
                     "image_url": {"url": image_url},
                 }
             )
-        elif url or attachment.get("vision_description") or attachment_reupload_context(attachment):
+        elif url or attachment_reupload_context(attachment):
             text_summary_attachments.append(attachment)
 
     enhanced_text = _format_attachment_summary(text, text_summary_attachments)

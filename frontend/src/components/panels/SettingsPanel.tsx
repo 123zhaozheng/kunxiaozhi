@@ -83,7 +83,6 @@ export function SettingsPanel() {
       file_upload: t("categories.file_upload"),
       tools: t("categories.tools"),
       audio_transcription: t("categories.audio_transcription"),
-      vision_assist: t("categories.vision_assist"),
       dify: t("categories.dify"),
       document_parse: t("categories.document_parse"),
       tracing: t("categories.tracing"),

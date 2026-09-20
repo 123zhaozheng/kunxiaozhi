@@ -691,8 +691,7 @@
     "skills": "스킬",
     "tools": "도구",
     "tracing": "추적",
-    "user": "프로필",
-    "vision_assist": "비전 어시스트"
+    "user": "프로필"
   },
   "chat": {
     "retention": {
@@ -2111,7 +2110,6 @@
     "ENABLE_REGISTRATION": "사용자 등록 활성화",
     "ENABLE_SANDBOX": "코드 실행용 샌드박스 환경 활성화",
     "ENABLE_SKILLS": "스킬 기능 활성화",
-    "ENABLE_VISION_ASSIST": "비전 어시스트 활성화: 메인 채팅 모델이 비전을 지원하지 않을 때 보조 비전 모델이 이미지를 설명하고 메시지에 주입합니다. VISION_ASSIST_MODEL_ID 필요.",
     "EVENT_MERGE_BATCH_SIZE": "이벤트 병합 배치 크기",
     "EVENT_MERGE_CONCURRENCY": "이벤트 병합 동시성 수",
     "EVENT_MERGE_INTERVAL": "이벤트 병합 간격(초)",
@@ -2234,8 +2232,6 @@
     "TURNSTILE_REQUIRE_ON_REGISTER": "등록 시 Turnstile 검증 요구",
     "TURNSTILE_SECRET_KEY": "Cloudflare Turnstile 시크릿 키",
     "TURNSTILE_SITE_KEY": "Cloudflare Turnstile 사이트 키",
-    "VISION_ASSIST_MAX_BYTES": "비전 어시스트로 다운로드할 최대 이미지 바이트. 초과 시 설명을 건너뛰고 URL 전용 요약으로 강등. 기본 10MB.",
-    "VISION_ASSIST_MODEL_ID": "보조 비전 모델 카드 ID (kind=chat 및 profile.supports_vision=true). 이미지 입력을 지원하는 카드를 참조하세요 (예: gpt-4o-mini, qwen-vl-plus). 빈 값은 비전 어시스트 비활성화.",
     "WELCOME_SUGGESTIONS": "사용자에게 표시되는 환영 페이지 제안 (언어 코드를 키로 하는 다국어 JSON 객체)",
     "WELCOME_SUGGESTION_ICON": "아이콘",
     "WELCOME_SUGGESTION_ITEM": "제안",

@@ -691,8 +691,7 @@
     "skills": "Навыки",
     "tools": "Инструменты",
     "tracing": "Трассировка",
-    "user": "Профиль",
-    "vision_assist": "Визио-ассистент"
+    "user": "Профиль"
   },
   "chat": {
     "retention": {
@@ -2113,7 +2112,6 @@
     "ENABLE_REGISTRATION": "Включить регистрацию пользователей",
     "ENABLE_SANDBOX": "Включить песочницу для выполнения кода",
     "ENABLE_SKILLS": "Включить функцию навыков",
-    "ENABLE_VISION_ASSIST": "Включить визио-ассистента: если основная модель не поддерживает vision, вспомогательная vision-модель описывает изображения и внедряет описание в сообщение. Требует VISION_ASSIST_MODEL_ID.",
     "EVENT_MERGE_BATCH_SIZE": "Размер пакета объединения событий",
     "EVENT_MERGE_CONCURRENCY": "Количество параллельных объединений событий",
     "EVENT_MERGE_INTERVAL": "Интервал объединения событий в секундах",
@@ -2236,8 +2234,6 @@
     "TURNSTILE_REQUIRE_ON_REGISTER": "Требовать проверку Turnstile при регистрации",
     "TURNSTILE_SECRET_KEY": "Секретный ключ Cloudflare Turnstile",
     "TURNSTILE_SITE_KEY": "Ключ сайта Cloudflare Turnstile",
-    "VISION_ASSIST_MAX_BYTES": "Максимальный размер изображения в байтах для загрузки. При превышении — пропуск описания и деградация до краткой ссылки. По умолчанию 10МБ.",
-    "VISION_ASSIST_MODEL_ID": "ID карточки вспомогательной vision-модели (kind=chat с profile.supports_vision=true). Укажите карточку с поддержкой ввода изображений (например, gpt-4o-mini или qwen-vl-plus). Пусто — отключить.",
     "WELCOME_SUGGESTIONS": "Предложения на странице приветствия (многоязычный JSON-объект с ключами по коду языка)",
     "WELCOME_SUGGESTION_ICON": "Иконка",
     "WELCOME_SUGGESTION_ITEM": "Предложение",

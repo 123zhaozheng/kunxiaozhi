@@ -691,8 +691,7 @@
     "skills": "スキル",
     "tools": "ツール",
     "tracing": "トレース",
-    "user": "プロフィール",
-    "vision_assist": "ビジョンアシスト"
+    "user": "プロフィール"
   },
   "chat": {
     "retention": {
@@ -2111,7 +2110,6 @@
     "ENABLE_REGISTRATION": "ユーザー登録を有効化",
     "ENABLE_SANDBOX": "コード実行用のサンドボックス環境を有効化",
     "ENABLE_SKILLS": "スキル機能を有効化",
-    "ENABLE_VISION_ASSIST": "ビジョンアシストを有効化：メインチャットモデルがビジョン非対応の場合、補助ビジョンモデルで画像を記述しメッセージに注入します。VISION_ASSIST_MODEL_ID が必要です。",
     "EVENT_MERGE_BATCH_SIZE": "イベントマージバッチサイズ",
     "EVENT_MERGE_CONCURRENCY": "イベントマージ並行数",
     "EVENT_MERGE_INTERVAL": "イベントマージ間隔（秒）",
@@ -2234,8 +2232,6 @@
     "TURNSTILE_REQUIRE_ON_REGISTER": "登録時にTurnstile検証を要求",
     "TURNSTILE_SECRET_KEY": "Cloudflare Turnstileシークレットキー",
     "TURNSTILE_SITE_KEY": "Cloudflare Turnstileサイトキー",
-    "VISION_ASSIST_MAX_BYTES": "ビジョンアシストでダウンロードする画像の最大バイト数。超過時は記述をスキップしURLのみの摘要に低下します。デフォルト 10MB。",
-    "VISION_ASSIST_MODEL_ID": "補助ビジョンモデルカード ID（kind=chat かつ profile.supports_vision=true）。画像入力対応カードを指定してください（例: gpt-4o-mini、qwen-vl-plus）。空欄で無効化。",
     "WELCOME_SUGGESTIONS": "ユーザーに表示されるウェルカムページの候補（言語コードをキーとした多言語JSONオブジェクト）",
     "WELCOME_SUGGESTION_ICON": "アイコン",
     "WELCOME_SUGGESTION_ITEM": "候補",

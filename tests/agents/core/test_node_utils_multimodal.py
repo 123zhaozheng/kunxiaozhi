@@ -65,30 +65,28 @@ def test_non_vision_model_keeps_image_attachment_as_text_summary():
     assert "/api/upload/file/uploads/img.png" in message.content
 
 
-def test_non_vision_model_renders_vision_description_when_present():
-    """Image attachment with vision_description renders the description block."""
-    attachment = image_attachment(vision_description="A cat on a mat.")
-    message = build_human_message("what is this?", [attachment], supports_vision=False)
+def test_non_vision_model_renders_image_like_a_document():
+    """Images are presented exactly like documents: metadata + a link.
+
+    The auxiliary vision model was removed; a non-multimodal model is expected
+    to call read_document with this link when it needs the image content.
+    """
+    message = build_human_message("what is this?", [image_attachment()], supports_vision=False)
 
     assert isinstance(message.content, str)
-    assert "视觉描述" in message.content
-    assert "A cat on a mat." in message.content
     assert "img.png" in message.content
-    # URL must NOT be included when vision_description is present — it's an
-    # internal address the main model cannot fetch, and including it causes
-    # the model to attempt read_file on the URL and fail.
-    assert "/api/upload/file/" not in message.content
+    assert "- 链接: /api/upload/file/uploads/img.png" in message.content
+    assert "视觉描述" not in message.content
 
 
-def test_non_vision_model_renders_vision_description_without_url():
-    """vision_description renders even when url is empty (intranet base64 path)."""
-    attachment = image_attachment(url="", vision_description="A cat on a mat.")
-    message = build_human_message("what is this?", [attachment], supports_vision=False)
+def test_non_vision_model_skips_image_without_url():
+    """No link means nothing actionable to render."""
+    message = build_human_message(
+        "what is this?", [image_attachment(url="")], supports_vision=False
+    )
 
     assert isinstance(message.content, str)
-    assert "视觉描述" in message.content
-    assert "A cat on a mat." in message.content
-    assert "User Uploaded Attachments" in message.content
+    assert "img.png" not in message.content
 
 
 def test_vision_model_keeps_document_attachments_in_text_summary():
@@ -121,9 +119,13 @@ async def test_inline_image_attachments_uses_existing_url_without_download(monke
         fail_get_or_init_storage,
     )
 
-    attachments = await inline_image_attachments_as_data_urls([image_attachment()])
+    attachments = await inline_image_attachments_as_data_urls(
+        [image_attachment()], base_url="https://app.example"
+    )
 
-    assert attachments[0]["url"] == "/api/upload/file/uploads/img.png"
+    # A model provider fetches image_url from its own network, so the address
+    # handed to the model must be absolute.
+    assert attachments[0]["url"] == "https://app.example/api/upload/file/uploads/img.png"
     assert "data_url" not in attachments[0]
 
 
@@ -323,3 +325,44 @@ async def test_resolve_model_supports_vision_defaults_false(monkeypatch):
 
     assert await node_utils.resolve_model_supports_vision(None, "text-model") is False
     assert await node_utils.resolve_model_supports_vision(None, "missing") is False
+
+
+@pytest.mark.asyncio
+async def test_managed_image_url_is_absolutized_for_vision(monkeypatch):
+    """Managed attachments carry a root-relative URL; vision needs it absolute.
+
+    attachments.py blanks `key` for managed files, so the relative `url` is the
+    only handle the vision path has.
+    """
+    managed = {
+        "name": "chart.png",
+        "type": "image",
+        "mime_type": "image/png",
+        "key": "",
+        "url": "/api/storage/files/" + "a" * 32 + "/content/chart.png",
+    }
+    out = await inline_image_attachments_as_data_urls(
+        [managed], base_url="https://app.example"
+    )
+    assert out[0]["url"] == (
+        "https://app.example/api/storage/files/" + "a" * 32 + "/content/chart.png"
+    )
+
+    message = build_human_message("看图", out, supports_vision=True)
+    blocks = [p for p in message.content if p.get("type") == "image_url"]
+    assert blocks and blocks[0]["image_url"]["url"].startswith("https://app.example/")
+
+
+@pytest.mark.asyncio
+async def test_managed_image_url_falls_back_to_app_base_url(monkeypatch):
+    """/api/chat/stream passes no base_url, so APP_BASE_URL must cover it."""
+    monkeypatch.setattr("src.kernel.config.settings.APP_BASE_URL", "https://env.example")
+    managed = {
+        "name": "chart.png",
+        "type": "image",
+        "mime_type": "image/png",
+        "key": "",
+        "url": "/api/storage/files/" + "b" * 32 + "/content/chart.png",
+    }
+    out = await inline_image_attachments_as_data_urls([managed], base_url="")
+    assert out[0]["url"].startswith("https://env.example/api/storage/files/")

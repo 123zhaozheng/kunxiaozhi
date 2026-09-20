@@ -691,8 +691,7 @@
     "skills": "技能",
     "tools": "工具",
     "tracing": "追踪",
-    "user": "个人资料",
-    "vision_assist": "视觉辅助"
+    "user": "个人资料"
   },
   "chat": {
     "retention": {
@@ -2254,7 +2253,6 @@
     "ENABLE_REGISTRATION": "启用用户注册",
     "ENABLE_SANDBOX": "启用沙箱环境运行代码",
     "ENABLE_SKILLS": "启用技能功能",
-    "ENABLE_VISION_ASSIST": "启用视觉辅助：主对话模型不支持 vision 时，用辅助 vision 模型描述图片，把描述注入消息。需配合 VISION_ASSIST_MODEL_ID。",
     "EVENT_MERGE_BATCH_SIZE": "事件合并批量大小",
     "EVENT_MERGE_CONCURRENCY": "事件合并并发数",
     "EVENT_MERGE_INTERVAL": "事件合并间隔（秒）",
@@ -2385,8 +2383,6 @@
     "TURNSTILE_REQUIRE_ON_REGISTER": "注册时要求 Turnstile 验证",
     "TURNSTILE_SECRET_KEY": "Cloudflare Turnstile 密钥",
     "TURNSTILE_SITE_KEY": "Cloudflare Turnstile 站点密钥",
-    "VISION_ASSIST_MAX_BYTES": "视觉辅助下载图片的最大字节数。超过则跳过描述，降级为纯链接摘要。默认 10MB。",
-    "VISION_ASSIST_MODEL_ID": "辅助 vision 模型卡片 ID（kind=chat 且 profile.supports_vision=true）。请引用支持图片输入的卡片，例如 gpt-4o-mini 或 qwen-vl-plus。留空则禁用视觉辅助。",
     "WELCOME_SUGGESTIONS": "显示给用户的欢迎页建议（按语言代码键入的多语言 JSON 对象）",
     "WELCOME_SUGGESTION_ICON": "图标",
     "WELCOME_SUGGESTION_ITEM": "建议项",
