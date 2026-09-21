@@ -38,6 +38,8 @@ class _Collection:
             if isinstance(expected, dict):
                 if "$ne" in expected and actual == expected["$ne"]:
                     return False
+                if "$in" in expected and actual not in expected["$in"]:
+                    return False
                 if "$gte" in expected and (actual is None or actual < expected["$gte"]):
                     return False
                 if "$lt" in expected and (actual is None or actual >= expected["$lt"]):
@@ -69,6 +71,12 @@ class _Collection:
         for operation in operations:
             await self.update_one(operation._filter, operation._doc, upsert=operation._upsert)
         return None
+
+    async def delete_many(self, query):
+        remaining = [doc for doc in self.documents if not self._matches(doc, query)]
+        removed = len(self.documents) - len(remaining)
+        self.documents = remaining
+        return removed
 
     def find(self, query):
         self.find_calls += 1
@@ -288,3 +296,102 @@ async def test_backfill_uses_snapshot_collection_and_never_traces(monkeypatch) -
     assert await worker.run_once() == 1
     assert database.traces_accessed is False
     assert usage.documents[0]["source"] == "snapshot"
+
+
+@pytest.mark.asyncio
+async def test_backfill_bucket_anchors_cst_day_start() -> None:
+    """快照的一天按 CST 界定：date D 的桶必须是 UTC D-1T16:00，不是 D 零点。"""
+    snapshot = _Collection([_snapshot("2026-06-18", tokens=12)])
+    usage = _Collection()
+    state = _Collection()
+    worker = UsageHourlyBackfillWorker(
+        redis_client=_Redis(),
+        snapshot_collection=snapshot,
+        usage_collection=usage,
+        state_collection=state,
+        enabled=True,
+    )
+
+    assert await worker.run_once() == 1
+
+    assert len(usage.documents) == 1
+    assert usage.documents[0]["bucket"] == datetime(2026, 6, 17, 16, 0, tzinfo=UTC)
+
+
+@pytest.mark.asyncio
+async def test_backfill_stops_before_live_coverage() -> None:
+    """live 行覆盖之日起不再回填，避免快照行与 live 行同日并存。"""
+    snapshot = _Collection(
+        [
+            _snapshot("2026-09-18", tokens=10),
+            _snapshot("2026-09-19", tokens=11),
+            _snapshot("2026-09-20", tokens=12),
+        ]
+    )
+    usage = _Collection(
+        [
+            {
+                "bucket": datetime(2026, 9, 20, 2, 0, tzinfo=UTC),  # CST 9-20 10:00
+                "user_id": "user-1",
+                "model": "model-1",
+                "source": "live",
+                "tokens": 1,
+            }
+        ]
+    )
+    state = _Collection()
+    worker = UsageHourlyBackfillWorker(
+        redis_client=_Redis(),
+        snapshot_collection=snapshot,
+        usage_collection=usage,
+        state_collection=state,
+        enabled=True,
+        batch_days=7,
+    )
+
+    total = await worker.run_until_complete()
+
+    assert total == 2
+    snapshot_buckets = [doc["bucket"] for doc in usage.documents if doc["source"] == "snapshot"]
+    assert snapshot_buckets == [
+        datetime(2026, 9, 17, 16, 0, tzinfo=UTC),
+        datetime(2026, 9, 18, 16, 0, tzinfo=UTC),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_legacy_midnight_backfill_rows_are_purged_and_refilled() -> None:
+    """UTC 零点桶的旧回填行被清除、游标重置并按 CST 口径重灌。"""
+    legacy_row = {
+        "bucket": datetime(2026, 6, 18, 0, 0, tzinfo=UTC),  # 修复前的错误锚点
+        "user_id": "user-1",
+        "model": None,
+        "persona_preset_id": "persona-1",
+        "agent_id": "agent-1",
+        "source": "snapshot",
+        "tokens": 99,
+        "user_messages": 9,
+        "runs": 0,
+    }
+    snapshot = _Collection([_snapshot("2026-06-18", tokens=12)])
+    usage = _Collection([deepcopy(legacy_row)])
+    state = _Collection(
+        # 游标已越过该日期：不重置的话 $setOnInsert 幂等会让清洗后的空窗不补
+        [{"_id": "usage_hourly", "cursor_date": "2026-06-20"}]
+    )
+    worker = UsageHourlyBackfillWorker(
+        redis_client=_Redis(),
+        snapshot_collection=snapshot,
+        usage_collection=usage,
+        state_collection=state,
+        enabled=True,
+    )
+
+    assert await worker.run_once() == 1
+
+    assert legacy_row not in usage.documents
+    assert len(usage.documents) == 1
+    assert usage.documents[0]["bucket"] == datetime(2026, 6, 17, 16, 0, tzinfo=UTC)
+    assert usage.documents[0]["tokens"] == 12
+    # 重置后的游标应重新推进到已重灌的日期
+    assert state.documents[-1]["cursor_date"] == "2026-06-18"

@@ -8,6 +8,7 @@ from collections.abc import Callable
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+from src.infra.analytics.date_range import CST
 from src.infra.analytics.snapshot import (
     _COMPLETE_MARKER_USER_ID,
     SNAPSHOT_COLLECTION_NAME,
@@ -66,7 +67,10 @@ def _parse_snapshot_date(value: Any) -> tuple[str, datetime] | None:
     else:
         return None
     date_string = snapshot_date.isoformat()
-    return date_string, datetime.combine(snapshot_date, datetime.min.time(), timezone.utc)
+    # 快照的一天按 CST 界定：date "2026-06-18" 的零点是 CST 00:00 = UTC 前一日
+    # 16:00。此前按 UTC 零点解释，导致所有回填行整体后移 8 小时。
+    bucket = datetime.combine(snapshot_date, datetime.min.time(), CST).astimezone(timezone.utc)
+    return date_string, bucket
 
 
 class UsageHourlyBackfillWorker:
@@ -211,6 +215,14 @@ class UsageHourlyBackfillWorker:
         if earliest is None or latest is None:
             return 0
 
+        await self._purge_legacy_midnight_rows()
+
+        # live 记录覆盖之日起，快照行与 live 行会同日并存；读侧一旦跨 source
+        # 求和就会双计。回填只补 live 之前的历史日。
+        live_start = await self._find_live_start()
+        if live_start is not None:
+            latest = min(latest, live_start - timedelta(days=1))
+
         state = await self._load_state()
         cursor_date = state.get("cursor_date") if state else self._cursor_date
         start_date = earliest
@@ -267,6 +279,54 @@ class UsageHourlyBackfillWorker:
             return None
         parsed = _parse_snapshot_date(document.get("date"))
         return date.fromisoformat(parsed[0]) if parsed else None
+
+    async def _find_live_start(self) -> date | None:
+        """Return the CST date of the earliest live row, if any."""
+        try:
+            document = await self._usage_storage.collection.find_one(
+                {"source": "live"}, sort=[("bucket", 1)]
+            )
+        except Exception as exc:
+            logger.warning("[Analytics] Usage hourly live-start probe failed: %s", exc)
+            return None
+        bucket = (document or {}).get("bucket")
+        if not isinstance(bucket, datetime):
+            return None
+        if bucket.tzinfo is None:
+            bucket = bucket.replace(tzinfo=timezone.utc)
+        return bucket.astimezone(CST).date()
+
+    async def _purge_legacy_midnight_rows(self) -> None:
+        """删除时区修复前写入的错位回填行并重置游标，让下一批按正确口径重灌。
+
+        旧行 bucket 落在 UTC 零点；修复后的行固定锚定 16:00Z（CST 零点），
+        判定自限——重灌完成后条件永不命中。游标必须一并重置，否则
+        ``$setOnInsert`` 幂等会让清洗后的空窗永远不补。
+        """
+        collection = self._usage_storage.collection
+        wrong: list[datetime] = []
+        for document in await self._cursor_to_list(collection.find({"source": "snapshot"})):
+            bucket = document.get("bucket")
+            if not isinstance(bucket, datetime):
+                continue
+            if bucket.tzinfo is None:
+                bucket = bucket.replace(tzinfo=timezone.utc)
+            if bucket.hour == 0 and bucket.minute == 0:
+                wrong.append(bucket)
+        if not wrong:
+            return
+        try:
+            await collection.delete_many({"source": "snapshot", "bucket": {"$in": wrong}})
+            await self._get_state_collection().delete_many(
+                {"_id": USAGE_HOURLY_BACKFILL_STATE_ID}
+            )
+            self._cursor_date = None
+            logger.info(
+                "[Analytics] Purged %d timezone-shifted backfill rows; cursor reset",
+                len(wrong),
+            )
+        except Exception as exc:
+            logger.warning("[Analytics] Legacy backfill purge failed: %s", exc)
 
     async def _load_state(self) -> dict[str, Any] | None:
         try:
