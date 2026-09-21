@@ -111,13 +111,14 @@ class UsageHourlyRecorder:
         persona_preset_id: str | None = None,
         occurred_at: datetime | None = None,
     ) -> None:
-        """累加一条用户消息，模型维度不适用故记为 ``unknown``。"""
+        """累加一条用户消息；模型维度不适用故记 ``None``，与快照回填行一致，
+        使按模型聚合的 ``$ne: None`` 过滤将其排除，不产生零值图例项。"""
         if not self.enabled:
             return
         key: _MetricKey = (
             hour_bucket(occurred_at or utc_now()),
             user_id,
-            "unknown",
+            None,
             persona_preset_id,
             agent_id,
         )

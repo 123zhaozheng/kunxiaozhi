@@ -507,6 +507,7 @@ EXTRA_SETTING_DEFINITIONS: dict[str, dict] = {
         "description": "settingDesc.ANALYTICS_USAGE_HOURLY_FLUSH_SECONDS",
         "default": 300,
         "minimum": 30,
+        "maximum": 3600,
         "depends_on": "ANALYTICS_USAGE_HOURLY_ENABLED",
     },
     "ANALYTICS_USAGE_HOURLY_BACKFILL_INTERVAL_SECONDS": {
@@ -516,6 +517,7 @@ EXTRA_SETTING_DEFINITIONS: dict[str, dict] = {
         "description": "settingDesc.ANALYTICS_USAGE_HOURLY_BACKFILL_INTERVAL_SECONDS",
         "default": 3600,
         "minimum": 60,
+        "maximum": 86400,
         "depends_on": "ANALYTICS_USAGE_HOURLY_ENABLED",
     },
     "ANALYTICS_USAGE_HOURLY_BACKFILL_BATCH_DAYS": {

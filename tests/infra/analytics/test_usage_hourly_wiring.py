@@ -40,6 +40,26 @@ def test_token_usage_events_feed_the_recorder() -> None:
     assert "record_token_usage" in calls
 
 
+def test_user_message_events_feed_the_recorder() -> None:
+    """``user:message`` 落库处必须调用 recorder，否则消息维度永远没有 live 行。"""
+    calls = _module_calls(REPO_ROOT / "src/infra/writer/presenter_storage.py")
+    assert "_record_usage_hourly_message" in calls
+    assert "record_user_message" in calls
+
+
+def test_message_rows_carry_no_model_dimension() -> None:
+    """消息行的 model 必须是 ``None``（被按模型聚合过滤）；字符串 ``unknown``
+    会穿透 ``$ne: None``，在模型图表里产生零值幽灵图例项。"""
+    source = (
+        REPO_ROOT / "src/infra/analytics/usage_hourly_recorder.py"
+    ).read_text(encoding="utf-8")
+    record_block = source.split("async def record_user_message", 1)[1].split(
+        "async def ", 1
+    )[0]
+    assert '"unknown"' not in record_block
+    assert "\n            None," in record_block
+
+
 def test_workers_and_indexes_are_mounted_in_lifespan() -> None:
     """worker 与索引创建必须挂在 lifespan，否则只能手工跑。"""
     main_source = (REPO_ROOT / "src/api/main.py").read_text(encoding="utf-8")
