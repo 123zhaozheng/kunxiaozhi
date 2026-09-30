@@ -1585,3 +1585,24 @@ git am -3 合入 09-18 存储 URL 交接包（4 提交，attachments.py 冲突�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 50: 定时任务功能
+
+**Date**: 2026-09-30
+**Task**: 定时任务功能
+**Branch**: `feat/scheduled-tasks`
+
+### Summary
+
+参考 LambChat 实现银行员工友好的定时任务，后端+前端+测试+spec
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6db75a1` | (see git log) |
+
+### Status
+
+[OK] **Completed**
