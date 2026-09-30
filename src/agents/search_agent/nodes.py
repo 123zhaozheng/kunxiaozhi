@@ -28,7 +28,6 @@ from src.agents.core.subagent_prompts import (
     get_memory_guide,
 )
 from src.agents.core.thinking import build_thinking_config
-from src.agents.core.vision_assist import describe_image_attachments
 from src.agents.search_agent.context import SearchAgentContext
 from src.agents.search_agent.prompt import (
     DEFAULT_SYSTEM_PROMPT,
@@ -350,11 +349,6 @@ async def agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict[str,
         attachments = await inline_image_attachments_as_data_urls(
             attachments,
             base_url=configurable.get("base_url", ""),
-        )
-    else:
-        attachments = await describe_image_attachments(
-            attachments,
-            supports_vision=supports_vision,
         )
     new_message = build_human_message(user_input, attachments, supports_vision=supports_vision)
 

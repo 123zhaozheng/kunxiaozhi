@@ -35,7 +35,6 @@ export type SettingCategory =
   | "memory_search"
   | "memory_storage"
   | "audio_transcription"
-  | "vision_assist"
   | "dify"
   | "document_parse";
 

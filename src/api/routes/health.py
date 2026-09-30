@@ -10,11 +10,14 @@ import time
 from fastapi import APIRouter, Depends, HTTPException
 
 from src.api.deps import require_permissions
-from src.infra.monitoring import get_memory_monitor
+from src.infra.logging import get_logger
+from src.infra.monitoring import get_memory_monitor, get_mongodb_storage_metrics
+from src.infra.monitoring.mongo_storage import build_mongo_storage_unavailable_response
 from src.kernel.config import settings
 from src.kernel.schemas.agent import HealthResponse, MemoryHealthSummary
 
 router = APIRouter()
+logger = get_logger(__name__)
 _READINESS_RETRY_BACKOFF_SECONDS = 1.0
 _readiness_probe_lock = asyncio.Lock()
 
@@ -242,3 +245,15 @@ async def memory_health_check(
             "top_objects", _format_object_rows(last_alert.get("top_object_types"))
         ),
     }
+
+
+@router.get("/health/mongodb")
+async def mongodb_storage_health(
+    _=Depends(require_permissions("settings:manage")),
+):
+    """详细 MongoDB 存储诊断"""
+    try:
+        return await get_mongodb_storage_metrics()
+    except Exception as exc:
+        logger.warning("MongoDB storage health route failed: %s", exc)
+        return build_mongo_storage_unavailable_response(exc)

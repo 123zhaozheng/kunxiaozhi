@@ -22,6 +22,7 @@ from src.infra.logging import get_logger
 from src.kernel.schemas.analytics import (
     ActiveUserListResponse,
     ByLabelResponse,
+    ByModelResponse,
     ByPresetFeedbackResponse,
     FeedbackListResponse,
     FeedbackSummaryResponse,
@@ -212,7 +213,7 @@ async def get_sessions_by_persona(
     return ByLabelResponse(items=items)
 
 
-@router.get("/tokens/by-model", response_model=ByLabelResponse)
+@router.get("/tokens/by-model", response_model=ByModelResponse)
 async def get_tokens_by_model(
     start: str = Query(..., description="起始日期 (YYYY-MM-DD，UTC+8)"),
     end: str = Query(..., description="结束日期 (YYYY-MM-DD，UTC+8)"),
@@ -221,7 +222,7 @@ async def get_tokens_by_model(
     role_id: Optional[str] = Query(None, description="按 RBAC 用户角色 ID 筛选"),
     _: None = Depends(require_permissions("settings:manage")),
     manager: AnalyticsManager = Depends(get_analytics_manager),
-) -> ByLabelResponse:
+) -> ByModelResponse:
     """按模型统计 token 消耗。"""
     s, e = _parse_range(start, end)
     if persona_preset_id or agent_id or role_id:
@@ -235,7 +236,11 @@ async def get_tokens_by_model(
         items = await manager.get_tokens_by_model(s, e, filters=filters)
     else:
         items = await manager.get_tokens_by_model(s, e)
-    return ByLabelResponse(items=items)
+    return ByModelResponse(
+        items=list(items),
+        partial=bool(getattr(items, "partial", False)),
+        model_data_since=getattr(items, "model_data_since", None),
+    )
 
 
 def _parse_list_sort(sort: str | None, *, default: str) -> str:

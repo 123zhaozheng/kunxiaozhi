@@ -46,6 +46,7 @@ export function ChatView({
   currentRunId,
   isLoading,
   isLoadingHistory,
+  checkpointsCleaned,
   connectionStatus,
   canSendMessage,
   tools,
@@ -369,6 +370,9 @@ export function ChatView({
         latestAutoPreview={latestAutoPreview}
         onOpenPreview={handleOpenPreview}
         onForkMessage={handleForkMessage}
+        forkDisabledReason={
+          checkpointsCleaned ? t("chat.retention.forkDisabled") : null
+        }
         onRecommendQuestionClick={handleRecommendQuestionClick}
         onRetryCancelledMessage={handleRetryCancelledMessage}
         activeGoal={
@@ -391,6 +395,8 @@ export function ChatView({
       handleRetryCancelledMessage,
       visibleActiveGoal,
       goalsByRunId,
+      checkpointsCleaned,
+      t,
     ],
   );
 
@@ -604,6 +610,12 @@ export function ChatView({
         <div className="relative px-2">
           <ChatInput
             {...chatInputProps}
+            disabled={checkpointsCleaned}
+            retentionNotice={
+              checkpointsCleaned
+                ? `${t("chat.retention.noticeLead")}${t("chat.retention.noticeKept")}`
+                : undefined
+            }
             activeGoal={visibleActiveGoal}
             onClearActiveGoal={onClearActiveGoal}
             goalLabel={t("chat.goal.active", "目标")}

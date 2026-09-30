@@ -229,6 +229,18 @@ class Settings(BaseSettings):
     CHECKPOINT_PG_POOL_MIN_SIZE: int = 2
     CHECKPOINT_PG_POOL_MAX_SIZE: int = 10
 
+    # Checkpoint Retention Settings
+    CHECKPOINT_CLEANUP_ENABLED: bool = False
+    CHECKPOINT_CLEANUP_RETENTION_DAYS: int = 30
+    CHECKPOINT_CLEANUP_INTERVAL_HOURS: int = 24
+    CHECKPOINT_CLEANUP_BATCH_LIMIT: int = 200
+
+    # Analytics Usage Settings
+    ANALYTICS_USAGE_HOURLY_ENABLED: bool = False
+    ANALYTICS_USAGE_HOURLY_FLUSH_SECONDS: int = 300
+    ANALYTICS_USAGE_HOURLY_BACKFILL_INTERVAL_SECONDS: int = 3600
+    ANALYTICS_USAGE_HOURLY_BACKFILL_BATCH_DAYS: int = 7
+
     # Sandbox Settings
     ENABLE_SANDBOX: bool = True
     SANDBOX_PLATFORM: str = "daytona"
@@ -425,14 +437,16 @@ class Settings(BaseSettings):
     AUDIO_TRANSCRIPTION_MAX_DOWNLOAD_BYTES: int = 50 * 1024 * 1024
 
     # Vision assist settings (auxiliary vision model for non-vision main models)
-    ENABLE_VISION_ASSIST: bool = False
-    VISION_ASSIST_MODEL_ID: str = ""
-    VISION_ASSIST_MAX_BYTES: int = 10 * 1024 * 1024
 
     # Document parse tool settings (MinerU-backed document reader for non-sandbox agents)
     ENABLE_DOCUMENT_PARSE: bool = False
     MINERU_API_BASE_URL: str = "http://localhost:8000"
     MINERU_API_KEY: str = ""
+    # hybrid "medium" force-disables figure analysis server-side, so the default
+    # effort must be "high" for PDF figures/images to be described at all.
+    MINERU_BACKEND: str = "hybrid-engine"
+    MINERU_PARSE_EFFORT: str = "high"
+    MINERU_IMAGE_ANALYSIS: bool = True
     DOCUMENT_PARSE_MAX_BYTES: int = 52428800
     DOCUMENT_PARSE_MAX_OUTPUT_CHARS: int = 50000
 

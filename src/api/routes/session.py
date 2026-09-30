@@ -601,6 +601,13 @@ async def fork_session_from_message(
         logger.warning("Fork 404: session=%s message=%s exc=%s", session_id, message_id, exc)
         raise HTTPException(status_code=404, detail=detail) from exc
     except SessionError as exc:
+        if "checkpoints_cleaned" in str(exc):
+            # Not a server fault: the source session's resumable state was
+            # reclaimed by retention, so a faithful fork is impossible.
+            raise HTTPException(
+                status_code=409,
+                detail="该会话早前的对话内容已从 AI 的记忆中清理，无法从这里分叉",
+            ) from exc
         logger.error("Fork 500: session=%s message=%s exc=%s", session_id, message_id, exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

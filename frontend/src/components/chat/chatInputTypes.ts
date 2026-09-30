@@ -23,6 +23,9 @@ export interface ChatInputProps {
   onStop: () => void;
   isLoading: boolean;
   disabled?: boolean;
+  /** When set, the session's context was reclaimed: input is disabled and this
+   *  text replaces the placeholder. */
+  retentionNotice?: string;
   canSend?: boolean;
   tools?: ToolState[];
   onToggleTool?: (toolName: string) => void;

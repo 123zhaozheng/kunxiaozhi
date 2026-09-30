@@ -125,6 +125,10 @@ export function AnalyticsPanel() {
   const [sessionsByAgent, setSessionsByAgent] = useState<ByLabelItem[]>([]);
   const [sessionsByPersona, setSessionsByPersona] = useState<ByLabelItem[]>([]);
   const [tokensByModel, setTokensByModel] = useState<ByLabelItem[]>([]);
+  const [tokensByModelPartial, setTokensByModelPartial] = useState<{
+    partial: boolean;
+    since: string | null;
+  }>({ partial: false, since: null });
   const [feedbackSummary, setFeedbackSummary] =
     useState<FeedbackSummaryResponse | null>(null);
   const [feedbackByPreset, setFeedbackByPreset] = useState<ByPresetFeedbackItem[]>(
@@ -259,6 +263,14 @@ export function AnalyticsPanel() {
       byModelResult.status === "fulfilled" && Array.isArray(byModelResult.value?.items)
         ? byModelResult.value.items
         : [],
+    );
+    setTokensByModelPartial(
+      byModelResult.status === "fulfilled" && byModelResult.value?.partial
+        ? {
+            partial: true,
+            since: byModelResult.value.model_data_since ?? null,
+          }
+        : { partial: false, since: null },
     );
     setFeedbackSummary(
       feedbackSummaryResult.status === "fulfilled"
@@ -430,6 +442,7 @@ export function AnalyticsPanel() {
           sessionsByAgent={sessionsByAgent}
           sessionsByPersona={sessionsByPersona}
           tokensByModel={tokensByModel}
+          tokensByModelPartial={tokensByModelPartial}
           feedbackSummary={feedbackSummary}
           feedbackByPreset={feedbackByPreset}
           isLoading={isLoading}

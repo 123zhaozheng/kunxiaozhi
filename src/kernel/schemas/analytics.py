@@ -51,6 +51,19 @@ class ByLabelResponse(BaseModel):
     items: list[ByLabelItem] = Field(default_factory=list, description="分组条目列表")
 
 
+class ByModelResponse(ByLabelResponse):
+    """按模型聚合响应，显式标记缺失模型维度的历史区间。"""
+
+    partial: bool = Field(
+        default=False,
+        description="请求区间是否包含没有模型维度的历史数据",
+    )
+    model_data_since: Optional[str] = Field(
+        default=None,
+        description="最早存在实时模型维度数据的日期 (YYYY-MM-DD)",
+    )
+
+
 class SessionsTrendResponse(BaseModel):
     """会话/消息趋势响应"""
 

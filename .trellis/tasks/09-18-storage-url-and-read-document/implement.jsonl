@@ -1,0 +1,8 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/index.md", "reason": "后端 spec 入口与 Pre-Development Checklist"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "稳定错误码与错误信封约定（file_deleted/410 等）"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "新增解析器与 worker 的日志规范"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "提交前质量门禁"}
+{"file": ".trellis/spec/backend/read-document-dispatch.md", "reason": "read_document 分发契约（本任务要扩展并更正）"}
+{"file": ".trellis/spec/backend/agent-harness.md", "reason": "模型可见工具描述的单一来源约定"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "user_files/storage_operations 查询与索引约束"}

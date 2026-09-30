@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 48
-- **Last Active**: 2026-09-14
+- **Total Sessions**: 49
+- **Last Active**: 2026-09-20
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1560 | Active |
+| `journal-1.md` | ~1587 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 49 | 2026-09-20 | 合入 kunxiaozhi 09-18 存储URL交接包与 image-unify 并完成 review 修正 | `1b041089`, `7f8d9c2f`, `aa4f4232`, `936adf1c`, `1bdde899`, `f7bb98a7`, `8d53d7fa` | `feat/user-storage-management` |
 | 48 | 2026-09-14 | 归档 .qoder / .kiro 平台 harness | `d1014b9b` | `main` |
 | 47 | 2026-08-20 | 输入框 @ 角色修复与 / 技能强调 | `65e9124c` | `main` |
 | 46 | 2026-08-20 | 登录弹出公告与提醒控制 | `3850de15` | `main` |

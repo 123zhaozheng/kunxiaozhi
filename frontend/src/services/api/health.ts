@@ -71,9 +71,57 @@ export interface MemoryDiagnostics {
   summary: Record<string, unknown>;
 }
 
+export interface MongoStorageDatabase {
+  name: string;
+  available: boolean;
+  error: string | null;
+  data_size: number | null;
+  storage_size: number | null;
+  index_size: number | null;
+  objects: number | null;
+  collections: number | null;
+}
+
+export interface MongoStorageCollection {
+  name: string;
+  available: boolean;
+  error: string | null;
+  size: number | null;
+  storage_size: number | null;
+  total_index_size: number | null;
+  count: number | null;
+}
+
+export interface MongoStorageCleanup {
+  available: boolean;
+  error: string | null;
+  enabled: boolean;
+  retention_days: number | null;
+  interval_hours: number | null;
+  backlog_sessions: number | null;
+  approximate: boolean;
+}
+
+export interface MongoStorageCheckpointBackend {
+  backend: string;
+  enabled: boolean;
+}
+
+export interface MongoStorageDiagnostics {
+  available: boolean;
+  database: MongoStorageDatabase;
+  collections: MongoStorageCollection[];
+  cleanup: MongoStorageCleanup;
+  checkpoint_backend: MongoStorageCheckpointBackend;
+}
+
 export const healthApi = {
   async getMemoryDiagnostics(refresh = false): Promise<MemoryDiagnostics> {
     const params = refresh ? "?refresh=true" : "";
     return authFetch<MemoryDiagnostics>(`${API_BASE}/health/memory${params}`);
+  },
+
+  async mongodbStorage(): Promise<MongoStorageDiagnostics> {
+    return authFetch<MongoStorageDiagnostics>(`${API_BASE}/health/mongodb`);
   },
 };

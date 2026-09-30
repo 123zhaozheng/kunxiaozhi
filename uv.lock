@@ -1731,7 +1731,7 @@ wheels = [
 
 [[package]]
 name = "lamb-agent"
-version = "2.5.0"
+version = "3.5.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },

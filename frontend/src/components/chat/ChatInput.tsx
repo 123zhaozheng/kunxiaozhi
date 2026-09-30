@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { ImageViewer } from "../common";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { isSandboxCapacityError } from "../../services/api/fetch";
+import type { FileCategory } from "../../types";
 import { ContactAdminDialog } from "../common/ContactAdminDialog";
 import { SandboxCapacityDialog } from "./SandboxCapacityDialog";
 import { useFileUpload } from "../../hooks/useFileUpload";
@@ -50,6 +51,7 @@ export const ChatInput = memo(function ChatInput({
   onStop,
   isLoading,
   disabled,
+  retentionNotice,
   canSend = true,
   tools = [],
   onToggleTool,
@@ -687,6 +689,15 @@ export const ChatInput = memo(function ChatInput({
   };
 
   const hasContent = !!input.trim() && !disabled;
+  // Retention-locked sessions cannot chat, so no attachment may enter either
+  // (picker, drag-drop): the upload entry point below is the single choke.
+  const uploadFilesAllowed = useCallback(
+    (files: FileList | File[], category?: FileCategory) => {
+      if (retentionNotice) return;
+      uploadFiles(files, category);
+    },
+    [retentionNotice, uploadFiles],
+  );
   const hasUploadingAttachment = attachments.some((a) => a.isUploading);
   const hasFailedAttachment = attachments.some((a) => !!a.uploadError);
   const canSubmit =
@@ -714,7 +725,7 @@ export const ChatInput = memo(function ChatInput({
     const files = e.dataTransfer?.files;
     if (!files || files.length === 0) return;
     if (!validateCount(files.length)) return;
-    uploadFiles(files);
+    uploadFilesAllowed(files);
   };
 
   const thinkingOption = agentOptions?.enable_thinking;
@@ -846,13 +857,15 @@ export const ChatInput = memo(function ChatInput({
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 placeholder={
-                  canSend
-                    ? mentionMode === "team"
-                      ? t("chat.teamPlaceholder")
-                      : t("chat.placeholder")
-                    : t("chat.noPermission")
+                  retentionNotice
+                    ? retentionNotice
+                    : canSend
+                      ? mentionMode === "team"
+                        ? t("chat.teamPlaceholder")
+                        : t("chat.placeholder")
+                      : t("chat.noPermission")
                 }
-                disabled={disabled || !canSend}
+                disabled={disabled || !!retentionNotice || !canSend}
                 className="bg-transparent outline-none w-full pt-[10px] resize-none text-[15px] disabled:opacity-50 leading-relaxed overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] min-h-[40px] sm:min-h-[44px]"
                 style={{
                   color: "var(--theme-text)",
@@ -965,7 +978,7 @@ export const ChatInput = memo(function ChatInput({
             }
             uploadCategories={uploadCategories}
             uploadLimits={uploadLimits}
-            uploadFiles={uploadFiles}
+            uploadFiles={uploadFilesAllowed}
             selectedPersonaName={selectedPersonaName}
             personaAvatar={personaAvatar}
             onClearPersonaPreset={onClearPersonaPreset}

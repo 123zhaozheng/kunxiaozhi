@@ -199,6 +199,9 @@ class StoragePresenterMixin:
                 )
                 if event_type == "token:usage":
                     self._token_usage_recorded = True
+                    await self._record_usage_hourly(data)
+                elif event_type == "user:message":
+                    await self._record_usage_hourly_message()
                 elif event_type == "goal:end":
                     self._goal_end_recorded = True
                 elif event_type == "done":
@@ -207,6 +210,30 @@ class StoragePresenterMixin:
             raise
         except Exception as e:
             logger.warning("Failed to save event: %s", e)
+
+    async def _record_usage_hourly(self, data: Any) -> None:
+        """Feed the hourly pre-aggregate; never let analytics break the chat path."""
+        try:
+            from src.infra.analytics.usage_hourly_recorder import get_usage_hourly_recorder
+
+            await get_usage_hourly_recorder().record_token_usage(
+                data=data if isinstance(data, dict) else None,
+                user_id=self.config.user_id,
+                agent_id=self.config.agent_id,
+            )
+        except Exception as exc:
+            logger.debug("Usage hourly record skipped: %s", exc)
+
+    async def _record_usage_hourly_message(self) -> None:
+        try:
+            from src.infra.analytics.usage_hourly_recorder import get_usage_hourly_recorder
+
+            await get_usage_hourly_recorder().record_user_message(
+                user_id=self.config.user_id,
+                agent_id=self.config.agent_id,
+            )
+        except Exception as exc:
+            logger.debug("Usage hourly message record skipped: %s", exc)
 
     async def _ensure_token_usage_event(self) -> None:
         """Persist a token usage event before terminal trace status, even if usage is zero."""

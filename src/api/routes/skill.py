@@ -28,6 +28,7 @@ from src.infra.skill.types import (
     UserSkillPreferenceResponse,
     UserSkillPreferenceUpdate,
 )
+from src.infra.storage.content_url import build_content_url
 from src.infra.user.storage import UserStorage
 from src.kernel.config import settings  # noqa: F401 - compatibility for route tests/patching
 from src.kernel.schemas.user import TokenPayload
@@ -556,7 +557,7 @@ async def upload_skill_binary_file(
         "message": "Binary file uploaded",
         "storage_key": binary_ref.storage_key,
         "url": (
-            f"/api/storage/files/{binary_ref.file_id}/content"
+            build_content_url("", binary_ref.file_id, safe_path)
             if binary_ref.file_id
             else f"/api/upload/file/{binary_ref.storage_key}"
         ),

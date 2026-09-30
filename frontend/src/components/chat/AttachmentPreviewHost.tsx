@@ -49,12 +49,20 @@ export function AttachmentPreviewHost() {
       {attachment && (
         <LazyDocumentPreview
           path={attachment.name}
-          s3Key={attachment.key}
+          // Prefer the logical content URL: freshly uploaded managed files
+          // still carry a physical key here, but the legacy /api/upload/file
+          // endpoint deliberately 404s managed keys. Only server-projected
+          // payloads blank the key, which is why previews worked only after
+          // a page refresh. Legacy attachments without a URL keep the key path.
+          s3Key={!attachment.url ? attachment.key : undefined}
+          signedUrl={
+            attachment.url ? getFullUrl(attachment.url) ?? attachment.url : undefined
+          }
           fileSize={attachment.size}
           mimeType={attachment.mimeType}
           registryKey={`attachment-preview:${
             previewState?.source ?? "unknown"
-          }:${attachment.key}`}
+          }:${attachment.fileId || attachment.key}`}
           imageUrl={
             attachment.type === "image" ? getFullUrl(attachment.url) : undefined
           }

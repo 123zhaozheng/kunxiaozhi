@@ -693,6 +693,69 @@ class SessionStorage:
                 rebuilt += 1
         return rebuilt
 
+    async def mark_checkpoints_cleaned(self, session_id: str, cleaned_at: datetime) -> bool:
+        """Stamp a session as checkpoint-cleaned without touching ``updated_at``.
+
+        Deliberately bypasses :meth:`update`: that helper always refreshes
+        ``updated_at``, which would both resurrect long-idle sessions to the top
+        of the ``updated_at``-sorted session list and reset the retention clock.
+        """
+        await self.ensure_indexes_if_needed()
+        result = await self.collection.update_one(
+            {"session_id": session_id},
+            {"$set": {"metadata.checkpoints_cleaned_at": cleaned_at}},
+        )
+        if result.matched_count:
+            return True
+        try:
+            result = await self.collection.update_one(
+                {"_id": ObjectId(session_id)},
+                {"$set": {"metadata.checkpoints_cleaned_at": cleaned_at}},
+            )
+        except Exception:
+            return False
+        return bool(result.matched_count)
+
+    async def list_inactive_session_ids(
+        self,
+        *,
+        cutoff: datetime,
+        limit: int,
+        exclude_ids: set[str] | None = None,
+    ) -> list[str]:
+        """List session ids whose last activity predates ``cutoff``.
+
+        ``updated_at`` is refreshed on every persisted turn, so it is the
+        activity signal for retention. Already-stamped sessions are skipped so
+        repeated runs drain the backlog instead of rescanning the same head; a
+        session that is chatted with again becomes eligible once more because
+        the new turn moves ``updated_at`` past the stamp.
+        """
+        await self.ensure_indexes_if_needed()
+        limit = max(int(limit), 1)
+        query = {
+            "updated_at": {"$lt": cutoff},
+            "$or": [
+                {"metadata.checkpoints_cleaned_at": {"$exists": False}},
+                {"$expr": {"$lt": ["$metadata.checkpoints_cleaned_at", "$updated_at"]}},
+            ],
+        }
+        cursor = (
+            self.collection.find(query, {"session_id": 1, "_id": 1})
+            .sort("updated_at", 1)
+            .limit(limit)
+        )
+        docs = await cursor.to_list(length=limit)
+        session_ids: list[str] = []
+        for doc in docs:
+            session_id = doc.get("session_id") or str(doc.get("_id"))
+            if not session_id:
+                continue
+            if exclude_ids and session_id in exclude_ids:
+                continue
+            session_ids.append(session_id)
+        return session_ids
+
     async def _find_doc(
         self,
         session_id: str,

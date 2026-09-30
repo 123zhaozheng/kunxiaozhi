@@ -7,6 +7,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import toast from "react-hot-toast";
 import i18n from "../i18n";
 import { uuid } from "../utils/uuid";
+import { isCheckpointsCleaned } from "../utils/sessionRetention";
 import type {
   Message,
   AgentInfo,
@@ -67,6 +68,7 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [historyIncomplete, setHistoryIncomplete] = useState(false);
+  const [checkpointsCleaned, setCheckpointsCleaned] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [currentAgent, setCurrentAgent] = useState<string>("");
@@ -326,6 +328,7 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
       setError(null);
       setHistoryIncomplete(false);
       setHistoryError(null);
+      setCheckpointsCleaned(false);
 
       processedEventIdsRef.current.clear();
       lastHistoryTimestampRef.current = null;
@@ -348,6 +351,12 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
           setSessionId(targetSessionId);
           setCurrentProjectId(
             (sessionData.metadata?.project_id as string) || null,
+          );
+          setCheckpointsCleaned(
+            isCheckpointsCleaned(
+              sessionData.metadata?.checkpoints_cleaned_at,
+              sessionData.updated_at,
+            ),
           );
 
           const currentRunId =
@@ -924,6 +933,7 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
     setActiveGoal(null);
     setGoalsByRunId({});
     setSopPlan(null);
+    setCheckpointsCleaned(false);
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
@@ -1029,6 +1039,7 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
     goalsByRunId,
     sopPlan,
     historyIncomplete,
+    checkpointsCleaned,
     historyError,
     isInitializingSandbox,
     sandboxError,

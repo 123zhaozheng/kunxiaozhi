@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
 from bson import ObjectId
+from pymongo import UpdateOne
 
 from src.infra.analytics.date_range import (
     CST,
@@ -482,21 +483,19 @@ end
 
             if lock_lost:
                 continue
-            ops: list[dict[str, Any]] = []
+            ops: list[UpdateOne] = []
             for doc in groups.values():
                 ops.append(
-                    {
-                        "updateOne": {
-                            "filter": {
-                                "date": target_date,
-                                "user_id": doc["user_id"],
-                                "persona_preset_id": doc["persona_preset_id"],
-                                "agent_id": doc["agent_id"],
-                            },
-                            "update": {"$setOnInsert": doc},
-                            "upsert": True,
-                        }
-                    }
+                    UpdateOne(
+                        {
+                            "date": target_date,
+                            "user_id": doc["user_id"],
+                            "persona_preset_id": doc["persona_preset_id"],
+                            "agent_id": doc["agent_id"],
+                        },
+                        {"$setOnInsert": doc},
+                        upsert=True,
+                    )
                 )
             if ops:
                 await storage.snapshot.bulk_write(ops, ordered=False)

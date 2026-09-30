@@ -451,6 +451,85 @@ EXTRA_SETTING_DEFINITIONS: dict[str, dict] = {
         "depends_on": {"key": "CHECKPOINT_BACKEND", "value": "postgres"},
     },
     # ============================================
+    # Checkpoint Retention Settings
+    # ============================================
+    "CHECKPOINT_CLEANUP_ENABLED": {
+        "type": SettingType.BOOLEAN,
+        "category": SettingCategory.CHECKPOINT,
+        "subcategory": "cleanup",
+        "description": "settingDesc.CHECKPOINT_CLEANUP_ENABLED",
+        "default": False,
+        "frontend_visible": True,
+    },
+    "CHECKPOINT_CLEANUP_RETENTION_DAYS": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.CHECKPOINT,
+        "subcategory": "cleanup",
+        "description": "settingDesc.CHECKPOINT_CLEANUP_RETENTION_DAYS",
+        "default": 30,
+        "minimum": 7,
+        "frontend_visible": True,
+        "depends_on": "CHECKPOINT_CLEANUP_ENABLED",
+    },
+    "CHECKPOINT_CLEANUP_INTERVAL_HOURS": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.CHECKPOINT,
+        "subcategory": "cleanup",
+        "description": "settingDesc.CHECKPOINT_CLEANUP_INTERVAL_HOURS",
+        "default": 24,
+        "minimum": 1,
+        "depends_on": "CHECKPOINT_CLEANUP_ENABLED",
+    },
+    "CHECKPOINT_CLEANUP_BATCH_LIMIT": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.CHECKPOINT,
+        "subcategory": "cleanup",
+        "description": "settingDesc.CHECKPOINT_CLEANUP_BATCH_LIMIT",
+        "default": 200,
+        "minimum": 1,
+        "depends_on": "CHECKPOINT_CLEANUP_ENABLED",
+    },
+    # ============================================
+    # Analytics Usage Settings
+    # ============================================
+    "ANALYTICS_USAGE_HOURLY_ENABLED": {
+        "type": SettingType.BOOLEAN,
+        "category": SettingCategory.SESSION,
+        "subcategory": "analytics",
+        "description": "settingDesc.ANALYTICS_USAGE_HOURLY_ENABLED",
+        "default": False,
+        "frontend_visible": True,
+    },
+    "ANALYTICS_USAGE_HOURLY_FLUSH_SECONDS": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.SESSION,
+        "subcategory": "analytics",
+        "description": "settingDesc.ANALYTICS_USAGE_HOURLY_FLUSH_SECONDS",
+        "default": 300,
+        "minimum": 30,
+        "maximum": 3600,
+        "depends_on": "ANALYTICS_USAGE_HOURLY_ENABLED",
+    },
+    "ANALYTICS_USAGE_HOURLY_BACKFILL_INTERVAL_SECONDS": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.SESSION,
+        "subcategory": "analytics",
+        "description": "settingDesc.ANALYTICS_USAGE_HOURLY_BACKFILL_INTERVAL_SECONDS",
+        "default": 3600,
+        "minimum": 60,
+        "maximum": 86400,
+        "depends_on": "ANALYTICS_USAGE_HOURLY_ENABLED",
+    },
+    "ANALYTICS_USAGE_HOURLY_BACKFILL_BATCH_DAYS": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.SESSION,
+        "subcategory": "analytics",
+        "description": "settingDesc.ANALYTICS_USAGE_HOURLY_BACKFILL_BATCH_DAYS",
+        "default": 7,
+        "minimum": 1,
+        "depends_on": "ANALYTICS_USAGE_HOURLY_ENABLED",
+    },
+    # ============================================
     # User Management Settings
     # ============================================
     "DEFAULT_USER_ROLE": {

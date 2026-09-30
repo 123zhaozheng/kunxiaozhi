@@ -22,6 +22,7 @@ import { useTranslation } from "react-i18next";
 import { useSettingsContext } from "../../contexts/SettingsContext";
 import { JsonSchemaEditor } from "./JsonSchemaEditor";
 import { SystemHealthSection } from "./SystemHealthSection";
+import { MongoStorageSection } from "./MongoStorageSection";
 import { WeComNetworkSettings } from "./WeComNetworkSettings";
 import { OpenSandboxNodesPanel } from "./OpenSandboxNodesPanel";
 import { useAuth } from "../../hooks/useAuth";
@@ -83,7 +84,6 @@ export function SettingsPanel() {
       file_upload: t("categories.file_upload"),
       tools: t("categories.tools"),
       audio_transcription: t("categories.audio_transcription"),
-      vision_assist: t("categories.vision_assist"),
       dify: t("categories.dify"),
       document_parse: t("categories.document_parse"),
       tracing: t("categories.tracing"),
@@ -673,6 +673,7 @@ export function SettingsPanel() {
           <div className="flex-1 overflow-y-auto py-2 sm:py-4 px-4">
             {/* System Health Monitor */}
             <SystemHealthSection />
+            <MongoStorageSection />
 
             {!searchQuery && activeCategory === "sandbox" && canManage && (
               <div className="mb-5">

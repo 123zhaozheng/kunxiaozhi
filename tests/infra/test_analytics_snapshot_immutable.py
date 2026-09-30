@@ -178,9 +178,15 @@ async def test_historical_date_unchanged_after_data_deletion() -> None:
                 frozen_docs.append(dict(doc))
 
         async def bulk_write(self, operations, ordered=False):
+            # Mirror pymongo's contract: bulk_write accepts operation objects
+            # (UpdateOne/...), never raw command dicts. A loose fake here once
+            # enshrined a mongosh-style bug that only exploded in production.
             for operation in operations:
-                update = operation["updateOne"]
-                self._upsert(update["filter"], update["update"]["$setOnInsert"])
+                if not hasattr(operation, "_add_to_bulk"):
+                    raise TypeError(f"{operation!r} is not a valid request")
+                self._upsert(
+                    operation._filter, operation._doc["$setOnInsert"]
+                )
 
         async def update_one(self, query, update, upsert=False):
             self._upsert(query, update["$setOnInsert"])

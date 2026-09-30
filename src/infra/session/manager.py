@@ -9,6 +9,7 @@ from typing import List, Optional
 
 from src.infra.async_utils import run_blocking_io
 from src.infra.logging import get_logger
+from src.infra.session.retention import is_session_checkpoints_cleaned
 from src.infra.session.storage import SessionStorage
 from src.infra.session.trace_storage import get_trace_storage
 from src.infra.storage.checkpoint import (
@@ -361,6 +362,11 @@ class SessionManager:
         source_session = await self.get_session(session_id)
         if not source_session or source_session.user_id != user_id:
             raise NotFoundError("session_not_found")
+        if is_session_checkpoints_cleaned(source_session):
+            # Refuse rather than silently rebuilding a text-only fork: the
+            # clone would look complete while having lost tool calls and file
+            # state, which is more misleading than an explicit refusal.
+            raise SessionError("fork_unavailable_checkpoints_cleaned")
 
         target = await self._resolve_fork_target(session_id, message_id)
         new_metadata = clone_session_metadata(source_session.metadata)

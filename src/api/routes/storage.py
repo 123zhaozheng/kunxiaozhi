@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from src.api.deps import get_current_user_required, require_permissions
 from src.infra.logging import get_logger
+from src.infra.storage.content_url import content_disposition
 from src.infra.storage.s3.service import get_or_init_storage
 from src.infra.storage.user_storage import (
     StorageDomainError,
@@ -232,12 +233,20 @@ async def reconcile_storage_user(
 
 
 @router.get("/files/{file_id}/content")
+@router.get("/files/{file_id}/content/{filename:path}")
 async def stream_storage_file(
     file_id: str,
     request: Request,
+    filename: str | None = None,
     service: UserStorageQuotaService = Depends(get_storage_service),
 ) -> Any:
-    """Stream an active logical file, or return a stable tombstone 410."""
+    """Stream an active logical file, or return a stable tombstone 410.
+
+    ``filename`` is a cosmetic trailing segment so consumers can classify by
+    extension; it never participates in authorization or lookup, and the stored
+    row's name stays authoritative.
+    """
+    del filename
     row = await service.get_content_file(file_id)
     if not row:
         raise HTTPException(status_code=404, detail={"code": "file_not_found", "message": "文件不存在"})
@@ -263,14 +272,14 @@ async def stream_storage_file(
     object_storage = await get_or_init_storage()
     key = str(blob.get("storage_key") or row.get("storage_key") or "")
     headers = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
-    filename = str(row.get("name") or "download")
+    filename_for_header = str(row.get("name") or "download")
     mime_type = str(row.get("mime_type") or "application/octet-stream")
     if object_storage.is_local:
         try:
             path = object_storage.get_file_path(key)
             if not path.exists():
                 raise HTTPException(status_code=404, detail={"code": "file_not_found", "message": "文件不存在"})
-            return FileResponse(path=str(path), media_type=mime_type, filename=filename, headers=headers)
+            return FileResponse(path=str(path), media_type=mime_type, filename=filename_for_header, headers=headers)
         except HTTPException:
             raise
         except (OSError, ValueError) as exc:
@@ -284,4 +293,5 @@ async def stream_storage_file(
     except Exception as exc:
         logger.warning("Managed object existence check failed for %s: %s", file_id, exc)
         raise HTTPException(status_code=503, detail={"code": "storage_unavailable", "message": "文件存储暂不可用"}) from exc
+    headers["Content-Disposition"] = content_disposition(filename_for_header)
     return StreamingResponse(object_storage.download_stream(key), media_type=mime_type, headers=headers)

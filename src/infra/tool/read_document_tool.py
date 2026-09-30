@@ -14,10 +14,11 @@ The tool is registered only when ENABLE_DOCUMENT_PARSE is on.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from tempfile import SpooledTemporaryFile
 from typing import TYPE_CHECKING, Annotated, Any
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 import httpx
 from charset_normalizer import from_bytes
@@ -25,9 +26,11 @@ from langchain_core.tools import BaseTool, InjectedToolArg
 
 from src.infra.async_utils import run_blocking_io
 from src.infra.logging import get_logger
-from src.infra.tool.backend_utils import (
-    get_backend_from_runtime,
-    get_base_url_from_runtime,
+from src.infra.tool.backend_utils import get_backend_from_runtime
+from src.infra.tool.document_source import (
+    FLAVOR_MANAGED,
+    read_backend_bytes,
+    resolve_document_source,
 )
 from src.infra.tool.mineru_client import MinerUClient, MinerUError
 from src.kernel.config import settings
@@ -64,23 +67,39 @@ _PLAIN_TEXT_EXTENSIONS: frozenset[str] = frozenset(
 # Spreadsheet extensions: not parsed here; the agent is routed to the sandbox.
 _DATA_EXTENSIONS: frozenset[str] = frozenset({".xlsx", ".csv"})
 
+# MinerU converts an image to a single-page PDF and runs the normal pipeline,
+# so images use the same endpoint but need their own MIME table.
+_IMAGE_EXTENSIONS: dict[str, str] = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".bmp": "image/bmp",
+    ".tiff": "image/tiff",
+}
+
 _FILE_KIND_MINERU = "mineru"
+_FILE_KIND_IMAGE = "image"
 _FILE_KIND_PLAIN_TEXT = "plain_text"
 _FILE_KIND_DATA = "data"
+
+# Logical content URLs (/api/storage/files/{id}/content) carry no filename in
+# the path; the streaming endpoint is authoritative for the real name/mime.
+_EXTENSION_BY_CONTENT_TYPE: dict[str, str] = {
+    **{mime: ext for ext, mime in _MINERU_EXTENSIONS.items()},
+    "application/vnd.ms-excel": ".xlsx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "text/csv": ".csv",
+    "text/plain": ".txt",
+    "text/markdown": ".md",
+    "application/json": ".json",
+    "text/x-python": ".py",
+}
 
 
 async def _json_dumps_result(data: dict[str, Any]) -> str:
     return await run_blocking_io(json.dumps, data, ensure_ascii=False)
-
-
-def _resolve_url(url: str, runtime: ToolRuntime | None) -> str:
-    if url.startswith(("http://", "https://")):
-        return url
-    if url.startswith("/"):
-        base_url = get_base_url_from_runtime(runtime)
-        if base_url:
-            return f"{base_url}{url}"
-    return url
 
 
 def _guess_filename(url: str) -> str:
@@ -88,10 +107,47 @@ def _guess_filename(url: str) -> str:
     return path.split("/")[-1] if path else "document"
 
 
+def _filename_from_headers(headers: Any) -> str | None:
+    """Recover the real filename from a content response's headers."""
+    disposition = str(headers.get("content-disposition", "") or "")
+    match = re.search(r"filename\*=(?:utf-8|UTF-8)''([^;]+)", disposition)
+    if match:
+        return unquote(match.group(1).strip().strip('"'))
+    match = re.search(r'filename="?([^";]+)"?', disposition)
+    if match:
+        return match.group(1).strip()
+    content_type = str(headers.get("content-type", "") or "").split(";")[0].strip().lower()
+    ext = _EXTENSION_BY_CONTENT_TYPE.get(content_type)
+    return f"file{ext}" if ext else None
+
+
+async def _recover_filename(url: str) -> str | None:
+    """Probe response headers (HEAD first, GET fallback) for the real filename."""
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15) as http_client:
+            async with http_client.stream("HEAD", url) as response:
+                if 200 <= response.status_code < 300:
+                    return _filename_from_headers(response.headers)
+    except Exception as exc:
+        logger.debug("[read_document] HEAD probe failed for %s: %s", url, exc)
+    # HEAD unsupported or failed (non-2xx / error): fall back to a full GET.
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15) as http_client:
+            async with http_client.stream("GET", url) as response:
+                if response.status_code >= 400:
+                    return None
+                return _filename_from_headers(response.headers)
+    except Exception as exc:
+        logger.warning("[read_document] filename recovery failed for %s: %s", url, exc)
+        return None
+
+
 def _classify_file(filename: str) -> str | None:
     lower = filename.lower()
     if any(lower.endswith(ext) for ext in _MINERU_EXTENSIONS):
         return _FILE_KIND_MINERU
+    if any(lower.endswith(ext) for ext in _IMAGE_EXTENSIONS):
+        return _FILE_KIND_IMAGE
     if any(lower.endswith(ext) for ext in _PLAIN_TEXT_EXTENSIONS):
         return _FILE_KIND_PLAIN_TEXT
     if any(lower.endswith(ext) for ext in _DATA_EXTENSIONS):
@@ -101,6 +157,9 @@ def _classify_file(filename: str) -> str | None:
 
 def _content_type_for(filename: str) -> str | None:
     lower = filename.lower()
+    for ext, content_type in _IMAGE_EXTENSIONS.items():
+        if lower.endswith(ext):
+            return content_type
     for ext, content_type in _MINERU_EXTENSIONS.items():
         if lower.endswith(ext):
             return content_type
@@ -277,7 +336,9 @@ async def _handle_data_file(
 async def read_document(
     url: Annotated[
         str,
-        "Document attachment URL from the message summary. Absolute URL or /api/upload/file/<key> path.",
+        "Document or image location: an absolute URL, an /api path, an in-sandbox "
+        "absolute path (e.g. /workspace/a.pdf), or a /skills/... path. Bare storage "
+        "keys without a leading slash are rejected.",
     ],
     runtime: Annotated[ToolRuntime, InjectedToolArg] = None,  # type: ignore[assignment]
 ) -> str:
@@ -285,6 +346,8 @@ async def read_document(
 
     Dispatches by file type:
     - pdf / docx / pptx -> parsed by MinerU, returned as Markdown.
+    - png / jpg (on non-multimodal models) -> image analysis by MinerU returns
+      a text description of the image content.
     - txt / md / log / json / py -> decoded in-process and returned as plain text.
     - xlsx / csv -> NOT parsed to text. Returns guidance pointing to the sandbox
       (upload_url_to_sandbox + pandas via the sandbox execute tool). When no
@@ -297,9 +360,27 @@ async def read_document(
             {"error": "URL is empty, APP_BASE_URL may not be configured"}
         )
 
-    resolved_url = _resolve_url(url, runtime)
-    filename = _guess_filename(resolved_url)
+    source = resolve_document_source(url, runtime)
+    if source.failed:
+        return await _json_dumps_result(
+            {"error": source.error, "code": source.error, "reupload_required": False}
+        )
+    resolved_url = source.url or source.backend_path or url
+    filename = source.filename or _guess_filename(resolved_url)
     file_kind = _classify_file(filename)
+    if (
+        file_kind is None
+        and source.flavor == FLAVOR_MANAGED
+        and source.filename is None
+    ):
+        # Managed content URLs end in /content with no filename segment; ask
+        # the content endpoint for the real filename before giving up. Every
+        # other flavor (sandbox/skill paths, third-party URLs) carries its own
+        # name in the path, so probing it would be a wasted network call.
+        recovered = await _recover_filename(resolved_url)
+        if recovered:
+            filename = recovered
+            file_kind = _classify_file(filename)
     if file_kind is None:
         return await _json_dumps_result({"error": "Unsupported file type"})
 
@@ -318,14 +399,17 @@ async def read_document(
     # missing base URL short-circuits without touching the network). Plain text
     # deliberately does NOT require MinerU to be configured.
     base_url = getattr(settings, "MINERU_API_BASE_URL", "") or ""
-    if file_kind == _FILE_KIND_MINERU and not base_url:
+    if file_kind in {_FILE_KIND_MINERU, _FILE_KIND_IMAGE} and not base_url:
         return await _json_dumps_result(
             {"error": "MINERU_API_BASE_URL is not configured"}
         )
 
-    content, download_error = await _download_to_bytes(
-        resolved_url, max_download_bytes
-    )
+    if source.backend_path:
+        content, download_error = await read_backend_bytes(source.backend_path, runtime)
+    else:
+        content, download_error = await _download_to_bytes(
+            resolved_url, max_download_bytes
+        )
     if download_error is not None:
         if download_error in {"file_deleted", "file_forbidden", "file_missing", "file_transient"}:
             return await _json_dumps_result(
@@ -343,9 +427,9 @@ async def read_document(
             content, max_output_chars, resolved_url, filename
         )
 
-    # file_kind == _FILE_KIND_MINERU
+    # file_kind is _FILE_KIND_MINERU or _FILE_KIND_IMAGE
     content_type = _content_type_for(filename)
-    assert content_type is not None  # filename is a known MinerU extension
+    assert content_type is not None  # classified filenames always map to a MIME type
     client = MinerUClient(
         base_url=base_url,
         api_key=getattr(settings, "MINERU_API_KEY", "") or None,

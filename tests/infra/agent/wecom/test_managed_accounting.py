@@ -75,7 +75,9 @@ async def test_wecom_reserves_before_write_and_commits_authoritative_file(monkey
 
     assert result["file_id"] == "managed-file-1"
     assert result["status"] == "active"
-    assert result["url"] == "/api/storage/files/managed-file-1/content"
+    # Managed content URLs now carry a cosmetic filename segment so downstream
+    # consumers can classify by extension; file_id stays the only auth token.
+    assert result["url"] == "/api/storage/files/managed-file-1/content/report.pdf"
     assert calls == ["reserve", "write", "commit"]
 
 
