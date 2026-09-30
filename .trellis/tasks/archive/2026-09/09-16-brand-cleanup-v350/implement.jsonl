@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Frontend quality/forbidden patterns to follow when editing i18n and auth components"}
+{"file": ".trellis/spec/frontend/oa-sso-entry.md", "reason": "OA SSO entry context; howToStep2 copy being edited lives in the OA SSO help dialog"}
