@@ -15,7 +15,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
-import { Brain } from "lucide-react";
+import { Brain, CalendarClock } from "lucide-react";
 import { sessionApi, type BackendSession } from "../../services/api";
 import { useAuth } from "../../hooks/useAuth";
 import { useSettingsContext } from "../../contexts/SettingsContext";
@@ -116,6 +116,12 @@ export const SessionSidebar = forwardRef<
 
   const canReadMemory = enableMemory;
   const moreMenuFeatureItems = [
+    {
+      path: "/scheduled-tasks",
+      label: t("nav.scheduledTasks"),
+      icon: CalendarClock,
+      show: true,
+    },
     {
       path: "/memory",
       label: t("nav.memory"),

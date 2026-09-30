@@ -35,6 +35,7 @@ from src.api.routes import (
     opensandbox_admin,
     persona_preset,
     project,
+    scheduled_task,
     revealed_file,
     role,
     session,
@@ -515,6 +516,12 @@ async def lifespan(app: FastAPI):
 
     # 启动分布式运行时监听器（任务/设置/模型/记忆/WebSocket）
     await start_runtime_services()
+    try:
+        from src.infra.scheduler.service import get_scheduled_task_service
+
+        await get_scheduled_task_service().startup()
+    except Exception as e:  # noqa: BLE001 - scheduled tasks must never block startup
+        logger.warning("Scheduled task startup failed: %s", e)
     logger.info("Runtime distributed listeners started")
 
     # 后台恢复/清理残留任务；恢复逻辑自身有分布式锁与 heartbeat 判断。
@@ -856,6 +863,9 @@ def create_app() -> FastAPI:
         analytics.router, prefix="/api/analytics", tags=["Analytics"]
     )
     app.include_router(notification.router, prefix="/api/notifications", tags=["Notifications"])
+    app.include_router(
+        scheduled_task.router, prefix="/api/scheduled-tasks", tags=["Scheduled Tasks"]
+    )
     # WebSocket 路由: /ws 用于实时通知
     app.include_router(websocket.router, tags=["WebSocket"])
 

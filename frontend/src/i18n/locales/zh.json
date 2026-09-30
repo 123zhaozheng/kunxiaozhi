@@ -1645,7 +1645,8 @@
     "team": "团队构建",
     "userSettings": "用户管理",
     "users": "用户",
-    "workspace": "专家 · 技能 · 连接器"
+    "workspace": "专家 · 技能 · 连接器",
+    "scheduledTasks": "定时任务"
   },
   "navDesc": {
     "agents": "配置和管理 AI 助手",
@@ -2106,6 +2107,10 @@
     "users": {
       "description": "管理用户账户、角色和访问权限。管理多租户用户生命周期和安全设置。",
       "title": "用户管理"
+    },
+    "scheduledTasks": {
+      "title": "定时任务",
+      "description": "让昆小智按时自动完成工作"
     }
   },
   "openSandboxAdmin": {
@@ -2392,7 +2397,10 @@
     "WELCOME_SUGGESTION_ICON": "图标",
     "WELCOME_SUGGESTION_ITEM": "建议项",
     "WELCOME_SUGGESTION_LANG": "语言",
-    "WELCOME_SUGGESTION_TEXT": "文本"
+    "WELCOME_SUGGESTION_TEXT": "文本",
+    "SCHEDULED_TASK_ENABLED": "启用定时任务功能",
+    "SCHEDULED_TASK_MAX_PER_USER": "每个用户最多可创建的定时任务数",
+    "SCHEDULED_TASK_MIN_INTERVAL_HOURS": "“每隔几小时”任务允许的最小间隔（小时）"
   },
   "settings": {
     "defaultModel": "默认模型",
@@ -3095,6 +3103,101 @@
       "migration_required": "待迁移",
       "failed": "失败",
       "missing": "缺失"
+    }
+  },
+  "scheduledTask": {
+    "title": "定时任务",
+    "subtitle": "设定好时间，昆小智会自动帮你完成，并把结果通知你",
+    "create": "新建定时任务",
+    "createTitle": "新建定时任务",
+    "editTitle": "编辑定时任务",
+    "pickTemplate": "选择一个场景开始",
+    "blank": "从空白开始",
+    "blankHint": "自己写要让昆小智做的事",
+    "step1": "第 1 步：要让昆小智做什么？",
+    "step2": "第 2 步：什么时候做？",
+    "namePlaceholder": "给任务起个名字，例如：每日晨报",
+    "promptPlaceholder": "像平时聊天一样写下要求，例如：帮我整理今天需要跟进的客户事项，分点列出。",
+    "promptHint": "到点后昆小智会像你亲自发送这段话一样执行，结果会通知你，也可以在“运行记录”中查看。",
+    "createSubmit": "创建定时任务",
+    "emptyTitle": "还没有定时任务",
+    "emptyDesc": "选一个常用场景，一分钟就能设置好。例如每个工作日早上自动整理今日工作重点。",
+    "quota": "已创建 {{count}} / {{limit}} 个",
+    "limitReached": "最多创建 {{limit}} 个定时任务，请先删除不再需要的任务",
+    "nextRun": "下次执行",
+    "lastRun": "上次",
+    "pausedLabel": "已暂停",
+    "completed": "已完成（一次性任务）",
+    "runNow": "立即执行一次",
+    "runs": "运行记录",
+    "pause": "暂停",
+    "resume": "启用",
+    "manual": "手动",
+    "viewResult": "查看完整结果",
+    "noRuns": "还没有执行过。可以点“立即执行一次”试试效果。",
+    "runsTitle": "{{name}} · 运行记录",
+    "deleteTitle": "删除定时任务",
+    "deleteConfirm": "确定删除“{{name}}”吗？删除后不会再自动执行，运行记录也会一并删除。",
+    "kind": {
+      "daily": "每天",
+      "weekdays": "每个工作日",
+      "weekly": "每周",
+      "monthly": "每月",
+      "once": "仅一次",
+      "interval": "每隔几小时"
+    },
+    "kindHint": {
+      "daily": "包括周末",
+      "weekdays": "周一至周五",
+      "weekly": "选择星期几",
+      "monthly": "选择几号",
+      "once": "指定日期时间",
+      "interval": "适合频繁检查"
+    },
+    "weekday": {
+      "1": "周一",
+      "2": "周二",
+      "3": "周三",
+      "4": "周四",
+      "5": "周五",
+      "6": "周六",
+      "7": "周日"
+    },
+    "runStatus": {
+      "pending": "排队中",
+      "running": "执行中",
+      "success": "成功",
+      "failed": "失败",
+      "timeout": "超时",
+      "skipped": "已跳过"
+    },
+    "editor": {
+      "howOften": "多久执行一次？",
+      "whichDays": "每周哪几天？（可多选）",
+      "whichDay": "每月哪一天？",
+      "dayOfMonth": "{{day}} 号",
+      "lastDay": "每月最后一天",
+      "shortMonthHint": "提示：没有这一天的月份会跳过，如需每月都执行请选“每月最后一天”。",
+      "whatTime": "几点执行？（北京时间）",
+      "customTime": "自定义时间",
+      "whenOnce": "在什么时候执行？（北京时间）",
+      "everyHours": "每隔几小时？",
+      "hours": "{{count}} 小时",
+      "holidayHint": "工作日指周一至周五，暂不识别法定节假日和调休。",
+      "previewTitle": "接下来会在这些时间执行",
+      "previewFailed": "暂时无法预览，请检查设置"
+    },
+    "toast": {
+      "created": "定时任务已创建，到点会自动执行",
+      "updated": "已保存修改",
+      "resumed": "已启用，到点会自动执行",
+      "paused": "已暂停，不会再自动执行",
+      "runStarted": "已开始执行，完成后会通知你",
+      "deleted": "已删除"
+    },
+    "notify": {
+      "successTitle": "定时任务「{{name}}」已完成",
+      "failedTitle": "定时任务「{{name}}」未能完成"
     }
   }
 }

@@ -702,6 +702,35 @@ EXTRA_SETTING_DEFINITIONS: dict[str, dict] = {
     # ============================================
     # Memory Settings (Master Switch)
     # ============================================
+    # ============================================
+    # Scheduled Task Settings
+    # ============================================
+    "SCHEDULED_TASK_ENABLED": {
+        "type": SettingType.BOOLEAN,
+        "category": SettingCategory.AGENT,
+        "subcategory": "scheduled_task",
+        "description": "settingDesc.SCHEDULED_TASK_ENABLED",
+        "default": True,
+        "frontend_visible": True,
+    },
+    "SCHEDULED_TASK_MAX_PER_USER": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.AGENT,
+        "subcategory": "scheduled_task",
+        "description": "settingDesc.SCHEDULED_TASK_MAX_PER_USER",
+        "default": 20,
+        "depends_on": "SCHEDULED_TASK_ENABLED",
+        "frontend_visible": True,
+    },
+    "SCHEDULED_TASK_MIN_INTERVAL_HOURS": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.AGENT,
+        "subcategory": "scheduled_task",
+        "description": "settingDesc.SCHEDULED_TASK_MIN_INTERVAL_HOURS",
+        "default": 1,
+        "depends_on": "SCHEDULED_TASK_ENABLED",
+        "frontend_visible": True,
+    },
     "ENABLE_MEMORY": {
         "type": SettingType.BOOLEAN,
         "category": SettingCategory.MEMORY,

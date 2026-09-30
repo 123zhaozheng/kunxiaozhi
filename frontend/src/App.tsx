@@ -290,6 +290,15 @@ function NotificationsPage() {
   return <AppContent key="notifications" activeTab="notifications" />;
 }
 
+function ScheduledTasksPage() {
+  useSEO({
+    title: "seo.scheduledTasks.title",
+    description: "seo.scheduledTasks.description",
+    path: "/scheduled-tasks",
+  });
+  return <AppContent key="scheduled" activeTab="scheduled" />;
+}
+
 function MemoryPage() {
   useSEO({
     title: "seo.memory.title",
@@ -594,6 +603,14 @@ function App() {
                   toastMessage={t("errors.noPermission")}
                 >
                   <NotificationsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/scheduled-tasks"
+              element={
+                <ProtectedRoute>
+                  <ScheduledTasksPage />
                 </ProtectedRoute>
               }
             />

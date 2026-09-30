@@ -1645,7 +1645,8 @@
     "team": "Team Builder",
     "userSettings": "User Management",
     "users": "Users",
-    "workspace": "Experts · Skills · Connectors"
+    "workspace": "Experts · Skills · Connectors",
+    "scheduledTasks": "Scheduled Tasks"
   },
   "navDesc": {
     "agents": "Configure and manage AI agents",
@@ -2106,6 +2107,10 @@
     "users": {
       "description": "Manage user accounts, roles, and access permissions. Administer multi-tenant user lifecycle and security settings.",
       "title": "User Management"
+    },
+    "scheduledTasks": {
+      "title": "Scheduled Tasks",
+      "description": "Let the assistant run work on a schedule"
     }
   },
   "openSandboxAdmin": {
@@ -2392,7 +2397,10 @@
     "WELCOME_SUGGESTION_ICON": "Icon",
     "WELCOME_SUGGESTION_ITEM": "Suggestion",
     "WELCOME_SUGGESTION_LANG": "Language",
-    "WELCOME_SUGGESTION_TEXT": "Text"
+    "WELCOME_SUGGESTION_TEXT": "Text",
+    "SCHEDULED_TASK_ENABLED": "Enable scheduled tasks",
+    "SCHEDULED_TASK_MAX_PER_USER": "Max scheduled tasks per user",
+    "SCHEDULED_TASK_MIN_INTERVAL_HOURS": "Minimum interval (hours) for interval tasks"
   },
   "settings": {
     "defaultModel": "Default Model",
@@ -3095,6 +3103,101 @@
       "migration_required": "Needs migration",
       "failed": "Failed",
       "missing": "Missing"
+    }
+  },
+  "scheduledTask": {
+    "title": "Scheduled Tasks",
+    "subtitle": "Pick a time and the assistant will do the work for you and notify you",
+    "create": "New scheduled task",
+    "createTitle": "New scheduled task",
+    "editTitle": "Edit scheduled task",
+    "pickTemplate": "Start from a scenario",
+    "blank": "Start from scratch",
+    "blankHint": "Write your own instructions",
+    "step1": "Step 1: What should the assistant do?",
+    "step2": "Step 2: When?",
+    "namePlaceholder": "Task name, e.g. Morning brief",
+    "promptPlaceholder": "Write it like a chat message, e.g. list today's customer follow-ups.",
+    "promptHint": "At the scheduled time the assistant runs this as if you sent it. You will be notified and can review it in Run history.",
+    "createSubmit": "Create task",
+    "emptyTitle": "No scheduled tasks yet",
+    "emptyDesc": "Pick a common scenario and you are set up in a minute.",
+    "quota": "{{count}} / {{limit}} created",
+    "limitReached": "You can create up to {{limit}} scheduled tasks",
+    "nextRun": "Next run",
+    "lastRun": "Last",
+    "pausedLabel": "Paused",
+    "completed": "Completed (one-time)",
+    "runNow": "Run once now",
+    "runs": "Run history",
+    "pause": "Pause",
+    "resume": "Enable",
+    "manual": "manual",
+    "viewResult": "View full result",
+    "noRuns": "Not run yet. Try \"Run once now\".",
+    "runsTitle": "{{name}} · Run history",
+    "deleteTitle": "Delete scheduled task",
+    "deleteConfirm": "Delete \"{{name}}\"? It will stop running and its history will be removed.",
+    "kind": {
+      "daily": "Every day",
+      "weekdays": "Every weekday",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "once": "Once",
+      "interval": "Every N hours"
+    },
+    "kindHint": {
+      "daily": "Including weekends",
+      "weekdays": "Mon to Fri",
+      "weekly": "Pick days",
+      "monthly": "Pick a date",
+      "once": "Specific date and time",
+      "interval": "For frequent checks"
+    },
+    "weekday": {
+      "1": "Mon",
+      "2": "Tue",
+      "3": "Wed",
+      "4": "Thu",
+      "5": "Fri",
+      "6": "Sat",
+      "7": "Sun"
+    },
+    "runStatus": {
+      "pending": "Queued",
+      "running": "Running",
+      "success": "Success",
+      "failed": "Failed",
+      "timeout": "Timed out",
+      "skipped": "Skipped"
+    },
+    "editor": {
+      "howOften": "How often?",
+      "whichDays": "Which days? (multi-select)",
+      "whichDay": "Which day of the month?",
+      "dayOfMonth": "Day {{day}}",
+      "lastDay": "Last day of month",
+      "shortMonthHint": "Months without this day are skipped; choose \"Last day of month\" to run every month.",
+      "whatTime": "What time? (Beijing time)",
+      "customTime": "Custom time",
+      "whenOnce": "When? (Beijing time)",
+      "everyHours": "Every how many hours?",
+      "hours": "{{count}} h",
+      "holidayHint": "Weekdays are Mon to Fri; public holidays are not detected yet.",
+      "previewTitle": "Upcoming runs",
+      "previewFailed": "Preview unavailable, check the settings"
+    },
+    "toast": {
+      "created": "Scheduled task created",
+      "updated": "Changes saved",
+      "resumed": "Enabled",
+      "paused": "Paused",
+      "runStarted": "Started, you will be notified when done",
+      "deleted": "Deleted"
+    },
+    "notify": {
+      "successTitle": "Scheduled task \"{{name}}\" finished",
+      "failedTitle": "Scheduled task \"{{name}}\" did not finish"
     }
   }
 }

@@ -1,0 +1,161 @@
+"""Scheduled task REST API (owner-scoped)."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+
+from src.api.deps import get_current_user_required, require_permissions
+from src.infra.scheduler.schedule_spec import ScheduleValidationError
+from src.infra.scheduler.service import (
+    ScheduledTaskQuotaError,
+    get_scheduled_task_service,
+    max_tasks_per_user,
+    min_interval_hours,
+)
+from src.infra.scheduler.storage import get_scheduled_task_storage
+from src.infra.scheduler.templates import list_templates
+from src.kernel.schemas.scheduled_task import (
+    ScheduledTaskCreate,
+    ScheduledTaskListResponse,
+    ScheduledTaskResponse,
+    ScheduledTaskTemplate,
+    ScheduledTaskUpdate,
+    SchedulePreviewRequest,
+    SchedulePreviewResponse,
+    TaskRunListResponse,
+)
+from src.kernel.schemas.user import TokenPayload
+
+router = APIRouter(dependencies=[Depends(require_permissions("chat:write"))])
+
+_NOT_FOUND = "定时任务不存在或已被删除"
+
+
+def _bad_request(exc: Exception) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.get("/templates", response_model=list[ScheduledTaskTemplate])
+async def get_templates() -> list[ScheduledTaskTemplate]:
+    return list_templates()
+
+
+@router.post("/preview", response_model=SchedulePreviewResponse)
+async def preview_schedule(body: SchedulePreviewRequest) -> SchedulePreviewResponse:
+    try:
+        text, runs = get_scheduled_task_service().preview(body.schedule, body.timezone, body.count)
+    except ScheduleValidationError as exc:
+        return SchedulePreviewResponse(valid=False, error=str(exc))
+    return SchedulePreviewResponse(valid=True, schedule_text=text, next_runs=runs)
+
+
+@router.get("", response_model=ScheduledTaskListResponse)
+async def list_tasks(
+    user: TokenPayload = Depends(get_current_user_required),
+) -> ScheduledTaskListResponse:
+    service = get_scheduled_task_service()
+    tasks = await get_scheduled_task_storage().list_tasks(user.sub)
+    return ScheduledTaskListResponse(
+        items=[service.to_response(t) for t in tasks],
+        total=len(tasks),
+        limit=max_tasks_per_user(),
+        min_interval_hours=min_interval_hours(),
+    )
+
+
+@router.post("", response_model=ScheduledTaskResponse, status_code=status.HTTP_201_CREATED)
+async def create_task(
+    body: ScheduledTaskCreate, user: TokenPayload = Depends(get_current_user_required)
+) -> ScheduledTaskResponse:
+    service = get_scheduled_task_service()
+    try:
+        task = await service.create_task(body, user.sub)
+    except (ScheduleValidationError, ScheduledTaskQuotaError) as exc:
+        raise _bad_request(exc) from exc
+    return service.to_response(task)
+
+
+@router.get("/{task_id}", response_model=ScheduledTaskResponse)
+async def get_task(
+    task_id: str, user: TokenPayload = Depends(get_current_user_required)
+) -> ScheduledTaskResponse:
+    task = await get_scheduled_task_storage().get_task(task_id, user.sub)
+    if task is None:
+        raise HTTPException(status_code=404, detail=_NOT_FOUND)
+    return get_scheduled_task_service().to_response(task)
+
+
+@router.patch("/{task_id}", response_model=ScheduledTaskResponse)
+async def update_task(
+    task_id: str, body: ScheduledTaskUpdate, user: TokenPayload = Depends(get_current_user_required)
+) -> ScheduledTaskResponse:
+    service = get_scheduled_task_service()
+    try:
+        task = await service.update_task(task_id, user.sub, body)
+    except ScheduleValidationError as exc:
+        raise _bad_request(exc) from exc
+    if task is None:
+        raise HTTPException(status_code=404, detail=_NOT_FOUND)
+    return service.to_response(task)
+
+
+@router.post("/{task_id}/pause", response_model=ScheduledTaskResponse)
+async def pause_task(
+    task_id: str, user: TokenPayload = Depends(get_current_user_required)
+) -> ScheduledTaskResponse:
+    service = get_scheduled_task_service()
+    task = await service.set_enabled(task_id, user.sub, False)
+    if task is None:
+        raise HTTPException(status_code=404, detail=_NOT_FOUND)
+    return service.to_response(task)
+
+
+@router.post("/{task_id}/resume", response_model=ScheduledTaskResponse)
+async def resume_task(
+    task_id: str, user: TokenPayload = Depends(get_current_user_required)
+) -> ScheduledTaskResponse:
+    service = get_scheduled_task_service()
+    try:
+        task = await service.set_enabled(task_id, user.sub, True)
+    except ScheduleValidationError as exc:
+        raise _bad_request(exc) from exc
+    if task is None:
+        raise HTTPException(status_code=404, detail=_NOT_FOUND)
+    return service.to_response(task)
+
+
+@router.post("/{task_id}/run")
+async def run_task_now(
+    task_id: str, user: TokenPayload = Depends(get_current_user_required)
+) -> dict:
+    result = await get_scheduled_task_service().run_now(task_id, user.sub)
+    if result is None:
+        raise HTTPException(status_code=404, detail=_NOT_FOUND)
+    if result.get("skipped"):
+        reason = result.get("reason")
+        message = (
+            "这个任务正在执行中，请等它完成后再试"
+            if reason == "already_running"
+            else "定时任务功能已被管理员关闭"
+        )
+        raise HTTPException(status_code=409, detail=message)
+    return result
+
+
+@router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_task(
+    task_id: str, user: TokenPayload = Depends(get_current_user_required)
+) -> None:
+    if not await get_scheduled_task_service().delete_task(task_id, user.sub):
+        raise HTTPException(status_code=404, detail=_NOT_FOUND)
+
+
+@router.get("/{task_id}/runs", response_model=TaskRunListResponse)
+async def list_runs(
+    task_id: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    user: TokenPayload = Depends(get_current_user_required),
+) -> TaskRunListResponse:
+    items, total = await get_scheduled_task_storage().list_runs(task_id, user.sub, skip, limit)
+    return TaskRunListResponse(items=items, total=total)

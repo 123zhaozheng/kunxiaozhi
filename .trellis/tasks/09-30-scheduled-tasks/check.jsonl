@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Mongo storage conventions"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "backend quality rules"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "error handling"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "UI components"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "frontend quality rules"}

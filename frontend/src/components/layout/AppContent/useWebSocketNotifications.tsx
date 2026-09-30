@@ -42,6 +42,41 @@ export function useWebSocketNotifications({
   // WebSocket for task completion notifications
   useWebSocket({
     enabled,
+    onScheduledTaskFinished: (notification) => {
+      const d = notification.data;
+      const ok = d.status === "success";
+      const title = ok
+        ? t("scheduledTask.notify.successTitle", {
+            name: d.task_name,
+            defaultValue: "定时任务「{{name}}」已完成",
+          })
+        : t("scheduledTask.notify.failedTitle", {
+            name: d.task_name,
+            defaultValue: "定时任务「{{name}}」未能完成",
+          });
+      const body =
+        d.paused_reason ||
+        (ok ? d.result_preview : d.error_message) ||
+        d.schedule_text;
+      const route = `/chat/${d.session_id}`;
+      window.dispatchEvent(new CustomEvent("scheduled-task:refresh"));
+      void appNotificationService.notify({
+        type: "task",
+        title,
+        body: body || "",
+        route,
+        dedupeKey: `scheduled:${d.run_id}`,
+      });
+      const open = () => navigate(route);
+      if (ok) toast.success(title, { duration: 6000 });
+      else toast.error(`${title}${body ? `：${body}` : ""}`, { duration: 8000 });
+      if (
+        appNotificationService.getRuntime() === "unsupported" &&
+        shouldAttemptBrowserNotification({ isSupported, cachedPermission: permission })
+      ) {
+        notify(title, { body: body || "", onClick: open, url: route });
+      }
+    },
     onFeedbackNotification: (notification: FeedbackNotification) => {
       const {
         preset_id,
