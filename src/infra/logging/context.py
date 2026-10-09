@@ -47,6 +47,8 @@ class RequestContext:
     run_id: Optional[str] = None
     user_id: Optional[str] = None
     trace_id: Optional[str] = None
+    # 本次运行是否为定时任务自动执行（用户不在场）
+    unattended: bool = False
 
 
 class TraceContext:
@@ -79,6 +81,8 @@ class TraceContext:
         "request_context_request_id", default=None
     )
     _request_trace_id: ContextVar[Optional[str]] = ContextVar("request_trace_id", default=None)
+    # 定时运行标记：按次运行，仅由 TaskExecutor.run_task 显式设置
+    _unattended: ContextVar[bool] = ContextVar("unattended", default=False)
 
     @classmethod
     def set(
@@ -153,6 +157,7 @@ class TraceContext:
         run_id: Optional[str] = None,
         user_id: Optional[str] = None,
         trace_id: Optional[str] = None,
+        unattended: Optional[bool] = None,
     ) -> None:
         """
         设置请求上下文
@@ -165,6 +170,7 @@ class TraceContext:
             user_id: 用户 ID
             request_id: 请求 ID
             trace_id: 追踪 ID
+            unattended: 是否定时自动执行；None 表示不修改
         """
         if request_id is not None:
             cls._request_context_request_id.set(request_id)
@@ -176,6 +182,8 @@ class TraceContext:
             cls._user_id.set(user_id)
         if trace_id is not None:
             cls._request_trace_id.set(trace_id)
+        if unattended is not None:
+            cls._unattended.set(bool(unattended))
 
     @classmethod
     def get_request_context(cls) -> RequestContext:
@@ -191,6 +199,7 @@ class TraceContext:
             run_id=cls._run_id.get(),
             user_id=cls._user_id.get(),
             trace_id=cls._request_trace_id.get(),
+            unattended=cls._unattended.get(),
         )
 
     @classmethod
@@ -201,6 +210,7 @@ class TraceContext:
         cls._run_id.set(None)
         cls._user_id.set(None)
         cls._request_trace_id.set(None)
+        cls._unattended.set(False)
 
     @classmethod
     def get_session_id(cls) -> Optional[str]:

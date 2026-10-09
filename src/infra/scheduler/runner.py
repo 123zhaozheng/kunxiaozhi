@@ -319,6 +319,8 @@ class ScheduledTaskRunner:
                 "scheduled_task_run_id": run_id,
                 "scheduled_task_name": task.name,
                 "hidden_from_conversation_list": True,
+                # 重启后据此识别「定时运行」的 run，不自动恢复
+                "unattended_run_id": agent_run_id,
             },
         )
 
@@ -335,6 +337,7 @@ class ScheduledTaskRunner:
             display_message=task.prompt,
             write_user_message_immediately=True,
             persona_preset_id=request.persona_preset_id,
+            unattended=True,
         )
         manager = get_task_manager()
         if settings.TASK_BACKEND == "arq":

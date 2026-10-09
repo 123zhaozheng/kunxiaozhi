@@ -186,12 +186,20 @@ async def validate_agent_model_access(
     await _attach_resolved_model_options(agent_options, model)
 
 
+def _continuation_metadata_extra(existing_metadata: dict | None) -> dict | None:
+    """续聊时的会话元数据补丁：定时任务会话被用户续聊后取消隐藏，使其出现在会话列表中。"""
+    if (existing_metadata or {}).get("hidden_from_conversation_list") is True:
+        return {"hidden_from_conversation_list": False}
+    return None
+
+
 async def _update_session_config(
     session_id: str,
     run_id: str,
     agent_id: str,
     request: AgentRequest,
     language: str,
+    extra: dict | None = None,
 ) -> None:
     """Update session metadata with conversation configuration."""
     session_manager = SessionManager()
@@ -201,6 +209,7 @@ async def _update_session_config(
         agent_id=agent_id,
         request=request,
         language=language,
+        extra=extra,
     )
     await session_manager.update_session_metadata(session_id, conversation_config)
 
@@ -569,6 +578,7 @@ async def chat_stream(
             agent_id,
             request,
             preferred_language,
+            extra=_continuation_metadata_extra(existing_metadata),
         )
 
         return {
@@ -634,6 +644,7 @@ async def chat_stream(
         agent_id,
         request,
         preferred_language,
+        extra=_continuation_metadata_extra(existing_metadata),
     )
 
     return {

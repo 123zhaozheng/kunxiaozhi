@@ -115,6 +115,7 @@ async def run_agent_task(ctx: dict[str, Any], run_id: str) -> None:
             team_id=payload.get("team_id"),
             active_goal=payload.get("active_goal"),
             persona_preset_id=payload.get("persona_preset_id"),
+            unattended=bool(payload.get("unattended", False)),
         )
     except TaskInterruptedError:
         await payload_store.delete(run_id)

@@ -34,6 +34,7 @@ import {
 } from "../sidebar/unreadCounts";
 import { isSessionFavorite } from "../sidebar/sessionFavorites";
 import { getSessionTitle } from "./sessionHelpers";
+import { subscribeSessionListRefresh } from "../../utils/sessionListEvents";
 import { SearchDialog } from "./SearchDialog";
 import { ShareDialog } from "../share/ShareDialog";
 import { NewProjectModal } from "./NewProjectModal";
@@ -480,6 +481,18 @@ export const SessionSidebar = forwardRef<
     projectRefs.current.forEach((ref) => ref?.softRefresh());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSessionId]);
+
+  // 在隐藏的定时任务会话里续聊后，后端取消隐藏；收到通知时与上面一样做软刷新。
+  // 用 ref 保存最新的刷新函数，避免订阅闭包过期。
+  const refreshSessionListRef = useRef<() => void>(() => undefined);
+  refreshSessionListRef.current = () => {
+    uncategorizedList.softRefresh();
+    projectRefs.current.forEach((ref) => ref?.softRefresh());
+  };
+  useEffect(
+    () => subscribeSessionListRefresh(() => refreshSessionListRef.current()),
+    [],
+  );
 
   useEffect(() => {
     if (newSession && newSession.id) {

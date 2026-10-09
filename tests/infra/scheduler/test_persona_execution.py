@@ -99,7 +99,27 @@ async def test_persona_run_uses_snapshot_skills_kb_and_agent(fakes, execution) -
     assert metadata["scheduled_task_name"] == "晨报"
     assert metadata["hidden_from_conversation_list"] is True
     assert metadata["current_run_id"] == sub["run_id"]
+    # 定时运行标记：提交时传 unattended=True；metadata 记下本次运行的 run_id（重启后据此不自动恢复）
+    assert sub["unattended"] is True
+    assert metadata["unattended_run_id"] == sub["run_id"]
+    assert "unattended" not in sub["agent_options"]
+    assert "unattended" not in metadata["agent_options"]
     assert fakes.storage.tasks[task.id].last_run_status == RunStatus.SUCCESS
+
+
+@pytest.mark.asyncio
+async def test_run_is_submitted_unattended_on_both_backends(fakes, execution) -> None:
+    execution.personas.add("p1", preferred_agent_id="fast", skill_names=[])
+    task = await fakes.service.create_task(
+        _create(persona_preset_id="p1"), "u1", actor=_user()
+    )
+
+    for backend in ("local", "arq"):
+        execution.settings.TASK_BACKEND = backend
+        await _run(task.id)
+
+    assert [s["backend"] for s in execution.task_manager.submits] == ["local", "arq"]
+    assert all(s["unattended"] is True for s in execution.task_manager.submits)
 
 
 @pytest.mark.asyncio

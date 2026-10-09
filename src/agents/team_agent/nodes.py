@@ -21,6 +21,10 @@ from src.agents.core.node_utils import (
     resolve_model_supports_vision,
 )
 from src.agents.core.persona import build_persona_prompt_sections
+from src.agents.core.scheduled_run import (
+    scheduled_run_middleware,
+    scheduled_run_prompt_sections,
+)
 from src.agents.core.subagent_prompts import (
     MAIN_AGENT_PROMPT_SECTIONS,
     SAFETY_AND_VERIFICATION_GUIDE,
@@ -386,8 +390,9 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
             ToolResultBinaryMiddleware(base_url=subagent_base_url),
             SubagentActivityMiddleware(backend=backend),
         ]
-        if prompt_sections:
-            mw.append(SectionPromptMiddleware(sections=prompt_sections))
+        sections = [*(prompt_sections or []), *scheduled_run_prompt_sections()]
+        if sections:
+            mw.append(SectionPromptMiddleware(sections=sections))
         if sandbox_backend:
             mw.append(EnvVarPromptMiddleware(user_id=context.user_id or "default"))
         if context.deferred_manager is not None:
@@ -402,6 +407,8 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
                     search_limit=settings.DEFERRED_TOOL_SEARCH_LIMIT,
                 )
             )
+        # 定时运行兜底：过滤用户交互类工具（放在缓存标记之前）
+        mw.extend(scheduled_run_middleware())
         mw.append(PromptCachingMiddleware())
         # 团队模式全链路排除 write_todos（SOP 工具替代；主代理与子代理一致）
         mw.append(TeamToolExclusionMiddleware())
@@ -569,6 +576,7 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
         from src.agents.team_agent.sop.prompt_section import build_sop_guidance_section
 
         _prompt_sections.append(build_sop_guidance_section())
+    _prompt_sections.extend(scheduled_run_prompt_sections())
     if _prompt_sections:
         user_middleware.append(SectionPromptMiddleware(sections=_prompt_sections))
     if sandbox_backend:
@@ -595,6 +603,8 @@ async def team_router_node(state: Dict[str, Any], config: RunnableConfig) -> Dic
     if rubric_middleware is not None:
         user_middleware.append(rubric_middleware)
 
+    # 定时运行兜底：先过滤工具，再打缓存标记
+    user_middleware.extend(scheduled_run_middleware())
     user_middleware.append(PromptCachingMiddleware())
     # 团队模式主代理排除 write_todos（路由职责之外；SOP 工具为正式替代）
     user_middleware.append(TeamToolExclusionMiddleware())

@@ -149,6 +149,23 @@ class ScheduledTaskStorage:
         )
         return [TaskRunRecord.model_validate(d) async for d in cursor], total
 
+    async def mark_run_interrupted(self, run_id: str) -> bool:
+        """Close a run that was interrupted by a restart (only if still PENDING/RUNNING)."""
+        result = await self.runs.update_one(
+            {
+                "_id": run_id,
+                "status": {"$in": [RunStatus.PENDING.value, RunStatus.RUNNING.value]},
+            },
+            {
+                "$set": {
+                    "status": RunStatus.FAILED.value,
+                    "error_message": "服务重启，本次执行被中断",
+                    "finished_at": utc_now(),
+                }
+            },
+        )
+        return bool(result.modified_count)
+
     async def mark_stale_runs_failed(self, older_than: datetime) -> int:
         """Runs left RUNNING/PENDING by a crashed replica are closed on startup."""
         result = await self.runs.update_many(

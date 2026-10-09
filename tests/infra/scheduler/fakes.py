@@ -114,6 +114,22 @@ class FakeStorage:
         ]
         return items, len(items)
 
+    async def mark_run_interrupted(self, run_id: str) -> bool:
+        record = self.runs.get(run_id)
+        if record is None:
+            return False
+        status = getattr(record.get("status"), "value", record.get("status"))
+        if status not in (RunStatus.PENDING.value, RunStatus.RUNNING.value):
+            return False
+        record.update(
+            {
+                "status": RunStatus.FAILED,
+                "error_message": "服务重启，本次执行被中断",
+                "finished_at": utc_now(),
+            }
+        )
+        return True
+
     async def mark_stale_runs_failed(self, older_than) -> int:
         return 0
 

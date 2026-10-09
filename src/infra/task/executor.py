@@ -57,6 +57,9 @@ class TaskExecutor:
         self._run_info = run_info
         self._heartbeat = heartbeat_manager
         self._state_machine = TaskStateMachine()
+        # 正在执行的定时（unattended）运行。agent 流结束时 clear_request_context() 会复位
+        # ContextVar，随后的完成/失败/取消通知读不到标记，因此另存一份。
+        self._unattended_run_ids: set[str] = set()
 
     async def run_task(
         self,
@@ -79,6 +82,7 @@ class TaskExecutor:
         team_id: Optional[str] = None,
         active_goal: Optional[Dict[str, Any]] = None,
         persona_preset_id: Optional[str] = None,
+        unattended: bool = False,
     ) -> None:
         """执行任务"""
         from src.infra.writer.present import Presenter, PresenterConfig
@@ -123,7 +127,11 @@ class TaskExecutor:
                 run_id=run_id,
                 user_id=user_id,
                 trace_id=presenter.trace_id,
+                # 每次都显式设置，避免复制的上下文带入上一次运行的值
+                unattended=bool(unattended),
             )
+            if unattended:
+                self._unattended_run_ids.add(run_id)
 
             await presenter._ensure_trace()
             await self._update_session_status(session_id, TaskStatus.RUNNING, run_id=run_id)
@@ -209,6 +217,7 @@ class TaskExecutor:
             from .cancellation import TaskCancellation
 
             await TaskCancellation.clear_interrupt(run_id)
+            self._unattended_run_ids.discard(run_id)
             # 清除请求上下文，防止 contextvars 泄漏到后续任务
             TraceContext.clear_request_context()
             TraceContext.clear()
@@ -413,6 +422,12 @@ class TaskExecutor:
             message: 可选的消息
         """
         try:
+            from src.infra.logging.context import TraceContext
+
+            # 定时运行的结果通过运行记录/定时任务通知交付，不再重复发送 task:complete
+            if TraceContext.get_request_context().unattended or run_id in self._unattended_run_ids:
+                return
+
             from src.infra.websocket import get_connection_manager
 
             manager = get_connection_manager()
