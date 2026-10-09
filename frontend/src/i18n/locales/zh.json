@@ -3124,6 +3124,54 @@
     "subtitle": "设定好时间，昆小智会自动帮你完成，并把结果通知你",
     "create": "新建定时任务",
     "disabledBanner": "定时任务功能已被管理员关闭，已有任务暂停执行，可以查看和删除",
+    "createdViaChat": "聊天创建",
+    "draft": {
+      "titleCreate": "定时任务草稿 · 新建",
+      "titleUpdate": "定时任务草稿 · 修改",
+      "field": {
+        "name": "名称",
+        "prompt": "要做的事",
+        "schedule": "执行频率",
+        "nextRuns": "接下来",
+        "persona": "执行专家",
+        "enabled": "启用状态"
+      },
+      "change": {
+        "name": "名称",
+        "prompt": "要做的事",
+        "schedule": "执行时间",
+        "persona": "执行专家",
+        "enabled": "启用状态"
+      },
+      "changes": "改动",
+      "defaultAssistant": "默认助手",
+      "enabledOn": "启用，到点自动执行",
+      "enabledOff": "暂停，不会自动执行",
+      "expand": "展开",
+      "collapse": "收起",
+      "loading": "正在确认草稿状态…",
+      "confirmCreate": "确认创建",
+      "confirmUpdate": "确认修改",
+      "confirming": "处理中…",
+      "cancel": "取消",
+      "pendingHint": "确认后才会生效",
+      "expiresIn": "{{count}} 分钟内有效",
+      "expiresSoon": "不到 1 分钟内有效",
+      "viewTasks": "查看定时任务",
+      "readOnly": "仅供查看",
+      "readOnlyHint": "这是一份草稿预览，需要在你自己的会话中确认后才会生效",
+      "status": {
+        "confirmed": "已确认生效",
+        "cancelled": "已取消",
+        "confirming": "处理中…",
+        "expired": "已过期，可以让助手重新生成",
+        "expiredBadge": "已过期"
+      },
+      "toast": {
+        "created": "定时任务已创建",
+        "updated": "定时任务已修改"
+      }
+    },
     "createTitle": "新建定时任务",
     "editTitle": "编辑定时任务",
     "pickTemplate": "选择一个场景开始",

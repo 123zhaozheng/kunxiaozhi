@@ -158,6 +158,14 @@ async def _resolve_owner(user_id: str):
     )
 
 
+async def resolve_active_user(user_id: str):
+    """Latest roles / permissions of an active user, or None (missing or deactivated).
+
+    Public wrapper for callers outside the runner (the chat tools).
+    """
+    return await _resolve_owner(user_id)
+
+
 def extract_result_text(events: list[dict[str, Any]], limit: int = RESULT_PREVIEW_CHARS) -> str:
     chunks: list[str] = []
     for event in events:

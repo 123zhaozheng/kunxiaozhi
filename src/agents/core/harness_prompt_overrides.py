@@ -83,6 +83,8 @@ _DEFAULT_TOOLS = {
     "update_persona_preset": "按 preset_id 或名称更新 persona 预设。",
     "search_persona_presets": "建团队前先按任务角色词检索 persona 预设；空串列出近期可见预设。",
     "create_agent_team": "按 search_persona_presets 结果组建团队；members 每项含 persona_preset_id 等字段。",
+    "list_scheduled_tasks": "查询当前用户的全部定时任务（只读）：名称、频率、是否启用、下次运行与最近运行结果。用户问时间时以返回的 now 为准。",
+    "draft_scheduled_task": "为用户生成定时任务草稿（新建或修改，含暂停/恢复）。只生成草稿，不会直接生效；必须由用户在聊天卡片上点击确认后才生效；不支持删除。用户问时间时以工具返回的 now 为准。",
 }
 
 _DEFAULT_FIELDS = {
@@ -123,6 +125,24 @@ _DEFAULT_FIELDS = {
     "update_persona_preset": {"preset_id": "已知的精确预设 ID。", "current_name": "未知 preset_id 时用现有名称定位。", "name": "新的预设名。", "description": "新的一行简介。"},
     "search_persona_presets": {"query": "搜索文本；用任务角色/能力词。", "tag": "精确标签过滤。", "limit": "返回数量上限（1-50）。"},
     "create_agent_team": {"name": "团队名（≤80 字符）。", "members": "成员列表，每项含 persona_preset_id 等字段。", "team_id": "已有团队 ID；更新时传入。", "description": "团队用途简述。", "avatar": "emoji 或头像图 URL。", "tags": "可搜索标签。"},
+    "list_scheduled_tasks": {},
+    "draft_scheduled_task": {
+        "action": "create=新建；update=修改（含暂停/恢复）。",
+        "task_id": "update 时的任务 ID（优先于 task_name）。",
+        "task_name": "update 时用任务名称定位（task_id 未知时）。",
+        "name": "任务名称（create 必填；update 为新名称）。",
+        "prompt": "每次运行时要执行的内容（create 必填；update 为新内容）。",
+        "schedule": "执行频率（create 必填；update 为新频率）。",
+        "kind": "频率类型：daily 每天、weekdays 工作日、weekly 每周、monthly 每月、once 仅一次、interval 间隔。",
+        "time": "执行时刻 HH:MM，北京时间。",
+        "weekdays": "weekly 时使用，1=周一 … 7=周日。",
+        "month_day": "monthly 时使用，1-31，-1 表示每月最后一天。",
+        "run_at": "once 时使用，北京时间 YYYY-MM-DDTHH:MM:SS，须晚于当前时间。",
+        "every_hours": "interval 时使用，1-24。",
+        "persona_name": "要使用的专家名称；不填则沿用当前会话的专家。",
+        "clear_persona": "true 表示不使用任何专家。",
+        "enabled": "update 时 false=暂停、true=恢复；create 时默认启用。",
+    },
 }
 
 DEFAULT_HARNESS_CATALOG = HarnessCatalog(

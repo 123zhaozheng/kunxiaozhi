@@ -121,6 +121,70 @@ export interface ScheduledTaskTemplate {
   schedule: ScheduleSpec;
 }
 
+export type ScheduledTaskDraftAction = "create" | "update";
+
+export type ScheduledTaskDraftStatus =
+  | "pending"
+  | "confirming"
+  | "confirmed"
+  | "cancelled"
+  | "expired";
+
+export type ScheduledTaskDraftChangeKey =
+  | "name"
+  | "prompt"
+  | "schedule"
+  | "persona"
+  | "enabled";
+
+export interface ScheduledTaskDraftPersona {
+  id: string;
+  name: string;
+  avatar?: string | null;
+}
+
+export interface ScheduledTaskDraftSummary {
+  name: string;
+  prompt: string;
+  schedule_text: string;
+  next_runs: string[];
+  persona: ScheduledTaskDraftPersona | null;
+  enabled: boolean;
+}
+
+/** GET /drafts/{id} 的返回（DraftResponse）。 */
+export interface ScheduledTaskDraft {
+  id: string;
+  action: ScheduledTaskDraftAction;
+  task_id: string | null;
+  status: ScheduledTaskDraftStatus;
+  summary: ScheduledTaskDraftSummary;
+  before: ScheduledTaskDraftSummary | null;
+  changes: ScheduledTaskDraftChangeKey[];
+  expires_at: string;
+  result_task_id: string | null;
+  last_error: string | null;
+}
+
+export interface ScheduledTaskDraftConfirmResponse {
+  draft: ScheduledTaskDraft;
+  task: ScheduledTask;
+}
+
+/** 智能体工具 draft_scheduled_task 成功时的返回（解析后）。 */
+export interface ScheduledTaskDraftToolResult {
+  entity_type: "scheduled_task_draft";
+  draft_id: string;
+  action: ScheduledTaskDraftAction;
+  task_id: string | null;
+  summary: ScheduledTaskDraftSummary;
+  before: ScheduledTaskDraftSummary | null;
+  changes: ScheduledTaskDraftChangeKey[];
+  expires_at: string | null;
+  now?: string | null;
+  message?: string | null;
+}
+
 export interface ScheduledTaskRunFinishedNotification {
   type: "scheduled_task:run_finished";
   data: {

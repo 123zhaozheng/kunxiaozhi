@@ -3124,6 +3124,54 @@
     "subtitle": "Pick a time and the assistant will do the work for you and notify you",
     "create": "New scheduled task",
     "disabledBanner": "Scheduled tasks have been turned off by the administrator. Existing tasks are paused; you can still view and delete them.",
+    "createdViaChat": "Created in chat",
+    "draft": {
+      "titleCreate": "Scheduled task draft · New",
+      "titleUpdate": "Scheduled task draft · Edit",
+      "field": {
+        "name": "Name",
+        "prompt": "Task",
+        "schedule": "Frequency",
+        "nextRuns": "Upcoming",
+        "persona": "Expert",
+        "enabled": "Status"
+      },
+      "change": {
+        "name": "Name",
+        "prompt": "Task",
+        "schedule": "Schedule",
+        "persona": "Expert",
+        "enabled": "Status"
+      },
+      "changes": "Changes",
+      "defaultAssistant": "Default assistant",
+      "enabledOn": "Enabled, runs automatically",
+      "enabledOff": "Paused, will not run",
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "loading": "Checking draft status…",
+      "confirmCreate": "Confirm and create",
+      "confirmUpdate": "Confirm changes",
+      "confirming": "Processing…",
+      "cancel": "Cancel",
+      "pendingHint": "Takes effect only after you confirm",
+      "expiresIn": "valid for {{count}} min",
+      "expiresSoon": "valid for under 1 min",
+      "viewTasks": "View scheduled tasks",
+      "readOnly": "View only",
+      "readOnlyHint": "This is a draft preview. Confirm it in your own conversation to apply it.",
+      "status": {
+        "confirmed": "Confirmed",
+        "cancelled": "Cancelled",
+        "confirming": "Processing…",
+        "expired": "Expired. Ask the assistant to generate a new one.",
+        "expiredBadge": "Expired"
+      },
+      "toast": {
+        "created": "Scheduled task created",
+        "updated": "Scheduled task updated"
+      }
+    },
     "createTitle": "New scheduled task",
     "editTitle": "Edit scheduled task",
     "pickTemplate": "Start from a scenario",

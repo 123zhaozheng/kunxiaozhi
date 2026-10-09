@@ -16,6 +16,7 @@ import {
 } from "./taskNotificationGuards";
 import { buildTaskNotificationCopy } from "./taskNotificationContent";
 import { isMobileDevice } from "../../../utils/mobile";
+import { dispatchScheduledTaskRefresh } from "../../../utils/scheduledTaskEvents";
 
 interface UseWebSocketNotificationsOptions {
   sessionId: string | null;
@@ -59,7 +60,7 @@ export function useWebSocketNotifications({
         (ok ? d.result_preview : d.error_message) ||
         d.schedule_text;
       const route = `/chat/${d.session_id}`;
-      window.dispatchEvent(new CustomEvent("scheduled-task:refresh"));
+      dispatchScheduledTaskRefresh();
       void appNotificationService.notify({
         type: "task",
         title,

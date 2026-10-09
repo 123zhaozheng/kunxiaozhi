@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from uuid import uuid4
 
 from src.infra.logging import get_logger
+from src.infra.scheduler.drafts import get_draft_storage
 from src.infra.scheduler.persona import _is_persona_admin, ensure_persona_usable, persona_briefs
 from src.infra.scheduler.runner import get_scheduled_task_runner, settings_enabled, stale_run_cutoff
 from src.infra.scheduler.runtime import ScheduledJob, get_runtime_scheduler
@@ -94,6 +95,7 @@ class ScheduledTaskService:
         owner_id: str,
         *,
         actor: Optional[TokenPayload] = None,
+        created_via: Literal["web", "chat"] = "web",
     ) -> ScheduledTask:
         _ensure_enabled()
         self.validate(request.schedule, request.timezone)
@@ -113,6 +115,7 @@ class ScheduledTaskService:
                 "_id": str(uuid4()),
                 "owner_id": owner_id,
                 **request.model_dump(),
+                "created_via": created_via,
                 "status": ScheduledTaskStatus.ACTIVE,
                 "created_at": now,
                 "updated_at": now,
@@ -330,6 +333,11 @@ class ScheduledTaskService:
             logger.info("[ScheduledTaskService] loaded %d active scheduled tasks", count)
         except Exception as exc:  # noqa: BLE001 - never block app startup
             logger.warning("[ScheduledTaskService] startup load failed: %s", exc)
+
+        try:
+            await get_draft_storage().ensure_indexes()
+        except Exception as exc:  # noqa: BLE001 - drafts are optional, never block startup
+            logger.warning("[ScheduledTaskService] draft index creation failed: %s", exc)
 
         async def _resync() -> Any:
             return await self.load_all()

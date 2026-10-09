@@ -17,6 +17,8 @@ TEAM_ROUTER_EXCLUDED_TOOLS = frozenset(
         "update_persona_preset",
         "search_persona_presets",
         "create_agent_team",
+        "list_scheduled_tasks",  # 定时任务管理与路由职责无关
+        "draft_scheduled_task",
     }
 )
 

@@ -156,13 +156,61 @@ class FakeStorage:
         return 0
 
 
+class FakeDraftStorage:
+    """In-memory ``scheduled_task_drafts`` with the same atomic-transition semantics."""
+
+    def __init__(self) -> None:
+        self.docs: dict[str, dict[str, Any]] = {}
+
+    async def ensure_indexes(self) -> None:
+        return None
+
+    async def create(self, doc: dict[str, Any]) -> None:
+        self.docs[doc["_id"]] = dict(doc)
+
+    async def get(self, draft_id: str, owner_id: str) -> Optional[dict[str, Any]]:
+        doc = self.docs.get(draft_id)
+        if doc is None or doc["owner_id"] != owner_id:
+            return None
+        return dict(doc)
+
+    async def transition(
+        self,
+        draft_id,
+        owner_id,
+        from_status,
+        to_status,
+        extra_set=None,
+        require_unexpired=False,
+    ):
+        doc = self.docs.get(draft_id)
+        if doc is None or doc["owner_id"] != owner_id or doc["status"] != from_status:
+            return None
+        if require_unexpired and doc["expires_at"] <= utc_now():
+            return None
+        doc.update({**(extra_set or {}), "status": to_status})
+        return dict(doc)
+
+    async def set_fields(self, draft_id, owner_id, fields):
+        doc = self.docs.get(draft_id)
+        if doc is None or doc["owner_id"] != owner_id:
+            return None
+        doc.update(fields)
+        return dict(doc)
+
+
 def install_fakes(monkeypatch: pytest.MonkeyPatch):
     """Patch storage / redis / scheduler singletons and return the fake handles."""
+    from src.infra.scheduler import drafts
+
     fake_storage = FakeStorage()
     fake_redis = FakeRedis()
+    fake_drafts = FakeDraftStorage()
     scheduler = RuntimeScheduler()
     for mod in (service, runner, storage):
         monkeypatch.setattr(mod, "get_scheduled_task_storage", lambda: fake_storage, raising=False)
+    for mod in (service, drafts):
+        monkeypatch.setattr(mod, "get_draft_storage", lambda: fake_drafts)
     monkeypatch.setattr(locks, "get_redis_client", lambda: fake_redis)
     monkeypatch.setattr(service, "get_runtime_scheduler", lambda: scheduler)
     svc = service.ScheduledTaskService()
@@ -170,7 +218,13 @@ def install_fakes(monkeypatch: pytest.MonkeyPatch):
     return type(
         "Fakes",
         (),
-        {"storage": fake_storage, "redis": fake_redis, "scheduler": scheduler, "service": svc},
+        {
+            "storage": fake_storage,
+            "redis": fake_redis,
+            "scheduler": scheduler,
+            "service": svc,
+            "drafts": fake_drafts,
+        },
     )
 
 

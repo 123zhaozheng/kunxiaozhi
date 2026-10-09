@@ -8,6 +8,8 @@ import type {
   SchedulePreview,
   ScheduleSpec,
   ScheduledTask,
+  ScheduledTaskDraft,
+  ScheduledTaskDraftConfirmResponse,
   ScheduledTaskInput,
   ScheduledTaskListResponse,
   ScheduledTaskTemplate,
@@ -63,6 +65,23 @@ export const scheduledTaskApi = {
   runs(id: string, skip = 0, limit = 20): Promise<TaskRunListResponse> {
     return authFetch<TaskRunListResponse>(
       `${BASE}/${id}/runs?skip=${skip}&limit=${limit}`,
+    );
+  },
+  getDraft(id: string): Promise<ScheduledTaskDraft> {
+    return authFetch<ScheduledTaskDraft>(
+      `${BASE}/drafts/${encodeURIComponent(id)}`,
+    );
+  },
+  confirmDraft(id: string): Promise<ScheduledTaskDraftConfirmResponse> {
+    return authFetch<ScheduledTaskDraftConfirmResponse>(
+      `${BASE}/drafts/${encodeURIComponent(id)}/confirm`,
+      { method: "POST" },
+    );
+  },
+  cancelDraft(id: string): Promise<ScheduledTaskDraft> {
+    return authFetch<ScheduledTaskDraft>(
+      `${BASE}/drafts/${encodeURIComponent(id)}/cancel`,
+      { method: "POST" },
     );
   },
 };

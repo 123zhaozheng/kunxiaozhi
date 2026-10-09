@@ -18,6 +18,7 @@ import { PanelLoadingState } from "../../common/PanelLoadingState";
 import { ConfirmDialog } from "../../common/ConfirmDialog";
 import { useSettingsContext } from "../../../contexts/SettingsContext";
 import { scheduledTaskApi } from "../../../services/api/scheduledTask";
+import { subscribeScheduledTaskRefresh } from "../../../utils/scheduledTaskEvents";
 import type {
   ScheduledTask,
   ScheduledTaskTemplate,
@@ -27,7 +28,6 @@ import { TaskEditorDialog } from "./TaskEditorDialog";
 import { TaskRunsDrawer } from "./TaskRunsDrawer";
 import { STATUS_STYLES, formatFireTime, relativeFromNow } from "./scheduleUtils";
 
-export const SCHEDULED_TASK_REFRESH_EVENT = "scheduled-task:refresh";
 
 export function ScheduledTaskPanel() {
   const { t, i18n } = useTranslation();
@@ -65,9 +65,7 @@ export function ScheduledTaskPanel() {
   useEffect(() => {
     void load();
     scheduledTaskApi.templates().then(setTemplates).catch(() => setTemplates([]));
-    const onRefresh = () => void load();
-    window.addEventListener(SCHEDULED_TASK_REFRESH_EVENT, onRefresh);
-    return () => window.removeEventListener(SCHEDULED_TASK_REFRESH_EVENT, onRefresh);
+    return subscribeScheduledTaskRefresh(() => void load());
   }, [load]);
 
   const replace = (task: ScheduledTask) =>
@@ -292,7 +290,17 @@ function TaskCard({ task, locale, busy, onToggle, onRun, onEdit, onRuns, onDelet
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="truncate font-semibold text-stone-900 dark:text-stone-100">{task.name}</div>
+          <div className="flex items-center gap-2">
+            <span className="truncate font-semibold text-stone-900 dark:text-stone-100">{task.name}</span>
+            {task.created_via === "chat" && (
+              <span
+                data-testid="task-created-via-chat"
+                className="inline-flex shrink-0 items-center rounded-full bg-sky-50 px-2 py-0.5 text-[11px] text-sky-700 dark:bg-sky-900/40 dark:text-sky-300"
+              >
+                {t("scheduledTask.createdViaChat", "聊天创建")}
+              </span>
+            )}
+          </div>
           <div className="mt-0.5 text-sm text-stone-600 dark:text-stone-300">{task.schedule_text}</div>
         </div>
         <button

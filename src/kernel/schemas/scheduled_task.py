@@ -55,12 +55,24 @@ class ScheduleSpec(BaseModel):
     - ``every_hours``: 1..24 for ``interval``.
     """
 
-    kind: ScheduleKind
-    time: Optional[str] = Field(None, description="HH:MM")
-    weekdays: Optional[list[int]] = None
-    month_day: Optional[int] = None
-    run_at: Optional[datetime] = None
-    every_hours: Optional[int] = None
+    kind: ScheduleKind = Field(
+        ...,
+        description=(
+            "频率类型：daily 每天、weekdays 工作日、weekly 每周、monthly 每月、"
+            "once 仅一次、interval 间隔。"
+        ),
+    )
+    time: Optional[str] = Field(None, description="执行时刻 HH:MM，北京时间。")
+    weekdays: Optional[list[int]] = Field(
+        None, description="weekly 时使用，1=周一 … 7=周日。"
+    )
+    month_day: Optional[int] = Field(
+        None, description="monthly 时使用，1-31，-1 表示每月最后一天。"
+    )
+    run_at: Optional[datetime] = Field(
+        None, description="once 时使用，北京时间 YYYY-MM-DDTHH:MM:SS，须晚于当前时间。"
+    )
+    every_hours: Optional[int] = Field(None, description="interval 时使用，1-24。")
 
     @field_validator("weekdays")
     @classmethod
@@ -220,6 +232,26 @@ class SchedulePreviewResponse(BaseModel):
     schedule_text: str = ""
     next_runs: list[datetime] = Field(default_factory=list)
     error: Optional[str] = None
+
+
+class ScheduledTaskDraftResponse(BaseModel):
+    """Chat-created draft awaiting the user's confirmation on the chat card."""
+
+    id: str
+    action: Literal["create", "update"]
+    task_id: Optional[str] = None
+    status: Literal["pending", "confirming", "confirmed", "cancelled", "expired"]
+    summary: dict[str, Any]
+    before: Optional[dict[str, Any]] = None
+    changes: list[str] = Field(default_factory=list)
+    expires_at: datetime
+    result_task_id: Optional[str] = None
+    last_error: Optional[str] = None
+
+
+class ScheduledTaskDraftConfirmResponse(BaseModel):
+    draft: ScheduledTaskDraftResponse
+    task: ScheduledTaskResponse
 
 
 class ScheduledTaskTemplate(BaseModel):

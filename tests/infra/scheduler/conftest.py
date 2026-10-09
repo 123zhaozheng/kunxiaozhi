@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from .fakes import FakeRedis, FakeStorage, install_execution_fakes, install_fakes
+from .fakes import FakeDraftStorage, FakeRedis, FakeStorage, install_execution_fakes, install_fakes
 
-__all__ = ["FakeRedis", "FakeStorage", "execution", "fakes"]
+__all__ = ["FakeDraftStorage", "FakeRedis", "FakeStorage", "execution", "fakes"]
 
 
 @pytest.fixture
