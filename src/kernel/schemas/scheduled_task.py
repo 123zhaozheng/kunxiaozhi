@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -75,7 +75,7 @@ class ScheduledTaskCreate(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=8000)
     schedule: ScheduleSpec
     timezone: str = Field(DEFAULT_TIMEZONE)
-    agent_id: str = Field("fast", min_length=1)
+    agent_id: Literal["fast", "search"] = "fast"
     persona_preset_id: Optional[str] = None
     model_id: Optional[str] = None
     enabled: bool = True
@@ -91,18 +91,28 @@ class ScheduledTaskCreate(BaseModel):
             raise ValueError("must not be blank")
         return v
 
+    @field_validator("persona_preset_id")
+    @classmethod
+    def _blank_persona_to_none(cls, v: Optional[str]) -> Optional[str]:
+        return v.strip() or None if isinstance(v, str) else v
+
 
 class ScheduledTaskUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     prompt: Optional[str] = Field(None, min_length=1, max_length=8000)
     schedule: Optional[ScheduleSpec] = None
     timezone: Optional[str] = None
-    agent_id: Optional[str] = None
+    agent_id: Optional[Literal["fast", "search"]] = None
     persona_preset_id: Optional[str] = None
     model_id: Optional[str] = None
     enabled: Optional[bool] = None
     max_retries: Optional[int] = Field(None, ge=0, le=3)
     timeout_seconds: Optional[int] = Field(None, ge=60, le=7200)
+
+    @field_validator("persona_preset_id")
+    @classmethod
+    def _blank_persona_to_none(cls, v: Optional[str]) -> Optional[str]:
+        return v.strip() or None if isinstance(v, str) else v
 
 
 class ScheduledTask(BaseModel):
@@ -122,6 +132,8 @@ class ScheduledTask(BaseModel):
     enabled: bool = True
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE
     pause_reason: Optional[str] = None
+    paused_by: Optional[Literal["user", "admin", "system"]] = None
+    created_via: Literal["web", "chat"] = "web"
     max_retries: int = 1
     timeout_seconds: int = 1800
     template_id: Optional[str] = None
@@ -162,10 +174,15 @@ class ScheduledTaskResponse(BaseModel):
     timezone: str
     agent_id: str
     persona_preset_id: Optional[str] = None
+    persona_name: Optional[str] = None
+    persona_avatar: Optional[str] = None
+    persona_available: Optional[bool] = None
     model_id: Optional[str] = None
     enabled: bool
     status: ScheduledTaskStatus
     pause_reason: Optional[str] = None
+    paused_by: Optional[Literal["user", "admin", "system"]] = None
+    created_via: Literal["web", "chat"] = "web"
     max_retries: int
     timeout_seconds: int
     template_id: Optional[str] = None

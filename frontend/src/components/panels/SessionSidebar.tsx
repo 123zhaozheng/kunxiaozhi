@@ -19,6 +19,7 @@ import { Brain, CalendarClock } from "lucide-react";
 import { sessionApi, type BackendSession } from "../../services/api";
 import { useAuth } from "../../hooks/useAuth";
 import { useSettingsContext } from "../../contexts/SettingsContext";
+import { Permission } from "../../types";
 import { useProjectSessionList } from "../../hooks/useSession";
 import { useProjectManager } from "../../hooks/useProjectManager";
 import { useTouchDrag } from "../../hooks/useTouchDrag";
@@ -92,7 +93,7 @@ export const SessionSidebar = forwardRef<
   ref,
 ) {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, hasAllPermissions } = useAuth();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [internalCollapsed, setInternalCollapsed] = useState(true);
@@ -112,7 +113,7 @@ export const SessionSidebar = forwardRef<
     top: number;
     left: number;
   } | null>(null);
-  const { enableMemory } = useSettingsContext();
+  const { enableMemory, enableScheduledTasks } = useSettingsContext();
 
   const canReadMemory = enableMemory;
   const moreMenuFeatureItems = [
@@ -120,7 +121,9 @@ export const SessionSidebar = forwardRef<
       path: "/scheduled-tasks",
       label: t("nav.scheduledTasks"),
       icon: CalendarClock,
-      show: true,
+      show:
+        enableScheduledTasks &&
+        hasAllPermissions([Permission.SCHEDULED_TASK_USE, Permission.CHAT_WRITE]),
     },
     {
       path: "/memory",

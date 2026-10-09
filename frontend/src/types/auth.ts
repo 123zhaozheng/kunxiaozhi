@@ -74,6 +74,9 @@ export enum Permission {
   TEAM_DELETE = "team:delete",
   // Notification
   NOTIFICATION_MANAGE = "notification:manage",
+  // Scheduled Task
+  SCHEDULED_TASK_USE = "scheduled_task:use",
+  SCHEDULED_TASK_ADMIN = "scheduled_task:admin",
 }
 
 // 用户信息

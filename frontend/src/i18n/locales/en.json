@@ -2400,7 +2400,10 @@
     "WELCOME_SUGGESTION_TEXT": "Text",
     "SCHEDULED_TASK_ENABLED": "Enable scheduled tasks",
     "SCHEDULED_TASK_MAX_PER_USER": "Max scheduled tasks per user",
-    "SCHEDULED_TASK_MIN_INTERVAL_HOURS": "Minimum interval (hours) for interval tasks"
+    "SCHEDULED_TASK_MIN_INTERVAL_HOURS": "Minimum interval (hours) for interval tasks",
+    "SCHEDULED_TASK_CHAT_TOOL_ENABLED": "Allow viewing and managing scheduled tasks in chat",
+    "SCHEDULED_TASK_MAX_CONCURRENT_RUNS": "Global concurrency limit for scheduled runs (excess runs wait in queue)",
+    "SCHEDULED_TASK_QUEUE_TIMEOUT_MINUTES": "Max queue wait for scheduled runs in minutes (skipped on timeout)"
   },
   "settings": {
     "defaultModel": "Default Model",
@@ -3109,6 +3112,7 @@
     "title": "Scheduled Tasks",
     "subtitle": "Pick a time and the assistant will do the work for you and notify you",
     "create": "New scheduled task",
+    "disabledBanner": "Scheduled tasks have been turned off by the administrator. Existing tasks are paused; you can still view and delete them.",
     "createTitle": "New scheduled task",
     "editTitle": "Edit scheduled task",
     "pickTemplate": "Start from a scenario",

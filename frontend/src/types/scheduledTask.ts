@@ -8,6 +8,12 @@ export type ScheduleKind =
 
 export type ScheduledTaskStatus = "active" | "paused" | "completed";
 
+export type PausedBy = "user" | "admin" | "system";
+
+export type CreatedVia = "web" | "chat";
+
+export type ScheduledTaskAgentId = "fast" | "search";
+
 export type RunStatus =
   | "pending"
   | "running"
@@ -34,10 +40,15 @@ export interface ScheduledTask {
   timezone: string;
   agent_id: string;
   persona_preset_id?: string | null;
+  persona_name?: string | null;
+  persona_avatar?: string | null;
+  persona_available?: boolean | null;
   model_id?: string | null;
   enabled: boolean;
   status: ScheduledTaskStatus;
   pause_reason?: string | null;
+  paused_by?: PausedBy | null;
+  created_via?: CreatedVia;
   max_retries: number;
   timeout_seconds: number;
   template_id?: string | null;
@@ -57,7 +68,7 @@ export interface ScheduledTaskInput {
   prompt: string;
   schedule: ScheduleSpec;
   timezone?: string;
-  agent_id?: string;
+  agent_id?: ScheduledTaskAgentId;
   persona_preset_id?: string | null;
   model_id?: string | null;
   enabled?: boolean;

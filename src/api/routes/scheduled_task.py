@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from src.api.deps import get_current_user_required, require_permissions
 from src.infra.scheduler.schedule_spec import ScheduleValidationError
 from src.infra.scheduler.service import (
+    ScheduledTaskDisabledError,
     ScheduledTaskQuotaError,
     get_scheduled_task_service,
     max_tasks_per_user,
@@ -26,7 +27,7 @@ from src.kernel.schemas.scheduled_task import (
 )
 from src.kernel.schemas.user import TokenPayload
 
-router = APIRouter(dependencies=[Depends(require_permissions("chat:write"))])
+router = APIRouter(dependencies=[Depends(require_permissions("scheduled_task:use", "chat:write"))])
 
 _NOT_FOUND = "定时任务不存在或已被删除"
 
@@ -70,7 +71,7 @@ async def create_task(
     service = get_scheduled_task_service()
     try:
         task = await service.create_task(body, user.sub)
-    except (ScheduleValidationError, ScheduledTaskQuotaError) as exc:
+    except (ScheduleValidationError, ScheduledTaskQuotaError, ScheduledTaskDisabledError) as exc:
         raise _bad_request(exc) from exc
     return service.to_response(task)
 
@@ -92,7 +93,7 @@ async def update_task(
     service = get_scheduled_task_service()
     try:
         task = await service.update_task(task_id, user.sub, body)
-    except ScheduleValidationError as exc:
+    except (ScheduleValidationError, ScheduledTaskDisabledError) as exc:
         raise _bad_request(exc) from exc
     if task is None:
         raise HTTPException(status_code=404, detail=_NOT_FOUND)
@@ -117,7 +118,7 @@ async def resume_task(
     service = get_scheduled_task_service()
     try:
         task = await service.set_enabled(task_id, user.sub, True)
-    except ScheduleValidationError as exc:
+    except (ScheduleValidationError, ScheduledTaskDisabledError) as exc:
         raise _bad_request(exc) from exc
     if task is None:
         raise HTTPException(status_code=404, detail=_NOT_FOUND)
@@ -128,17 +129,21 @@ async def resume_task(
 async def run_task_now(
     task_id: str, user: TokenPayload = Depends(get_current_user_required)
 ) -> dict:
-    result = await get_scheduled_task_service().run_now(task_id, user.sub)
+    try:
+        result = await get_scheduled_task_service().run_now(task_id, user.sub)
+    except ScheduledTaskDisabledError as exc:
+        raise _bad_request(exc) from exc
     if result is None:
         raise HTTPException(status_code=404, detail=_NOT_FOUND)
     if result.get("skipped"):
         reason = result.get("reason")
-        message = (
-            "这个任务正在执行中，请等它完成后再试"
-            if reason == "already_running"
-            else "定时任务功能已被管理员关闭"
-        )
-        raise HTTPException(status_code=409, detail=message)
+        if reason == "already_running":
+            raise HTTPException(
+                status_code=409, detail="这个任务正在执行中，请等它完成后再试"
+            )
+        if reason == "task_not_found":
+            raise HTTPException(status_code=404, detail=_NOT_FOUND)
+        raise _bad_request(ScheduledTaskDisabledError())
     return result
 
 

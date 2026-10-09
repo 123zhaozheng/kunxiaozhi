@@ -39,6 +39,19 @@ WS_EVENT_TYPE = "scheduled_task:run_finished"
 
 _monitors: set[asyncio.Task[None]] = set()
 
+OWNER_UNAVAILABLE_MESSAGE = "任务创建人账号已停用或已没有定时任务权限，任务已暂停"
+NO_MODEL_MESSAGE = "当前账号没有可用的模型，请联系管理员"
+REQUIRED_OWNER_PERMISSIONS = ("scheduled_task:use", "chat:write")
+
+
+class NonRetryableRunError(Exception):
+    """A failure that retrying cannot fix: stop retrying and pause the task."""
+
+    def __init__(self, message: str, pause_reason: Optional[str] = None) -> None:
+        super().__init__(message)
+        self.message = message
+        self.pause_reason = pause_reason or message
+
 
 def _spawn(coro: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
     async def _safe() -> None:
@@ -86,7 +99,7 @@ async def _resolve_owner(user_id: str):
     from src.kernel.schemas.user import TokenPayload
 
     user = await UserStorage().get_by_id(user_id)
-    if not user:
+    if not user or not getattr(user, "is_active", True):
         return None
     roles = await RoleStorage().get_by_names(list(user.roles or []))
     permissions: set[str] = set()
@@ -177,6 +190,7 @@ class ScheduledTaskRunner:
         session_id = build_session_id(task.id, run_id)
         agent_run_id = run_id
         preview = ""
+        non_retryable_reason: Optional[str] = None
         try:
             for attempt in range(attempts):
                 agent_run_id = attempt_run_id(run_id, attempt)
@@ -189,6 +203,13 @@ class ScheduledTaskRunner:
                     status, error = await self._execute(
                         task, run_id, session_id, attempt, started_at
                     )
+                except NonRetryableRunError as exc:
+                    logger.warning(
+                        "[ScheduledRunner] task=%s non-retryable failure: %s", task.id, exc.message
+                    )
+                    status, error = RunStatus.FAILED, exc.message
+                    non_retryable_reason = exc.pause_reason
+                    break
                 except Exception as exc:  # noqa: BLE001
                     logger.warning(
                         "[ScheduledRunner] task=%s attempt=%d error: %s", task.id, attempt, exc
@@ -214,7 +235,9 @@ class ScheduledTaskRunner:
                 task.id, run_id=run_id, status=status, session_id=session_id, finished_at=finished
             )
             await release_task_lock(task.id, token)
-            paused_reason = await self._post_run_transitions(task, updated, trigger)
+            paused_reason = await self._post_run_transitions(
+                task, updated, trigger, non_retryable_reason
+            )
             await self._notify(task, run_id, status, session_id, preview, error, paused_reason)
 
     async def _execute(
@@ -230,16 +253,23 @@ class ScheduledTaskRunner:
         from src.infra.session.manager import SessionManager
         from src.infra.task.concurrency import get_registered_executor
         from src.infra.task.manager import get_task_manager
+        from src.kernel.exceptions import AuthorizationError
         from src.kernel.schemas.agent import AgentRequest
 
         owner = await _resolve_owner(task.owner_id)
-        if owner is None:
-            return RunStatus.FAILED, "任务创建人账号不存在或已停用"
+        if owner is None or any(
+            perm not in set(owner.permissions or []) for perm in REQUIRED_OWNER_PERMISSIONS
+        ):
+            raise NonRetryableRunError(OWNER_UNAVAILABLE_MESSAGE)
 
         agent_options: dict[str, Any] = {}
         if task.model_id:
             agent_options["model_id"] = task.model_id
-        await validate_agent_model_access(agent_options, owner)
+        try:
+            await validate_agent_model_access(agent_options, owner)
+        except AuthorizationError as exc:
+            message = _friendly_error(exc) if task.model_id else NO_MODEL_MESSAGE
+            raise NonRetryableRunError(message) from exc
 
         request = AgentRequest(
             message=task.prompt, persona_preset_id=task.persona_preset_id or None
@@ -340,12 +370,17 @@ class ScheduledTaskRunner:
         task: ScheduledTask,
         updated: Optional[ScheduledTask],
         trigger: RunTrigger,
+        non_retryable_reason: Optional[str] = None,
     ) -> Optional[str]:
         from src.infra.scheduler.service import get_scheduled_task_service
 
         if updated is None:
             return None
         service = get_scheduled_task_service()
+        if non_retryable_reason:
+            # Takes precedence over one-shot completion and the failure counter.
+            await service.auto_pause(task.id, non_retryable_reason, paused_by="system")
+            return non_retryable_reason
         if task.schedule.kind == ScheduleKind.ONCE and trigger == RunTrigger.SCHEDULE:
             await service.mark_completed(task.id)
             return None

@@ -2400,7 +2400,10 @@
     "WELCOME_SUGGESTION_TEXT": "文本",
     "SCHEDULED_TASK_ENABLED": "启用定时任务功能",
     "SCHEDULED_TASK_MAX_PER_USER": "每个用户最多可创建的定时任务数",
-    "SCHEDULED_TASK_MIN_INTERVAL_HOURS": "“每隔几小时”任务允许的最小间隔（小时）"
+    "SCHEDULED_TASK_MIN_INTERVAL_HOURS": "“每隔几小时”任务允许的最小间隔（小时）",
+    "SCHEDULED_TASK_CHAT_TOOL_ENABLED": "允许在聊天中查询和管理定时任务",
+    "SCHEDULED_TASK_MAX_CONCURRENT_RUNS": "定时任务全局并发上限（超过后排队等待）",
+    "SCHEDULED_TASK_QUEUE_TIMEOUT_MINUTES": "定时任务排队最长等待时间（分钟，超时则跳过本次执行）"
   },
   "settings": {
     "defaultModel": "默认模型",
@@ -3109,6 +3112,7 @@
     "title": "定时任务",
     "subtitle": "设定好时间，昆小智会自动帮你完成，并把结果通知你",
     "create": "新建定时任务",
+    "disabledBanner": "定时任务功能已被管理员关闭，已有任务暂停执行，可以查看和删除",
     "createTitle": "新建定时任务",
     "editTitle": "编辑定时任务",
     "pickTemplate": "选择一个场景开始",

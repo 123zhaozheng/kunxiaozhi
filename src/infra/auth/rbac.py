@@ -170,6 +170,8 @@ class RBACManager:
                     # Persona Preset
                     Permission.PERSONA_PRESET_READ.value,
                     Permission.PERSONA_PRESET_WRITE.value,
+                    # Scheduled Task
+                    Permission.SCHEDULED_TASK_USE.value,
                     # Profile
                     Permission.USERNAME_UPDATE.value,
                 ],

@@ -16,6 +16,7 @@ import {
 import { PanelHeader } from "../../common/PanelHeader";
 import { PanelLoadingState } from "../../common/PanelLoadingState";
 import { ConfirmDialog } from "../../common/ConfirmDialog";
+import { useSettingsContext } from "../../../contexts/SettingsContext";
 import { scheduledTaskApi } from "../../../services/api/scheduledTask";
 import type {
   ScheduledTask,
@@ -30,6 +31,14 @@ export const SCHEDULED_TASK_REFRESH_EVENT = "scheduled-task:refresh";
 export function ScheduledTaskPanel() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const {
+    settings,
+    isLoading: settingsLoading,
+    enableScheduledTasks,
+  } = useSettingsContext();
+  // getBooleanSetting is false while settings are still loading; only trust it once loaded.
+  const featureDisabled =
+    settings !== null && !settingsLoading && !enableScheduledTasks;
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   const [limit, setLimit] = useState(20);
   const [templates, setTemplates] = useState<ScheduledTaskTemplate[]>([]);
@@ -119,6 +128,7 @@ export function ScheduledTaskPanel() {
 
   const atLimit = tasks.length >= limit;
   const openCreate = (template: ScheduledTaskTemplate | null = null) => {
+    if (featureDisabled) return;
     if (atLimit) {
       toast.error(t("scheduledTask.limitReached", { limit, defaultValue: "最多创建 {{limit}} 个定时任务" }));
       return;
@@ -139,7 +149,8 @@ export function ScheduledTaskPanel() {
           <button
             type="button"
             onClick={() => openCreate()}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900"
+            disabled={featureDisabled}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-stone-100 dark:text-stone-900"
           >
             <Plus size={16} />
             {t("scheduledTask.create", "新建定时任务")}
@@ -147,6 +158,18 @@ export function ScheduledTaskPanel() {
         }
       />
 
+      {featureDisabled && (
+        <div
+          role="alert"
+          className="mx-4 mb-3 flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800 sm:mx-6 dark:bg-amber-900/30 dark:text-amber-200"
+        >
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+          {t(
+            "scheduledTask.disabledBanner",
+            "定时任务功能已被管理员关闭，已有任务暂停执行，可以查看和删除",
+          )}
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto px-4 pb-8 sm:px-6">
         {loading ? (
           <PanelLoadingState text={t("common.loading", "加载中...")} />

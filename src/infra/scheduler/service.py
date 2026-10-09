@@ -42,6 +42,13 @@ class ScheduledTaskQuotaError(ValueError):
     """User-facing quota error (Chinese message)."""
 
 
+class ScheduledTaskDisabledError(ValueError):
+    """Raised when the feature is switched off by the administrator."""
+
+    def __init__(self, message: str = "定时任务功能已被管理员关闭") -> None:
+        super().__init__(message)
+
+
 def max_tasks_per_user() -> int:
     return max(1, int(getattr(settings, "SCHEDULED_TASK_MAX_PER_USER", 20) or 20))
 
@@ -52,6 +59,11 @@ def min_interval_hours() -> int:
 
 def job_id_for(task_id: str) -> str:
     return f"{JOB_PREFIX}{task_id}"
+
+
+def _ensure_enabled() -> None:
+    if not settings_enabled():
+        raise ScheduledTaskDisabledError()
 
 
 class ScheduledTaskService:
@@ -75,6 +87,7 @@ class ScheduledTaskService:
     # ── CRUD ───────────────────────────────────────
 
     async def create_task(self, request: ScheduledTaskCreate, owner_id: str) -> ScheduledTask:
+        _ensure_enabled()
         self.validate(request.schedule, request.timezone)
         storage = get_scheduled_task_storage()
         limit = max_tasks_per_user()
@@ -110,6 +123,8 @@ class ScheduledTaskService:
         if task is None:
             return None
         updates: dict[str, Any] = request.model_dump(exclude_unset=True)
+        if updates != {"enabled": False}:
+            _ensure_enabled()  # pausing stays allowed while the feature is off
         if "schedule" in updates or "timezone" in updates:
             spec = request.schedule or task.schedule
             self.validate(spec, updates.get("timezone") or task.timezone)
@@ -121,9 +136,11 @@ class ScheduledTaskService:
         if updates.get("enabled") is True:
             updates["status"] = ScheduledTaskStatus.ACTIVE.value
             updates["pause_reason"] = None
+            updates["paused_by"] = None
             updates["consecutive_failures"] = 0
         elif updates.get("enabled") is False:
             updates["status"] = ScheduledTaskStatus.PAUSED.value
+            updates["paused_by"] = "user"
         if not updates:
             return task
         updated = await storage.update_task(task_id, updates)
@@ -138,6 +155,8 @@ class ScheduledTaskService:
         task = await storage.get_task(task_id, owner_id)
         if task is None:
             return None
+        if enabled:
+            _ensure_enabled()
         if enabled and task.schedule.kind == ScheduleKind.ONCE:
             # Resuming a past one-shot would never fire; ask the user to pick a new time.
             self.validate(task.schedule, task.timezone)
@@ -153,6 +172,7 @@ class ScheduledTaskService:
         task = await get_scheduled_task_storage().get_task(task_id, owner_id)
         if task is None:
             return None
+        _ensure_enabled()
         return await get_scheduled_task_runner().run(task.id, trigger=RunTrigger.MANUAL)
 
     # ── transitions used by the runner ─────────────
@@ -165,13 +185,18 @@ class ScheduledTaskService:
         if updated is not None:
             logger.info("[ScheduledTaskService] one-shot task %s completed", task_id)
 
-    async def auto_pause(self, task_id: str, reason: str) -> None:
+    async def auto_pause(self, task_id: str, reason: str, paused_by: str = "system") -> None:
         await get_scheduled_task_storage().update_task(
             task_id,
-            {"status": ScheduledTaskStatus.PAUSED.value, "enabled": False, "pause_reason": reason},
+            {
+                "status": ScheduledTaskStatus.PAUSED.value,
+                "enabled": False,
+                "pause_reason": reason,
+                "paused_by": paused_by,
+            },
         )
         self._unregister(task_id)
-        logger.warning("[ScheduledTaskService] auto-paused %s: %s", task_id, reason)
+        logger.warning("[ScheduledTaskService] auto-paused %s (%s): %s", task_id, paused_by, reason)
 
     # ── registration ───────────────────────────────
 
@@ -248,6 +273,8 @@ class ScheduledTaskService:
         if not settings_enabled():
             for task_id in list(self._signatures):
                 self._unregister(task_id)
+            # Forget the marker so re-enabling re-registers everything on the next resync.
+            self._marker = None
             return 0
         storage = get_scheduled_task_storage()
         marker = await storage.get_active_marker()
