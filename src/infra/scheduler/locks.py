@@ -10,6 +10,7 @@ Adapted from LambChat ``src/infra/scheduler/locks.py``:
 
 from __future__ import annotations
 
+import time
 import uuid
 from collections.abc import Awaitable
 from typing import Any, Optional, cast
@@ -31,6 +32,50 @@ else
     return 0
 end
 """
+
+
+RUN_SLOTS_KEY = "scheduler:running"
+MIN_RUN_SLOT_TTL = 60
+
+# ZSET: member = agent run id of one attempt, score = expiry timestamp (seconds).
+# KEYS[1]=key; ARGV = now, limit, expire_at, member. The clock comes from the client so
+# every replica uses the same time source as the score it writes.
+_ACQUIRE_RUN_SLOT_LUA = """
+redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
+if redis.call("ZSCORE", KEYS[1], ARGV[4]) then
+    redis.call("ZADD", KEYS[1], ARGV[3], ARGV[4])
+    return 1
+end
+if redis.call("ZCARD", KEYS[1]) < tonumber(ARGV[2]) then
+    redis.call("ZADD", KEYS[1], ARGV[3], ARGV[4])
+    return 1
+end
+return 0
+"""
+
+
+def _now() -> float:
+    return time.time()
+
+
+async def acquire_run_slot(member: str, limit: int, ttl: int) -> bool:
+    """Try to take one of ``limit`` global run slots; expired members are reclaimed."""
+    redis = get_redis_client()
+    now = _now()
+    expire_at = now + max(MIN_RUN_SLOT_TTL, int(ttl))
+    result = await cast(
+        Awaitable[Any],
+        redis.eval(_ACQUIRE_RUN_SLOT_LUA, 1, RUN_SLOTS_KEY, now, int(limit), expire_at, member),
+    )
+    return bool(result)
+
+
+async def release_run_slot(member: str) -> None:
+    redis = get_redis_client()
+    try:
+        await cast(Awaitable[Any], redis.zrem(RUN_SLOTS_KEY, member))
+    except Exception as exc:  # noqa: BLE001 - slot expires via score anyway
+        logger.warning("[SchedulerRunSlot] release failed for member=%s: %s", member, exc)
 
 
 async def claim_schedule_slot(task_id: str, slot_id: str, ttl: int = DEFAULT_SLOT_TTL) -> bool:

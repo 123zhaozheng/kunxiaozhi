@@ -9,6 +9,7 @@ result preview -> stats + auto-pause -> release lock -> notify owner.
 from __future__ import annotations
 
 import asyncio
+import random
 import time
 import uuid
 from collections.abc import Coroutine
@@ -16,7 +17,13 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from src.infra.logging import get_logger
-from src.infra.scheduler.locks import acquire_task_lock, claim_schedule_slot, release_task_lock
+from src.infra.scheduler.locks import (
+    acquire_run_slot,
+    acquire_task_lock,
+    claim_schedule_slot,
+    release_run_slot,
+    release_task_lock,
+)
 from src.infra.scheduler.persona import PERSONA_UNAVAILABLE_RUN_MESSAGE
 from src.infra.scheduler.schedule_spec import describe
 from src.infra.scheduler.storage import get_scheduled_task_storage
@@ -45,6 +52,40 @@ NO_MODEL_MESSAGE = "当前账号没有可用的模型，请联系管理员"
 REQUIRED_OWNER_PERMISSIONS = ("scheduled_task:use", "chat:write")
 SUPPORTED_AGENT_IDS = ("fast", "search")
 SANDBOX_BUSY_MESSAGE = "沙箱资源暂时不足，请稍后重试"
+BUSY_SKIPPED_MESSAGE = "系统繁忙，本次执行已跳过"
+BUSY_ONESHOT_PAUSE_REASON = "系统繁忙，本次未能执行，请修改执行时间后重新启用"
+SLOT_POLL_SECONDS = 5.0
+
+DEFAULT_MAX_CONCURRENT_RUNS = 10
+DEFAULT_QUEUE_TIMEOUT_MINUTES = 20
+
+
+def _clamped_setting(name: str, default: int, low: int, high: int) -> int:
+    raw = getattr(settings, name, None)
+    try:
+        value = int(raw) if raw is not None else default
+    except (TypeError, ValueError):
+        value = default
+    return min(max(value, low), high)
+
+
+def max_concurrent_runs() -> int:
+    """Global cap of concurrently executing scheduled runs (1..100, default 10)."""
+    return _clamped_setting(
+        "SCHEDULED_TASK_MAX_CONCURRENT_RUNS", DEFAULT_MAX_CONCURRENT_RUNS, 1, 100
+    )
+
+
+def queue_timeout_seconds() -> int:
+    """Max seconds a run may wait for a slot (1..120 minutes, default 20)."""
+    minutes = _clamped_setting(
+        "SCHEDULED_TASK_QUEUE_TIMEOUT_MINUTES", DEFAULT_QUEUE_TIMEOUT_MINUTES, 1, 120
+    )
+    return minutes * 60
+
+
+def _slot_poll_delay() -> float:
+    return SLOT_POLL_SECONDS + random.uniform(0, 1)
 
 
 class NonRetryableRunError(Exception):
@@ -158,7 +199,11 @@ class ScheduledTaskRunner:
 
         run_id = str(uuid.uuid4())
         attempts = max(1, int(task.max_retries or 0) + 1)
-        token = await acquire_task_lock(task.id, run_id, ttl=task.timeout_seconds * attempts + 120)
+        token = await acquire_task_lock(
+            task.id,
+            run_id,
+            ttl=(task.timeout_seconds + queue_timeout_seconds()) * attempts + 120,
+        )
         if token is None:
             return {"skipped": True, "reason": "already_running"}
 
@@ -198,26 +243,45 @@ class ScheduledTaskRunner:
             for attempt in range(attempts):
                 agent_run_id = attempt_run_id(run_id, attempt)
                 session_id = build_session_id(task.id, run_id, attempt)
-                await storage.update_run(
-                    run_id,
-                    {"status": RunStatus.RUNNING, "attempt": attempt, "session_id": session_id},
-                )
-                try:
-                    status, error = await self._execute(
-                        task, run_id, session_id, attempt, started_at
-                    )
-                except NonRetryableRunError as exc:
-                    logger.warning(
-                        "[ScheduledRunner] task=%s non-retryable failure: %s", task.id, exc.message
-                    )
-                    status, error = RunStatus.FAILED, exc.message
-                    non_retryable_reason = exc.pause_reason
+                # Queue for a global run slot while the record stays PENDING.
+                acquired = await self._wait_for_run_slot(agent_run_id, task)
+                if not acquired:
+                    if attempt == 0:
+                        status, error = RunStatus.SKIPPED, BUSY_SKIPPED_MESSAGE
+                    else:
+                        # Keep the previous attempt's FAILED result; do not retry further.
+                        agent_run_id = attempt_run_id(run_id, attempt - 1)
+                        session_id = build_session_id(task.id, run_id, attempt - 1)
                     break
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "[ScheduledRunner] task=%s attempt=%d error: %s", task.id, attempt, exc
+                try:
+                    await storage.update_run(
+                        run_id,
+                        {
+                            "status": RunStatus.RUNNING,
+                            "attempt": attempt,
+                            "session_id": session_id,
+                        },
                     )
-                    status, error = RunStatus.FAILED, _friendly_error(exc)
+                    try:
+                        status, error = await self._execute(
+                            task, run_id, session_id, attempt, started_at
+                        )
+                    except NonRetryableRunError as exc:
+                        logger.warning(
+                            "[ScheduledRunner] task=%s non-retryable failure: %s",
+                            task.id,
+                            exc.message,
+                        )
+                        status, error = RunStatus.FAILED, exc.message
+                        non_retryable_reason = exc.pause_reason
+                        break
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "[ScheduledRunner] task=%s attempt=%d error: %s", task.id, attempt, exc
+                        )
+                        status, error = RunStatus.FAILED, _friendly_error(exc)
+                finally:
+                    await release_run_slot(agent_run_id)
                 if status != RunStatus.FAILED:
                     break
             if status == RunStatus.SUCCESS:
@@ -242,6 +306,30 @@ class ScheduledTaskRunner:
                 task, updated, trigger, non_retryable_reason
             )
             await self._notify(task, run_id, status, session_id, preview, error, paused_reason)
+
+    async def _wait_for_run_slot(self, member: str, task: ScheduledTask) -> bool:
+        """Queue until a global run slot is free. False means the queue wait timed out.
+
+        Limit and timeout are re-read each loop so hot-updated settings take effect.
+        Redis failures fail open: run without a slot (release is then a no-op).
+        """
+        deadline = time.monotonic() + queue_timeout_seconds()
+        while True:
+            try:
+                if await acquire_run_slot(
+                    member, max_concurrent_runs(), ttl=task.timeout_seconds + 120
+                ):
+                    return True
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "[ScheduledRunner] run slot unavailable, running without a slot task=%s: %s",
+                    task.id,
+                    exc,
+                )
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            await asyncio.sleep(_slot_poll_delay())
 
     async def _execute(
         self,
@@ -401,6 +489,10 @@ class ScheduledTaskRunner:
             await service.auto_pause(task.id, non_retryable_reason, paused_by="system")
             return non_retryable_reason
         if task.schedule.kind == ScheduleKind.ONCE and trigger == RunTrigger.SCHEDULE:
+            if updated.last_run_status == RunStatus.SKIPPED:
+                # Never mark a skipped one-shot completed: it would be silently lost.
+                await service.auto_pause(task.id, BUSY_ONESHOT_PAUSE_REASON, paused_by="system")
+                return BUSY_ONESHOT_PAUSE_REASON
             await service.mark_completed(task.id)
             return None
         if (

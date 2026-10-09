@@ -20,6 +20,7 @@ from src.kernel.schemas.scheduled_task import (
 class FakeRedis:
     def __init__(self) -> None:
         self.data: dict[str, str] = {}
+        self.zsets: dict[str, dict[str, float]] = {}
 
     async def set(self, key: str, value: str, nx: bool = False, ex: int | None = None) -> bool:
         if nx and key in self.data:
@@ -27,11 +28,27 @@ class FakeRedis:
         self.data[key] = value
         return True
 
-    async def eval(self, _script: str, _n: int, key: str, token: str) -> int:
-        if self.data.get(key) == token:
-            del self.data[key]
-            return 1
-        return 0
+    async def eval(self, script: str, numkeys: int, *args: Any) -> int:
+        if script == locks._RELEASE_LOCK_LUA:
+            key, token = args
+            if self.data.get(key) == token:
+                del self.data[key]
+                return 1
+            return 0
+        if script == locks._ACQUIRE_RUN_SLOT_LUA:
+            key, now, limit, expire_at, member = args
+            zset = self.zsets.setdefault(key, {})
+            for stale in [m for m, score in zset.items() if score <= float(now)]:
+                del zset[stale]
+            if member in zset or len(zset) < int(limit):
+                zset[member] = float(expire_at)
+                return 1
+            return 0
+        raise AssertionError(f"unexpected script: {script!r}")
+
+    async def zrem(self, key: str, *members: str) -> int:
+        zset = self.zsets.get(key, {})
+        return sum(1 for m in members if zset.pop(m, None) is not None)
 
 
 class FakeStorage:
@@ -87,7 +104,12 @@ class FakeStorage:
 
     async def record_task_result(self, task_id, *, run_id, status, session_id, finished_at):
         task = self.tasks[task_id]
-        failures = 0 if status == RunStatus.SUCCESS else task.consecutive_failures + 1
+        if status == RunStatus.SUCCESS:
+            failures = 0
+        elif status == RunStatus.SKIPPED:
+            failures = task.consecutive_failures
+        else:
+            failures = task.consecutive_failures + 1
         return await self.update_task(
             task_id,
             {

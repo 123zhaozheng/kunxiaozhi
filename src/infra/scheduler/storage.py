@@ -111,8 +111,16 @@ class ScheduledTaskStorage:
         session_id: Optional[str],
         finished_at: datetime,
     ) -> Optional[ScheduledTask]:
-        """Atomically bump run stats and the consecutive-failure counter."""
+        """Atomically bump run stats and the consecutive-failure counter.
+
+        SUCCESS resets the counter, FAILED / TIMEOUT increment it, SKIPPED (system busy)
+        leaves it untouched.
+        """
         succeeded = status == RunStatus.SUCCESS
+        skipped = status == RunStatus.SKIPPED
+        inc: dict[str, int] = {"total_runs": 1}
+        if not succeeded and not skipped:
+            inc["consecutive_failures"] = 1
         update: dict[str, Any] = {
             "$set": {
                 "last_run_at": finished_at,
@@ -122,7 +130,7 @@ class ScheduledTaskStorage:
                 "updated_at": utc_now(),
                 **({"consecutive_failures": 0} if succeeded else {}),
             },
-            "$inc": {"total_runs": 1, **({} if succeeded else {"consecutive_failures": 1})},
+            "$inc": inc,
         }
         doc = await self.tasks.find_one_and_update(
             {"_id": task_id}, update, return_document=ReturnDocument.AFTER
