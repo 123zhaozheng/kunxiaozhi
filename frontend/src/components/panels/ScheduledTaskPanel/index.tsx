@@ -22,6 +22,7 @@ import type {
   ScheduledTask,
   ScheduledTaskTemplate,
 } from "../../../types/scheduledTask";
+import { PersonaAvatarBadge } from "./PersonaAvatarBadge";
 import { TaskEditorDialog } from "./TaskEditorDialog";
 import { TaskRunsDrawer } from "./TaskRunsDrawer";
 import { STATUS_STYLES, formatFireTime, relativeFromNow } from "./scheduleUtils";
@@ -315,6 +316,22 @@ function TaskCard({ task, locale, busy, onToggle, onRun, onEdit, onRuns, onDelet
 
       <p className="mt-2 line-clamp-2 text-sm text-stone-500 dark:text-stone-400">{task.prompt}</p>
 
+      {task.persona_preset_id && (
+        <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="task-persona">
+          {task.persona_name && (
+            <span className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-stone-100 py-0.5 pl-1 pr-2.5 text-xs text-stone-700 dark:bg-stone-800 dark:text-stone-200">
+              <PersonaAvatarBadge avatar={task.persona_avatar} size={18} />
+              <span className="truncate">{task.persona_name}</span>
+            </span>
+          )}
+          {task.persona_available === false && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+              <AlertTriangle size={12} className="shrink-0" />
+              {t("scheduledTask.persona.unavailable", "专家已不可用")}
+            </span>
+          )}
+        </div>
+      )}
       {task.pause_reason && (
         <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
           <AlertTriangle size={14} className="mt-0.5 shrink-0" />

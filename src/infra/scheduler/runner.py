@@ -17,6 +17,7 @@ from typing import Any, Optional
 
 from src.infra.logging import get_logger
 from src.infra.scheduler.locks import acquire_task_lock, claim_schedule_slot, release_task_lock
+from src.infra.scheduler.persona import PERSONA_UNAVAILABLE_RUN_MESSAGE
 from src.infra.scheduler.schedule_spec import describe
 from src.infra.scheduler.storage import get_scheduled_task_storage
 from src.infra.utils.datetime import ensure_utc, utc_now
@@ -42,6 +43,8 @@ _monitors: set[asyncio.Task[None]] = set()
 OWNER_UNAVAILABLE_MESSAGE = "任务创建人账号已停用或已没有定时任务权限，任务已暂停"
 NO_MODEL_MESSAGE = "当前账号没有可用的模型，请联系管理员"
 REQUIRED_OWNER_PERMISSIONS = ("scheduled_task:use", "chat:write")
+SUPPORTED_AGENT_IDS = ("fast", "search")
+SANDBOX_BUSY_MESSAGE = "沙箱资源暂时不足，请稍后重试"
 
 
 class NonRetryableRunError(Exception):
@@ -248,12 +251,20 @@ class ScheduledTaskRunner:
         attempt: int,
         started_at: datetime,
     ) -> tuple[RunStatus, Optional[str]]:
-        from src.api.routes.chat import resolve_persona_request, validate_agent_model_access
+        from src.agents.core.persona import resolve_persona_agent_id
+        from src.api.routes.chat import (
+            build_conversation_config,
+            resolve_persona_request,
+            validate_agent_model_access,
+        )
         from src.infra.chat.user_message_timestamp import format_user_message_with_timestamp
+        from src.infra.persona_preset.dify_kb_agent_options import (
+            apply_dify_kb_dataset_ids_to_agent_options,
+        )
         from src.infra.session.manager import SessionManager
         from src.infra.task.concurrency import get_registered_executor
         from src.infra.task.manager import get_task_manager
-        from src.kernel.exceptions import AuthorizationError
+        from src.kernel.exceptions import AuthorizationError, NotFoundError
         from src.kernel.schemas.agent import AgentRequest
 
         owner = await _resolve_owner(task.owner_id)
@@ -262,63 +273,68 @@ class ScheduledTaskRunner:
         ):
             raise NonRetryableRunError(OWNER_UNAVAILABLE_MESSAGE)
 
-        agent_options: dict[str, Any] = {}
-        if task.model_id:
-            agent_options["model_id"] = task.model_id
+        # Same order as ``chat_stream``: persona -> model access -> knowledge base -> agent.
+        request = AgentRequest(
+            message=task.prompt,
+            persona_preset_id=task.persona_preset_id or None,
+            agent_options={"model_id": task.model_id} if task.model_id else {},
+        )
         try:
-            await validate_agent_model_access(agent_options, owner)
+            await resolve_persona_request(request, owner)
+        except (NotFoundError, AuthorizationError) as exc:
+            raise NonRetryableRunError(PERSONA_UNAVAILABLE_RUN_MESSAGE) from exc
+        if request.agent_options is None:
+            request.agent_options = {}
+        try:
+            await validate_agent_model_access(request.agent_options, owner)
         except AuthorizationError as exc:
             message = _friendly_error(exc) if task.model_id else NO_MODEL_MESSAGE
             raise NonRetryableRunError(message) from exc
-
-        request = AgentRequest(
-            message=task.prompt, persona_preset_id=task.persona_preset_id or None
+        apply_dify_kb_dataset_ids_to_agent_options(
+            request.agent_options, persona_snapshot=request.persona_snapshot
         )
-        agent_options_final: dict[str, Any] = agent_options
-        if task.persona_preset_id:
-            request.agent_options = agent_options
-            await resolve_persona_request(request, owner)
-            agent_options_final = request.agent_options or agent_options
 
-        agent_id = task.agent_id or "fast"
-        if task.persona_preset_id and request.persona_snapshot is not None:
-            from src.agents.core.persona import resolve_persona_agent_id
+        # Legacy documents may carry other agent ids; only fast / search are supported.
+        agent_id = task.agent_id if task.agent_id in SUPPORTED_AGENT_IDS else "fast"
+        snapshot = request.persona_snapshot
+        if snapshot is not None:
+            agent_id = resolve_persona_agent_id(agent_id, snapshot.preferred_agent_id)
+            # Like the web client: only a persona with bound skills restricts them.
+            request.enabled_skills = list(snapshot.skill_names) if snapshot.skill_names else None
 
-            agent_id = resolve_persona_agent_id(
-                agent_id, getattr(request.persona_snapshot, "preferred_agent_id", None)
-            )
+        if not await _admit_sandbox(agent_id, owner.sub):
+            return RunStatus.FAILED, SANDBOX_BUSY_MESSAGE
 
         message = format_user_message_with_timestamp(task.prompt, task.timezone, now=started_at)
         agent_run_id = attempt_run_id(run_id, attempt)
-        metadata: dict[str, Any] = {
-            "source": "scheduled_task",
-            "scheduled_task_id": task.id,
-            "scheduled_task_run_id": run_id,
-            "scheduled_task_name": task.name,
-            "hidden_from_conversation_list": True,
-            "agent_id": agent_id,
-            "executor_key": "agent_stream",
-            "agent_options": agent_options_final,
-        }
-        if task.persona_preset_id:
-            metadata["persona_preset_id"] = task.persona_preset_id
-            if request.persona_snapshot is not None:
-                metadata["persona_preset_name"] = request.persona_snapshot.name
-                metadata["persona_snapshot"] = request.persona_snapshot.model_dump()
+        metadata = build_conversation_config(
+            run_id=agent_run_id,
+            agent_id=agent_id,
+            request=request,
+            language="zh",
+            session_id=session_id,
+            extra={
+                "source": "scheduled_task",
+                "scheduled_task_id": task.id,
+                "scheduled_task_run_id": run_id,
+                "scheduled_task_name": task.name,
+                "hidden_from_conversation_list": True,
+            },
+        )
 
         common: dict[str, Any] = dict(
             session_id=session_id,
             agent_id=agent_id,
             message=message,
             user_id=task.owner_id,
-            agent_options=agent_options_final,
+            agent_options=request.agent_options,
             run_id=agent_run_id,
             enabled_skills=request.enabled_skills,
             persona_system_prompt=request.persona_system_prompt,
             session_name=f"[定时] {task.name}",
             display_message=task.prompt,
             write_user_message_immediately=True,
-            persona_preset_id=task.persona_preset_id or None,
+            persona_preset_id=request.persona_preset_id,
         )
         manager = get_task_manager()
         if settings.TASK_BACKEND == "arq":
@@ -432,11 +448,37 @@ def attempt_run_id(run_id: str, attempt: int) -> str:
     return run_id if attempt == 0 else f"{run_id}-r{attempt}"
 
 
+async def _admit_sandbox(agent_id: str, user_id: str) -> bool:
+    """Mirror ``chat_stream`` sandbox admission. False means no capacity (retryable)."""
+    from src.agents.core.base import AgentFactory
+    from src.kernel.schemas.opensandbox import OpenSandboxCapacityUnavailable
+
+    if str(settings.SANDBOX_PLATFORM).lower() != "opensandbox":
+        return True
+    try:
+        agent_cls = AgentFactory.get_class(agent_id) if hasattr(AgentFactory, "get_class") else None
+        supports_sandbox = bool(
+            getattr(agent_cls, "_supports_sandbox", agent_id in {"search", "team"})
+        )
+    except Exception:  # noqa: BLE001
+        supports_sandbox = agent_id in {"search", "team"}
+    if not supports_sandbox:
+        return True
+    try:
+        from src.infra.sandbox.session_manager import get_session_sandbox_manager
+
+        await get_session_sandbox_manager().admit(user_id)
+    except OpenSandboxCapacityUnavailable:
+        return False
+    return True
+
+
 def _friendly_error(exc: Exception) -> str:
     text = str(exc) or exc.__class__.__name__
     mapping = {
         "model_disabled": "所选模型已被停用，请编辑任务更换模型",
         "model_not_allowed": "你没有使用所选模型的权限，请编辑任务更换模型",
+        "persona_preset_not_found": PERSONA_UNAVAILABLE_RUN_MESSAGE,
     }
     for key, friendly in mapping.items():
         if key in text:

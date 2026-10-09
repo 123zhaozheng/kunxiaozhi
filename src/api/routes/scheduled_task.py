@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from src.api.deps import get_current_user_required, require_permissions
+from src.infra.scheduler.persona import ScheduledTaskPersonaError
 from src.infra.scheduler.schedule_spec import ScheduleValidationError
 from src.infra.scheduler.service import (
     ScheduledTaskDisabledError,
@@ -57,7 +58,7 @@ async def list_tasks(
     service = get_scheduled_task_service()
     tasks = await get_scheduled_task_storage().list_tasks(user.sub)
     return ScheduledTaskListResponse(
-        items=[service.to_response(t) for t in tasks],
+        items=await service.to_responses_with_persona(tasks, user),
         total=len(tasks),
         limit=max_tasks_per_user(),
         min_interval_hours=min_interval_hours(),
@@ -70,10 +71,15 @@ async def create_task(
 ) -> ScheduledTaskResponse:
     service = get_scheduled_task_service()
     try:
-        task = await service.create_task(body, user.sub)
-    except (ScheduleValidationError, ScheduledTaskQuotaError, ScheduledTaskDisabledError) as exc:
+        task = await service.create_task(body, user.sub, actor=user)
+    except (
+        ScheduleValidationError,
+        ScheduledTaskQuotaError,
+        ScheduledTaskDisabledError,
+        ScheduledTaskPersonaError,
+    ) as exc:
         raise _bad_request(exc) from exc
-    return service.to_response(task)
+    return await service.to_response_with_persona(task, user)
 
 
 @router.get("/{task_id}", response_model=ScheduledTaskResponse)
@@ -83,7 +89,7 @@ async def get_task(
     task = await get_scheduled_task_storage().get_task(task_id, user.sub)
     if task is None:
         raise HTTPException(status_code=404, detail=_NOT_FOUND)
-    return get_scheduled_task_service().to_response(task)
+    return await get_scheduled_task_service().to_response_with_persona(task, user)
 
 
 @router.patch("/{task_id}", response_model=ScheduledTaskResponse)
@@ -92,12 +98,16 @@ async def update_task(
 ) -> ScheduledTaskResponse:
     service = get_scheduled_task_service()
     try:
-        task = await service.update_task(task_id, user.sub, body)
-    except (ScheduleValidationError, ScheduledTaskDisabledError) as exc:
+        task = await service.update_task(task_id, user.sub, body, actor=user)
+    except (
+        ScheduleValidationError,
+        ScheduledTaskDisabledError,
+        ScheduledTaskPersonaError,
+    ) as exc:
         raise _bad_request(exc) from exc
     if task is None:
         raise HTTPException(status_code=404, detail=_NOT_FOUND)
-    return service.to_response(task)
+    return await service.to_response_with_persona(task, user)
 
 
 @router.post("/{task_id}/pause", response_model=ScheduledTaskResponse)
@@ -108,7 +118,7 @@ async def pause_task(
     task = await service.set_enabled(task_id, user.sub, False)
     if task is None:
         raise HTTPException(status_code=404, detail=_NOT_FOUND)
-    return service.to_response(task)
+    return await service.to_response_with_persona(task, user)
 
 
 @router.post("/{task_id}/resume", response_model=ScheduledTaskResponse)
@@ -122,7 +132,7 @@ async def resume_task(
         raise _bad_request(exc) from exc
     if task is None:
         raise HTTPException(status_code=404, detail=_NOT_FOUND)
-    return service.to_response(task)
+    return await service.to_response_with_persona(task, user)
 
 
 @router.post("/{task_id}/run")

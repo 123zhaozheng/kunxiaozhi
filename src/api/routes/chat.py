@@ -222,6 +222,7 @@ def build_conversation_config(
     request: AgentRequest,
     language: str,
     session_id: str | None = None,
+    extra: dict | None = None,
 ) -> dict:
     """Build session metadata for conversation configuration."""
     conversation_config = {
@@ -246,6 +247,8 @@ def build_conversation_config(
         conversation_config["project_id"] = request.project_id
     if agent_id == "team" and request.team_id:
         conversation_config["team_id"] = request.team_id
+    if extra:
+        conversation_config.update(extra)
     return conversation_config
 
 

@@ -18,7 +18,7 @@ from src.infra.scheduler import service as service_mod
 from src.infra.scheduler.runner import ScheduledTaskRunner
 from src.kernel.schemas.scheduled_task import RunStatus
 from src.kernel.schemas.user import TokenPayload
-from tests.infra.scheduler.fakes import install_fakes
+from tests.infra.scheduler.fakes import install_execution_fakes, install_fakes
 
 BASE = "/api/scheduled-tasks"
 DISABLED_MESSAGE = "定时任务功能已被管理员关闭"
@@ -263,3 +263,79 @@ async def test_run_now_submits_and_conflicts_when_already_running(env: Env) -> N
     busy = await env.client.post(f"{BASE}/{task_id}/run")
     assert busy.status_code == 409
     assert busy.json()["detail"] == "这个任务正在执行中，请等它完成后再试"
+
+
+# ── persona (P2) ───────────────────────────────
+
+PERSONA_DENIED = "所选专家不存在或你无权使用"
+
+
+@pytest.fixture
+def personas(env: Env):
+    handles = install_execution_fakes(env.monkeypatch)
+    handles.personas.add("plaza", name="分析师", avatar="📊")
+    handles.personas.add(
+        "foreign", scope="user", visibility="private", status="draft", owner_user_id="u2"
+    )
+    return handles.personas
+
+
+@pytest.mark.asyncio
+async def test_create_with_invisible_persona_is_a_chinese_400(env: Env, personas) -> None:
+    for pid in ("foreign", "missing"):
+        resp = await env.client.post(BASE, json={**BODY, "persona_preset_id": pid})
+        assert resp.status_code == 400, resp.text
+        assert resp.json()["detail"] == PERSONA_DENIED
+    assert env.fakes.storage.tasks == {}
+
+
+@pytest.mark.asyncio
+async def test_list_and_get_include_persona_fields(env: Env, personas) -> None:
+    created = await env.create(persona_preset_id="plaza")
+    assert created["persona_name"] == "分析师"
+    assert created["persona_avatar"] == "📊"
+    assert created["persona_available"] is True
+    plain = await env.create(name="无专家")
+    assert plain["persona_available"] is None
+
+    listing = (await env.client.get(BASE)).json()["items"]
+    by_name = {item["name"]: item for item in listing}
+    assert by_name["晨报"]["persona_name"] == "分析师"
+    assert by_name["晨报"]["persona_available"] is True
+    assert by_name["无专家"]["persona_name"] is None
+
+    personas.docs["plaza"]["status"] = "archived"
+    got = (await env.client.get(f"{BASE}/{created['id']}")).json()
+    assert got["persona_preset_id"] == "plaza"
+    assert got["persona_available"] is False
+    assert got["persona_name"] is None and got["persona_avatar"] is None
+
+
+@pytest.mark.asyncio
+async def test_patch_persona_validates_changes_but_not_unchanged_or_clear(
+    env: Env, personas
+) -> None:
+    task_id = (await env.create(persona_preset_id="plaza"))["id"]
+
+    denied = await env.client.patch(f"{BASE}/{task_id}", json={"persona_preset_id": "foreign"})
+    assert denied.status_code == 400 and denied.json()["detail"] == PERSONA_DENIED
+    assert env.fakes.storage.tasks[task_id].persona_preset_id == "plaza"
+
+    personas.docs["plaza"]["status"] = "archived"  # current persona went away
+    renamed = await env.client.patch(f"{BASE}/{task_id}", json={"name": "改名"})
+    assert renamed.status_code == 200
+    assert renamed.json()["persona_available"] is False
+
+    cleared = await env.client.patch(f"{BASE}/{task_id}", json={"persona_preset_id": None})
+    assert cleared.status_code == 200
+    body = cleared.json()
+    assert body["persona_preset_id"] is None and body["persona_available"] is None
+
+
+@pytest.mark.asyncio
+async def test_pause_and_resume_responses_include_persona(env: Env, personas) -> None:
+    task_id = (await env.create(persona_preset_id="plaza"))["id"]
+    paused = (await env.client.post(f"{BASE}/{task_id}/pause")).json()
+    assert paused["persona_name"] == "分析师"
+    resumed = (await env.client.post(f"{BASE}/{task_id}/resume")).json()
+    assert resumed["persona_available"] is True

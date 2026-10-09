@@ -3109,6 +3109,17 @@
     }
   },
   "scheduledTask": {
+    "persona": {
+      "label": "Expert (optional)",
+      "none": "None — run with the default Kunxiaozhi assistant",
+      "choose": "Choose expert",
+      "change": "Change expert",
+      "clear": "Clear",
+      "hint": "When set, runs use this expert's role, skills and knowledge bases.",
+      "unavailable": "Expert unavailable",
+      "unavailableHint": "The selected expert was deleted, unpublished, or you no longer have access. Edit the task to pick another expert."
+    },
+
     "title": "Scheduled Tasks",
     "subtitle": "Pick a time and the assistant will do the work for you and notify you",
     "create": "New scheduled task",

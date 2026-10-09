@@ -8,6 +8,7 @@ from typing import Any, Optional
 from uuid import uuid4
 
 from src.infra.logging import get_logger
+from src.infra.scheduler.persona import _is_persona_admin, ensure_persona_usable, persona_briefs
 from src.infra.scheduler.runner import get_scheduled_task_runner, settings_enabled, stale_run_cutoff
 from src.infra.scheduler.runtime import ScheduledJob, get_runtime_scheduler
 from src.infra.scheduler.schedule_spec import (
@@ -30,6 +31,7 @@ from src.kernel.schemas.scheduled_task import (
     ScheduleKind,
     ScheduleSpec,
 )
+from src.kernel.schemas.user import TokenPayload
 
 logger = get_logger(__name__)
 
@@ -86,9 +88,19 @@ class ScheduledTaskService:
 
     # ── CRUD ───────────────────────────────────────
 
-    async def create_task(self, request: ScheduledTaskCreate, owner_id: str) -> ScheduledTask:
+    async def create_task(
+        self,
+        request: ScheduledTaskCreate,
+        owner_id: str,
+        *,
+        actor: Optional[TokenPayload] = None,
+    ) -> ScheduledTask:
         _ensure_enabled()
         self.validate(request.schedule, request.timezone)
+        if request.persona_preset_id:
+            if actor is None:
+                raise ValueError("actor is required when persona_preset_id is set")
+            await ensure_persona_usable(request.persona_preset_id, actor)
         storage = get_scheduled_task_storage()
         limit = max_tasks_per_user()
         if await storage.count_tasks(owner_id) >= limit:
@@ -116,7 +128,12 @@ class ScheduledTaskService:
         return task
 
     async def update_task(
-        self, task_id: str, owner_id: str, request: ScheduledTaskUpdate
+        self,
+        task_id: str,
+        owner_id: str,
+        request: ScheduledTaskUpdate,
+        *,
+        actor: Optional[TokenPayload] = None,
     ) -> Optional[ScheduledTask]:
         storage = get_scheduled_task_storage()
         task = await storage.get_task(task_id, owner_id)
@@ -125,6 +142,14 @@ class ScheduledTaskService:
         updates: dict[str, Any] = request.model_dump(exclude_unset=True)
         if updates != {"enabled": False}:
             _ensure_enabled()  # pausing stays allowed while the feature is off
+        new_persona = updates.get("persona_preset_id")
+        # Only a *changed* persona is validated: renaming a task must not fail just because
+        # its current persona went away (the runner handles that at execution time).
+        # An explicit null clears the persona and needs no check.
+        if new_persona and new_persona != task.persona_preset_id:
+            if actor is None:
+                raise ValueError("actor is required when persona_preset_id changes")
+            await ensure_persona_usable(new_persona, actor)
         if "schedule" in updates or "timezone" in updates:
             spec = request.schedule or task.schedule
             self.validate(spec, updates.get("timezone") or task.timezone)
@@ -328,6 +353,31 @@ class ScheduledTaskService:
             schedule_text=describe(task.schedule, task.timezone),
             next_run_at=self.next_run_at(task),
         )
+
+    async def to_responses_with_persona(
+        self, tasks: list[ScheduledTask], viewer: TokenPayload
+    ) -> list[ScheduledTaskResponse]:
+        """Responses enriched with persona name / avatar / availability for ``viewer``."""
+        briefs = await persona_briefs(
+            [t.persona_preset_id for t in tasks if t.persona_preset_id],
+            user_id=viewer.sub,
+            is_admin=_is_persona_admin(viewer),
+        )
+        items: list[ScheduledTaskResponse] = []
+        for task in tasks:
+            response = self.to_response(task)
+            brief = briefs.get(task.persona_preset_id) if task.persona_preset_id else None
+            if brief is not None:
+                response.persona_name = brief["name"]
+                response.persona_avatar = brief["avatar"]
+                response.persona_available = brief["available"]
+            items.append(response)
+        return items
+
+    async def to_response_with_persona(
+        self, task: ScheduledTask, viewer: TokenPayload
+    ) -> ScheduledTaskResponse:
+        return (await self.to_responses_with_persona([task], viewer))[0]
 
 
 def _is_past(run_at: datetime, timezone_name: str) -> bool:
