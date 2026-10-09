@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/backend/scheduled-tasks.md", "reason": "verify phase-1 multi-replica and runner contracts are preserved"}
+{"file": ".trellis/spec/backend/persona-runtime-and-dify-kb.md", "reason": "verify scheduled runs apply persona exactly like chat"}
+{"file": ".trellis/spec/backend/agent-harness.md", "reason": "verify new tools registered in harness overrides incl. nested fields"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "verify Chinese errors and no exception leakage from tools"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "verify indexes and atomic draft/state transitions"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "backend review checklist"}
+{"file": ".trellis/spec/backend/analytics-persona-and-lists.md", "reason": "verify statistics are untouched (R6)"}
+{"file": ".trellis/spec/frontend/sop-history-restoration.md", "reason": "verify SOP/approval behaviour unchanged for normal chats; scheduled runs simply lack ask_human/update_sop"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "frontend review checklist"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "verify unattended flag on local, arq and recovery paths"}
+{"file": ".trellis/tasks/10-09-scheduled-tasks-v2/research/unattended-isolation-and-session.md", "reason": "risk list for the unattended plumbing review gate"}
