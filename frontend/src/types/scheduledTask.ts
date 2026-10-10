@@ -104,6 +104,28 @@ export interface TaskRunListResponse {
   total: number;
 }
 
+/** 管理员视角的任务条目：在任务基础上附带创建人信息。 */
+export interface ScheduledTaskAdminItem extends ScheduledTask {
+  owner_id: string;
+  owner_name?: string | null;
+}
+
+export interface ScheduledTaskAdminListResponse {
+  items: ScheduledTaskAdminItem[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
+export interface ScheduledTaskAdminListParams {
+  skip?: number;
+  limit?: number;
+  q?: string;
+  owner?: string;
+  status?: ScheduledTaskStatus | "";
+  last_run_status?: RunStatus | "";
+}
+
 export interface SchedulePreview {
   valid: boolean;
   schedule_text: string;

@@ -1646,7 +1646,8 @@
     "userSettings": "User Management",
     "users": "Users",
     "workspace": "Experts · Skills · Connectors",
-    "scheduledTasks": "Scheduled Tasks"
+    "scheduledTasks": "Scheduled Tasks",
+    "scheduledTasksAdmin": "Scheduled Task Admin"
   },
   "navDesc": {
     "agents": "Configure and manage AI agents",
@@ -2111,6 +2112,10 @@
     "scheduledTasks": {
       "title": "Scheduled Tasks",
       "description": "Let the assistant run work on a schedule"
+    },
+    "scheduledTasksAdmin": {
+      "title": "Scheduled Task Admin",
+      "description": "View and manage scheduled tasks of all users"
     }
   },
   "openSandboxAdmin": {
@@ -3125,6 +3130,7 @@
     "create": "New scheduled task",
     "disabledBanner": "Scheduled tasks have been turned off by the administrator. Existing tasks are paused; you can still view and delete them.",
     "createdViaChat": "Created in chat",
+    "adminPausedHint": "Paused by an administrator. Contact them if you need it resumed.",
     "draft": {
       "titleCreate": "Scheduled task draft · New",
       "titleUpdate": "Scheduled task draft · Edit",
@@ -3261,6 +3267,62 @@
     "notify": {
       "successTitle": "Scheduled task \"{{name}}\" finished",
       "failedTitle": "Scheduled task \"{{name}}\" did not finish"
+    }
+  },
+  "scheduledTaskAdmin": {
+    "title": "Scheduled Task Admin",
+    "subtitle": "View and manage scheduled tasks of all users",
+    "searchPlaceholder": "Search task name",
+    "ownerPlaceholder": "Owner username",
+    "filter": {
+      "status": "Status",
+      "statusAll": "All statuses",
+      "lastRun": "Last result",
+      "lastRunAll": "All results"
+    },
+    "statusLabel": {
+      "active": "Active",
+      "paused": "Paused",
+      "completed": "Completed"
+    },
+    "pausedBy": {
+      "admin": "Paused by admin",
+      "system": "Paused by system",
+      "user": "Paused by user"
+    },
+    "columns": {
+      "name": "Task",
+      "owner": "Owner",
+      "schedule": "Frequency",
+      "persona": "Expert",
+      "status": "Status",
+      "lastRun": "Last result",
+      "nextRun": "Next run",
+      "actions": "Actions"
+    },
+    "personaDefault": "Default assistant",
+    "personaUnavailable": "Unavailable",
+    "actions": {
+      "runs": "Run history",
+      "pause": "Pause",
+      "resume": "Resume",
+      "delete": "Delete"
+    },
+    "pauseDialog": {
+      "title": "Pause scheduled task",
+      "desc": "\"{{name}}\" will be paused. The owner cannot resume it, and the reason will be shown to them.",
+      "label": "Reason (required)",
+      "placeholder": "e.g. Task content is risky; resume after review",
+      "confirm": "Pause"
+    },
+    "deleteTitle": "Delete scheduled task",
+    "deleteConfirm": "Delete {{owner}}'s scheduled task \"{{name}}\"? It will stop running and its run history will be deleted too. This cannot be undone.",
+    "empty": "No scheduled tasks",
+    "emptyFiltered": "No tasks match the filters",
+    "toast": {
+      "paused": "Task paused",
+      "resumed": "Task resumed",
+      "deleted": "Task deleted"
     }
   }
 }

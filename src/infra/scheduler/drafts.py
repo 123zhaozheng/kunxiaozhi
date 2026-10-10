@@ -295,7 +295,11 @@ async def confirm_draft(draft_id: str, actor: TokenPayload) -> tuple[dict[str, A
     """Apply a pending draft exactly once; see module docstring for the failure semantics."""
     from src.infra.scheduler.persona import ScheduledTaskPersonaError
     from src.infra.scheduler.schedule_spec import ScheduleValidationError
-    from src.infra.scheduler.service import ScheduledTaskDisabledError, ScheduledTaskQuotaError
+    from src.infra.scheduler.service import (
+        ScheduledTaskAdminPausedError,
+        ScheduledTaskDisabledError,
+        ScheduledTaskQuotaError,
+    )
 
     storage = get_draft_storage()
     claimed = await storage.transition(
@@ -317,6 +321,7 @@ async def confirm_draft(draft_id: str, actor: TokenPayload) -> tuple[dict[str, A
         ScheduledTaskQuotaError,
         ScheduledTaskPersonaError,
         ScheduledTaskDisabledError,
+        ScheduledTaskAdminPausedError,
         DraftConflict,
         DraftTaskMissing,
     ) as exc:

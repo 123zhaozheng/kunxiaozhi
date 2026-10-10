@@ -35,9 +35,10 @@ from src.api.routes import (
     opensandbox_admin,
     persona_preset,
     project,
-    scheduled_task,
     revealed_file,
     role,
+    scheduled_task,
+    scheduled_task_admin,
     session,
     share,
     skill,
@@ -865,6 +866,11 @@ def create_app() -> FastAPI:
     app.include_router(notification.router, prefix="/api/notifications", tags=["Notifications"])
     app.include_router(
         scheduled_task.router, prefix="/api/scheduled-tasks", tags=["Scheduled Tasks"]
+    )
+    app.include_router(
+        scheduled_task_admin.router,
+        prefix="/api/admin/scheduled-tasks",
+        tags=["Scheduled Tasks Admin"],
     )
     # WebSocket 路由: /ws 用于实时通知
     app.include_router(websocket.router, tags=["WebSocket"])

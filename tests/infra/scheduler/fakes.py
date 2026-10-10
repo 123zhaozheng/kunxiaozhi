@@ -80,14 +80,48 @@ class FakeStorage:
         self.tasks[task_id] = ScheduledTask.model_validate(data)
         return self.tasks[task_id]
 
-    async def delete_task(self, task_id: str, owner_id: str) -> bool:
+    async def delete_task(self, task_id: str, owner_id: Optional[str] = None) -> bool:
         if await self.get_task(task_id, owner_id) is None:
             return False
         del self.tasks[task_id]
+        for run_id in [rid for rid, r in self.runs.items() if r["task_id"] == task_id]:
+            del self.runs[run_id]
         return True
 
     async def count_tasks(self, owner_id: str) -> int:
         return sum(1 for t in self.tasks.values() if t.owner_id == owner_id)
+
+    async def list_tasks_admin(
+        self,
+        *,
+        skip: int = 0,
+        limit: int = 20,
+        name_query: Optional[str] = None,
+        owner_ids: Optional[list[str]] = None,
+        status: Optional[str] = None,
+        last_run_status: Optional[str] = None,
+    ) -> tuple[list[ScheduledTask], int]:
+        limit = min(max(int(limit), 1), 100)
+        skip = max(0, int(skip))
+        if owner_ids is not None and not owner_ids:
+            return [], 0
+        items = list(self.tasks.values())
+        if name_query and name_query.strip():
+            needle = name_query.strip().casefold()
+            items = [t for t in items if needle in t.name.casefold()]
+        if owner_ids is not None:
+            items = [t for t in items if t.owner_id in set(owner_ids)]
+        if status:
+            items = [t for t in items if getattr(t.status, "value", t.status) == status]
+        if last_run_status:
+            items = [
+                t
+                for t in items
+                if t.last_run_status is not None
+                and getattr(t.last_run_status, "value", t.last_run_status) == last_run_status
+            ]
+        items.sort(key=lambda t: t.updated_at or utc_now(), reverse=True)
+        return items[skip : skip + limit], len(items)
 
     async def list_tasks(self, owner_id: str) -> list[ScheduledTask]:
         return [t for t in self.tasks.values() if t.owner_id == owner_id]
@@ -128,13 +162,16 @@ class FakeStorage:
     async def update_run(self, run_id: str, updates: dict[str, Any]) -> None:
         self.runs[run_id].update(updates)
 
-    async def list_runs(self, task_id, owner_id, skip=0, limit=20):
+    async def list_runs(self, task_id, owner_id=None, skip=0, limit=20):
         items = [
             TaskRunRecord.model_validate(r)
             for r in self.runs.values()
-            if r["task_id"] == task_id and r["owner_id"] == owner_id
+            if r["task_id"] == task_id and (owner_id is None or r["owner_id"] == owner_id)
         ]
-        return items, len(items)
+        total = len(items)
+        skip = max(0, skip)
+        limit = min(max(int(limit), 1), 100)
+        return items[skip : skip + limit], total
 
     async def mark_run_interrupted(self, run_id: str) -> bool:
         record = self.runs.get(run_id)
@@ -226,7 +263,6 @@ def install_fakes(monkeypatch: pytest.MonkeyPatch):
             "drafts": fake_drafts,
         },
     )
-
 
 
 # ── execution fakes (persona / task manager / session metadata) ──────────────

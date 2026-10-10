@@ -78,6 +78,8 @@ export function ScheduledTaskPanel() {
     });
 
   const toggle = async (task: ScheduledTask) => {
+    // 被管理员暂停的任务，用户无法自行恢复（后端同样会返回 403）。
+    if (task.paused_by === "admin") return;
     setBusyId(task.id);
     try {
       const updated = task.enabled
@@ -98,6 +100,7 @@ export function ScheduledTaskPanel() {
   };
 
   const runNow = async (task: ScheduledTask) => {
+    if (task.paused_by === "admin") return;
     setBusyId(task.id);
     try {
       await scheduledTaskApi.runNow(task.id);
@@ -278,6 +281,8 @@ interface TaskCardProps {
 
 function TaskCard({ task, locale, busy, onToggle, onRun, onEdit, onRuns, onDelete, onOpenLast }: TaskCardProps) {
   const { t } = useTranslation();
+  // 管理员暂停后，用户不能自行启用或立即执行。
+  const adminLocked = task.paused_by === "admin";
   const actionBtn =
     "inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs text-stone-600 hover:bg-stone-100 disabled:opacity-40 dark:text-stone-300 dark:hover:bg-stone-800";
   return (
@@ -307,10 +312,16 @@ function TaskCard({ task, locale, busy, onToggle, onRun, onEdit, onRuns, onDelet
           type="button"
           role="switch"
           aria-checked={task.enabled}
-          disabled={busy}
+          disabled={busy || adminLocked}
           onClick={onToggle}
-          title={task.enabled ? t("scheduledTask.pause", "暂停") : t("scheduledTask.resume", "启用")}
-          className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+          title={
+            adminLocked
+              ? t("scheduledTask.adminPausedHint", "管理员已暂停，如需恢复请联系管理员")
+              : task.enabled
+                ? t("scheduledTask.pause", "暂停")
+                : t("scheduledTask.resume", "启用")
+          }
+          className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
             task.enabled ? "bg-emerald-500" : "bg-stone-300 dark:bg-stone-600"
           }`}
         >
@@ -346,6 +357,11 @@ function TaskCard({ task, locale, busy, onToggle, onRun, onEdit, onRuns, onDelet
           {task.pause_reason}
         </div>
       )}
+      {adminLocked && (
+        <p data-testid="task-admin-paused-hint" className="mt-1.5 text-xs text-amber-700 dark:text-amber-300">
+          {t("scheduledTask.adminPausedHint", "管理员已暂停，如需恢复请联系管理员")}
+        </p>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-stone-500 dark:text-stone-400">
         {task.status === "completed" ? (
@@ -369,7 +385,7 @@ function TaskCard({ task, locale, busy, onToggle, onRun, onEdit, onRuns, onDelet
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1 border-t border-stone-100 pt-3 dark:border-stone-800">
-        <button type="button" className={actionBtn} disabled={busy} onClick={onRun}>
+        <button type="button" className={actionBtn} disabled={busy || adminLocked} onClick={onRun}>
           <Zap size={14} />
           {t("scheduledTask.runNow", "立即执行一次")}
         </button>
@@ -381,7 +397,7 @@ function TaskCard({ task, locale, busy, onToggle, onRun, onEdit, onRuns, onDelet
           <Pencil size={14} />
           {t("common.edit", "编辑")}
         </button>
-        <button type="button" className={actionBtn} disabled={busy} onClick={onToggle}>
+        <button type="button" className={actionBtn} disabled={busy || adminLocked} onClick={onToggle}>
           {task.enabled ? <Pause size={14} /> : <Play size={14} />}
           {task.enabled ? t("scheduledTask.pause", "暂停") : t("scheduledTask.resume", "启用")}
         </button>

@@ -16,7 +16,11 @@ from src.infra.scheduler.runner import (
     NonRetryableRunError,
     ScheduledTaskRunner,
 )
-from src.infra.scheduler.service import ScheduledTaskDisabledError, ScheduledTaskService
+from src.infra.scheduler.service import (
+    ScheduledTaskAdminPausedError,
+    ScheduledTaskDisabledError,
+    ScheduledTaskService,
+)
 from src.kernel.exceptions import AuthorizationError
 from src.kernel.schemas.scheduled_task import (
     RunStatus,
@@ -159,7 +163,12 @@ async def test_paused_by_follows_user_pause_resume_and_auto_pause(fakes) -> None
     await svc.auto_pause(task.id, "管理员原因", paused_by="admin")
     assert fakes.storage.tasks[task.id].paused_by == "admin"
 
-    revived = await svc.set_enabled(task.id, "u1", True)
+    # P6: an administrator's hold can only be lifted by an administrator.
+    with pytest.raises(ScheduledTaskAdminPausedError):
+        await svc.set_enabled(task.id, "u1", True)
+    assert fakes.storage.tasks[task.id].paused_by == "admin"
+
+    revived = await svc.admin_resume(task.id, "admin")
     assert revived.paused_by is None
 
 

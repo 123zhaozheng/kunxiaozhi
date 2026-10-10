@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any, Optional
 
@@ -49,6 +50,8 @@ class ScheduledTaskStorage:
     async def ensure_indexes(self) -> None:
         await self.tasks.create_index([("owner_id", 1), ("updated_at", DESCENDING)])
         await self.tasks.create_index([("enabled", 1), ("status", 1)])
+        await self.tasks.create_index([("status", 1), ("updated_at", DESCENDING)])
+        await self.tasks.create_index([("last_run_status", 1), ("updated_at", DESCENDING)])
         await self.runs.create_index([("task_id", 1), ("started_at", DESCENDING)])
         await self.runs.create_index([("owner_id", 1), ("started_at", DESCENDING)])
         logger.info("[ScheduledTaskStorage] indexes ensured")
@@ -74,14 +77,46 @@ class ScheduledTaskStorage:
         )
         return ScheduledTask.model_validate(doc) if doc else None
 
-    async def delete_task(self, task_id: str, owner_id: str) -> bool:
-        result = await self.tasks.delete_one({"_id": task_id, "owner_id": owner_id})
+    async def delete_task(self, task_id: str, owner_id: Optional[str] = None) -> bool:
+        """Delete a task and its runs; ``owner_id=None`` is the admin path (match by id only)."""
+        query: dict[str, Any] = {"_id": task_id}
+        if owner_id is not None:
+            query["owner_id"] = owner_id
+        result = await self.tasks.delete_one(query)
         if result.deleted_count:
             await self.runs.delete_many({"task_id": task_id})
         return bool(result.deleted_count)
 
     async def count_tasks(self, owner_id: str) -> int:
         return await self.tasks.count_documents({"owner_id": owner_id})
+
+    async def list_tasks_admin(
+        self,
+        *,
+        skip: int = 0,
+        limit: int = 20,
+        name_query: Optional[str] = None,
+        owner_ids: Optional[list[str]] = None,
+        status: Optional[str] = None,
+        last_run_status: Optional[str] = None,
+    ) -> tuple[list[ScheduledTask], int]:
+        """Cross-user listing for administrators (newest update first)."""
+        limit = min(max(int(limit), 1), RUN_LIST_LIMIT_MAX)
+        skip = max(0, int(skip))
+        if owner_ids is not None and not owner_ids:
+            return [], 0
+        query: dict[str, Any] = {}
+        if name_query and name_query.strip():
+            query["name"] = {"$regex": re.escape(name_query.strip()), "$options": "i"}
+        if owner_ids is not None:
+            query["owner_id"] = {"$in": list(owner_ids)}
+        if status:
+            query["status"] = status
+        if last_run_status:
+            query["last_run_status"] = last_run_status
+        total = await self.tasks.count_documents(query)
+        cursor = self.tasks.find(query).sort("updated_at", DESCENDING).skip(skip).limit(limit)
+        return [ScheduledTask.model_validate(d) async for d in cursor], total
 
     async def list_tasks(self, owner_id: str) -> list[ScheduledTask]:
         cursor = self.tasks.find({"owner_id": owner_id}).sort("created_at", DESCENDING)
@@ -147,10 +182,12 @@ class ScheduledTaskStorage:
         await self.runs.update_one({"_id": run_id}, {"$set": clean})
 
     async def list_runs(
-        self, task_id: str, owner_id: str, skip: int = 0, limit: int = 20
+        self, task_id: str, owner_id: Optional[str] = None, skip: int = 0, limit: int = 20
     ) -> tuple[list[TaskRunRecord], int]:
         limit = min(max(int(limit), 1), RUN_LIST_LIMIT_MAX)
-        query = {"task_id": task_id, "owner_id": owner_id}
+        query: dict[str, Any] = {"task_id": task_id}
+        if owner_id is not None:
+            query["owner_id"] = owner_id
         total = await self.runs.count_documents(query)
         cursor = (
             self.runs.find(query).sort("started_at", DESCENDING).skip(max(0, skip)).limit(limit)

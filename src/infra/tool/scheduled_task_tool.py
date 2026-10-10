@@ -425,6 +425,7 @@ async def _draft_update(
     from src.infra.scheduler import drafts
     from src.infra.scheduler.persona import _is_persona_admin, persona_briefs
     from src.infra.scheduler.schedule_spec import ScheduleValidationError, describe
+    from src.infra.scheduler.service import ScheduledTaskAdminPausedError
     from src.kernel.schemas.scheduled_task import ScheduledTaskStatus
 
     task, error = await _locate_task(user, task_id, task_name)
@@ -476,6 +477,12 @@ async def _draft_update(
     if not changes:
         return _fail("提供的内容与当前设置相同，无需修改")
 
+    # An administrator's hold cannot be lifted by the owner, so do not even offer a draft.
+    resumes = payload.get("enabled") is True or (
+        "schedule" in changes and task.status == ScheduledTaskStatus.COMPLETED
+    )
+    if resumes and task.paused_by == "admin":
+        return _fail(str(ScheduledTaskAdminPausedError(task.pause_reason)))
     # Validate a changed schedule (or resuming a task); an untouched schedule is only previewed.
     must_validate = "schedule" in changes or payload.get("enabled") is True
     try:

@@ -39,6 +39,8 @@ logger = get_logger(__name__)
 JOB_PREFIX = "user_task:"
 RESYNC_JOB_ID = "scheduled_task.resync"
 RESYNC_INTERVAL_SECONDS = 60
+ADMIN_PAUSE_PREFIX = "管理员已暂停："
+ADMIN_PAUSE_REASON_MAX = 200
 
 
 class ScheduledTaskQuotaError(ValueError):
@@ -50,6 +52,22 @@ class ScheduledTaskDisabledError(ValueError):
 
     def __init__(self, message: str = "定时任务功能已被管理员关闭") -> None:
         super().__init__(message)
+
+
+class ScheduledTaskAdminPausedError(PermissionError):
+    """The task was paused by an administrator; the owner cannot resume or run it."""
+
+    def __init__(self, pause_reason: Optional[str] = None) -> None:
+        reason = (pause_reason or "").strip()
+        if reason.startswith(ADMIN_PAUSE_PREFIX):
+            reason = reason[len(ADMIN_PAUSE_PREFIX) :].strip()
+        super().__init__(f"该任务已被管理员暂停（原因：{reason}），如需恢复请联系管理员")
+
+
+def ensure_not_admin_paused(task: ScheduledTask) -> None:
+    """Raise when ``task`` is held by an administrator (owner may not resume / run it)."""
+    if task.paused_by == "admin":
+        raise ScheduledTaskAdminPausedError(task.pause_reason)
 
 
 def max_tasks_per_user() -> int:
@@ -143,6 +161,8 @@ class ScheduledTaskService:
         if task is None:
             return None
         updates: dict[str, Any] = request.model_dump(exclude_unset=True)
+        if updates.get("enabled") is True:
+            ensure_not_admin_paused(task)
         if updates != {"enabled": False}:
             _ensure_enabled()  # pausing stays allowed while the feature is off
         new_persona = updates.get("persona_preset_id")
@@ -162,13 +182,16 @@ class ScheduledTaskService:
             if task.status == ScheduledTaskStatus.COMPLETED:
                 updates.setdefault("enabled", True)
         if updates.get("enabled") is True:
+            ensure_not_admin_paused(task)
             updates["status"] = ScheduledTaskStatus.ACTIVE.value
             updates["pause_reason"] = None
             updates["paused_by"] = None
             updates["consecutive_failures"] = 0
         elif updates.get("enabled") is False:
             updates["status"] = ScheduledTaskStatus.PAUSED.value
-            updates["paused_by"] = "user"
+            # An administrator's hold is never downgraded to a user pause.
+            if task.paused_by != "admin":
+                updates["paused_by"] = "user"
         if not updates:
             return task
         updated = await storage.update_task(task_id, updates)
@@ -184,6 +207,7 @@ class ScheduledTaskService:
         if task is None:
             return None
         if enabled:
+            ensure_not_admin_paused(task)
             _ensure_enabled()
         if enabled and task.schedule.kind == ScheduleKind.ONCE:
             # Resuming a past one-shot would never fire; ask the user to pick a new time.
@@ -200,6 +224,7 @@ class ScheduledTaskService:
         task = await get_scheduled_task_storage().get_task(task_id, owner_id)
         if task is None:
             return None
+        ensure_not_admin_paused(task)
         _ensure_enabled()
         return await get_scheduled_task_runner().run(task.id, trigger=RunTrigger.MANUAL)
 
@@ -225,6 +250,70 @@ class ScheduledTaskService:
         )
         self._unregister(task_id)
         logger.warning("[ScheduledTaskService] auto-paused %s (%s): %s", task_id, paused_by, reason)
+
+    # ── administrator interventions ────────────────
+
+    @staticmethod
+    def _audit(action: str, task: ScheduledTask, actor: str, reason: str = "") -> None:
+        """Minimal operation trail: one structured line per administrator action."""
+        logger.info(
+            "[ScheduledTaskAdmin] action=%s task=%s owner=%s actor=%s reason=%s",
+            action,
+            task.id,
+            task.owner_id,
+            actor,
+            reason,
+        )
+
+    async def admin_pause(self, task_id: str, reason: str, actor: str) -> Optional[ScheduledTask]:
+        reason = (reason or "").strip()
+        if not reason:
+            raise ValueError("请填写暂停原因")
+        if len(reason) > ADMIN_PAUSE_REASON_MAX:
+            raise ValueError(f"暂停原因不能超过 {ADMIN_PAUSE_REASON_MAX} 字")
+        storage = get_scheduled_task_storage()
+        if await storage.get_task(task_id) is None:
+            return None
+        await self.auto_pause(task_id, f"{ADMIN_PAUSE_PREFIX}{reason}", paused_by="admin")
+        task = await storage.get_task(task_id)
+        if task is not None:
+            self._audit("pause", task, actor, reason)
+        return task
+
+    async def admin_resume(self, task_id: str, actor: str) -> Optional[ScheduledTask]:
+        _ensure_enabled()
+        storage = get_scheduled_task_storage()
+        task = await storage.get_task(task_id)
+        if task is None:
+            return None
+        if task.schedule.kind == ScheduleKind.ONCE:
+            self.validate(task.schedule, task.timezone)  # a past one-shot would never fire
+        updated = await storage.update_task(
+            task_id,
+            {
+                "enabled": True,
+                "status": ScheduledTaskStatus.ACTIVE.value,
+                "paused_by": None,
+                "pause_reason": None,
+                "consecutive_failures": 0,
+            },
+        )
+        if updated is None:
+            return None
+        self.sync_registration(updated)
+        self._audit("resume", updated, actor)
+        return updated
+
+    async def admin_delete(self, task_id: str, actor: str) -> bool:
+        storage = get_scheduled_task_storage()
+        task = await storage.get_task(task_id)
+        if task is None:
+            return False
+        deleted = await storage.delete_task(task_id)
+        if deleted:
+            self._unregister(task_id)
+            self._audit("delete", task, actor)
+        return deleted
 
     # ── registration ───────────────────────────────
 

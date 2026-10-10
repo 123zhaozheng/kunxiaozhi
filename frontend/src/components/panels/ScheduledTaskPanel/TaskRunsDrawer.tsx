@@ -3,12 +3,30 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { ExternalLink, Loader2, RefreshCw, X } from "lucide-react";
 import { scheduledTaskApi } from "../../../services/api/scheduledTask";
-import type { ScheduledTask, TaskRun } from "../../../types/scheduledTask";
+import type {
+  ScheduledTask,
+  TaskRun,
+  TaskRunListResponse,
+} from "../../../types/scheduledTask";
 import { STATUS_STYLES, formatDuration, formatFireTime } from "./scheduleUtils";
 
 const PAGE = 20;
 
-export function TaskRunsDrawer({ task, onClose }: { task: ScheduledTask; onClose: () => void }) {
+interface TaskRunsDrawerProps {
+  task: ScheduledTask;
+  onClose: () => void;
+  /** 自定义拉取运行记录的方法，默认使用用户侧接口。 */
+  fetchRuns?: (taskId: string, skip: number, limit: number) => Promise<TaskRunListResponse>;
+  /** 是否允许跳转到运行产生的会话；管理员无权打开他人会话时置为 false。 */
+  allowOpenSession?: boolean;
+}
+
+export function TaskRunsDrawer({
+  task,
+  onClose,
+  fetchRuns = scheduledTaskApi.runs,
+  allowOpenSession = true,
+}: TaskRunsDrawerProps) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [runs, setRuns] = useState<TaskRun[]>([]);
@@ -19,14 +37,14 @@ export function TaskRunsDrawer({ task, onClose }: { task: ScheduledTask; onClose
     async (skip = 0) => {
       setLoading(true);
       try {
-        const res = await scheduledTaskApi.runs(task.id, skip, PAGE);
+        const res = await fetchRuns(task.id, skip, PAGE);
         setRuns((prev) => (skip === 0 ? res.items : [...prev, ...res.items]));
         setTotal(res.total);
       } finally {
         setLoading(false);
       }
     },
-    [task.id],
+    [task.id, fetchRuns],
   );
 
   useEffect(() => {
@@ -102,7 +120,7 @@ export function TaskRunsDrawer({ task, onClose }: { task: ScheduledTask; onClose
               {run.error_message && (
                 <p className="mt-2 text-sm text-rose-600 dark:text-rose-400">{run.error_message}</p>
               )}
-              {run.session_id && run.status !== "pending" && (
+              {allowOpenSession && run.session_id && run.status !== "pending" && (
                 <button
                   type="button"
                   onClick={() => navigate(`/chat/${run.session_id}`)}

@@ -221,6 +221,34 @@ class TaskRunListResponse(BaseModel):
     total: int
 
 
+class ScheduledTaskAdminItem(ScheduledTaskResponse):
+    """Administrator view: the task plus its creator."""
+
+    owner_id: str
+    owner_name: Optional[str] = None
+
+
+class ScheduledTaskAdminListResponse(BaseModel):
+    items: list[ScheduledTaskAdminItem]
+    total: int
+    skip: int
+    limit: int
+
+
+class ScheduledTaskAdminPauseRequest(BaseModel):
+    reason: str
+
+    @field_validator("reason")
+    @classmethod
+    def _validate_reason(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("请填写暂停原因")
+        if len(v) > 200:
+            raise ValueError("暂停原因不能超过 200 字")
+        return v
+
+
 class SchedulePreviewRequest(BaseModel):
     schedule: ScheduleSpec
     timezone: str = DEFAULT_TIMEZONE

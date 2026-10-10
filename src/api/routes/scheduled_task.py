@@ -10,6 +10,7 @@ from src.infra.scheduler import drafts
 from src.infra.scheduler.persona import ScheduledTaskPersonaError
 from src.infra.scheduler.schedule_spec import ScheduleValidationError
 from src.infra.scheduler.service import (
+    ScheduledTaskAdminPausedError,
     ScheduledTaskDisabledError,
     ScheduledTaskQuotaError,
     get_scheduled_task_service,
@@ -41,6 +42,10 @@ _NOT_FOUND = "定时任务不存在或已被删除"
 
 def _bad_request(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+def _forbidden(exc: Exception) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
 
 
 @router.get("/templates", response_model=list[ScheduledTaskTemplate])
@@ -81,6 +86,8 @@ async def confirm_draft(
         raise HTTPException(status_code=410, detail=str(exc)) from exc
     except (drafts.DraftStateConflict, drafts.DraftConflict) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ScheduledTaskAdminPausedError as exc:
+        raise _forbidden(exc) from exc
     except (
         ScheduleValidationError,
         ScheduledTaskQuotaError,
@@ -158,6 +165,8 @@ async def update_task(
     service = get_scheduled_task_service()
     try:
         task = await service.update_task(task_id, user.sub, body, actor=user)
+    except ScheduledTaskAdminPausedError as exc:
+        raise _forbidden(exc) from exc
     except (
         ScheduleValidationError,
         ScheduledTaskDisabledError,
@@ -187,6 +196,8 @@ async def resume_task(
     service = get_scheduled_task_service()
     try:
         task = await service.set_enabled(task_id, user.sub, True)
+    except ScheduledTaskAdminPausedError as exc:
+        raise _forbidden(exc) from exc
     except (ScheduleValidationError, ScheduledTaskDisabledError) as exc:
         raise _bad_request(exc) from exc
     if task is None:
@@ -200,6 +211,8 @@ async def run_task_now(
 ) -> dict:
     try:
         result = await get_scheduled_task_service().run_now(task_id, user.sub)
+    except ScheduledTaskAdminPausedError as exc:
+        raise _forbidden(exc) from exc
     except ScheduledTaskDisabledError as exc:
         raise _bad_request(exc) from exc
     if result is None:
