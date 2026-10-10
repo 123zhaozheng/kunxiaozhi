@@ -1,11 +1,11 @@
 """Redis coordination for scheduled tasks across replicas.
 
-Adapted from LambChat ``src/infra/scheduler/locks.py``:
-
 - *slot claim*: ``SET NX EX`` on ``scheduler:task_slot:{task}:{slot}``; never
   released, so a delayed peer cannot re-run the same fire slot.
 - *execution lock*: random token, released with a Lua compare-and-delete so a
   replica can never release a lock it no longer owns.
+- *run slot*: global concurrency cap via the ``scheduler:running`` ZSET (Lua
+  claim; members expire by score and are reclaimed automatically).
 """
 
 from __future__ import annotations

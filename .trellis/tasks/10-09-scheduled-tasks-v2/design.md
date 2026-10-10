@@ -59,6 +59,7 @@
 8. 当 agent 支持沙箱且 `SANDBOX_PLATFORM == "opensandbox"` 时，调用 `get_session_sandbox_manager().admit(owner.sub)`。容量不足时为普通 FAILED，文案「沙箱资源暂时不足」，可重试。
 9. 组装会话 metadata：
    - 基础部分：`build_conversation_config(run_id=agent_run_id, agent_id, request, language=owner.metadata.language or "zh")`。这一步补齐了 `persona_avatar`、`enabled_skills` 等字段，保证前端续聊时能还原。
+     - **实现偏离（P7 审查确认）**：实际实现为固定 `language="zh"`——`_resolve_owner` 构造的 `TokenPayload` 不含 metadata，拿不到用户语言；PRD 未要求按用户语言，按现状接受。
    - 叠加定时任务字段：`source`、`scheduled_task_id`、`scheduled_task_run_id`、`scheduled_task_name`、`hidden_from_conversation_list=True`、`unattended_run_id=agent_run_id`（§3.3）。
 10. 调用 `submit(..., unattended=True)`（§3.1）。
 
@@ -106,6 +107,7 @@
 
 - `task/startup_cleanup.py` 会扫描三类候选会话：RUNNING、PENDING/QUEUED、可恢复的 FAILED。遇到 `metadata.unattended_run_id == run_id` 时：
   - 标记为 FAILED，并设置 `task_recoverable=False`、`task_error_code="unattended_interrupted"`；
+     - **实现修正（P3 独立评审后调整）**：实际保留 `task_recoverable=True`（用户仍可手动续聊恢复）+ `error_code="unattended_interrupted"`；不要按本行旧口径「修复」回去。
   - 不调用 `_resume_interrupted_run`。
 - 后续处理：
   - 如果 runner 的监控还活在其他副本上，它会读到 FAILED，然后按重试策略处理；
