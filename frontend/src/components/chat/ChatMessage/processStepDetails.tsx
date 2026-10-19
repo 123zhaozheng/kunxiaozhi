@@ -30,6 +30,10 @@ import {
   type McpMultiModalResult,
 } from "./items/toolUtils";
 import { McpBlockPreview, ToolResultContent } from "./items/McpBlockPreview";
+import {
+  isPersistentToolPanelOpen,
+  updatePersistentToolPanel,
+} from "./items/persistentToolPanelState";
 import { formatSubagentName } from "./SubagentBlocks";
 import type { ProcessStepStatus } from "./executionProcess";
 import type {
@@ -52,9 +56,6 @@ export interface ProcessStepPanelPayload {
   footer?: ReactNode;
   // 对应各 Item 的 expandable/canExpand 门控；false 时简洁行不可点。
   canOpen: boolean;
-  // 桌面端已有面板打开中（thinking/summary 的 streaming 实时刷新路径）
-  // 时，payload 的 children 需要被复用刷新 —— 调用方用它做等价判断。
-  refreshContent?: ReactNode;
 }
 
 function durationFooter(
@@ -705,7 +706,9 @@ export type StepPanelPart =
   | SubagentPart;
 
 export function buildStepPanelPayload(
-  entry: { part: StepPanelPart },
+  // isStreaming：thinking/summary 经 isMessageStreaming && isLast 门控后的状态；
+  // 不传时回退 part.isStreaming（历史消息可能残留 true）。
+  entry: { part: StepPanelPart; isStreaming?: boolean },
   { Icon16, t }: StepPanelInput,
 ): ProcessStepPanelPayload | null {
   const part = entry.part;
@@ -824,27 +827,29 @@ export function buildStepPanelPayload(
     }
   }
   if (part.type === "thinking") {
-    const status: ProcessStepStatus = part.isStreaming ? "loading" : "success";
+    const streaming = entry.isStreaming ?? !!part.isStreaming;
+    const status: ProcessStepStatus = streaming ? "loading" : "success";
     const children = (
       <div className="p-3 sm:p-4 [&_.markdown-preview]:thinking-content">
-        <MarkdownContent content={part.content} isStreaming={part.isStreaming} />
+        <MarkdownContent content={part.content} isStreaming={streaming} />
       </div>
     );
     return {
       title: t("chat.message.thought"),
       icon: Icon16,
       status,
-      panelKey: part.thinking_id,
+      panelKey: stepPanelKey(part),
       children,
       canOpen: !!part.content,
     };
   }
   if (part.type === "summary") {
-    const status: ProcessStepStatus = part.isStreaming ? "loading" : "success";
-    const panelKey = `summary:${part.agent_id || "root"}:${part.depth || 0}:${part.summary_id || "default"}`;
+    const streaming = entry.isStreaming ?? !!part.isStreaming;
+    const status: ProcessStepStatus = streaming ? "loading" : "success";
+    const panelKey = stepPanelKey(part);
     const children = (
       <div className="p-3 sm:p-4">
-        <MarkdownContent content={part.content} isStreaming={part.isStreaming} />
+        <MarkdownContent content={part.content} isStreaming={streaming} />
       </div>
     );
     return {
@@ -901,6 +906,33 @@ export function buildStepPanelPayload(
     return null;
   }
   return null;
+}
+
+// thinking/summary 面板 key，与 ThinkingBlock / SummaryItem 同口径。
+export function stepPanelKey(part: StepPanelPart): string | undefined {
+  if (part.type === "thinking") return part.thinking_id || undefined;
+  if (part.type === "summary") {
+    return `summary:${part.agent_id || "root"}:${part.depth || 0}:${part.summary_id || "default"}`;
+  }
+  return undefined;
+}
+
+// 已打开的 thinking/summary 面板随流式内容刷新（替代 ThinkingBlock/SummaryItem
+// 的 useEffect 刷新，组内简洁行没有这两个组件）。无 key 时不刷新，避免改写其它面板。
+export function refreshOpenStepPanel(
+  part: ThinkingPart | SummaryPart,
+  isStreaming: boolean,
+  t: TranslateFn,
+): boolean {
+  const panelKey = stepPanelKey(part);
+  if (!panelKey || !isPersistentToolPanelOpen(panelKey)) return false;
+  const payload = buildStepPanelPayload({ part, isStreaming }, { Icon16: null, t });
+  if (!payload) return false;
+  updatePersistentToolPanel(
+    (prev) => ({ ...prev, status: payload.status, children: payload.children }),
+    panelKey,
+  );
+  return true;
 }
 
 export function formatStepCommandPreview(command: string): string {

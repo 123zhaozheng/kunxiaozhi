@@ -72,8 +72,10 @@ import {
 import {
   buildStepPanelPayload,
   canOpenStep,
+  refreshOpenStepPanel,
   subagentDisplayName,
   type StepPanelPart,
+  type TranslateFn,
 } from "./processStepDetails";
 import type { MessagePart } from "../../../types/message";
 import type { RevealPreviewRequest } from "./items/revealPreviewData";
@@ -416,6 +418,26 @@ export function ExecutionProcessGroup({
     applyFailureAutoExpand(groupKey, { isStreaming: streaming, failedCount });
   }, [groupKey, streaming, failedCount]);
 
+  // 点开的思考/总结面板随流式内容与门控状态刷新（否则面板冻结在点开时的快照）。
+  useEffect(() => {
+    for (const entry of processEntries) {
+      const part = entry.part;
+      if (part.type !== "thinking" && part.type !== "summary") continue;
+      refreshOpenStepPanel(
+        part,
+        !isProcessEntryFinished(entry, gatingFor(entry)),
+        t as TranslateFn,
+      );
+    }
+  }, [processEntries, gatingFor, t]);
+
+  // 收起时 subagent 卡片仍需挂载（隐藏）：SubagentBlock 卸载会清空其面板数据，
+  // 已打开的子代理侧栏会变空白，外部跳转也无法再打开该子代理面板。
+  const hasSubagent = useMemo(
+    () => processEntries.some((entry) => entry.part.type === "subagent"),
+    [processEntries],
+  );
+
   if (processEntries.length === 0) return null;
 
   const handleToggle = () => {
@@ -439,7 +461,10 @@ export function ExecutionProcessGroup({
     const summary = getStepSummary(entry);
     const Icon = stepIconFor(summary.kind, summary);
     const payload = buildStepPanelPayload(
-      { part: part as StepPanelPart },
+      {
+        part: part as StepPanelPart,
+        isStreaming: !isProcessEntryFinished(entry, gatingFor(entry)),
+      },
       {
         Icon16: <Icon size={16} />,
         t: t as (key: string, options?: Record<string, unknown>) => string,
@@ -522,8 +547,13 @@ export function ExecutionProcessGroup({
       </button>
 
       {/* 展开区：缩进行列表（左侧细引导线），无边框无分隔线 */}
-      {expanded && (
-        <div className="ml-2.5 border-l border-stone-200 dark:border-stone-700 pl-3 py-0.5">
+      {(expanded || hasSubagent) && (
+        <div
+          className={clsx(
+            "ml-2.5 border-l border-stone-200 dark:border-stone-700 pl-3 py-0.5",
+            !expanded && "hidden",
+          )}
+        >
           {processEntries.map((entry) => {
             // subagent 保持卡片原样（不做简洁行，由 SubagentBlock 自带面板逻辑）。
             if (entry.part.type === "subagent") {
@@ -543,6 +573,7 @@ export function ExecutionProcessGroup({
                 />
               );
             }
+            if (!expanded) return null;
             const summary = getStepSummary(entry);
             const kind = summary.kind;
             const Icon = stepIconFor(kind, summary);
