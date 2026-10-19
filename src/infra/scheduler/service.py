@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Literal, Optional
 from uuid import uuid4
+
+from apscheduler.triggers.base import BaseTrigger
+from pydantic import ValidationError
 
 from src.infra.logging import get_logger
 from src.infra.scheduler.drafts import get_draft_storage
@@ -17,6 +20,8 @@ from src.infra.scheduler.schedule_spec import (
     build_trigger,
     describe,
     next_fire_times,
+    to_display_spec,
+    to_storage_spec,
     validate_spec,
 )
 from src.infra.scheduler.storage import get_scheduled_task_storage
@@ -41,6 +46,8 @@ RESYNC_JOB_ID = "scheduled_task.resync"
 RESYNC_INTERVAL_SECONDS = 60
 ADMIN_PAUSE_PREFIX = "管理员已暂停："
 ADMIN_PAUSE_REASON_MAX = 200
+# APScheduler drops a fire that starts more than this late (its default is 1s).
+MISFIRE_GRACE_SECONDS = 300
 
 
 class ScheduledTaskQuotaError(ValueError):
@@ -133,6 +140,7 @@ class ScheduledTaskService:
                 "_id": str(uuid4()),
                 "owner_id": owner_id,
                 **request.model_dump(),
+                "schedule": to_storage_spec(request.schedule, request.timezone),
                 "created_via": created_via,
                 "status": ScheduledTaskStatus.ACTIVE,
                 "created_at": now,
@@ -177,7 +185,9 @@ class ScheduledTaskService:
             spec = request.schedule or task.schedule
             self.validate(spec, updates.get("timezone") or task.timezone)
             if request.schedule is not None:
-                updates["schedule"] = request.schedule.model_dump(mode="python")
+                updates["schedule"] = to_storage_spec(
+                    request.schedule, updates.get("timezone") or task.timezone
+                ).model_dump(mode="python")
             # A rescheduled one-shot / completed task becomes active again.
             if task.status == ScheduledTaskStatus.COMPLETED:
                 updates.setdefault("enabled", True)
@@ -194,6 +204,12 @@ class ScheduledTaskService:
                 updates["paused_by"] = "user"
         if not updates:
             return task
+        # Validate the merged document first: an invalid $set would poison the task for every
+        # reader (startup load and resync list all active tasks).
+        try:
+            ScheduledTask.model_validate({**task.model_dump(by_alias=True), **updates})
+        except ValidationError as exc:
+            raise ScheduleValidationError("任务参数不合法，请检查后重试") from exc
         updated = await storage.update_task(task_id, updates)
         if updated is not None:
             self.sync_registration(updated)
@@ -344,7 +360,9 @@ class ScheduledTaskService:
         task_id = task.id
 
         async def _handler() -> Any:
-            return await runner.run(task_id, trigger=RunTrigger.SCHEDULE, fired_at=utc_now())
+            return await runner.run(
+                task_id, trigger=RunTrigger.SCHEDULE, fired_at=scheduled_fire_time(trigger)
+            )
 
         scheduler.register_job(
             ScheduledJob(
@@ -354,6 +372,7 @@ class ScheduledTaskService:
                 trigger=trigger,
                 max_instances=1,
                 coalesce=True,
+                misfire_grace_time=MISFIRE_GRACE_SECONDS,
             )
         )
         self._signatures[task.id] = signature
@@ -445,6 +464,7 @@ class ScheduledTaskService:
     def to_response(self, task: ScheduledTask) -> ScheduledTaskResponse:
         data = task.model_dump()
         data.pop("owner_id", None)
+        data["schedule"] = to_display_spec(task.schedule, task.timezone)
         return ScheduledTaskResponse(
             **data,
             schedule_text=describe(task.schedule, task.timezone),
@@ -475,6 +495,20 @@ class ScheduledTaskService:
         self, task: ScheduledTask, viewer: TokenPayload
     ) -> ScheduledTaskResponse:
         return (await self.to_responses_with_persona([task], viewer))[0]
+
+
+def scheduled_fire_time(trigger: BaseTrigger, now: Optional[datetime] = None) -> datetime:
+    """The fire time being executed, identical on every replica even when one fires late.
+
+    Feeds the cross-replica dedupe slot; using the wall clock would let a late replica
+    (within the misfire grace) land in a different slot and run the task twice.
+    """
+    now = now or utc_now()
+    try:
+        fire = trigger.get_next_fire_time(None, now - timedelta(seconds=MISFIRE_GRACE_SECONDS))
+    except Exception:  # noqa: BLE001 - fall back to the wall clock
+        fire = None
+    return fire if fire is not None and fire <= now else now
 
 
 def _is_past(run_at: datetime, timezone_name: str) -> bool:

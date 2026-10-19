@@ -424,7 +424,11 @@ async def _draft_update(
 ) -> dict[str, Any]:
     from src.infra.scheduler import drafts
     from src.infra.scheduler.persona import _is_persona_admin, persona_briefs
-    from src.infra.scheduler.schedule_spec import ScheduleValidationError, describe
+    from src.infra.scheduler.schedule_spec import (
+        ScheduleValidationError,
+        describe,
+        to_storage_spec,
+    )
     from src.infra.scheduler.service import ScheduledTaskAdminPausedError
     from src.kernel.schemas.scheduled_task import ScheduledTaskStatus
 
@@ -454,9 +458,10 @@ async def _draft_update(
         payload["prompt"] = prompt.strip()
         changes.append("prompt")
     new_schedule = task.schedule
-    if schedule is not None and schedule.model_dump(mode="json") != task.schedule.model_dump(
+    # Compare in storage form: once.run_at is stored as aware UTC, the model sends local time.
+    if schedule is not None and to_storage_spec(schedule, task.timezone).model_dump(
         mode="json"
-    ):
+    ) != task.schedule.model_dump(mode="json"):
         new_schedule = schedule
         payload["schedule"] = schedule.model_dump(mode="json")
         changes.append("schedule")

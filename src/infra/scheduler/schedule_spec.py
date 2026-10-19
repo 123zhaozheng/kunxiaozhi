@@ -159,6 +159,27 @@ def describe(spec: ScheduleSpec, timezone_name: str | None = None) -> str:
     return ""
 
 
+def to_storage_spec(spec: ScheduleSpec, timezone_name: str | None) -> ScheduleSpec:
+    """Store ``once.run_at`` as aware UTC.
+
+    The Mongo client decodes datetimes as UTC (``tz_aware=True``), so a naive local
+    ``run_at`` would silently come back shifted by the task's UTC offset.
+    """
+    if spec.kind != ScheduleKind.ONCE or spec.run_at is None:
+        return spec
+    run_at = ensure_utc(_local_run_at(spec, resolve_timezone(timezone_name)))
+    return spec.model_copy(update={"run_at": run_at})
+
+
+def to_display_spec(spec: ScheduleSpec, timezone_name: str | None) -> ScheduleSpec:
+    """API form of ``once.run_at``: naive wall-clock time in the task timezone."""
+    if spec.kind != ScheduleKind.ONCE or spec.run_at is None:
+        return spec
+    tz = resolve_timezone(timezone_name)
+    local = _local_run_at(spec, tz).astimezone(tz).replace(tzinfo=None)
+    return spec.model_copy(update={"run_at": local})
+
+
 def next_fire_times(
     spec: ScheduleSpec,
     timezone_name: str | None,

@@ -11,7 +11,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 
@@ -109,6 +109,19 @@ class ScheduledTaskCreate(BaseModel):
         return v.strip() or None if isinstance(v, str) else v
 
 
+# PATCH fields where an explicit null is invalid (persona_preset_id / model_id: null clears).
+_NON_NULLABLE_UPDATE_FIELDS = (
+    "name",
+    "prompt",
+    "schedule",
+    "timezone",
+    "agent_id",
+    "enabled",
+    "max_retries",
+    "timeout_seconds",
+)
+
+
 class ScheduledTaskUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     prompt: Optional[str] = Field(None, min_length=1, max_length=8000)
@@ -125,6 +138,17 @@ class ScheduledTaskUpdate(BaseModel):
     @classmethod
     def _blank_persona_to_none(cls, v: Optional[str]) -> Optional[str]:
         return v.strip() or None if isinstance(v, str) else v
+
+    @model_validator(mode="after")
+    def _reject_explicit_null(self) -> "ScheduledTaskUpdate":
+        nulls = [
+            f
+            for f in _NON_NULLABLE_UPDATE_FIELDS
+            if f in self.model_fields_set and getattr(self, f) is None
+        ]
+        if nulls:
+            raise ValueError(f"以下字段不能为空：{', '.join(nulls)}")
+        return self
 
 
 class ScheduledTask(BaseModel):

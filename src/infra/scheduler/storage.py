@@ -6,6 +6,7 @@ import re
 from datetime import datetime
 from typing import Any, Optional
 
+from pydantic import ValidationError
 from pymongo import DESCENDING, ReturnDocument
 
 from src.infra.logging import get_logger
@@ -28,6 +29,19 @@ RUN_LIST_LIMIT_MAX = 100
 
 def _dump(model: Any) -> dict[str, Any]:
     return model.model_dump(by_alias=True, mode="python")
+
+
+async def _valid_tasks(cursor: Any) -> list[ScheduledTask]:
+    """Skip (and log) unreadable documents so one bad task cannot break every listing."""
+    tasks: list[ScheduledTask] = []
+    async for doc in cursor:
+        try:
+            tasks.append(ScheduledTask.model_validate(doc))
+        except ValidationError as exc:
+            logger.error(
+                "[ScheduledTaskStorage] skip invalid task %s: %s", doc.get("_id"), exc.errors()
+            )
+    return tasks
 
 
 class ScheduledTaskStorage:
@@ -116,15 +130,15 @@ class ScheduledTaskStorage:
             query["last_run_status"] = last_run_status
         total = await self.tasks.count_documents(query)
         cursor = self.tasks.find(query).sort("updated_at", DESCENDING).skip(skip).limit(limit)
-        return [ScheduledTask.model_validate(d) async for d in cursor], total
+        return await _valid_tasks(cursor), total
 
     async def list_tasks(self, owner_id: str) -> list[ScheduledTask]:
         cursor = self.tasks.find({"owner_id": owner_id}).sort("created_at", DESCENDING)
-        return [ScheduledTask.model_validate(d) async for d in cursor]
+        return await _valid_tasks(cursor)
 
     async def list_active_tasks(self) -> list[ScheduledTask]:
         cursor = self.tasks.find({"enabled": True, "status": ScheduledTaskStatus.ACTIVE.value})
-        return [ScheduledTask.model_validate(d) async for d in cursor]
+        return await _valid_tasks(cursor)
 
     async def get_active_marker(self) -> str:
         """Cheap change marker: active count + newest updated_at across all tasks."""

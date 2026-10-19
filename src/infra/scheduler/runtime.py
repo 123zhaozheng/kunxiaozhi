@@ -38,6 +38,8 @@ class ScheduledJob:
     enabled: EnabledValue = True
     name: str | None = None
     max_instances: int = 1
+    # None keeps APScheduler's default (1s); late fires beyond it are dropped silently.
+    misfire_grace_time: int | None = None
     coalesce: bool = True
     run_on_start: bool = False
 
@@ -145,6 +147,11 @@ class RuntimeScheduler:
             replace_existing=True,
             coalesce=job.coalesce,
             max_instances=job.max_instances,
+            **(
+                {"misfire_grace_time": job.misfire_grace_time}
+                if job.misfire_grace_time is not None
+                else {}
+            ),
             **({"next_run_time": utc_now()} if job.run_on_start else {}),
         )
         logger.info(

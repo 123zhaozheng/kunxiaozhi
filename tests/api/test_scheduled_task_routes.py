@@ -339,3 +339,33 @@ async def test_pause_and_resume_responses_include_persona(env: Env, personas) ->
     assert paused["persona_name"] == "分析师"
     resumed = (await env.client.post(f"{BASE}/{task_id}/resume")).json()
     assert resumed["persona_available"] is True
+
+
+# ── release fixes: PATCH null guard / once run_at timezone ─────────
+
+
+@pytest.mark.asyncio
+async def test_patch_null_is_rejected_without_touching_the_task(env: Env) -> None:
+    created = await env.create()
+    for body in ({"timezone": None}, {"name": None}, {"schedule": None}):
+        resp = await env.client.patch(f"{BASE}/{created['id']}", json=body)
+        assert resp.status_code == 422, resp.text
+
+    item = (await env.client.get(BASE)).json()["items"][0]
+    assert item["timezone"] == "Asia/Shanghai" and item["name"] == "晨报"
+    assert await env.fakes.service.load_all(force=True) == 1
+
+
+@pytest.mark.asyncio
+async def test_once_run_at_is_returned_as_local_wall_clock(env: Env) -> None:
+    from datetime import datetime, timezone
+
+    created = await env.create(schedule={"kind": "once", "run_at": "2099-10-20T09:00:00"})
+    assert created["schedule"]["run_at"] == "2099-10-20T09:00:00"
+    assert created["schedule_text"] == "仅一次：2099-10-20 09:00"
+    assert datetime.fromisoformat(created["next_run_at"]) == datetime(
+        2099, 10, 20, 1, 0, tzinfo=timezone.utc
+    )
+
+    stored = env.fakes.storage.tasks[created["id"]].schedule.run_at
+    assert stored == datetime(2099, 10, 20, 1, 0, tzinfo=timezone.utc)

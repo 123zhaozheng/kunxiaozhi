@@ -165,3 +165,64 @@ async def test_stop_shuts_down_apscheduler_without_waiting(
 
     fake = _FakeAsyncIOScheduler.instances[-1]
     assert fake.shutdown_wait is False
+
+
+def test_misfire_grace_is_passed_only_when_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    from apscheduler.triggers.date import DateTrigger
+
+    import src.infra.scheduler.runtime as scheduler_module
+
+    monkeypatch.setattr(scheduler_module, "AsyncIOScheduler", _FakeAsyncIOScheduler)
+
+    async def handler() -> None:
+        return None
+
+    trigger = DateTrigger(run_date="2099-01-01 00:00:00", timezone="UTC")
+    scheduler = RuntimeScheduler()
+    scheduler.register_job(
+        ScheduledJob(id="graceful", handler=handler, trigger=trigger, misfire_grace_time=300)
+    )
+    scheduler.register_job(ScheduledJob(id="default", handler=handler, trigger=trigger))
+    scheduler.start()
+
+    jobs = _FakeAsyncIOScheduler.instances[-1].added_jobs
+    added = {job["kwargs"]["id"]: job["kwargs"] for job in jobs}
+    assert added["graceful"]["misfire_grace_time"] == 300
+    assert "misfire_grace_time" not in added["default"]
+
+
+@pytest.mark.asyncio
+async def test_late_trigger_job_still_runs_within_misfire_grace() -> None:
+    import asyncio
+    import time
+    from datetime import timedelta
+
+    from apscheduler.triggers.date import DateTrigger
+
+    from src.infra.utils.datetime import utc_now
+
+    fired: list[bool] = []
+
+    async def handler() -> None:
+        fired.append(True)
+
+    scheduler = RuntimeScheduler()
+    scheduler.start()
+    try:
+        scheduler.register_job(
+            ScheduledJob(
+                id="late",
+                handler=handler,
+                trigger=DateTrigger(run_date=utc_now() + timedelta(seconds=0.3)),
+                misfire_grace_time=60,
+            )
+        )
+        await asyncio.sleep(0.05)
+        time.sleep(1.5)  # stall the loop past APScheduler's default 1s grace
+        for _ in range(30):
+            if fired:
+                break
+            await asyncio.sleep(0.1)
+    finally:
+        await scheduler.stop()
+    assert fired
