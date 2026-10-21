@@ -7,7 +7,9 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.base import BaseTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from src.infra.logging import get_logger
@@ -22,14 +24,22 @@ JobHandler = Callable[[], Awaitable[Any]]
 
 @dataclass(frozen=True, slots=True)
 class ScheduledJob:
-    """A managed interval task."""
+    """A managed task.
+
+    Either ``interval_seconds`` (legacy interval jobs, may be dynamic) or a
+    concrete APScheduler ``trigger`` (cron/date/anchored interval, used by
+    user-defined scheduled tasks) must be provided.
+    """
 
     id: str
-    interval_seconds: IntervalValue
     handler: JobHandler
+    interval_seconds: IntervalValue | None = None
+    trigger: BaseTrigger | None = None
     enabled: EnabledValue = True
     name: str | None = None
     max_instances: int = 1
+    # None keeps APScheduler's default (1s); late fires beyond it are dropped silently.
+    misfire_grace_time: int | None = None
     coalesce: bool = True
     run_on_start: bool = False
 
@@ -46,15 +56,51 @@ class RuntimeScheduler:
         """Register or replace an interval job."""
         if not job.id:
             raise ValueError("scheduled job id is required")
+        self.register_job(job)
+
+    def register_job(self, job: ScheduledJob) -> None:
+        """Register or replace a job with either an interval or a concrete trigger."""
+        if not job.id:
+            raise ValueError("scheduled job id is required")
+        if job.trigger is None and job.interval_seconds is None:
+            raise ValueError("scheduled job requires interval_seconds or trigger")
         self._jobs[job.id] = job
         logger.info(
-            "[Scheduler] registered job %s interval=%ss run_on_start=%s",
+            "[Scheduler] registered job %s trigger=%s run_on_start=%s",
             job.id,
-            self._resolve_interval_seconds(job),
+            self._describe_trigger(job),
             job.run_on_start,
         )
         if self._scheduler is not None:
             self._add_or_replace_job(job)
+
+    def unregister_job(self, job_id: str) -> None:
+        """Remove a job from the registry and the live scheduler (idempotent)."""
+        self._jobs.pop(job_id, None)
+        self._scheduled_intervals.pop(job_id, None)
+        if self._scheduler is not None:
+            try:
+                self._scheduler.remove_job(job_id)
+            except JobLookupError:
+                pass
+            except Exception as exc:  # noqa: BLE001 - removal must never break callers
+                logger.debug("[Scheduler] remove_job %s ignored: %s", job_id, exc)
+
+    def has_job(self, job_id: str) -> bool:
+        return job_id in self._jobs
+
+    def job_ids(self) -> list[str]:
+        return list(self._jobs)
+
+    def get_next_run_time(self, job_id: str) -> Any:
+        """Return the live APScheduler next fire time, or None."""
+        if self._scheduler is None:
+            return None
+        try:
+            job = self._scheduler.get_job(job_id)
+        except Exception:  # noqa: BLE001
+            return None
+        return getattr(job, "next_run_time", None) if job is not None else None
 
     def start(self) -> None:
         """Start APScheduler and add all registered jobs."""
@@ -87,28 +133,39 @@ class RuntimeScheduler:
     def _add_or_replace_job(self, job: ScheduledJob) -> None:
         if self._scheduler is None:
             return
-        interval_seconds = self._resolve_interval_seconds(job)
-        self._scheduled_intervals[job.id] = interval_seconds
+        if job.trigger is not None:
+            trigger: BaseTrigger = job.trigger
+        else:
+            interval_seconds = self._resolve_interval_seconds(job)
+            self._scheduled_intervals[job.id] = interval_seconds
+            trigger = IntervalTrigger(seconds=interval_seconds)
         self._scheduler.add_job(
             self._make_job_runner(job.id),
-            trigger=IntervalTrigger(seconds=interval_seconds),
+            trigger=trigger,
             id=job.id,
             name=job.name or job.id,
             replace_existing=True,
             coalesce=job.coalesce,
             max_instances=job.max_instances,
+            **(
+                {"misfire_grace_time": job.misfire_grace_time}
+                if job.misfire_grace_time is not None
+                else {}
+            ),
             **({"next_run_time": utc_now()} if job.run_on_start else {}),
         )
         logger.info(
-            "[Scheduler] scheduled job %s every %ss%s",
+            "[Scheduler] scheduled job %s trigger=%s%s",
             job.id,
-            interval_seconds,
+            self._describe_trigger(job),
             " starting now" if job.run_on_start else "",
         )
 
     def _make_job_runner(self, job_id: str) -> Callable[[], Awaitable[Any]]:
         async def _runner() -> Any:
-            job = self._jobs[job_id]
+            job = self._jobs.get(job_id)
+            if job is None:
+                return {"skipped": True, "reason": "unregistered"}
             return await self._run_job(job)
 
         return _runner
@@ -126,7 +183,9 @@ class RuntimeScheduler:
             self._refresh_interval_if_needed(job)
 
     def _refresh_interval_if_needed(self, job: ScheduledJob) -> None:
-        if self._scheduler is None:
+        if self._scheduler is None or job.trigger is not None:
+            return
+        if self._jobs.get(job.id) is not job:
             return
         next_interval = self._resolve_interval_seconds(job)
         current_interval = self._scheduled_intervals.get(job.id)
@@ -141,7 +200,13 @@ class RuntimeScheduler:
     @staticmethod
     def _resolve_interval_seconds(job: ScheduledJob) -> int:
         value = job.interval_seconds() if callable(job.interval_seconds) else job.interval_seconds
-        return max(1, int(value))
+        return max(1, int(value or 1))
+
+    @classmethod
+    def _describe_trigger(cls, job: ScheduledJob) -> str:
+        if job.trigger is not None:
+            return type(job.trigger).__name__
+        return f"every {cls._resolve_interval_seconds(job)}s"
 
     @staticmethod
     def _resolve_enabled(job: ScheduledJob) -> bool:

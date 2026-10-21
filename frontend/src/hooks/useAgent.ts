@@ -50,6 +50,7 @@ import { resolvePersonaEnabledSkills } from "./useAgent/personaRequestConfig";
 import { planGoalSubmission } from "./useAgent/goalCommands";
 import { translateBackendError } from "../utils/backendErrors";
 import { dispatchSessionTitleUpdated } from "../utils/sessionTitleEvents";
+import { dispatchSessionListRefresh } from "../utils/sessionListEvents";
 import { resolveAvailableAgentId } from "./useAgent/agentSelection";
 import { useSopStatus } from "./useSopStatus";
 
@@ -88,6 +89,8 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
   >({});
   const [goalModeEnabled, setGoalModeEnabled] = useState(false);
   const { plan: sopPlan, setSopPlan } = useSopStatus(null);
+  // 加载历史时发现的「隐藏」会话 id（定时任务会话）；续聊成功后据此刷新侧栏
+  const hiddenSessionIdRef = useRef<string | null>(null);
 
   // Refs for connection management
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -358,6 +361,11 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
               sessionData.updated_at,
             ),
           );
+          // 定时任务会话默认从侧栏隐藏；续聊后后端会取消隐藏，需要通知侧栏刷新
+          hiddenSessionIdRef.current =
+            sessionData.metadata?.hidden_from_conversation_list === true
+              ? targetSessionId
+              : null;
 
           const currentRunId =
             targetRunId ||
@@ -783,6 +791,11 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
               console.warn("[sendMessage] Failed to generate title:", err);
             });
         } else if (sessionId && newRunId) {
+          // 在隐藏的定时任务会话里续聊：后端已取消隐藏，刷新侧栏让它出现
+          if (hiddenSessionIdRef.current === sessionId) {
+            hiddenSessionIdRef.current = null;
+            dispatchSessionListRefresh();
+          }
           // 更新现有 session 的 metadata
           const conversationConfig: Record<string, unknown> = {
             ...((newlyCreatedSession?.metadata as Record<string, unknown>) ||

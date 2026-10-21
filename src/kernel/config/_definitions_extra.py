@@ -702,6 +702,67 @@ EXTRA_SETTING_DEFINITIONS: dict[str, dict] = {
     # ============================================
     # Memory Settings (Master Switch)
     # ============================================
+    # ============================================
+    # Scheduled Task Settings
+    # ============================================
+    "SCHEDULED_TASK_ENABLED": {
+        "type": SettingType.BOOLEAN,
+        "category": SettingCategory.AGENT,
+        "subcategory": "scheduled_task",
+        "description": "settingDesc.SCHEDULED_TASK_ENABLED",
+        "default": True,
+        "frontend_visible": True,
+    },
+    "SCHEDULED_TASK_MAX_PER_USER": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.AGENT,
+        "subcategory": "scheduled_task",
+        "description": "settingDesc.SCHEDULED_TASK_MAX_PER_USER",
+        "default": 20,
+        "minimum": 1,
+        "maximum": 100,
+        "depends_on": "SCHEDULED_TASK_ENABLED",
+        "frontend_visible": True,
+    },
+    "SCHEDULED_TASK_MIN_INTERVAL_HOURS": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.AGENT,
+        "subcategory": "scheduled_task",
+        "description": "settingDesc.SCHEDULED_TASK_MIN_INTERVAL_HOURS",
+        "default": 1,
+        "minimum": 1,
+        "maximum": 24,
+        "depends_on": "SCHEDULED_TASK_ENABLED",
+        "frontend_visible": True,
+    },
+    "SCHEDULED_TASK_CHAT_TOOL_ENABLED": {
+        "type": SettingType.BOOLEAN,
+        "category": SettingCategory.AGENT,
+        "subcategory": "scheduled_task",
+        "description": "settingDesc.SCHEDULED_TASK_CHAT_TOOL_ENABLED",
+        "default": True,
+        "depends_on": "SCHEDULED_TASK_ENABLED",
+    },
+    "SCHEDULED_TASK_MAX_CONCURRENT_RUNS": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.AGENT,
+        "subcategory": "scheduled_task",
+        "description": "settingDesc.SCHEDULED_TASK_MAX_CONCURRENT_RUNS",
+        "default": 10,
+        "minimum": 1,
+        "maximum": 100,
+        "depends_on": "SCHEDULED_TASK_ENABLED",
+    },
+    "SCHEDULED_TASK_QUEUE_TIMEOUT_MINUTES": {
+        "type": SettingType.NUMBER,
+        "category": SettingCategory.AGENT,
+        "subcategory": "scheduled_task",
+        "description": "settingDesc.SCHEDULED_TASK_QUEUE_TIMEOUT_MINUTES",
+        "default": 20,
+        "minimum": 1,
+        "maximum": 120,
+        "depends_on": "SCHEDULED_TASK_ENABLED",
+    },
     "ENABLE_MEMORY": {
         "type": SettingType.BOOLEAN,
         "category": SettingCategory.MEMORY,

@@ -290,6 +290,24 @@ function NotificationsPage() {
   return <AppContent key="notifications" activeTab="notifications" />;
 }
 
+function ScheduledTasksPage() {
+  useSEO({
+    title: "seo.scheduledTasks.title",
+    description: "seo.scheduledTasks.description",
+    path: "/scheduled-tasks",
+  });
+  return <AppContent key="scheduled" activeTab="scheduled" />;
+}
+
+function ScheduledTasksAdminPage() {
+  useSEO({
+    title: "seo.scheduledTasksAdmin.title",
+    description: "seo.scheduledTasksAdmin.description",
+    path: "/admin/scheduled-tasks",
+  });
+  return <AppContent key="scheduledAdmin" activeTab="scheduledAdmin" />;
+}
+
 function MemoryPage() {
   useSEO({
     title: "seo.memory.title",
@@ -594,6 +612,32 @@ function App() {
                   toastMessage={t("errors.noPermission")}
                 >
                   <NotificationsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/scheduled-tasks"
+              element={
+                <ProtectedRoute
+                  permissions={[Permission.SCHEDULED_TASK_USE]}
+                  redirectTo="/chat"
+                  showToast
+                  toastMessage={t("errors.noPermission")}
+                >
+                  <ScheduledTasksPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/scheduled-tasks"
+              element={
+                <ProtectedRoute
+                  permissions={[Permission.SCHEDULED_TASK_ADMIN]}
+                  redirectTo="/chat"
+                  showToast
+                  toastMessage={t("errors.noPermission")}
+                >
+                  <ScheduledTasksAdminPage />
                 </ProtectedRoute>
               }
             />

@@ -247,6 +247,15 @@ PERMISSION_METADATA: dict[str, dict[str, str]] = {
         "label": "管理通知",
         "description": "创建、编辑、删除系统通知公告",
     },
+    # Scheduled Task
+    Permission.SCHEDULED_TASK_USE.value: {
+        "label": "使用定时任务",
+        "description": "创建、编辑、暂停、删除并运行自己的定时任务",
+    },
+    Permission.SCHEDULED_TASK_ADMIN.value: {
+        "label": "管理所有定时任务",
+        "description": "查看、暂停、恢复和删除所有用户的定时任务（管理员）",
+    },
     # Environment Variables
     Permission.ENVVAR_READ.value: {
         "label": "读取环境变量",
@@ -399,6 +408,13 @@ PERMISSION_GROUPS_CONFIG: list[PermissionGroupConfig] = [
         "name": "通知公告",
         "permissions": [
             Permission.NOTIFICATION_MANAGE.value,
+        ],
+    },
+    {
+        "name": "定时任务",
+        "permissions": [
+            Permission.SCHEDULED_TASK_USE.value,
+            Permission.SCHEDULED_TASK_ADMIN.value,
         ],
     },
     {

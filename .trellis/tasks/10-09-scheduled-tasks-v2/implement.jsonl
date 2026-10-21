@@ -1,0 +1,17 @@
+{"file": ".trellis/tasks/10-09-scheduled-tasks-v2/research/persona-selection.md", "reason": "R1 persona validation/execution findings and anchors"}
+{"file": ".trellis/tasks/10-09-scheduled-tasks-v2/research/unattended-isolation-and-session.md", "reason": "R2/R3 per-run flag plumbing (local/arq/recovery), continuation, cleanup, stats; note: final decision is NOT injecting ask_human/update_sop instead of short-circuiting"}
+{"file": ".trellis/tasks/10-09-scheduled-tasks-v2/research/chat-tool.md", "reason": "R4 internal tool architecture, harness overrides, retry wrapper, frontend renderer"}
+{"file": ".trellis/tasks/10-09-scheduled-tasks-v2/research/admin-governance.md", "reason": "R5 RBAC, settings, switch gaps, admin overview, global concurrency"}
+{"file": ".trellis/spec/backend/scheduled-tasks.md", "reason": "phase-1 scheduler contracts (slot/lock/resync/runner) that must be kept"}
+{"file": ".trellis/spec/backend/persona-runtime-and-dify-kb.md", "reason": "persona runtime + Dify KB injection that the runner must mirror"}
+{"file": ".trellis/spec/backend/persona-preferred-agent.md", "reason": "preferred agent resolution for personas (fast/search only)"}
+{"file": ".trellis/spec/backend/agent-harness.md", "reason": "tool assembly, tool description overrides and harness prompt rules"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Mongo storage/index conventions (drafts collection, admin indexes)"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Chinese user-facing errors, no internal leakage"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "backend quality rules"}
+{"file": ".trellis/spec/backend/analytics-persona-and-lists.md", "reason": "R6 statistics scope: scheduled sessions counted as normal sessions"}
+{"file": ".trellis/spec/frontend/scheduled-task-panel.md", "reason": "phase-1 scheduled task UI conventions"}
+{"file": ".trellis/spec/frontend/sop-history-restoration.md", "reason": "SOP/approval history behaviour must stay unchanged when update_sop is excluded from scheduled runs"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "UI components (draft card, admin panel)"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "frontend quality rules"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "flag/contract changes span task manager, arq payload, agent contexts and UI"}

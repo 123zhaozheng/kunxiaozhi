@@ -55,6 +55,16 @@ const TeamBuilderPanel = lazy(() =>
     default: m.TeamBuilderWrapper,
   })),
 );
+const ScheduledTaskAdminPanel = lazy(() =>
+  import("../../panels/ScheduledTaskAdminPanel").then((m) => ({
+    default: m.ScheduledTaskAdminPanel,
+  })),
+);
+const ScheduledTaskPanel = lazy(() =>
+  import("../../panels/ScheduledTaskPanel").then((m) => ({
+    default: m.ScheduledTaskPanel,
+  })),
+);
 const AnalyticsPanel = lazy(() =>
   import("../../panels/analytics/AnalyticsPanel").then((m) => ({
     default: m.AnalyticsPanel,
@@ -80,6 +90,8 @@ const panelMap: Record<
   team: TeamBuilderPanel,
   notifications: NotificationPanel,
   memory: MemoryPanel,
+  scheduled: ScheduledTaskPanel,
+  scheduledAdmin: ScheduledTaskAdminPanel,
   analytics: AnalyticsPanel,
 };
 

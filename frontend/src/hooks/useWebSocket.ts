@@ -5,6 +5,7 @@ import {
 } from "../services/api/tokenManager";
 import { getRefreshToken } from "../services/api";
 import { buildWebSocketUrl } from "../services/api/config";
+import type { ScheduledTaskRunFinishedNotification } from "../types/scheduledTask";
 
 export interface TaskCompleteNotification {
   type: "task:complete";
@@ -34,6 +35,9 @@ export interface FeedbackNotification {
 }
 
 interface UseWebSocketOptions {
+  onScheduledTaskFinished?: (
+    notification: ScheduledTaskRunFinishedNotification,
+  ) => void;
   onTaskComplete?: (notification: TaskCompleteNotification) => void;
   onFeedbackNotification?: (notification: FeedbackNotification) => void;
   enabled?: boolean;
@@ -47,13 +51,19 @@ const MAX_AUTH_FAILURES = 3; // Switch to long interval after this many consecut
 const AUTH_FAILURE_COOLDOWN = 5 * 60 * 1000; // 5 minutes cooldown after max failures
 
 export function useWebSocket(options: UseWebSocketOptions = {}) {
-  const { onTaskComplete, onFeedbackNotification, enabled = true } = options;
+  const {
+    onTaskComplete,
+    onFeedbackNotification,
+    onScheduledTaskFinished,
+    enabled = true,
+  } = options;
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
   const onTaskCompleteRef = useRef(onTaskComplete);
   const onFeedbackNotificationRef = useRef(onFeedbackNotification);
+  const onScheduledTaskFinishedRef = useRef(onScheduledTaskFinished);
   const isMountedRef = useRef(true);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -74,6 +84,10 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   useEffect(() => {
     onFeedbackNotificationRef.current = onFeedbackNotification;
   }, [onFeedbackNotification]);
+
+  useEffect(() => {
+    onScheduledTaskFinishedRef.current = onScheduledTaskFinished;
+  }, [onScheduledTaskFinished]);
 
   const connect = useCallback(async () => {
     // Prevent multiple simultaneous connection attempts
@@ -174,6 +188,13 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
             onFeedbackNotificationRef.current
           ) {
             onFeedbackNotificationRef.current(message);
+          }
+
+          if (
+            message.type === "scheduled_task:run_finished" &&
+            onScheduledTaskFinishedRef.current
+          ) {
+            onScheduledTaskFinishedRef.current(message);
           }
         } catch (e) {
           console.error("[WebSocket] Failed to parse message:", e);

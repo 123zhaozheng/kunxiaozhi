@@ -404,6 +404,14 @@ class Settings(BaseSettings):
     # Memory Settings (Master Switch)
     ENABLE_MEMORY: bool = False
 
+    # Scheduled tasks (user-defined timed agent runs)
+    SCHEDULED_TASK_ENABLED: bool = True
+    SCHEDULED_TASK_MAX_PER_USER: int = 20
+    SCHEDULED_TASK_MIN_INTERVAL_HOURS: int = 1
+    SCHEDULED_TASK_CHAT_TOOL_ENABLED: bool = True
+    SCHEDULED_TASK_MAX_CONCURRENT_RUNS: int = 10
+    SCHEDULED_TASK_QUEUE_TIMEOUT_MINUTES: int = 20
+
     # Native Memory Settings (MongoDB-backed, zero external deps)
     NATIVE_MEMORY_EMBEDDING_MODEL_ID: str = ""
     NATIVE_MEMORY_STALENESS_DAYS: int = 30

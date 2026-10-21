@@ -64,7 +64,7 @@ const GlobItem = memo(function GlobItem({
         </span>
         {searchPath && (
           <span className="text-stone-400 dark:text-stone-500">
-            in {searchPath}
+            {t("chat.message.toolInPath", { path: searchPath })}
           </span>
         )}
         <div className="absolute top-1.5 right-1.5 opacity-0 group-hover/args:opacity-100 transition-opacity">

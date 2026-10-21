@@ -27,6 +27,7 @@ interface SettingsContextValue {
   settings: SettingsResponse | null;
   enableSkills: boolean;
   enableMemory: boolean;
+  enableScheduledTasks: boolean;
   isLoading: boolean;
   error: string | null;
   savingKeys: Set<string>;
@@ -159,6 +160,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     settings,
     enableSkills: getBooleanSetting("ENABLE_SKILLS"),
     enableMemory: getBooleanSetting("ENABLE_MEMORY"),
+    enableScheduledTasks: getBooleanSetting("SCHEDULED_TASK_ENABLED"),
     availableModels,
     defaultModel,
     pinnedModelIds: cleanedPinnedIds,

@@ -109,6 +109,10 @@ class Permission(str, Enum):
     # Notification
     NOTIFICATION_MANAGE = "notification:manage"
 
+    # Scheduled Task
+    SCHEDULED_TASK_USE = "scheduled_task:use"
+    SCHEDULED_TASK_ADMIN = "scheduled_task:admin"
+
 
 class MessageType(str, Enum):
     """消息类型"""

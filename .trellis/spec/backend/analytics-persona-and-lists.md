@@ -81,6 +81,15 @@ session/message counting pipeline.
 `/usage/*` endpoints must agree because they share this builder. `/runs/list` keeps
 「事件数」 (`event_count`) — that label is honest and must not be changed to user messages.
 
+#### Scheduled sessions (定时会话口径)
+
+Sessions created by scheduled task runs (`sch_*` ids, `metadata.source == "scheduled_task"`,
+`hidden_from_conversation_list=True`) count as **normal user sessions** in every metric above.
+Analytics queries must NOT filter them out, and each retry attempt (`_r<N>` suffix) counts
+its own sessions and messages. Persona attribution reads session metadata like any chat
+session. No analytics code distinguishes scheduled runs — that is the contract (R6), not an
+accident; do not add a `scheduled` dimension or filter.
+
 #### List filters (sessions + active users)
 
 | Param | Type | Notes |

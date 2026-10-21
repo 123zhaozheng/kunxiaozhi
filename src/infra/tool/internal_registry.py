@@ -19,6 +19,7 @@ from src.infra.tool.mcp_client import MCPToolWithRetry
 from src.infra.tool.persona_preset_tool import get_persona_preset_tools
 from src.infra.tool.read_document_tool import get_read_document_tool
 from src.infra.tool.sandbox_mcp_tool import get_sandbox_mcp_tools
+from src.infra.tool.scheduled_task_tool import get_scheduled_task_tools
 from src.infra.tool.skill_marketplace_tool import get_skill_marketplace_tools
 from src.infra.tool.team_tool import get_team_tools
 from src.kernel.config import settings
@@ -72,6 +73,10 @@ def build_internal_tools(*, include_sandbox_tools: bool | None = None) -> list[B
 
     tools.extend(get_persona_preset_tools())
     tools.extend(get_team_tools())
+    if settings.SCHEDULED_TASK_ENABLED and getattr(
+        settings, "SCHEDULED_TASK_CHAT_TOOL_ENABLED", True
+    ):
+        tools.extend(get_scheduled_task_tools())
     return tools
 
 

@@ -341,6 +341,58 @@ class TaskRecoveryService:
             ),
         )
 
+    async def _abandon_unattended_run(
+        self,
+        session: Any,
+        source_run_id: str,
+        session_metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Fail an interrupted scheduled run without resuming it.
+
+        The session stays ``recoverable`` with ``unattended_interrupted`` so the user can still
+        resume manually, while the startup scan (which only matches ``server_restart``) will not
+        pick it up again.
+        """
+        error_message = "定时任务运行被中断（服务重启），不自动恢复，由定时任务按重试策略处理"
+        try:
+            # Reuses the trace-failing logic; it writes ``server_restart`` which is overridden below.
+            await self._mark_run_failed(source_run_id, error_message, session)
+            await self._storage.update(
+                session.id,
+                SessionUpdate(
+                    metadata=self._state_machine.build_metadata(
+                        TaskStatus.FAILED,
+                        run_id=source_run_id,
+                        error=error_message,
+                        error_code="unattended_interrupted",
+                        recoverable=True,
+                    )
+                ),
+            )
+        except Exception as e:
+            logger.warning("Failed to mark unattended run %s as interrupted: %s", source_run_id, e)
+
+        scheduled_run_id = session_metadata.get("scheduled_task_run_id")
+        if scheduled_run_id:
+            try:
+                from src.infra.scheduler.storage import get_scheduled_task_storage
+
+                await get_scheduled_task_storage().mark_run_interrupted(str(scheduled_run_id))
+            except Exception as e:
+                logger.warning(
+                    "Failed to mark scheduled task run %s interrupted: %s", scheduled_run_id, e
+                )
+
+        logger.info(
+            "Skip auto-resume for unattended run: session=%s, run_id=%s", session.id, source_run_id
+        )
+        return {
+            "success": False,
+            "run_id": None,
+            "resumed_from_run_id": source_run_id,
+            "message": "定时任务运行被中断，不自动恢复",
+        }
+
     async def resume_interrupted_run(
         self,
         session: Any,
@@ -355,6 +407,15 @@ class TaskRecoveryService:
                 "resumed_from_run_id": None,
                 "message": "没有可恢复的任务",
             }
+
+        # 定时任务运行：重启后不自动恢复（用户手动恢复除外），由定时任务按重试策略处理
+        unattended_session_metadata = getattr(session, "metadata", None) or {}
+        if reason != "manual_resume" and str(
+            unattended_session_metadata.get("unattended_run_id") or ""
+        ) == str(source_run_id):
+            return await self._abandon_unattended_run(
+                session, source_run_id, unattended_session_metadata
+            )
 
         redis_client = get_redis_client()
         lock_key = f"{RECOVERY_LOCK_PREFIX}{session.id}:{source_run_id}"

@@ -44,6 +44,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Durable Trace Event Storage](./trace-event-storage.md) | Immutable event documents, dual-write/read rollout, backpressure, backfill, and rollback | Filled |
 | [Duplicate Trace Migration](./trace-duplicate-migration.md) | Dry-run-first duplicate repair, backup, leases, deterministic merge, audit, and rollback | Filled |
 | [Stale Running Trace Recovery](./trace-stale-recovery.md) | Grace, strict heartbeat/task evidence, identity-scoped CAS, audit, and startup cleanup | Filled |
+| [Scheduled Tasks](./scheduled-tasks.md) | Friendly ScheduleSpec, Redis slot+lock multi-replica dedupe, detached monitor, auto-pause, hidden sessions | Filled |
 
 ---
 

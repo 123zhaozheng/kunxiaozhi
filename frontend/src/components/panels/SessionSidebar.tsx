@@ -15,10 +15,11 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
-import { Brain } from "lucide-react";
+import { Brain, CalendarClock } from "lucide-react";
 import { sessionApi, type BackendSession } from "../../services/api";
 import { useAuth } from "../../hooks/useAuth";
 import { useSettingsContext } from "../../contexts/SettingsContext";
+import { Permission } from "../../types";
 import { useProjectSessionList } from "../../hooks/useSession";
 import { useProjectManager } from "../../hooks/useProjectManager";
 import { useTouchDrag } from "../../hooks/useTouchDrag";
@@ -33,6 +34,7 @@ import {
 } from "../sidebar/unreadCounts";
 import { isSessionFavorite } from "../sidebar/sessionFavorites";
 import { getSessionTitle } from "./sessionHelpers";
+import { subscribeSessionListRefresh } from "../../utils/sessionListEvents";
 import { SearchDialog } from "./SearchDialog";
 import { ShareDialog } from "../share/ShareDialog";
 import { NewProjectModal } from "./NewProjectModal";
@@ -92,7 +94,7 @@ export const SessionSidebar = forwardRef<
   ref,
 ) {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, hasAllPermissions } = useAuth();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [internalCollapsed, setInternalCollapsed] = useState(true);
@@ -112,10 +114,18 @@ export const SessionSidebar = forwardRef<
     top: number;
     left: number;
   } | null>(null);
-  const { enableMemory } = useSettingsContext();
+  const { enableMemory, enableScheduledTasks } = useSettingsContext();
 
   const canReadMemory = enableMemory;
   const moreMenuFeatureItems = [
+    {
+      path: "/scheduled-tasks",
+      label: t("nav.scheduledTasks"),
+      icon: CalendarClock,
+      show:
+        enableScheduledTasks &&
+        hasAllPermissions([Permission.SCHEDULED_TASK_USE, Permission.CHAT_WRITE]),
+    },
     {
       path: "/memory",
       label: t("nav.memory"),
@@ -471,6 +481,18 @@ export const SessionSidebar = forwardRef<
     projectRefs.current.forEach((ref) => ref?.softRefresh());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSessionId]);
+
+  // 在隐藏的定时任务会话里续聊后，后端取消隐藏；收到通知时与上面一样做软刷新。
+  // 用 ref 保存最新的刷新函数，避免订阅闭包过期。
+  const refreshSessionListRef = useRef<() => void>(() => undefined);
+  refreshSessionListRef.current = () => {
+    uncategorizedList.softRefresh();
+    projectRefs.current.forEach((ref) => ref?.softRefresh());
+  };
+  useEffect(
+    () => subscribeSessionListRefresh(() => refreshSessionListRef.current()),
+    [],
+  );
 
   useEffect(() => {
     if (newSession && newSession.id) {

@@ -81,7 +81,8 @@ function useSubagentPanelData(agentId: string): SubagentPanelData | undefined {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
-function formatSubagentName(agentName: string): string {
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatSubagentName(agentName: string): string {
   return agentName
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
@@ -883,6 +884,25 @@ export function SandboxItem({
           ? "cancelled"
           : "error";
 
+  // 面板详情：复用下方内联展开的同一三块文案（sandboxId / error / cancelled）。
+  const panelDetailContent = (
+    <div className="space-y-2 max-h-full overflow-y-auto p-2 sm:p-4">
+      {status === "ready" && sandboxId && (
+        <div className="text-xs text-stone-600 dark:text-stone-300 font-mono">
+          {t("chat.sandboxId", { id: sandboxId })}
+        </div>
+      )}
+      {status === "error" && error && (
+        <div className="text-xs text-red-600 dark:text-red-400">{error}</div>
+      )}
+      {status === "cancelled" && (
+        <div className="text-xs text-amber-600 dark:text-amber-400">
+          {t("chat.cancelled")}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <CollapsiblePill
       status={pillStatus}
@@ -896,6 +916,16 @@ export function SandboxItem({
       }
       expandable={!!hasDetails}
       onExpandChange={setIsExpanded}
+      onPanelOpen={() => {
+        if (!hasDetails) return;
+        openPersistentToolPanel({
+          title: t("chat.sandbox.name"),
+          icon: <Box size={16} />,
+          status: pillStatus,
+          subtitle: sandboxId || undefined,
+          children: panelDetailContent,
+        });
+      }}
       animatedDots={status === "starting"}
     >
       {isExpanded && hasDetails && (

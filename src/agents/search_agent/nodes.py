@@ -22,6 +22,10 @@ from src.agents.core.node_utils import (
     resolve_model_supports_vision,
 )
 from src.agents.core.persona import build_persona_prompt_sections
+from src.agents.core.scheduled_run import (
+    scheduled_run_middleware,
+    scheduled_run_prompt_sections,
+)
 from src.agents.core.subagent_prompts import (
     MAIN_AGENT_PROMPT_SECTIONS,
     SUBAGENT_PROMPT,
@@ -218,6 +222,7 @@ async def agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict[str,
         subagent_prompt_sections.append(marketplace_skill_prompt)
     if persona_skill_harness:
         subagent_prompt_sections.append(persona_skill_harness)
+    subagent_prompt_sections.extend(scheduled_run_prompt_sections())
     subagent_middleware = [
         *create_retry_middleware(fallback_model=fallback_model_id, thinking=thinking_config),
         MCPQuotaMiddleware(user_id=context.user_id),
@@ -240,6 +245,8 @@ async def agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict[str,
                 search_limit=settings.DEFERRED_TOOL_SEARCH_LIMIT,
             )
         )
+    # 定时运行：过滤 ask_human / update_sop 等用户交互工具（放在缓存标记之前）
+    subagent_middleware.extend(scheduled_run_middleware())
     subagent_middleware.append(PromptCachingMiddleware())
 
     custom_subagents: list[SubAgent | CompiledSubAgent] = [
@@ -278,6 +285,7 @@ async def agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict[str,
     goal_section = build_goal_prompt_section(active_goal)
     if goal_section:
         _prompt_sections.append(goal_section)
+    _prompt_sections.extend(scheduled_run_prompt_sections())
     if _prompt_sections:
         user_middleware.append(SectionPromptMiddleware(sections=_prompt_sections))
     # Sandbox tool/env prompts are user/session-specific and are appended after static sections.
@@ -309,6 +317,8 @@ async def agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict[str,
         user_middleware.append(rubric_middleware)
 
     # KV cache: tag final system block + last tool AFTER all dynamic injection
+    # 定时运行：先过滤工具，再打缓存标记，保证缓存标记落在过滤后的工具上
+    user_middleware.extend(scheduled_run_middleware())
     user_middleware.append(PromptCachingMiddleware())
 
     inner_graph = create_deep_agent(

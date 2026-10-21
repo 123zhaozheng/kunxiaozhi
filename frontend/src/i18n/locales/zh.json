@@ -771,6 +771,16 @@
       "openInSidebar": "在侧栏中打开",
       "parameters": "参数",
       "processing": "过程",
+      "processCapabilitiesMore": "+{{count}}",
+      "processDurationMinutes": "{{minutes}} 分 {{seconds}} 秒",
+      "processDurationSeconds": "{{seconds}} 秒",
+      "processProgress": "已完成 {{done}}/{{total}} 步",
+      "processStepDuration": "{{seconds}} 秒",
+      "processStepRunning": "执行中",
+      "processSteps": "{{count}} 个步骤",
+      "processStepsFailed": "{{count}} 步失败",
+      "processTitle": "执行过程",
+      "processViewDetails": "查看执行过程",
       "projects": "项目",
       "result": "结果",
       "retryAnswer": "重新回答",
@@ -1645,7 +1655,9 @@
     "team": "团队构建",
     "userSettings": "用户管理",
     "users": "用户",
-    "workspace": "专家 · 技能 · 连接器"
+    "workspace": "专家 · 技能 · 连接器",
+    "scheduledTasks": "定时任务",
+    "scheduledTasksAdmin": "定时任务管理"
   },
   "navDesc": {
     "agents": "配置和管理 AI 助手",
@@ -2106,6 +2118,14 @@
     "users": {
       "description": "管理用户账户、角色和访问权限。管理多租户用户生命周期和安全设置。",
       "title": "用户管理"
+    },
+    "scheduledTasks": {
+      "title": "定时任务",
+      "description": "让昆小智按时自动完成工作"
+    },
+    "scheduledTasksAdmin": {
+      "title": "定时任务管理",
+      "description": "查看与管控所有用户的定时任务"
     }
   },
   "openSandboxAdmin": {
@@ -2392,7 +2412,13 @@
     "WELCOME_SUGGESTION_ICON": "图标",
     "WELCOME_SUGGESTION_ITEM": "建议项",
     "WELCOME_SUGGESTION_LANG": "语言",
-    "WELCOME_SUGGESTION_TEXT": "文本"
+    "WELCOME_SUGGESTION_TEXT": "文本",
+    "SCHEDULED_TASK_ENABLED": "启用定时任务功能",
+    "SCHEDULED_TASK_MAX_PER_USER": "每个用户最多可创建的定时任务数",
+    "SCHEDULED_TASK_MIN_INTERVAL_HOURS": "“每隔几小时”任务允许的最小间隔（小时）",
+    "SCHEDULED_TASK_CHAT_TOOL_ENABLED": "允许在聊天中查询和管理定时任务",
+    "SCHEDULED_TASK_MAX_CONCURRENT_RUNS": "定时任务全局并发上限（超过后排队等待）",
+    "SCHEDULED_TASK_QUEUE_TIMEOUT_MINUTES": "定时任务排队最长等待时间（分钟，超时则跳过本次执行）"
   },
   "settings": {
     "defaultModel": "默认模型",
@@ -3095,6 +3121,218 @@
       "migration_required": "待迁移",
       "failed": "失败",
       "missing": "缺失"
+    }
+  },
+  "scheduledTask": {
+    "persona": {
+      "label": "执行专家（可选）",
+      "none": "不指定，由昆小智默认助手执行",
+      "choose": "选择专家",
+      "change": "更换专家",
+      "clear": "清除",
+      "hint": "选择后，到点会按该专家的角色设定、技能和知识库来执行。",
+      "unavailable": "专家已不可用",
+      "unavailableHint": "所选专家已被删除、下架或你已无权使用，请编辑任务更换专家"
+    },
+
+    "title": "定时任务",
+    "subtitle": "设定好时间，昆小智会自动帮你完成，并把结果通知你",
+    "create": "新建定时任务",
+    "disabledBanner": "定时任务功能已被管理员关闭，已有任务暂停执行，可以查看和删除",
+    "createdViaChat": "聊天创建",
+    "adminPausedHint": "管理员已暂停，如需恢复请联系管理员",
+    "draft": {
+      "titleCreate": "定时任务草稿 · 新建",
+      "titleUpdate": "定时任务草稿 · 修改",
+      "field": {
+        "name": "名称",
+        "prompt": "要做的事",
+        "schedule": "执行频率",
+        "nextRuns": "接下来",
+        "persona": "执行专家",
+        "enabled": "启用状态"
+      },
+      "change": {
+        "name": "名称",
+        "prompt": "要做的事",
+        "schedule": "执行时间",
+        "persona": "执行专家",
+        "enabled": "启用状态"
+      },
+      "changes": "改动",
+      "defaultAssistant": "默认助手",
+      "enabledOn": "启用，到点自动执行",
+      "enabledOff": "暂停，不会自动执行",
+      "expand": "展开",
+      "collapse": "收起",
+      "loading": "正在确认草稿状态…",
+      "confirmCreate": "确认创建",
+      "confirmUpdate": "确认修改",
+      "confirming": "处理中…",
+      "cancel": "取消",
+      "pendingHint": "确认后才会生效",
+      "expiresIn": "{{count}} 分钟内有效",
+      "expiresSoon": "不到 1 分钟内有效",
+      "viewTasks": "查看定时任务",
+      "readOnly": "仅供查看",
+      "readOnlyHint": "这是一份草稿预览，需要在你自己的会话中确认后才会生效",
+      "status": {
+        "confirmed": "已确认生效",
+        "cancelled": "已取消",
+        "confirming": "处理中…",
+        "expired": "已过期，可以让助手重新生成",
+        "expiredBadge": "已过期"
+      },
+      "toast": {
+        "created": "定时任务已创建",
+        "updated": "定时任务已修改"
+      }
+    },
+    "createTitle": "新建定时任务",
+    "editTitle": "编辑定时任务",
+    "pickTemplate": "选择一个场景开始",
+    "blank": "从空白开始",
+    "blankHint": "自己写要让昆小智做的事",
+    "step1": "第 1 步：要让昆小智做什么？",
+    "step2": "第 2 步：什么时候做？",
+    "namePlaceholder": "给任务起个名字，例如：每日晨报",
+    "promptPlaceholder": "像平时聊天一样写下要求，例如：帮我整理今天需要跟进的客户事项，分点列出。",
+    "promptHint": "到点后昆小智会像你亲自发送这段话一样执行，结果会通知你，也可以在“运行记录”中查看。",
+    "createSubmit": "创建定时任务",
+    "emptyTitle": "还没有定时任务",
+    "emptyDesc": "选一个常用场景，一分钟就能设置好。例如每个工作日早上自动整理今日工作重点。",
+    "quota": "已创建 {{count}} / {{limit}} 个",
+    "limitReached": "最多创建 {{limit}} 个定时任务，请先删除不再需要的任务",
+    "nextRun": "下次执行",
+    "lastRun": "上次",
+    "pausedLabel": "已暂停",
+    "completed": "已完成（一次性任务）",
+    "runNow": "立即执行一次",
+    "runs": "运行记录",
+    "pause": "暂停",
+    "resume": "启用",
+    "manual": "手动",
+    "viewResult": "查看完整结果",
+    "noRuns": "还没有执行过。可以点“立即执行一次”试试效果。",
+    "runsTitle": "{{name}} · 运行记录",
+    "deleteTitle": "删除定时任务",
+    "deleteConfirm": "确定删除“{{name}}”吗？删除后不会再自动执行，运行记录也会一并删除。",
+    "kind": {
+      "daily": "每天",
+      "weekdays": "每个工作日",
+      "weekly": "每周",
+      "monthly": "每月",
+      "once": "仅一次",
+      "interval": "每隔几小时"
+    },
+    "kindHint": {
+      "daily": "包括周末",
+      "weekdays": "周一至周五",
+      "weekly": "选择星期几",
+      "monthly": "选择几号",
+      "once": "指定日期时间",
+      "interval": "适合频繁检查"
+    },
+    "weekday": {
+      "1": "周一",
+      "2": "周二",
+      "3": "周三",
+      "4": "周四",
+      "5": "周五",
+      "6": "周六",
+      "7": "周日"
+    },
+    "runStatus": {
+      "pending": "排队中",
+      "running": "执行中",
+      "success": "成功",
+      "failed": "失败",
+      "timeout": "超时",
+      "skipped": "已跳过"
+    },
+    "editor": {
+      "howOften": "多久执行一次？",
+      "whichDays": "每周哪几天？（可多选）",
+      "whichDay": "每月哪一天？",
+      "dayOfMonth": "{{day}} 号",
+      "lastDay": "每月最后一天",
+      "shortMonthHint": "提示：没有这一天的月份会跳过，如需每月都执行请选“每月最后一天”。",
+      "whatTime": "几点执行？（北京时间）",
+      "customTime": "自定义时间",
+      "whenOnce": "在什么时候执行？（北京时间）",
+      "everyHours": "每隔几小时？",
+      "hours": "{{count}} 小时",
+      "holidayHint": "工作日指周一至周五，暂不识别法定节假日和调休。",
+      "previewTitle": "接下来会在这些时间执行",
+      "previewFailed": "暂时无法预览，请检查设置"
+    },
+    "toast": {
+      "created": "定时任务已创建，到点会自动执行",
+      "updated": "已保存修改",
+      "resumed": "已启用，到点会自动执行",
+      "paused": "已暂停，不会再自动执行",
+      "runStarted": "已开始执行，完成后会通知你",
+      "deleted": "已删除"
+    },
+    "notify": {
+      "successTitle": "定时任务「{{name}}」已完成",
+      "failedTitle": "定时任务「{{name}}」未能完成"
+    }
+  },
+  "scheduledTaskAdmin": {
+    "title": "定时任务管理",
+    "subtitle": "查看与管控所有用户的定时任务",
+    "searchPlaceholder": "搜索任务名",
+    "ownerPlaceholder": "创建人用户名",
+    "filter": {
+      "status": "状态",
+      "statusAll": "全部状态",
+      "lastRun": "最近结果",
+      "lastRunAll": "全部结果"
+    },
+    "statusLabel": {
+      "active": "启用中",
+      "paused": "已暂停",
+      "completed": "已完成"
+    },
+    "pausedBy": {
+      "admin": "管理员暂停",
+      "system": "系统暂停",
+      "user": "用户暂停"
+    },
+    "columns": {
+      "name": "任务名",
+      "owner": "创建人",
+      "schedule": "频率",
+      "persona": "执行专家",
+      "status": "状态",
+      "lastRun": "最近结果",
+      "nextRun": "下次执行",
+      "actions": "操作"
+    },
+    "personaDefault": "默认助手",
+    "personaUnavailable": "不可用",
+    "actions": {
+      "runs": "运行记录",
+      "pause": "暂停",
+      "resume": "恢复",
+      "delete": "删除"
+    },
+    "pauseDialog": {
+      "title": "暂停定时任务",
+      "desc": "将暂停“{{name}}”，创建人无法自行恢复，原因会展示给创建人。",
+      "label": "暂停原因（必填）",
+      "placeholder": "例如：任务内容有风险，待核实后再恢复",
+      "confirm": "确认暂停"
+    },
+    "deleteTitle": "删除定时任务",
+    "deleteConfirm": "确定删除 {{owner}} 的定时任务“{{name}}”吗？删除后不会再自动执行，运行记录也会一并删除，且无法恢复。",
+    "empty": "暂无定时任务",
+    "emptyFiltered": "没有符合条件的任务",
+    "toast": {
+      "paused": "已暂停该任务",
+      "resumed": "已恢复该任务",
+      "deleted": "已删除该任务"
     }
   }
 }

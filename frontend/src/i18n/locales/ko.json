@@ -1610,7 +1610,8 @@
     "team": "팀 빌더",
     "userSettings": "사용자 관리",
     "users": "사용자",
-    "workspace": "전문가 · 스킬 · 커넥터"
+    "workspace": "전문가 · 스킬 · 커넥터",
+    "scheduledTasks": "예약 작업"
   },
   "navDesc": {
     "agents": "AI 에이전트 설정 및 관리",

@@ -1,0 +1,13 @@
+{"file": ".trellis/tasks/10-16-agent-execution-collapse/prd.md", "reason": "需求与验收口径：简洁步骤模式、失败整组展开、正文产物外置、Out of Scope"}
+{"file": ".trellis/tasks/10-16-agent-execution-collapse/design.md", "reason": "技术设计：分区规则、分组组件、展开状态机、硬约束（原始 partIndex 透传/禁止展平/不滚动）"}
+{"file": ".trellis/tasks/10-16-agent-execution-collapse/implement.md", "reason": "执行计划：Wave 分工与每步验证点"}
+{"file": ".trellis/tasks/10-16-agent-execution-collapse/research/render-pipeline.md", "reason": "渲染管线实证：SSE→parts→组件映射、落点 index.tsx:540-572"}
+{"file": ".trellis/tasks/10-16-agent-execution-collapse/research/icons-style-scroll.md", "reason": "图标/主题/滚动基线实证：lucide 映射与状态色、Virtuoso 跟随机制"}
+{"file": ".trellis/tasks/10-16-agent-execution-collapse/research/state-history.md", "reason": "状态与历史实证：步数/耗时数据源、展开态零持久化、纯前端可实现结论"}
+{"file": ".trellis/tasks/10-16-agent-execution-collapse/research/start-check-compact-steps.md", "reason": "简洁行一步可达性核对：各 Item 文案/面板复用表、通用工具与 sandbox 两处适配、i18n 新键清单"}
+{"file": ".trellis/tasks/10-16-agent-execution-collapse/research/start-check-stream-split.md", "reason": "流式切分风险核查：原始下标/isLast 硬约束、子代理不透明透传、安放建议"}
+{"file": ".trellis/tasks/10-16-agent-execution-collapse/research/start-check-failed-locate.md", "reason": "失败定位核查：不主动滚动最小路径、失败自动展开写入覆盖态、锚点 scheme"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端 spec 索引"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "组件规范：命名导出、Tailwind 主题变量、aria、dark 变体"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "状态管理规范：createSingletonStore 单例模式、禁止新增全局状态库"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "质量基线：i18n 文案键、测试风格（node:test/tsx）、eslint"}

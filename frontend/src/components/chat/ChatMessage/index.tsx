@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { useEffect, useRef, useState, memo } from "react";
+import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
 import { Copy, GitBranch, Info, Sparkles, Target } from "lucide-react";
@@ -15,6 +15,12 @@ import { MarkdownContent } from "./MarkdownContent";
 import { ToolCallItem } from "./ToolCallItem";
 import { UserMessageBubble } from "./UserMessageBubble";
 import { MessagePartRenderer } from "./MessagePartRenderer";
+import { ExecutionProcessGroup } from "./ExecutionProcessGroup";
+import {
+  partitionMessageParts,
+  partitionProcessSegments,
+  resolveProcessDurationMs,
+} from "./executionProcess";
 import { RevealArtifactsSummary } from "./RevealArtifactsSummary";
 import { FeedbackButtons } from "./FeedbackButtons";
 import { AssistantAvatar } from "./AssistantAvatar";
@@ -460,6 +466,54 @@ export const ChatMessage = memo(function ChatMessage({
 
   // If there are parts, render in order; otherwise fall back to old rendering method
   const hasParts = message.parts && message.parts.length > 0;
+  // 「执行过程」分组：顶层 message.parts 分区（design §2/§3；返工 R1 按
+  // turn/loop 切多段，各段按首条目位置与正文交错原序渲染，body 永不进组）。
+  // 只消费 parts（实时与历史同构）；依赖只放 parts 本身，不自造深比较。
+  const { processEntries, bodyEntries } = useMemo(
+    () => partitionMessageParts(message.parts ?? []),
+    [message.parts],
+  );
+  // 段切分：body 隔开的最大连续过程条目各自成组（单段时退化为一段）。
+  const processSegments = useMemo(
+    () => partitionProcessSegments(processEntries),
+    [processEntries],
+  );
+  // 交错渲染：段组与 body 按原始 partIndex 归并，保持原顺序。
+  const interleavedNodes = useMemo(() => {
+    type Node =
+      | { kind: "segment"; key: string; segmentIndex: number; startIndex: number }
+      | { kind: "body"; key: string; entryIndex: number; partIndex: number };
+    const nodes: Node[] = [];
+    processSegments.forEach((segment, segmentIndex) => {
+      const startIndex = segment[0]?.partIndex ?? 0;
+      nodes.push({
+        kind: "segment",
+        key: `seg:${segmentIndex}:${startIndex}`,
+        segmentIndex,
+        startIndex,
+      });
+    });
+    bodyEntries.forEach((entry, entryIndex) => {
+      nodes.push({
+        kind: "body",
+        key: `body:${entry.partIndex}`,
+        entryIndex,
+        partIndex: entry.partIndex,
+      });
+    });
+    nodes.sort((a, b) => {
+      const ai = a.kind === "segment" ? a.startIndex : a.partIndex;
+      const bi = b.kind === "segment" ? b.startIndex : b.partIndex;
+      return ai - bi;
+    });
+    return nodes;
+  }, [processSegments, bodyEntries]);
+  // 分组耗时：优先 message.duration，缺失时回退过程 part 起止时间（R6.2）；
+  // 皆无则 undefined（ExecutionProcessGroup 省略耗时，不显示假值）。
+  const processDurationMs = useMemo(
+    () => resolveProcessDurationMs(message),
+    [message],
+  );
   // User message: bubble style, right aligned
   if (isUser) {
     return (
@@ -539,31 +593,65 @@ export const ChatMessage = memo(function ChatMessage({
 
           {hasParts ? (
             <div className="space-y-3 my-2 pl-1">
-              {message.parts!.map((part: MessagePart, index: number) =>
-                part.type === "recommend_questions" ? null : (
+              {interleavedNodes.map((node) => {
+                if (node.kind === "segment") {
+                  const segment = processSegments[node.segmentIndex];
+                  if (!segment || segment.length === 0) return null;
+                  return (
+                    <ExecutionProcessGroup
+                      key={node.key}
+                      messageId={message.id}
+                      processEntries={segment}
+                      segmentCount={processSegments.length}
+                      isStreaming={message.isStreaming}
+                      durationMs={processDurationMs}
+                      messagePartCount={message.parts!.length}
+                      activePreview={activePreview}
+                      onOpenPreview={onOpenPreview}
+                      allowAutoPreviewForPart={(partIndex) =>
+                        shouldAllowAutoPreviewForPart({
+                          messageId: message.id,
+                          partIndex,
+                          latestAutoPreview: latestAutoPreview ?? null,
+                        })
+                      }
+                      onRecommendQuestionClick={onRecommendQuestionClick}
+                      onRetryCancelledForPart={(part) =>
+                        part.type === "cancelled" && onRetryCancelledMessage
+                          ? () => void onRetryCancelledMessage(message.id)
+                          : undefined
+                      }
+                    />
+                  );
+                }
+                const entry = bodyEntries[node.entryIndex];
+                if (!entry) return null;
+                if (entry.part.type === "recommend_questions") return null;
+                return (
                   <MessagePartRenderer
-                    key={index}
-                    part={part}
+                    key={`${message.id}:${entry.partIndex}`}
+                    part={entry.part}
                     messageId={message.id}
-                    partIndex={index}
+                    partIndex={entry.partIndex}
                     isStreaming={message.isStreaming}
-                    isLast={index === message.parts!.length - 1}
+                    isLast={entry.partIndex === message.parts!.length - 1}
                     activePreview={activePreview}
                     onOpenPreview={onOpenPreview}
                     onRecommendQuestionClick={onRecommendQuestionClick}
                     onRetryCancelled={
-                      part.type === "cancelled" && onRetryCancelledMessage
+                      entry.part.type === "cancelled" &&
+                      onRetryCancelledMessage
                         ? () => void onRetryCancelledMessage(message.id)
                         : undefined
                     }
                     allowAutoPreview={shouldAllowAutoPreviewForPart({
                       messageId: message.id,
-                      partIndex: index,
+                      partIndex: entry.partIndex,
                       latestAutoPreview: latestAutoPreview ?? null,
                     })}
                   />
-                ),
-              )}
+                );
+              })}
               <RevealArtifactsSummary
                 parts={message.parts}
                 isStreaming={message.isStreaming}

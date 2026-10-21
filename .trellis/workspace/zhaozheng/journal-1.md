@@ -1585,3 +1585,56 @@ git am -3 合入 09-18 存储 URL 交接包（4 提交，attachments.py 冲突�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 50: 定时任务功能
+
+**Date**: 2026-09-30
+**Task**: 定时任务功能
+**Branch**: `feat/scheduled-tasks`
+
+### Summary
+
+参考 LambChat 实现银行员工友好的定时任务，后端+前端+测试+spec
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6db75a1` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 51: 定时任务二期 P6+P7 收尾
+
+**Date**: 2026-10-10
+**Task**: 定时任务二期 P6+P7 收尾
+**Branch**: `feat/scheduled-tasks`
+
+### Summary
+
+P6 管理员总览评审后提交;P7 spec 落档、整体审查通过,二期代码全部完成
+
+### Main Changes
+
+- 评审并提交 P6 管理员总览(4c4d03c5):跨用户筛选分页、带原因暂停/恢复/删除、用户不可自恢复,新增 47 例测试
+- P7 收尾(8ba888e2):scheduled-tasks/analytics/frontend 三个 spec 落档二期契约与 R6 口径;design.md 记录两处实现偏离(会话语言固定 zh、unattended 中断 recoverable=True);locks.py docstring 修正
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] 后端定向 257、受影响模块回归 707、统计回归 79、ruff/tsc/eslint/node-test 全绿;trellis-check 整体审查 0 阻断
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 手测清单 6 项待人工验证;上线按 implement.md 清单:试点角色授 scheduled_task:use、开 CHECKPOINT_CLEANUP_ENABLED、核对 SCHEDULED_TASK_MAX_CONCURRENT_RUNS

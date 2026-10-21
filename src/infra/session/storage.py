@@ -380,6 +380,8 @@ class SessionStorage:
             query["user_id"] = user_id
         if is_active is not None:
             query["is_active"] = is_active
+        # Scheduled-task runs live in the scheduled task panel, not the sidebar.
+        query["metadata.hidden_from_conversation_list"] = {"$ne": True}
 
         if search:
             search_terms = build_search_query_terms(search)

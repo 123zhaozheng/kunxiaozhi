@@ -1,0 +1,9 @@
+{"file": ".trellis/tasks/10-16-agent-execution-collapse/prd.md", "reason": "验收基线：Acceptance Criteria 逐条核对"}
+{"file": ".trellis/tasks/10-16-agent-execution-collapse/design.md", "reason": "设计合规核对：分区/状态机/硬约束/不采取的方案"}
+{"file": ".trellis/tasks/10-16-agent-execution-collapse/implement.md", "reason": "执行计划核对：Wave 完成度与验证点"}
+{"file": ".trellis/tasks/10-16-agent-execution-collapse/research/start-check-stream-split.md", "reason": "硬约束证据：原始 partIndex/isLast、全量透传、禁止展平 subagent"}
+{"file": ".trellis/tasks/10-16-agent-execution-collapse/research/start-check-failed-locate.md", "reason": "失败路径证据：不主动滚动、覆盖态写入、锚点 scheme"}
+{"file": ".trellis/tasks/10-16-agent-execution-collapse/research/start-check-compact-steps.md", "reason": "简洁行复用证据：两处适配边界、i18n 键清单"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "质量与测试基线"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "组件规范合规核对"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "状态管理合规核对：单例模式、订阅清理"}

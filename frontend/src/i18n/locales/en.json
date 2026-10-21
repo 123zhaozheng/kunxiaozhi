@@ -771,6 +771,16 @@
       "openInSidebar": "Open in sidebar",
       "parameters": "Parameters",
       "processing": "Process",
+      "processCapabilitiesMore": "+{{count}}",
+      "processDurationMinutes": "{{minutes}}m {{seconds}}s",
+      "processDurationSeconds": "{{seconds}}s",
+      "processProgress": "{{done}}/{{total}} steps done",
+      "processStepDuration": "{{seconds}}s",
+      "processStepRunning": "Running",
+      "processSteps": "{{count}} steps",
+      "processStepsFailed": "{{count}} steps failed",
+      "processTitle": "Execution process",
+      "processViewDetails": "View execution process",
       "projects": "Projects",
       "result": "Result",
       "retryAnswer": "Retry answer",
@@ -1645,7 +1655,9 @@
     "team": "Team Builder",
     "userSettings": "User Management",
     "users": "Users",
-    "workspace": "Experts · Skills · Connectors"
+    "workspace": "Experts · Skills · Connectors",
+    "scheduledTasks": "Scheduled Tasks",
+    "scheduledTasksAdmin": "Scheduled Task Admin"
   },
   "navDesc": {
     "agents": "Configure and manage AI agents",
@@ -2106,6 +2118,14 @@
     "users": {
       "description": "Manage user accounts, roles, and access permissions. Administer multi-tenant user lifecycle and security settings.",
       "title": "User Management"
+    },
+    "scheduledTasks": {
+      "title": "Scheduled Tasks",
+      "description": "Let the assistant run work on a schedule"
+    },
+    "scheduledTasksAdmin": {
+      "title": "Scheduled Task Admin",
+      "description": "View and manage scheduled tasks of all users"
     }
   },
   "openSandboxAdmin": {
@@ -2392,7 +2412,13 @@
     "WELCOME_SUGGESTION_ICON": "Icon",
     "WELCOME_SUGGESTION_ITEM": "Suggestion",
     "WELCOME_SUGGESTION_LANG": "Language",
-    "WELCOME_SUGGESTION_TEXT": "Text"
+    "WELCOME_SUGGESTION_TEXT": "Text",
+    "SCHEDULED_TASK_ENABLED": "Enable scheduled tasks",
+    "SCHEDULED_TASK_MAX_PER_USER": "Max scheduled tasks per user",
+    "SCHEDULED_TASK_MIN_INTERVAL_HOURS": "Minimum interval (hours) for interval tasks",
+    "SCHEDULED_TASK_CHAT_TOOL_ENABLED": "Allow viewing and managing scheduled tasks in chat",
+    "SCHEDULED_TASK_MAX_CONCURRENT_RUNS": "Global concurrency limit for scheduled runs (excess runs wait in queue)",
+    "SCHEDULED_TASK_QUEUE_TIMEOUT_MINUTES": "Max queue wait for scheduled runs in minutes (skipped on timeout)"
   },
   "settings": {
     "defaultModel": "Default Model",
@@ -3095,6 +3121,218 @@
       "migration_required": "Needs migration",
       "failed": "Failed",
       "missing": "Missing"
+    }
+  },
+  "scheduledTask": {
+    "persona": {
+      "label": "Expert (optional)",
+      "none": "None — run with the default Kunxiaozhi assistant",
+      "choose": "Choose expert",
+      "change": "Change expert",
+      "clear": "Clear",
+      "hint": "When set, runs use this expert's role, skills and knowledge bases.",
+      "unavailable": "Expert unavailable",
+      "unavailableHint": "The selected expert was deleted, unpublished, or you no longer have access. Edit the task to pick another expert."
+    },
+
+    "title": "Scheduled Tasks",
+    "subtitle": "Pick a time and the assistant will do the work for you and notify you",
+    "create": "New scheduled task",
+    "disabledBanner": "Scheduled tasks have been turned off by the administrator. Existing tasks are paused; you can still view and delete them.",
+    "createdViaChat": "Created in chat",
+    "adminPausedHint": "Paused by an administrator. Contact them if you need it resumed.",
+    "draft": {
+      "titleCreate": "Scheduled task draft · New",
+      "titleUpdate": "Scheduled task draft · Edit",
+      "field": {
+        "name": "Name",
+        "prompt": "Task",
+        "schedule": "Frequency",
+        "nextRuns": "Upcoming",
+        "persona": "Expert",
+        "enabled": "Status"
+      },
+      "change": {
+        "name": "Name",
+        "prompt": "Task",
+        "schedule": "Schedule",
+        "persona": "Expert",
+        "enabled": "Status"
+      },
+      "changes": "Changes",
+      "defaultAssistant": "Default assistant",
+      "enabledOn": "Enabled, runs automatically",
+      "enabledOff": "Paused, will not run",
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "loading": "Checking draft status…",
+      "confirmCreate": "Confirm and create",
+      "confirmUpdate": "Confirm changes",
+      "confirming": "Processing…",
+      "cancel": "Cancel",
+      "pendingHint": "Takes effect only after you confirm",
+      "expiresIn": "valid for {{count}} min",
+      "expiresSoon": "valid for under 1 min",
+      "viewTasks": "View scheduled tasks",
+      "readOnly": "View only",
+      "readOnlyHint": "This is a draft preview. Confirm it in your own conversation to apply it.",
+      "status": {
+        "confirmed": "Confirmed",
+        "cancelled": "Cancelled",
+        "confirming": "Processing…",
+        "expired": "Expired. Ask the assistant to generate a new one.",
+        "expiredBadge": "Expired"
+      },
+      "toast": {
+        "created": "Scheduled task created",
+        "updated": "Scheduled task updated"
+      }
+    },
+    "createTitle": "New scheduled task",
+    "editTitle": "Edit scheduled task",
+    "pickTemplate": "Start from a scenario",
+    "blank": "Start from scratch",
+    "blankHint": "Write your own instructions",
+    "step1": "Step 1: What should the assistant do?",
+    "step2": "Step 2: When?",
+    "namePlaceholder": "Task name, e.g. Morning brief",
+    "promptPlaceholder": "Write it like a chat message, e.g. list today's customer follow-ups.",
+    "promptHint": "At the scheduled time the assistant runs this as if you sent it. You will be notified and can review it in Run history.",
+    "createSubmit": "Create task",
+    "emptyTitle": "No scheduled tasks yet",
+    "emptyDesc": "Pick a common scenario and you are set up in a minute.",
+    "quota": "{{count}} / {{limit}} created",
+    "limitReached": "You can create up to {{limit}} scheduled tasks",
+    "nextRun": "Next run",
+    "lastRun": "Last",
+    "pausedLabel": "Paused",
+    "completed": "Completed (one-time)",
+    "runNow": "Run once now",
+    "runs": "Run history",
+    "pause": "Pause",
+    "resume": "Enable",
+    "manual": "manual",
+    "viewResult": "View full result",
+    "noRuns": "Not run yet. Try \"Run once now\".",
+    "runsTitle": "{{name}} · Run history",
+    "deleteTitle": "Delete scheduled task",
+    "deleteConfirm": "Delete \"{{name}}\"? It will stop running and its history will be removed.",
+    "kind": {
+      "daily": "Every day",
+      "weekdays": "Every weekday",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "once": "Once",
+      "interval": "Every N hours"
+    },
+    "kindHint": {
+      "daily": "Including weekends",
+      "weekdays": "Mon to Fri",
+      "weekly": "Pick days",
+      "monthly": "Pick a date",
+      "once": "Specific date and time",
+      "interval": "For frequent checks"
+    },
+    "weekday": {
+      "1": "Mon",
+      "2": "Tue",
+      "3": "Wed",
+      "4": "Thu",
+      "5": "Fri",
+      "6": "Sat",
+      "7": "Sun"
+    },
+    "runStatus": {
+      "pending": "Queued",
+      "running": "Running",
+      "success": "Success",
+      "failed": "Failed",
+      "timeout": "Timed out",
+      "skipped": "Skipped"
+    },
+    "editor": {
+      "howOften": "How often?",
+      "whichDays": "Which days? (multi-select)",
+      "whichDay": "Which day of the month?",
+      "dayOfMonth": "Day {{day}}",
+      "lastDay": "Last day of month",
+      "shortMonthHint": "Months without this day are skipped; choose \"Last day of month\" to run every month.",
+      "whatTime": "What time? (Beijing time)",
+      "customTime": "Custom time",
+      "whenOnce": "When? (Beijing time)",
+      "everyHours": "Every how many hours?",
+      "hours": "{{count}} h",
+      "holidayHint": "Weekdays are Mon to Fri; public holidays are not detected yet.",
+      "previewTitle": "Upcoming runs",
+      "previewFailed": "Preview unavailable, check the settings"
+    },
+    "toast": {
+      "created": "Scheduled task created",
+      "updated": "Changes saved",
+      "resumed": "Enabled",
+      "paused": "Paused",
+      "runStarted": "Started, you will be notified when done",
+      "deleted": "Deleted"
+    },
+    "notify": {
+      "successTitle": "Scheduled task \"{{name}}\" finished",
+      "failedTitle": "Scheduled task \"{{name}}\" did not finish"
+    }
+  },
+  "scheduledTaskAdmin": {
+    "title": "Scheduled Task Admin",
+    "subtitle": "View and manage scheduled tasks of all users",
+    "searchPlaceholder": "Search task name",
+    "ownerPlaceholder": "Owner username",
+    "filter": {
+      "status": "Status",
+      "statusAll": "All statuses",
+      "lastRun": "Last result",
+      "lastRunAll": "All results"
+    },
+    "statusLabel": {
+      "active": "Active",
+      "paused": "Paused",
+      "completed": "Completed"
+    },
+    "pausedBy": {
+      "admin": "Paused by admin",
+      "system": "Paused by system",
+      "user": "Paused by user"
+    },
+    "columns": {
+      "name": "Task",
+      "owner": "Owner",
+      "schedule": "Frequency",
+      "persona": "Expert",
+      "status": "Status",
+      "lastRun": "Last result",
+      "nextRun": "Next run",
+      "actions": "Actions"
+    },
+    "personaDefault": "Default assistant",
+    "personaUnavailable": "Unavailable",
+    "actions": {
+      "runs": "Run history",
+      "pause": "Pause",
+      "resume": "Resume",
+      "delete": "Delete"
+    },
+    "pauseDialog": {
+      "title": "Pause scheduled task",
+      "desc": "\"{{name}}\" will be paused. The owner cannot resume it, and the reason will be shown to them.",
+      "label": "Reason (required)",
+      "placeholder": "e.g. Task content is risky; resume after review",
+      "confirm": "Pause"
+    },
+    "deleteTitle": "Delete scheduled task",
+    "deleteConfirm": "Delete {{owner}}'s scheduled task \"{{name}}\"? It will stop running and its run history will be deleted too. This cannot be undone.",
+    "empty": "No scheduled tasks",
+    "emptyFiltered": "No tasks match the filters",
+    "toast": {
+      "paused": "Task paused",
+      "resumed": "Task resumed",
+      "deleted": "Task deleted"
     }
   }
 }

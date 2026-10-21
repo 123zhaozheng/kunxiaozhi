@@ -63,7 +63,7 @@ const LsItem = memo(function LsItem({
         <FolderOpen size={14} className="shrink-0 opacity-60" />
         <span className="truncate">{dirPath}</span>
         <span className="shrink-0 text-stone-400 dark:text-stone-500">
-          {entries.length} items
+          {t("chat.message.toolItemCount", { count: entries.length })}
         </span>
         <div className="absolute top-1.5 right-1.5 opacity-0 group-hover/args:opacity-100 transition-opacity">
           <CopyButton text={dirPath} size={12} />

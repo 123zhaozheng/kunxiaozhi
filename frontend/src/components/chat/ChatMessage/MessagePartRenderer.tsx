@@ -21,6 +21,11 @@ import { SummaryItem } from "./SummaryItem";
 import type { RevealPreviewRequest } from "./items/revealPreviewData";
 import type { RevealPreviewOpenSource } from "./items/revealPreviewState";
 import { createToolPartAnchorId } from "./messagePartAnchors";
+import { ScheduledTaskDraftCard } from "./items/ScheduledTaskDraftCard";
+import {
+  isScheduledTaskDraftToolName,
+  parseScheduledTaskDraftResult,
+} from "./items/scheduledTaskDraftResult";
 
 // Render single message part (shared by main agent and subagent)
 export function MessagePartRenderer({
@@ -214,6 +219,18 @@ export function MessagePartRenderer({
           completedAt={part.completedAt}
         />
       );
+    }
+    // Scheduled task draft: confirm / cancel card (falls back to generic card
+    // while pending, on error, or when the result is not a valid draft)
+    if (
+      isScheduledTaskDraftToolName(part.name) &&
+      !part.isPending &&
+      part.success !== false
+    ) {
+      const draft = parseScheduledTaskDraftResult(part.result);
+      if (draft) {
+        return <ScheduledTaskDraftCard result={draft} />;
+      }
     }
     return (
       <ToolCallItem

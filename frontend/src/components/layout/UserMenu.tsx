@@ -12,6 +12,7 @@ import {
   Bell,
   Settings,
   BarChart3,
+  CalendarClock,
 } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 import { Permission } from "../../types";
@@ -53,6 +54,9 @@ export function UserMenu({ onShowProfile }: UserMenuProps) {
     Permission.NOTIFICATION_MANAGE,
   ]);
   const canManageSettings = hasAnyPermission([Permission.SETTINGS_MANAGE]);
+  const canManageScheduledTasks = hasAnyPermission([
+    Permission.SCHEDULED_TASK_ADMIN,
+  ]);
 
   // Reactive mobile detection
   useEffect(() => {
@@ -167,6 +171,12 @@ export function UserMenu({ onShowProfile }: UserMenuProps) {
       label: t("nav.analytics"),
       icon: BarChart3,
       show: canManageSettings,
+    },
+    {
+      path: "/admin/scheduled-tasks",
+      label: t("nav.scheduledTasksAdmin", "定时任务管理"),
+      icon: CalendarClock,
+      show: canManageScheduledTasks,
     },
     {
       path: "/settings",
