@@ -45,6 +45,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Duplicate Trace Migration](./trace-duplicate-migration.md) | Dry-run-first duplicate repair, backup, leases, deterministic merge, audit, and rollback | Filled |
 | [Stale Running Trace Recovery](./trace-stale-recovery.md) | Grace, strict heartbeat/task evidence, identity-scoped CAS, audit, and startup cleanup | Filled |
 | [Scheduled Tasks](./scheduled-tasks.md) | Friendly ScheduleSpec, Redis slot+lock multi-replica dedupe, detached monitor, auto-pause, hidden sessions | Filled |
+| [Knowledge Base](./knowledge-base.md) | Mongo source of truth, Qdrant derived index, CAS pipeline + lease queue, hybrid retrieval degradation, upload/download safety | Filled |
 
 ---
 

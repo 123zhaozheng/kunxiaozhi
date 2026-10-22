@@ -323,22 +323,35 @@ class KnowledgeBaseStorage:
         self, before: datetime, limit: int = 200
     ) -> list[dict[str, Any]]:
         """``uploaded``/``parsed`` documents untouched since ``before`` and in no active task."""
-        cursor = self.documents.find(
-            {"status": {"$in": [DOC_UPLOADED, DOC_PARSED]}, "updated_at": {"$lt": before}},
-            {"kb_id": 1, "status": 1},
-        )
-        docs = await cursor.sort("updated_at", ASCENDING).limit(limit).to_list(length=limit)
-        if not docs:
-            return []
-        ids = [d["_id"] for d in docs]
-        covered: set[str] = set()
-        active = self.tasks.find(
-            {"status": {"$in": list(TASK_ACTIVE_STATUSES)}, "doc_ids": {"$in": ids}},
-            {"doc_ids": 1},
-        )
-        for task in await active.to_list(length=1000):
-            covered.update(task.get("doc_ids") or [])
-        return [d for d in docs if d["_id"] not in covered]
+        # Page past documents already covered by an active task so that a backlog of
+        # queued work cannot hide true orphans behind the first ``limit`` rows.
+        query = {"status": {"$in": [DOC_UPLOADED, DOC_PARSED]}, "updated_at": {"$lt": before}}
+        orphans: list[dict[str, Any]] = []
+        skip = 0
+        page_size = max(limit, 1)
+        for _ in range(20):
+            cursor = self.documents.find(query, {"kb_id": 1, "status": 1})
+            docs = (
+                await cursor.sort([("updated_at", ASCENDING), ("_id", ASCENDING)])
+                .skip(skip)
+                .limit(page_size)
+                .to_list(length=page_size)
+            )
+            if not docs:
+                break
+            ids = [d["_id"] for d in docs]
+            covered: set[str] = set()
+            active = self.tasks.find(
+                {"status": {"$in": list(TASK_ACTIVE_STATUSES)}, "doc_ids": {"$in": ids}},
+                {"doc_ids": 1},
+            )
+            async for task in active:
+                covered.update(task.get("doc_ids") or [])
+            orphans.extend(d for d in docs if d["_id"] not in covered)
+            if len(orphans) >= limit or len(docs) < page_size:
+                break
+            skip += page_size
+        return orphans[:limit]
 
     async def stats_for(self, kb_ids: list[str]) -> dict[str, dict[str, int]]:
         """Per-KB counters from one aggregation over ``(kb_id, status)``."""

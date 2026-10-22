@@ -289,3 +289,25 @@ async def test_drain_cleanup_tasks_cancels_pending_cleanups(kb_env) -> None:
     await service.drain_cleanup_tasks()
     assert task.cancelled()
     service._cleanup_tasks.discard(task)
+
+
+async def test_stale_document_scan_pages_past_documents_in_active_tasks(kb_env) -> None:
+    storage = get_kb_storage()
+    now = utc_now()
+    for i in range(5):
+        await storage.insert_document(
+            {
+                "_id": f"d{i}",
+                "kb_id": "kb1",
+                "sha256": f"s{i}",
+                "status": "uploaded",
+                "created_at": now,
+                "updated_at": now - timedelta(minutes=30 - i),
+            }
+        )
+    await storage.tasks.insert_one(
+        {"_id": "t1", "kb_id": "kb1", "status": "queued", "doc_ids": ["d0", "d1", "d2", "d3"]}
+    )
+
+    found = await storage.list_unqueued_stale_documents(now, limit=2)
+    assert [d["_id"] for d in found] == ["d4"]

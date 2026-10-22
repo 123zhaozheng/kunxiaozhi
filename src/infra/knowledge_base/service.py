@@ -182,8 +182,8 @@ async def build_kb_responses(items: list[tuple[dict[str, Any], str]]) -> list[Kn
 
     responses: list[KnowledgeBase] = []
     for kb, role in items:
-        emb = kb.get("embedding") or None
-        outdated = bool(emb) and (card is None or card.model_name != emb.get("model_name"))
+        emb: dict[str, Any] | None = kb.get("embedding") or None
+        outdated = emb is not None and (card is None or card.model_name != emb.get("model_name"))
         active = tasks.get(str(kb["_id"]))
         responses.append(
             KnowledgeBase.model_validate(
@@ -192,7 +192,7 @@ async def build_kb_responses(items: list[tuple[dict[str, Any], str]]) -> list[Kn
                     "my_role": role,
                     "embedding": (
                         {"model_name": emb.get("model_name"), "dim": emb.get("dim")}
-                        if emb
+                        if emb is not None
                         else None
                     ),
                     "index_outdated": outdated,
