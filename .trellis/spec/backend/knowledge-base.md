@@ -33,3 +33,12 @@ Code: `src/infra/knowledge_base/`, routes `src/api/routes/knowledge_base.py` (`/
 ## Testing
 
 - Unit/domain tests under `tests/infra/knowledge_base/` use in-memory fakes (`domain/kb_fakes.py`); run with the project's `--import-mode=importlib`.
+
+## Sharing, plaza, quota (PR2)
+
+- Roles: owner / editor / viewer (shared by username) / subscriber (subscribed to a public KB) / visitor (any logged-in user on a public KB). `resolve_kb_access` returns `KBAccess` capability flags; inactive users (including owners) get no access.
+- Subscriber/visitor read is re-evaluated per request via `is_publicly_readable` (active + `visibility=public` + `public_status=approved` + `KB_ALLOW_PUBLIC`). Unpublish deletes subscriber rows; delist keeps them so re-approval restores access. WS pushes skip subscriber rows while the KB is not publicly readable.
+- Publish → `approved`, or `pending` when `KB_PUBLIC_REQUIRES_REVIEW`. Admin routes (`/api/admin/kb`, `knowledge_base:admin`) are CAS transitions: approve ← pending|rejected|delisted, reject ← pending, delist ← pending|approved.
+- Quota: `resolve_kb_limits` takes the most permissive non-null RoleLimits value across roles, else global `KB_DEFAULT_*` / `KB_MAX_FILE_MB`. `kb_max_count` / `kb_max_docs_per_kb` allow 0 (= none). KB count, doc count and storage are charged to the KB owner; file size uses the uploader's limit. Checks are not atomic (slight overshoot accepted). Errors: 400 `{code, message, limit}` with `kb_quota_count|kb_quota_docs|kb_quota_storage|kb_file_too_large`.
+- File-library import re-checks ownership per file (others' files → `file_not_found`), skips project files, streams to a spooled temp file for SHA-256, and shares `add_document_from_stream` with upload. Per-file failures are reported in `results`, not as a request error.
+- Notifications live in `kb_notifications` (90-day TTL) and are always scoped by `user_id`; WS `kb:notification` is best effort.

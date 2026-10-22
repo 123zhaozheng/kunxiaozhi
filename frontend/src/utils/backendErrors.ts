@@ -12,6 +12,11 @@ const BACKEND_ERROR_KEYS: Record<string, string> = {
   storage_quota_exceeded: "storage.quotaExceeded",
   storage_operation_too_large: "storage.quotaExceeded",
   kb_disabled: "knowledge.errors.disabled",
+  kb_quota_count: "knowledge.errors.quotaCount",
+  kb_quota_docs: "knowledge.errors.quotaDocs",
+  kb_quota_storage: "knowledge.errors.quotaStorage",
+  kb_file_too_large: "knowledge.errors.fileTooLarge",
+  kb_public_disabled: "knowledge.errors.publicDisabled",
   file_deleted: "storage.deleted",
   managed_by_source: "storage.protectedHint",
 

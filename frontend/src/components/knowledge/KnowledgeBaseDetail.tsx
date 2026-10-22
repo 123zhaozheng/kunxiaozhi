@@ -1,3 +1,4 @@
+import { useAuth } from "../../hooks/useAuth";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -6,11 +7,14 @@ import {
   ArrowLeft,
   FileText,
   LibraryBig,
+  LogOut,
   Search,
   Settings2,
+  Share2,
 } from "lucide-react";
 import { PanelHeader } from "../common/PanelHeader";
 import { PanelLoadingState } from "../common/PanelLoadingState";
+import { ConfirmDialog } from "../common/ConfirmDialog";
 import { formatFileSize } from "../documents/utils/fileSize";
 import { useWebSocket, type KbEventNotification } from "../../hooks/useWebSocket";
 import {
@@ -30,9 +34,12 @@ import { useKbDetail } from "./hooks/useKbDetail";
 import { KnowledgeDisabledState, KnowledgeNotFoundState, KnowledgeNotReadyNotice } from "./KnowledgeNotices";
 import { RetrievalTestTab } from "./RetrievalTestTab";
 import { SettingsTab } from "./SettingsTab";
+import { KnowledgePublicStatusPill } from "./KnowledgePublicStatusPill";
+import { KnowledgeShareDialog } from "./KnowledgeShareDialog";
 import { OUTLINE_BTN, PRIMARY_BTN } from "./knowledgeStyles";
 import {
   POST_ACTION_REFRESH_MS,
+  getKbCapabilities,
   resolveKbDetailTab,
   type KbDetailTab,
 } from "./knowledgeUtils";
@@ -49,6 +56,7 @@ interface KnowledgeBaseDetailProps {
 
 export function KnowledgeBaseDetail({ kbId }: KnowledgeBaseDetailProps) {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = resolveKbDetailTab(searchParams.get("tab"));
@@ -56,6 +64,9 @@ export function KnowledgeBaseDetail({ kbId }: KnowledgeBaseDetailProps) {
   const { config } = useKbConfig();
   const { kb, setKb, loading, loadError, scheduleRefresh, refresh } = detail;
   const [viewing, setViewing] = useState<ViewingState | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [roleBusy, setRoleBusy] = useState(false);
 
   const onKbEvent = useCallback(
     (event: KbEventNotification) => {
@@ -124,6 +135,33 @@ export function KnowledgeBaseDetail({ kbId }: KnowledgeBaseDetailProps) {
   }
 
   const { stats } = kb;
+  const caps = getKbCapabilities(kb.my_role, kb);
+
+  const runRoleAction = async (action: "subscribe" | "unsubscribe" | "leave") => {
+    setRoleBusy(true);
+    try {
+      if (action === "subscribe") {
+        await knowledgeBaseApi.subscribe(kbId);
+        toast.success(t("knowledge.subscribe.subscribed", "已订阅"));
+        await refresh();
+      } else {
+        if (action === "unsubscribe") await knowledgeBaseApi.unsubscribe(kbId);
+        else await knowledgeBaseApi.leave(kbId, user?.id ?? "");
+        toast.success(
+          action === "unsubscribe"
+            ? t("knowledge.subscribe.unsubscribed", "已取消订阅")
+            : t("knowledge.share.left", "已退出共享"),
+        );
+        navigate("/knowledge");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRoleBusy(false);
+      setLeaveOpen(false);
+    }
+  };
+
   const chips: Array<{ key: string; text: string; danger?: boolean }> = [
     {
       key: "docs",
@@ -161,8 +199,11 @@ export function KnowledgeBaseDetail({ kbId }: KnowledgeBaseDetailProps) {
   const tabEntries: Array<{ key: KbDetailTab; label: string; icon: typeof FileText }> = [
     { key: "documents", label: t("knowledge.tabs.documents", "文档"), icon: FileText },
     { key: "search", label: t("knowledge.tabs.search", "检索测试"), icon: Search },
-    { key: "settings", label: t("knowledge.tabs.settings", "设置"), icon: Settings2 },
+    ...(caps.canManageSettings
+      ? [{ key: "settings" as const, label: t("knowledge.tabs.settings", "设置"), icon: Settings2 }]
+      : []),
   ];
+  const activeTab: KbDetailTab = tab === "settings" && !caps.canManageSettings ? "documents" : tab;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -182,17 +223,59 @@ export function KnowledgeBaseDetail({ kbId }: KnowledgeBaseDetailProps) {
         subtitle={kb.description || undefined}
         icon={<LibraryBig />}
         actions={
-          <button
-            type="button"
-            onClick={() => changeTab("settings")}
-            className={OUTLINE_BTN}
-          >
-            <Settings2 size={16} />
-            {t("knowledge.tabs.settings", "设置")}
-          </button>
+          <div className="flex items-center gap-2">
+            {caps.canShare && (
+              <button type="button" onClick={() => setShareOpen(true)} className={OUTLINE_BTN}>
+                <Share2 size={16} />
+                {t("knowledge.share.button", "分享")}
+              </button>
+            )}
+            {caps.canSubscribe && (
+              <button
+                type="button"
+                disabled={roleBusy}
+                onClick={() => void runRoleAction("subscribe")}
+                className={PRIMARY_BTN}
+              >
+                {t("knowledge.subscribe.subscribe", "订阅")}
+              </button>
+            )}
+            {caps.canUnsubscribe && (
+              <button
+                type="button"
+                disabled={roleBusy}
+                onClick={() => void runRoleAction("unsubscribe")}
+                className={OUTLINE_BTN}
+              >
+                {t("knowledge.subscribe.unsubscribe", "取消订阅")}
+              </button>
+            )}
+            {caps.canLeave && (
+              <button type="button" onClick={() => setLeaveOpen(true)} className={OUTLINE_BTN}>
+                <LogOut size={16} />
+                {t("knowledge.share.leave", "退出共享")}
+              </button>
+            )}
+            {caps.canManageSettings && (
+              <button
+                type="button"
+                onClick={() => changeTab("settings")}
+                className={OUTLINE_BTN}
+              >
+                <Settings2 size={16} />
+                {t("knowledge.tabs.settings", "设置")}
+              </button>
+            )}
+          </div>
         }
       >
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          {kb.my_role !== "owner" && (
+            <span className="scb__status-pill scb__status-pill--inactive">
+              {t(`knowledge.role.${kb.my_role}`, kb.my_role)}
+            </span>
+          )}
+          <KnowledgePublicStatusPill status={kb.public_status} />
           {chips.map((chip) => (
             <span
               key={chip.key}
@@ -217,7 +300,7 @@ export function KnowledgeBaseDetail({ kbId }: KnowledgeBaseDetailProps) {
           aria-label={kb.name}
         >
           {tabEntries.map(({ key, label, icon: Icon }) => {
-            const isActive = tab === key;
+            const isActive = activeTab === key;
             return (
               <button
                 key={key}
@@ -240,20 +323,21 @@ export function KnowledgeBaseDetail({ kbId }: KnowledgeBaseDetailProps) {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {tab === "documents" && (
+        {activeTab === "documents" && (
           <DocumentsTab
             kbId={kbId}
             detail={detail}
             config={config}
+            readOnly={!caps.canWriteDocs}
             onOpenDocument={(doc, docTab = "content") =>
               setViewing({ doc, focus: null, tab: docTab })
             }
           />
         )}
-        {tab === "search" && (
+        {activeTab === "search" && (
           <RetrievalTestTab kb={kb} config={config} onOpenHit={(hit) => void openHit(hit)} />
         )}
-        {tab === "settings" && (
+        {activeTab === "settings" && (
           <SettingsTab
             kb={kb}
             config={config}
@@ -262,6 +346,29 @@ export function KnowledgeBaseDetail({ kbId }: KnowledgeBaseDetailProps) {
           />
         )}
       </div>
+
+      {shareOpen && (
+        <KnowledgeShareDialog
+          kb={kb}
+          config={config}
+          onClose={() => setShareOpen(false)}
+          onKbChange={setKb}
+        />
+      )}
+
+      <ConfirmDialog
+        isOpen={leaveOpen}
+        title={t("knowledge.share.leaveTitle", "退出共享")}
+        message={t("knowledge.share.leaveConfirm", {
+          name: kb.name,
+          defaultValue: "确定退出“{{name}}”吗？退出后将无法再访问这个知识库。",
+        })}
+        confirmText={t("knowledge.share.leave", "退出共享")}
+        variant="danger"
+        loading={roleBusy}
+        onConfirm={() => void runRoleAction("leave")}
+        onCancel={() => setLeaveOpen(false)}
+      />
 
       {viewing && (
         <DocumentDetailSidebar

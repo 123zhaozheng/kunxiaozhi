@@ -83,7 +83,10 @@ async def test_config_is_not_shadowed_by_kb_id_route(env: Env) -> None:
         "mineru_enabled",
         "max_file_mb",
         "rerank_available",
+        "allow_public",
+        "public_requires_review",
     }
+    assert body["allow_public"] is True and body["public_requires_review"] is False
     assert body["enabled"] is True and body["ready"] is True and body["not_ready_reason"] is None
     assert body["max_file_mb"] == 1 and ".md" in body["allowed_extensions"]
     assert {"key", "chunk_token_num", "overlap_percent"} == set(body["presets"][0])
@@ -106,6 +109,13 @@ async def test_kb_crud_contract(env: Env) -> None:
         "chunk_token_num",
         "overlap_percent",
         "visibility",
+        "public_status",
+        "published_at",
+        "review",
+        "subscriber_count",
+        "can_write",
+        "can_manage",
+        "can_chat",
         "graph_enabled",
         "embedding",
         "index_outdated",
@@ -145,7 +155,7 @@ async def test_validation_errors_are_400_with_string_detail(env: Env) -> None:
     kb = await env.create()
     resp = await env.client.post(f"{BASE}/{kb['id']}/search", json={"query": "", "top_k": 5})
     assert resp.status_code == 400
-    resp = await env.client.get(BASE, params={"scope": "shared"})
+    resp = await env.client.get(BASE, params={"scope": "bogus"})
     assert resp.status_code == 400
 
 
@@ -236,7 +246,12 @@ async def test_upload_rejections(env: Env) -> None:
     bad_type = await env.upload(kb["id"], "run.exe", b"MZ")
     assert bad_type.status_code == 400 and isinstance(bad_type.json()["detail"], str)
     too_big = await env.upload(kb["id"], "big.md", b"a" * (1024 * 1024 + 1))
-    assert too_big.status_code == 400 and "1MB" in too_big.json()["detail"]
+    assert too_big.status_code == 400
+    assert too_big.json()["detail"] == {
+        "code": "kb_file_too_large",
+        "message": "文件大小超过 1MB 限制",
+        "limit": 1,
+    }
     empty = await env.upload(kb["id"], "empty.md", b"")
     assert empty.status_code == 400
     assert (await env.client.post(f"{BASE}/{kb['id']}/documents/upload")).status_code == 422

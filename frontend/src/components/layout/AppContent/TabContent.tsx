@@ -65,6 +65,11 @@ const ScheduledTaskPanel = lazy(() =>
     default: m.ScheduledTaskPanel,
   })),
 );
+const KnowledgeBaseAdminPanel = lazy(() =>
+  import("../../knowledge/KnowledgeBaseAdminPanel").then((m) => ({
+    default: m.KnowledgeBaseAdminPanel,
+  })),
+);
 const KnowledgeBasePanel = lazy(() =>
   import("../../knowledge/KnowledgeBasePanel").then((m) => ({
     default: m.KnowledgeBasePanel,
@@ -92,6 +97,7 @@ const panelMap: Record<
   agents: AgentModelPanel,
   files: RevealedFilesPage,
   knowledge: KnowledgeBasePanel,
+  knowledgeAdmin: KnowledgeBaseAdminPanel,
   persona: PersonaPlazaPanel,
   team: TeamBuilderPanel,
   notifications: NotificationPanel,

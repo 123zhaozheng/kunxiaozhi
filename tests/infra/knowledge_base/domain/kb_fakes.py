@@ -509,6 +509,18 @@ class EngineFakes:
     rerank_card_present: bool = False
     embed_calls: list[list[str]] = field(default_factory=list)
     model_name: str = "fake-embed"
+    users: dict[str, Any] = field(default_factory=dict)  # user_id -> UserBrief
+    roles: dict[str, Any] = field(default_factory=dict)  # role name -> limits dict
+    pushed: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+
+    def add_user(
+        self, user_id: str, username: str | None = None, *, active: bool = True, roles=("user",)
+    ):
+        from src.infra.knowledge_base.users import UserBrief
+
+        brief = UserBrief(user_id, username or f"name-{user_id}", active, tuple(roles))
+        self.users[user_id] = brief
+        return brief
 
 
 def install_kb_fakes(monkeypatch: pytest.MonkeyPatch) -> EngineFakes:
@@ -560,6 +572,49 @@ def install_kb_fakes(monkeypatch: pytest.MonkeyPatch) -> EngineFakes:
         return None
 
     monkeypatch.setattr(kb_events, "push_event", _no_push)
+
+    async def _push_notification(user_id: str, notification: dict[str, Any]) -> None:
+        fakes.pushed.append((user_id, notification))
+
+    monkeypatch.setattr(kb_events, "push_notification", _push_notification)
+
+    # user directory / role limits / file library
+    from types import SimpleNamespace
+
+    from src.infra.knowledge_base import users as kb_users
+    from src.infra.revealed_file import storage as revealed_storage
+    from src.infra.role.storage import RoleStorage
+    from src.infra.storage import mongodb
+
+    async def _user_by_id(user_id: str):
+        # Unseeded users read as active so tests only seed the cases they care about.
+        return fakes.users.get(user_id) or fakes.add_user(user_id, f"name-{user_id}")
+
+    async def _user_by_name(username: str):
+        return next((u for u in fakes.users.values() if u.username == username), None)
+
+    async def _is_active(user_id: str) -> bool:
+        user = await _user_by_id(user_id)
+        return user is not None and user.active
+
+    async def _role(self, name: str):
+        limits = fakes.roles.get(name)
+        return SimpleNamespace(limits=SimpleNamespace(**limits)) if limits is not None else None
+
+    monkeypatch.setattr(kb_users, "get_user_by_id", _user_by_id)
+    monkeypatch.setattr(kb_users, "get_user_by_username", _user_by_name)
+    monkeypatch.setattr(kb_users, "is_user_active", _is_active)
+    monkeypatch.setattr(RoleStorage, "get_by_name", _role)
+    monkeypatch.setattr(mongodb, "get_mongo_client", lambda: mongo)
+    monkeypatch.setattr(revealed_storage, "_revealed_file_storage", None)
+    for key, value in {
+        "KB_ALLOW_PUBLIC": True,
+        "KB_PUBLIC_REQUIRES_REVIEW": False,
+        "KB_DEFAULT_MAX_COUNT": 10,
+        "KB_DEFAULT_MAX_DOCS_PER_KB": 500,
+        "KB_DEFAULT_STORAGE_QUOTA_MB": 2048,
+    }.items():
+        monkeypatch.setattr(settings, key, value)
 
     # parsing
     supported = frozenset({".pdf", ".md", ".txt", ".csv", ".docx"})

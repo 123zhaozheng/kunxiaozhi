@@ -332,6 +332,54 @@ class RevealedFileStorage:
 
         return {"items": items, "total": total, "skip": skip, "limit": limit}
 
+    async def get_files_by_ids(self, user_id: str, file_ids: list[str]) -> list[Dict[str, Any]]:
+        """Fetch the caller's own records by id; ids of other users' files are silently dropped."""
+        from bson import ObjectId
+        from bson.errors import InvalidId
+
+        object_ids = []
+        for raw in file_ids:
+            try:
+                object_ids.append(ObjectId(raw))
+            except (InvalidId, TypeError):
+                continue
+        if not object_ids:
+            return []
+        cursor = self.collection.find({"user_id": user_id, "_id": {"$in": object_ids}})
+        items = await cursor.to_list(length=len(object_ids))
+        return [self._serialize_item(item) for item in items]
+
+    async def list_files_by_extensions(
+        self,
+        user_id: str,
+        extensions: list[str],
+        *,
+        search: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> Dict[str, Any]:
+        """Page through a user's non-project files whose name ends in one of ``extensions``."""
+        limit = _bounded_page_limit(limit)
+        if not extensions:
+            return {"items": [], "total": 0}
+        suffix = "(" + "|".join(re.escape(e.lstrip(".")) for e in extensions) + ")$"
+        conditions: list[Dict[str, Any]] = [
+            {"file_name": {"$regex": r"\." + suffix, "$options": "i"}}
+        ]
+        if search:
+            conditions.append(
+                {"file_name": {"$regex": _safe_search_pattern(search), "$options": "i"}}
+            )
+        query: Dict[str, Any] = {
+            "user_id": user_id,
+            "file_type": {"$ne": "project"},
+            "$and": conditions,
+        }
+        total = await self.collection.count_documents(query)
+        cursor = self.collection.find(query).sort("created_at", -1).skip(skip).limit(limit)
+        items = await cursor.to_list(length=limit)
+        return {"items": [self._serialize_item(item) for item in items], "total": total}
+
     async def get_stats(self, user_id: str) -> Dict[str, int]:
         """Get file count per type for a user."""
         await self.ensure_indexes_if_needed()

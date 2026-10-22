@@ -113,6 +113,9 @@ class Permission(str, Enum):
     SCHEDULED_TASK_USE = "scheduled_task:use"
     SCHEDULED_TASK_ADMIN = "scheduled_task:admin"
 
+    # Knowledge Base
+    KNOWLEDGE_BASE_ADMIN = "knowledge_base:admin"
+
 
 class MessageType(str, Enum):
     """消息类型"""

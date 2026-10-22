@@ -17,6 +17,12 @@ import {
 import { buildTaskNotificationCopy } from "./taskNotificationContent";
 import { isMobileDevice } from "../../../utils/mobile";
 import { dispatchScheduledTaskRefresh } from "../../../utils/scheduledTaskEvents";
+import {
+  dispatchKbNotificationsRefresh,
+  dispatchKnowledgeBaseRefresh,
+} from "../../../utils/knowledgeBaseEvents";
+import { getNotificationText } from "../../knowledge/knowledgeNotificationText";
+import type { KBNotification } from "../../../services/api/knowledgeBase";
 
 interface UseWebSocketNotificationsOptions {
   sessionId: string | null;
@@ -43,6 +49,23 @@ export function useWebSocketNotifications({
   // WebSocket for task completion notifications
   useWebSocket({
     enabled,
+    onKbEvent: (event) => {
+      if (event.type !== "kb:notification") return;
+      dispatchKbNotificationsRefresh();
+      dispatchKnowledgeBaseRefresh({ kbId: event.data?.kb_id });
+      const d = event.data;
+      const text = getNotificationText(t, {
+        id: d.id ?? "",
+        type: d.type ?? "",
+        kb_id: d.kb_id ?? "",
+        kb_name: d.kb_name ?? "",
+        actor_username: d.actor_username ?? "",
+        message: d.message ?? "",
+        read: false,
+        created_at: null,
+      } satisfies KBNotification);
+      toast(text, { duration: 5000 });
+    },
     onScheduledTaskFinished: (notification) => {
       const d = notification.data;
       const ok = d.status === "success";

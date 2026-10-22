@@ -14,6 +14,7 @@ import { useAuth } from "../../../hooks/useAuth";
 import { Permission } from "../../../types/auth";
 import { getFullUrl } from "../../../services/api";
 import { APP_NAME } from "../../../constants";
+import { KbUnreadDot } from "../../knowledge/KbUnreadDot";
 
 const railBtn =
   "sidebar-rail-btn flex h-9 w-9 items-center justify-center rounded-full transition-colors mx-2 touch-manipulation";
@@ -167,12 +168,13 @@ export function SidebarRail({
           <button
             type="button"
             onClick={onOpenKnowledgeBase}
-            className={`${railBtn} ${isKnowledgeActive ? "is-active" : ""}`}
+            className={`${railBtn} relative ${isKnowledgeActive ? "is-active" : ""}`}
             title={t("nav.knowledge", "知识库")}
             aria-label={t("nav.knowledge", "知识库")}
             aria-current={isKnowledgeActive ? "page" : undefined}
           >
             <LibraryBig size={20} />
+            <KbUnreadDot />
           </button>
         )}
         <button

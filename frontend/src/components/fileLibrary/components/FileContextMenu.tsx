@@ -1,7 +1,9 @@
 import { useTranslation } from "react-i18next";
-import { MessageSquare, Star, Download, ExternalLink } from "lucide-react";
+import { MessageSquare, Star, Download, ExternalLink, LibraryBig } from "lucide-react";
 import type { RevealedFileItem } from "../../../services/api";
 import { getFullUrl } from "../../../services/api";
+import { canImportToKnowledgeBase } from "../../knowledge/knowledgeUtils";
+import { useKnowledgeImport } from "../KnowledgeImportContext";
 
 interface FileContextMenuProps {
   menu: { x: number; y: number; file: RevealedFileItem } | null;
@@ -19,6 +21,7 @@ export function FileContextMenu({
   onToggleFavorite,
 }: FileContextMenuProps) {
   const { t } = useTranslation();
+  const knowledgeImport = useKnowledgeImport();
   if (!menu) return null;
 
   const isProject = file.file_type === "project";
@@ -71,6 +74,16 @@ export function FileContextMenu({
                 "noopener noreferrer",
               );
             },
+          },
+        ]
+      : []),
+    ...(knowledgeImport &&
+    canImportToKnowledgeBase(file, knowledgeImport.allowedExtensions)
+      ? [
+          {
+            icon: LibraryBig,
+            label: t("fileLibrary.context.importToKnowledge", "转到知识库"),
+            action: () => knowledgeImport.open(file),
           },
         ]
       : []),

@@ -38,6 +38,19 @@ KB_ROLE_OWNER = "owner"
 KB_ROLE_EDITOR = "editor"
 KB_ROLE_VIEWER = "viewer"
 KB_ROLE_SUBSCRIBER = "subscriber"
+KB_ROLE_VISITOR = "visitor"
+KB_SHARE_ROLES = (KB_ROLE_EDITOR, KB_ROLE_VIEWER)
+PUBLIC_NONE = "none"
+PUBLIC_PENDING = "pending"
+PUBLIC_APPROVED = "approved"
+PUBLIC_REJECTED = "rejected"
+PUBLIC_DELISTED = "delisted"
+PUBLIC_STATUSES = (PUBLIC_NONE, PUBLIC_PENDING, PUBLIC_APPROVED, PUBLIC_REJECTED, PUBLIC_DELISTED)
+KB_SCOPES = ("mine", "shared", "subscribed", "writable", "readable")
+QUOTA_COUNT = "kb_quota_count"
+QUOTA_DOCS = "kb_quota_docs"
+QUOTA_STORAGE = "kb_quota_storage"
+FILE_TOO_LARGE = "kb_file_too_large"
 
 DEFAULT_KB_ICON = "library-big"
 
@@ -108,6 +121,14 @@ class KBDocument(_KBModel):
     indexed_at: Optional[datetime] = None
 
 
+class KBReview(_KBModel):
+    action: str = ""
+    reviewer_id: str = ""
+    reviewer_username: str = ""
+    reason: str = ""
+    at: Optional[datetime] = None
+
+
 class KnowledgeBase(_KBModel):
     id: str = Field(..., validation_alias=_MONGO_ID)
     name: str
@@ -120,6 +141,13 @@ class KnowledgeBase(_KBModel):
     chunk_token_num: int = 512
     overlap_percent: int = 0
     visibility: str = "private"
+    public_status: str = PUBLIC_NONE
+    published_at: Optional[datetime] = None
+    review: Optional["KBReview"] = None
+    subscriber_count: int = 0
+    can_write: bool = False
+    can_manage: bool = False
+    can_chat: bool = True
     graph_enabled: bool = False
     embedding: Optional[KBEmbeddingInfo] = None
     index_outdated: bool = False
@@ -164,6 +192,8 @@ class KBConfig(_KBModel):
     mineru_enabled: bool = False
     max_file_mb: int = 100
     rerank_available: bool = False
+    allow_public: bool = True
+    public_requires_review: bool = False
 
 
 class KBListResponse(_KBModel):
@@ -256,3 +286,148 @@ class KBSearchResponse(_KBModel):
 
 class KBTaskListResponse(_KBModel):
     items: list[KBTask] = Field(default_factory=list)
+
+
+# ── PR2: sharing, public KBs, quotas, notifications, import ──
+
+
+class KBMember(_KBModel):
+    user_id: str
+    username: str = ""
+    role: str
+    granted_by: str = ""
+    created_at: Optional[datetime] = None
+
+
+class KBMemberListResponse(_KBModel):
+    items: list[KBMember] = Field(default_factory=list)
+
+
+class KBMemberAdd(_KBModel):
+    usernames: list[str] = Field(..., min_length=1, max_length=50)
+    role: str = KB_ROLE_VIEWER
+
+
+class KBMemberAddError(_KBModel):
+    username: str
+    reason: str  # not_found | inactive | self
+
+
+class KBMemberAddResponse(_KBModel):
+    added: list[KBMember] = Field(default_factory=list)
+    updated: list[KBMember] = Field(default_factory=list)
+    errors: list[KBMemberAddError] = Field(default_factory=list)
+
+
+class KBMemberUpdate(_KBModel):
+    role: str
+
+
+class KBUserResolve(_KBModel):
+    username: str
+    exists: bool
+    active: bool
+
+
+class KBUserResolveRequest(_KBModel):
+    usernames: list[str] = Field(..., min_length=1, max_length=50)
+
+
+class KBUserResolveResponse(_KBModel):
+    items: list[KBUserResolve] = Field(default_factory=list)
+
+
+class KBQuotaLimits(_KBModel):
+    kb_max_count: int
+    kb_max_docs_per_kb: int
+    kb_storage_quota_mb: int
+    kb_max_file_size_mb: int
+
+
+class KBQuotaUsage(_KBModel):
+    kb_count: int = 0
+    doc_count: int = 0
+    max_docs_in_kb: int = 0
+    storage_bytes: int = 0
+
+
+class KBQuotaResponse(_KBModel):
+    limits: KBQuotaLimits
+    usage: KBQuotaUsage
+
+
+class KBPlazaResponse(_KBModel):
+    items: list[KnowledgeBase] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 20
+
+
+class KBNotification(_KBModel):
+    id: str = Field(..., validation_alias=_MONGO_ID)
+    type: str
+    kb_id: str = ""
+    kb_name: str = ""
+    actor_username: str = ""
+    message: str = ""
+    read: bool = False
+    created_at: Optional[datetime] = None
+
+
+class KBNotificationListResponse(_KBModel):
+    items: list[KBNotification] = Field(default_factory=list)
+    total: int = 0
+    unread: int = 0
+    page: int = 1
+    page_size: int = 20
+
+
+class KBUnreadCount(_KBModel):
+    count: int = 0
+
+
+class KBImportableFile(_KBModel):
+    id: str
+    file_name: str
+    file_type: str = ""
+    mime_type: str = ""
+    file_size: int = 0
+    created_at: Optional[str] = None
+
+
+class KBImportableFileListResponse(_KBModel):
+    items: list[KBImportableFile] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 20
+
+
+class KBImportRequest(_KBModel):
+    file_ids: list[str] = Field(default_factory=list)
+
+
+class KBImportResult(_KBModel):
+    file_id: str
+    status: str  # created | duplicate | skipped | failed
+    code: Optional[str] = None
+    message: Optional[str] = None
+    document: Optional[KBDocument] = None
+
+
+class KBImportResponse(_KBModel):
+    results: list[KBImportResult] = Field(default_factory=list)
+    created: int = 0
+    duplicate: int = 0
+    skipped: int = 0
+    failed: int = 0
+
+
+class KBReviewRequest(_KBModel):
+    reason: str = ""
+
+
+class KBAdminListResponse(_KBModel):
+    items: list[KnowledgeBase] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 20

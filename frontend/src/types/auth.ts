@@ -77,6 +77,7 @@ export enum Permission {
   // Scheduled Task
   SCHEDULED_TASK_USE = "scheduled_task:use",
   SCHEDULED_TASK_ADMIN = "scheduled_task:admin",
+  KNOWLEDGE_BASE_ADMIN = "knowledge_base:admin",
 }
 
 // 用户信息
@@ -147,6 +148,10 @@ export interface RoleLimits {
   max_file_size_document?: number | null; // 文档上传大小限制（MB）
   max_files?: number | null; // 最大上传文件数，null = 使用全局默认
   storage_quota_mb?: number | null; // 个人存储空间上限（MB），null = 使用全局默认
+  kb_max_count?: number | null; // 每用户知识库数量，null = 使用全局默认
+  kb_max_docs_per_kb?: number | null; // 单库文档数
+  kb_storage_quota_mb?: number | null; // 知识库存储配额（MB）
+  kb_max_file_size_mb?: number | null; // 知识库单文件大小上限（MB）
   [key: string]: number | null | undefined; // 允许扩展
 }
 

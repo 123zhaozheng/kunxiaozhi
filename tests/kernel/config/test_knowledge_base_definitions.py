@@ -18,6 +18,11 @@ KB_SETTINGS = {
     "KB_WORKER_CONCURRENCY": (SettingType.NUMBER, 4, 1, 16),
     "KB_MAX_FILE_MB": (SettingType.NUMBER, 100, 1, 1024),
     "KB_EMBEDDING_BATCH_SIZE": (SettingType.NUMBER, 32, 1, 256),
+    "KB_ALLOW_PUBLIC": (SettingType.BOOLEAN, True, None, None),
+    "KB_PUBLIC_REQUIRES_REVIEW": (SettingType.BOOLEAN, False, None, None),
+    "KB_DEFAULT_MAX_COUNT": (SettingType.NUMBER, 10, 1, 1000),
+    "KB_DEFAULT_MAX_DOCS_PER_KB": (SettingType.NUMBER, 500, 1, 100000),
+    "KB_DEFAULT_STORAGE_QUOTA_MB": (SettingType.NUMBER, 2048, 1, 10485760),
 }
 ENV_ONLY = {
     "QDRANT_URL": "",

@@ -85,6 +85,19 @@ function RoleFormModal({
     role?.limits?.storage_quota_mb ?? "",
   );
   const [showUploadLimits, setShowUploadLimits] = useState(false);
+  const [maxKbCount, setMaxKbCount] = useState<number | "">(
+    role?.limits?.kb_max_count ?? "",
+  );
+  const [maxKbDocs, setMaxKbDocs] = useState<number | "">(
+    role?.limits?.kb_max_docs_per_kb ?? "",
+  );
+  const [kbStorageQuotaMb, setKbStorageQuotaMb] = useState<number | "">(
+    role?.limits?.kb_storage_quota_mb ?? "",
+  );
+  const [maxKbFileSizeMb, setMaxKbFileSizeMb] = useState<number | "">(
+    role?.limits?.kb_max_file_size_mb ?? "",
+  );
+  const [showKbLimits, setShowKbLimits] = useState(false);
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>(
     role?.permissions || [],
   );
@@ -198,6 +211,18 @@ function RoleFormModal({
         if (!isNaN(numValue) && numValue > 0) {
           limits.storage_quota_mb = numValue;
         }
+      }
+      // Count limits accept 0 ("none allowed"); size limits must be positive.
+      const kbLimitFields: Array<[keyof RoleLimits, number | "", number]> = [
+        ["kb_max_count", maxKbCount, 0],
+        ["kb_max_docs_per_kb", maxKbDocs, 0],
+        ["kb_storage_quota_mb", kbStorageQuotaMb, 1],
+        ["kb_max_file_size_mb", maxKbFileSizeMb, 1],
+      ];
+      for (const [key, raw, min] of kbLimitFields) {
+        if (raw === "") continue;
+        const numValue = Number(raw);
+        if (!isNaN(numValue) && numValue >= min) limits[key] = numValue;
       }
       const data: RoleCreate | RoleUpdate = {
         name: name.trim(),
@@ -428,6 +453,58 @@ function RoleFormModal({
                   <input
                     type="number"
                     min="0"
+                    value={value}
+                    onChange={(e) =>
+                      setter(
+                        e.target.value === "" ? "" : Number(e.target.value),
+                      )
+                    }
+                    className="glass-input es-input px-3"
+                    placeholder={t("roles.maxChannelsPlaceholder")}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 知识库限额 */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowKbLimits(!showKbLimits)}
+            className="es-section-title cursor-pointer w-full"
+          >
+            {t("roles.kbLimitsTitle")}
+            <ChevronDown
+              size={14}
+              className={`ml-auto transition-transform ${
+                showKbLimits ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+          {showKbLimits && (
+            <div className="es-section mt-2">
+              <p className="es-hint">{t("roles.kbLimitsHint")}</p>
+              {[
+                { label: "maxKbCount", value: maxKbCount, setter: setMaxKbCount },
+                { label: "maxKbDocs", value: maxKbDocs, setter: setMaxKbDocs },
+                {
+                  label: "kbStorageQuotaMb",
+                  value: kbStorageQuotaMb,
+                  setter: setKbStorageQuotaMb,
+                },
+                {
+                  label: "maxKbFileSizeMb",
+                  value: maxKbFileSizeMb,
+                  setter: setMaxKbFileSizeMb,
+                },
+              ].map(({ label, value, setter }) => (
+                <div key={label} className="es-field">
+                  <label className="es-label">{t(`roles.${label}`)}</label>
+                  <input
+                    type="number"
+                    min="1"
                     value={value}
                     onChange={(e) =>
                       setter(

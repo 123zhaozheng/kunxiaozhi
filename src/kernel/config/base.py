@@ -419,6 +419,11 @@ class Settings(BaseSettings):
     KB_WORKER_CONCURRENCY: int = 4
     KB_MAX_FILE_MB: int = 100
     KB_EMBEDDING_BATCH_SIZE: int = 32
+    KB_ALLOW_PUBLIC: bool = True
+    KB_PUBLIC_REQUIRES_REVIEW: bool = False
+    KB_DEFAULT_MAX_COUNT: int = 10
+    KB_DEFAULT_MAX_DOCS_PER_KB: int = 500
+    KB_DEFAULT_STORAGE_QUOTA_MB: int = 2048
     # Personal knowledge base (environment only)
     QDRANT_URL: str = ""
     QDRANT_API_KEY: str = ""

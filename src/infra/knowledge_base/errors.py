@@ -38,3 +38,18 @@ class KBForbiddenError(KBError):
 
 class KBBusyError(KBError):
     default_message = "知识库正在处理文档，请稍后再试"
+
+
+class KBQuotaError(KBError):
+    """A quota or size limit was hit; ``code`` is one of the ``kb_quota_*``/``kb_file_too_large``."""
+
+    default_message = "已超出知识库额度"
+
+    def __init__(self, code: str, message: str, limit: int) -> None:
+        super().__init__(message)
+        self.code = code
+        self.limit = limit
+
+
+class KBConflictError(KBError):
+    default_message = "操作冲突"

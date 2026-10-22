@@ -15,6 +15,7 @@ from src.infra.knowledge_base.errors import (
     KBDisabledError,
     KBDocumentNotFoundError,
     KBNotFoundError,
+    KBQuotaError,
     KBValidationError,
 )
 from src.infra.knowledge_base.storage import expand_status_filter, get_kb_storage
@@ -314,9 +315,10 @@ async def test_upload_rejects_empty_files(kb_env) -> None:
 async def test_upload_size_limit_by_content_length_and_by_streamed_bytes(kb_env) -> None:
     kb = await _create()
     limit = settings.KB_MAX_FILE_MB * 1024 * 1024
-    with pytest.raises(KBValidationError, match="1MB"):
+    with pytest.raises(KBQuotaError, match="1MB") as info:
         await _upload(kb.id, content_length=limit + 2 * 1024 * 1024)
-    with pytest.raises(KBValidationError, match="1MB"):
+    assert info.value.code == "kb_file_too_large" and info.value.limit == 1
+    with pytest.raises(KBQuotaError, match="1MB"):
         await _upload(kb.id, data=b"a" * (limit + 1))
     ok, created = await _upload(kb.id, "big.md", b"a" * limit)
     assert created and ok.document.size == limit

@@ -13,6 +13,7 @@ import {
   Settings,
   BarChart3,
   CalendarClock,
+  LibraryBig,
 } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 import { Permission } from "../../types";
@@ -56,6 +57,9 @@ export function UserMenu({ onShowProfile }: UserMenuProps) {
   const canManageSettings = hasAnyPermission([Permission.SETTINGS_MANAGE]);
   const canManageScheduledTasks = hasAnyPermission([
     Permission.SCHEDULED_TASK_ADMIN,
+  ]);
+  const canManageKnowledgeBases = hasAnyPermission([
+    Permission.KNOWLEDGE_BASE_ADMIN,
   ]);
 
   // Reactive mobile detection
@@ -177,6 +181,12 @@ export function UserMenu({ onShowProfile }: UserMenuProps) {
       label: t("nav.scheduledTasksAdmin", "定时任务管理"),
       icon: CalendarClock,
       show: canManageScheduledTasks,
+    },
+    {
+      path: "/admin/knowledge-bases",
+      label: t("nav.knowledgeAdmin", "知识库管理"),
+      icon: LibraryBig,
+      show: canManageKnowledgeBases,
     },
     {
       path: "/settings",

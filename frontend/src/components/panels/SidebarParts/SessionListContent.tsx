@@ -34,6 +34,7 @@ import {
   isWeComChannelProject,
 } from "./projectFilters";
 import { WeComChannelGroup } from "./WeComChannelGroup";
+import { KbUnreadDot } from "../../knowledge/KbUnreadDot";
 
 export interface SessionActions {
   onDeleteSession: (id: string) => void;
@@ -245,11 +246,12 @@ export function SessionListContent({
           <button
             type="button"
             onClick={() => navigate("/knowledge")}
-            className={`sidebar-nav-btn w-full h-8 rounded-[10px] flex items-center gap-3 px-[9px] focus:outline-none transition-colors ${isKnowledgeActive ? "is-active" : ""}`}
+            className={`sidebar-nav-btn relative w-full h-8 rounded-[10px] flex items-center gap-3 px-[9px] focus:outline-none transition-colors ${isKnowledgeActive ? "is-active" : ""}`}
             aria-current={isKnowledgeActive ? "page" : undefined}
           >
             <LibraryBig size={20} />
             <span>{t("nav.knowledge", "知识库")}</span>
+            <KbUnreadDot />
           </button>
         )}
 

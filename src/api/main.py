@@ -31,6 +31,7 @@ from src.api.routes import (
     health,
     human,
     knowledge_base,
+    knowledge_base_admin,
     mcp,
     memory,
     notification,
@@ -891,6 +892,9 @@ def create_app() -> FastAPI:
     app.include_router(upload.router, prefix="/api/upload", tags=["Upload"])
     app.include_router(storage.router, prefix="/api/storage", tags=["Storage"])
     app.include_router(knowledge_base.router, prefix="/api/kb", tags=["Knowledge Base"])
+    app.include_router(
+        knowledge_base_admin.router, prefix="/api/admin/kb", tags=["Knowledge Base Admin"]
+    )
     app.include_router(revealed_file.router, prefix="/api/files", tags=["Files"])
     app.include_router(human.router, prefix="/human", tags=["Human"])
     app.include_router(feedback.router, prefix="/api/feedback", tags=["Feedback"])

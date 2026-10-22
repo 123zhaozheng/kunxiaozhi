@@ -24,12 +24,19 @@ from src.infra.knowledge_base import (
 )
 from src.infra.knowledge_base import objects as kb_objects
 from src.infra.knowledge_base import queue as kb_queue
-from src.infra.knowledge_base.access import require_kb_access
+from src.infra.knowledge_base import quota as kb_quota
+from src.infra.knowledge_base.access import (
+    ROLE_CAPABILITIES,
+    KBAccess,
+    is_publicly_readable,
+    require_kb_access,
+)
 from src.infra.knowledge_base.errors import (
     KBBusyError,
     KBDisabledError,
     KBDocumentNotFoundError,
     KBNotFoundError,
+    KBQuotaError,
     KBTaskNotFoundError,
     KBValidationError,
 )
@@ -40,6 +47,7 @@ from src.infra.knowledge_base.storage import (
     get_kb_storage,
 )
 from src.infra.logging import get_logger
+from src.infra.revealed_file.storage import get_revealed_file_storage
 from src.infra.utils.datetime import utc_now
 from src.kernel.config import settings
 from src.kernel.schemas.knowledge_base import (
@@ -49,8 +57,13 @@ from src.kernel.schemas.knowledge_base import (
     DOC_INDEXED,
     DOC_PARSED,
     DOC_UPLOADED,
+    KB_ROLE_EDITOR,
     KB_ROLE_OWNER,
+    KB_ROLE_SUBSCRIBER,
+    KB_ROLE_VIEWER,
+    KB_SCOPES,
     KB_STATUS_ACTIVE,
+    PUBLIC_NONE,
     KBChunk,
     KBChunkListResponse,
     KBConfig,
@@ -60,6 +73,10 @@ from src.kernel.schemas.knowledge_base import (
     KBDeleteDocumentsResponse,
     KBDocument,
     KBDocumentListResponse,
+    KBImportableFile,
+    KBImportableFileListResponse,
+    KBImportResponse,
+    KBImportResult,
     KBPreset,
     KBSearchHit,
     KBSearchRequest,
@@ -185,11 +202,21 @@ async def build_kb_responses(items: list[tuple[dict[str, Any], str]]) -> list[Kn
         emb: dict[str, Any] | None = kb.get("embedding") or None
         outdated = emb is not None and (card is None or card.model_name != emb.get("model_name"))
         active = tasks.get(str(kb["_id"]))
+        _, can_write, can_manage, _, can_chat = ROLE_CAPABILITIES.get(
+            role, (False, False, False, False, False)
+        )
+        subscribers = (
+            await storage.count_members(str(kb["_id"]), KB_ROLE_SUBSCRIBER) if can_manage else 0
+        )
         responses.append(
             KnowledgeBase.model_validate(
                 {
                     **kb,
                     "my_role": role,
+                    "can_write": can_write,
+                    "can_manage": can_manage,
+                    "can_chat": can_chat,
+                    "subscriber_count": subscribers,
                     "embedding": (
                         {"model_name": emb.get("model_name"), "dim": emb.get("dim")}
                         if emb is not None
@@ -227,6 +254,8 @@ async def get_config() -> KBConfig:
         mineru_enabled=parsing.mineru_available(),
         max_file_mb=int(settings.KB_MAX_FILE_MB),
         rerank_available=rerank_available,
+        allow_public=bool(getattr(settings, "KB_ALLOW_PUBLIC", True)),
+        public_requires_review=bool(getattr(settings, "KB_PUBLIC_REQUIRES_REVIEW", False)),
     )
 
 
@@ -235,6 +264,7 @@ async def get_config() -> KBConfig:
 
 async def create_kb(user: TokenPayload, body: KBCreate) -> KnowledgeBase:
     ensure_enabled()
+    await kb_quota.check_can_create_kb(user)
     name = _clean_name(body.name)
     description = _clean_description(body.description)
     icon = _clean_icon(body.icon)
@@ -262,6 +292,9 @@ async def create_kb(user: TokenPayload, body: KBCreate) -> KnowledgeBase:
         **chunk,
         "embedding": None,
         "visibility": "private",
+        "public_status": PUBLIC_NONE,
+        "published_at": None,
+        "review": None,
         "graph_enabled": False,
         "status": KB_STATUS_ACTIVE,
         "created_at": now,
@@ -288,14 +321,31 @@ async def create_kb(user: TokenPayload, body: KBCreate) -> KnowledgeBase:
     return (await build_kb_responses([(kb_doc, KB_ROLE_OWNER)]))[0]
 
 
+_SCOPE_ROLES = {
+    "mine": [KB_ROLE_OWNER],
+    "shared": [KB_ROLE_EDITOR, KB_ROLE_VIEWER],
+    "subscribed": [KB_ROLE_SUBSCRIBER],
+    "writable": [KB_ROLE_OWNER, KB_ROLE_EDITOR],
+    "readable": [KB_ROLE_OWNER, KB_ROLE_EDITOR, KB_ROLE_VIEWER, KB_ROLE_SUBSCRIBER],
+}
+
+
 async def list_kbs(user: TokenPayload, scope: str = "mine") -> list[KnowledgeBase]:
     ensure_enabled()
-    if scope != "mine":
+    if scope not in KB_SCOPES:
         raise KBValidationError("不支持的 scope")
     storage = get_kb_storage()
-    kb_ids = await storage.list_member_kb_ids(user.sub, [KB_ROLE_OWNER])
-    bases = await storage.list_bases(kb_ids)
-    return await build_kb_responses([(kb, KB_ROLE_OWNER) for kb in bases])
+    roles = {
+        str(m["kb_id"]): str(m["role"])
+        for m in await storage.list_memberships(user.sub, _SCOPE_ROLES[scope])
+    }
+    bases = await storage.list_bases(list(roles))
+    items = [
+        (kb, roles[str(kb["_id"])])
+        for kb in bases
+        if roles[str(kb["_id"])] != KB_ROLE_SUBSCRIBER or is_publicly_readable(kb)
+    ]
+    return await build_kb_responses(items)
 
 
 async def get_kb(user: TokenPayload, kb_id: str) -> KnowledgeBase:
@@ -443,20 +493,50 @@ async def upload_document(
 ) -> tuple[KBUploadResponse, bool]:
     """Stream one upload into object storage and queue it. Returns ``(response, created)``."""
     ensure_enabled()
-    await require_kb_access(user.sub, kb_id, write=True)
+    access = await require_kb_access(user.sub, kb_id, write=True)
+    return await add_document_from_stream(
+        user,
+        access,
+        _safe_filename(getattr(file, "filename", None)),
+        file,
+        mime=getattr(file, "content_type", None),
+        content_length=content_length,
+    )
 
-    filename = _safe_filename(getattr(file, "filename", None))
+
+async def add_document_from_stream(
+    user: TokenPayload,
+    access: KBAccess,
+    filename: str,
+    stream: Any,
+    *,
+    mime: str | None = None,
+    content_length: int | None = None,
+    source: str = "upload",
+    source_ref: str | None = None,
+) -> tuple[KBUploadResponse, bool]:
+    """Spool ``stream`` (anything with ``async read(n)``), dedupe, enforce quotas, store, queue.
+
+    Shared by uploads and file-library imports. File size is checked against the uploader's
+    limit; document count and storage are charged to the KB owner.
+    """
     if not filename or not parsing.is_supported_filename(filename):
         raise KBValidationError("不支持的文件类型")
 
-    max_mb = int(settings.KB_MAX_FILE_MB)
-    max_bytes = max_mb * 1024 * 1024
+    kb = access.kb
+    kb_id = access.kb_id
+    uploader_limits = await kb_quota.resolve_kb_limits(user.roles)
+    owner_limits = await kb_quota.resolve_owner_limits(str(kb["owner_id"]), user)
+    max_mb = uploader_limits.kb_max_file_size_mb
+    max_bytes = uploader_limits.max_file_bytes
     if content_length is not None and content_length > max_bytes + UPLOAD_OVERHEAD_SLACK:
-        raise KBValidationError(f"文件大小超过 {max_mb}MB 限制")
+        raise kb_quota.file_too_large(max_mb)
 
-    spooled = await kb_objects.spool_upload(file, max_size_bytes=max_bytes, max_size_mb=max_mb)
+    spooled = await kb_objects.spool_upload(stream, max_size_bytes=max_bytes, max_size_mb=max_mb)
     try:
-        doc, created = await _store_upload(user, kb_id, file, filename, spooled)
+        doc, created = await _store_upload(
+            user, kb, filename, spooled, owner_limits, mime, source, source_ref
+        )
     finally:
         spooled.close()
     if not created:
@@ -481,22 +561,27 @@ async def upload_document(
 
 async def _store_upload(
     user: TokenPayload,
-    kb_id: str,
-    file: Any,
+    kb: dict[str, Any],
     filename: str,
     spooled: kb_objects.SpooledUpload,
+    owner_limits: kb_quota.KBLimits,
+    mime: str | None,
+    source: str,
+    source_ref: str | None,
 ) -> tuple[dict[str, Any], bool]:
-    """Dedupe on sha256, write the object and insert the row. ``created`` is False for dupes."""
+    """Dedupe on sha256, check quotas, write the object and insert the row."""
     storage = get_kb_storage()
+    kb_id = str(kb["_id"])
     if spooled.size == 0:
         raise KBValidationError("文件内容为空")
     existing = await storage.get_document_by_sha(kb_id, spooled.sha256_hex)
     if existing is not None:
         return existing, False
+    await kb_quota.check_can_add_document(kb, owner_limits, spooled.size)
 
     ext = parsing.normalize_extension(filename)
     doc_id = uuid4().hex
-    mime = getattr(file, "content_type", None) or mimetypes.guess_type(filename)[0] or ""
+    mime = mime or mimetypes.guess_type(filename)[0] or ""
     key = kb_objects.original_key(kb_id, doc_id, ext)
     await kb_objects.put_original(key, spooled, mime or None)
 
@@ -511,8 +596,8 @@ async def _store_upload(
         "mime": mime,
         "size": spooled.size,
         "sha256": spooled.sha256_hex,
-        "source": "upload",
-        "source_ref": None,
+        "source": source,
+        "source_ref": source_ref,
         "object_key": key,
         "markdown_key": None,
         "status": DOC_UPLOADED,
@@ -538,6 +623,118 @@ async def _store_upload(
         await kb_objects.delete_objects([key])
         raise
     return doc, True
+
+
+IMPORT_MAX_FILES = 50
+
+
+async def list_importable_files(
+    user: TokenPayload, *, q: str | None = None, page: int = 1, page_size: int = 20
+) -> KBImportableFileListResponse:
+    """The caller's own file-library entries with a supported extension (project files excluded)."""
+    ensure_enabled()
+    page = max(int(page), 1)
+    page_size = _clamp(page_size, 1, 50)
+    result = await get_revealed_file_storage().list_files_by_extensions(
+        user.sub,
+        sorted(parsing.SUPPORTED_EXTENSIONS),
+        search=q,
+        skip=(page - 1) * page_size,
+        limit=page_size,
+    )
+    return KBImportableFileListResponse(
+        items=[
+            KBImportableFile.model_validate({**item, "file_size": int(item.get("file_size") or 0)})
+            for item in result["items"]
+            if item.get("file_key")
+        ],
+        total=result["total"],
+        page=page,
+        page_size=page_size,
+    )
+
+
+async def import_files(user: TokenPayload, kb_id: str, file_ids: list[str]) -> KBImportResponse:
+    """Copy the caller's own file-library files into a KB with per-file outcomes."""
+    ensure_enabled()
+    access = await require_kb_access(user.sub, kb_id, write=True)
+    ids = list(dict.fromkeys(i for i in file_ids if i))
+    if not ids:
+        raise KBValidationError("请选择要导入的文件")
+    if len(ids) > IMPORT_MAX_FILES:
+        raise KBValidationError(f"单次最多导入 {IMPORT_MAX_FILES} 个文件")
+
+    records = {
+        str(r["id"]): r for r in await get_revealed_file_storage().get_files_by_ids(user.sub, ids)
+    }
+    limits = await kb_quota.resolve_kb_limits(user.roles)
+    response = KBImportResponse()
+    for file_id in ids:
+        result = await _import_one(user, access, records.get(file_id), file_id, limits)
+        response.results.append(result)
+        if result.status == "created":
+            response.created += 1
+        elif result.status == "duplicate":
+            response.duplicate += 1
+        elif result.status == "skipped":
+            response.skipped += 1
+        else:
+            response.failed += 1
+    return response
+
+
+async def _import_one(
+    user: TokenPayload,
+    access: KBAccess,
+    record: dict[str, Any] | None,
+    file_id: str,
+    limits: kb_quota.KBLimits,
+) -> KBImportResult:
+    def outcome(status: str, code: str, message: str) -> KBImportResult:
+        return KBImportResult(file_id=file_id, status=status, code=code, message=message)
+
+    if record is None:
+        return outcome("failed", "file_not_found", "文件不存在")
+    if record.get("file_type") == "project":
+        return outcome("skipped", "project_file", "项目文件不支持导入")
+    filename = _safe_filename(record.get("file_name"))
+    key = record.get("file_key")
+    if not key or not parsing.is_supported_filename(filename):
+        return outcome("skipped", "unsupported_type", "不支持的文件类型")
+    if int(record.get("file_size") or 0) > limits.max_file_bytes:
+        return outcome(
+            "failed",
+            "kb_file_too_large",
+            kb_quota.file_too_large(limits.kb_max_file_size_mb).args[0],
+        )
+
+    reader = kb_objects.IteratorReader(kb_objects.stream_object(str(key)))
+    try:
+        response, created = await add_document_from_stream(
+            user,
+            access,
+            filename,
+            reader,
+            mime=record.get("mime_type"),
+            source="file_library",
+            source_ref=file_id,
+        )
+    except KBQuotaError as exc:
+        return KBImportResult(file_id=file_id, status="failed", code=exc.code, message=str(exc))
+    except (KBValidationError, KBNotFoundError) as exc:
+        return outcome(
+            "skipped" if isinstance(exc, KBValidationError) else "failed", "invalid", str(exc)
+        )
+    except Exception:
+        logger.exception("[KB] import of library file %s failed", file_id)
+        return outcome("failed", "import_failed", "导入失败，请稍后重试")
+    finally:
+        await reader.aclose()
+    return KBImportResult(
+        file_id=file_id,
+        status="created" if created else "duplicate",
+        document=response.document,
+    )
 
 
 async def retry_documents(
@@ -876,7 +1073,7 @@ async def search_bases(
 
 async def search(user: TokenPayload, kb_id: str, req: KBSearchRequest) -> KBSearchResponse:
     ensure_enabled()
-    access = await require_kb_access(user.sub, kb_id)
+    access = await require_kb_access(user.sub, kb_id, chat=True)
     started = time.perf_counter()
     results, warnings = await search_bases([access.kb], req)
     return KBSearchResponse(

@@ -30,6 +30,8 @@ from src.kernel.schemas.knowledge_base import (
     DOC_UPLOADED,
     KB_STATUS_ACTIVE,
     KB_STATUS_DELETING,
+    PUBLIC_APPROVED,
+    PUBLIC_PENDING,
     TASK_ACTIVE_STATUSES,
     TASK_CANCELLED,
     TASK_QUEUED,
@@ -45,6 +47,9 @@ MEMBERS_COLLECTION = "kb_members"
 DOCUMENTS_COLLECTION = "kb_documents"
 CHUNKS_COLLECTION = "kb_chunks"
 TASKS_COLLECTION = "kb_tasks"
+NOTIFICATIONS_COLLECTION = "kb_notifications"
+NOTIFICATION_TTL_SECONDS = 90 * 24 * 3600
+PAGE_SIZE_MAX = 100
 
 DOC_LIST_PAGE_SIZE_MAX = 200
 CHUNK_INSERT_BATCH = 500
@@ -101,7 +106,19 @@ class KnowledgeBaseStorage:
     def tasks(self) -> Any:
         return self.db[TASKS_COLLECTION]
 
+    @property
+    def notifications(self) -> Any:
+        return self.db[NOTIFICATIONS_COLLECTION]
+
     async def ensure_indexes(self) -> None:
+        await self.bases.create_index([("visibility", ASCENDING), ("public_status", ASCENDING)])
+        await self.notifications.create_index([("user_id", ASCENDING), ("created_at", DESCENDING)])
+        await self.notifications.create_index([("user_id", ASCENDING), ("read", ASCENDING)])
+        await self.notifications.create_index(
+            [("created_at", ASCENDING)],
+            expireAfterSeconds=NOTIFICATION_TTL_SECONDS,
+            name="kb_notification_ttl",
+        )
         await self.bases.create_index([("owner_id", ASCENDING), ("updated_at", DESCENDING)])
         await self.bases.create_index([("status", ASCENDING)])
         await self.members.create_index([("kb_id", ASCENDING), ("user_id", ASCENDING)], unique=True)
@@ -148,6 +165,16 @@ class KnowledgeBaseStorage:
             return_document=ReturnDocument.AFTER,
         )
 
+    async def transition_public_status(
+        self, kb_id: str, from_statuses: list[str], updates: dict[str, Any]
+    ) -> Optional[dict[str, Any]]:
+        """CAS on ``public_status``; ``None`` when the KB is not in one of ``from_statuses``."""
+        return await self.bases.find_one_and_update(
+            {"_id": kb_id, "status": KB_STATUS_ACTIVE, "public_status": {"$in": from_statuses}},
+            {"$set": {**updates, "updated_at": utc_now()}},
+            return_document=ReturnDocument.AFTER,
+        )
+
     async def lock_embedding_signature(self, kb_id: str, signature: dict[str, Any]) -> bool:
         """Set the KB's embedding signature once; False if one is already present."""
         result = await self.bases.update_one(
@@ -172,6 +199,66 @@ class KnowledgeBaseStorage:
     async def delete_base(self, kb_id: str) -> None:
         await self.bases.delete_one({"_id": kb_id})
 
+    async def owned_base_ids(self, owner_id: str) -> list[str]:
+        docs = await self.bases.find(
+            {"owner_id": owner_id, "status": KB_STATUS_ACTIVE}, {"_id": 1}
+        ).to_list(length=5000)
+        return [str(d["_id"]) for d in docs]
+
+    async def count_owned_bases(self, owner_id: str) -> int:
+        return await self.bases.count_documents({"owner_id": owner_id, "status": KB_STATUS_ACTIVE})
+
+    async def owner_usage(self, owner_id: str) -> dict[str, int]:
+        """Document totals across the KBs a user owns (editors' uploads count toward the owner)."""
+        kb_ids = await self.owned_base_ids(owner_id)
+        usage = {"kb_count": len(kb_ids), "doc_count": 0, "max_docs_in_kb": 0, "storage_bytes": 0}
+        if not kb_ids:
+            return usage
+        pipeline = [
+            {"$match": {"kb_id": {"$in": kb_ids}}},
+            {"$group": {"_id": "$kb_id", "docs": {"$sum": 1}, "bytes": {"$sum": "$size"}}},
+        ]
+        async for row in self.documents.aggregate(pipeline):
+            docs = int(row.get("docs") or 0)
+            usage["doc_count"] += docs
+            usage["max_docs_in_kb"] = max(usage["max_docs_in_kb"], docs)
+            usage["storage_bytes"] += int(row.get("bytes") or 0)
+        return usage
+
+    async def count_kb_documents(self, kb_id: str) -> int:
+        return await self.documents.count_documents({"kb_id": kb_id})
+
+    async def list_public_bases(
+        self,
+        *,
+        statuses: list[str] | None = None,
+        query: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Public KBs (default: approved only), newest publication first."""
+        page_size = min(max(int(page_size), 1), PAGE_SIZE_MAX)
+        page = max(int(page), 1)
+        flt: dict[str, Any] = {
+            "status": KB_STATUS_ACTIVE,
+            "public_status": {"$in": statuses or [PUBLIC_APPROVED]},
+        }
+        if query:
+            safe = re.escape(query.strip())
+            flt["$or"] = [
+                {"name": {"$regex": safe, "$options": "i"}},
+                {"description": {"$regex": safe, "$options": "i"}},
+                {"owner_username": {"$regex": safe, "$options": "i"}},
+            ]
+        total = await self.bases.count_documents(flt)
+        cursor = self.bases.find(flt).sort("published_at", DESCENDING)
+        items = await cursor.skip((page - 1) * page_size).limit(page_size).to_list(length=page_size)
+        return items, total
+
+    async def list_pending_bases(self) -> list[dict[str, Any]]:
+        cursor = self.bases.find({"status": KB_STATUS_ACTIVE, "public_status": PUBLIC_PENDING})
+        return await cursor.to_list(length=1000)
+
     # ── members ─────────────────────────────────────────────
 
     async def insert_member(self, doc: dict[str, Any]) -> None:
@@ -180,14 +267,52 @@ class KnowledgeBaseStorage:
     async def get_member(self, kb_id: str, user_id: str) -> Optional[dict[str, Any]]:
         return await self.members.find_one({"kb_id": kb_id, "user_id": user_id})
 
-    async def list_member_user_ids(self, kb_id: str) -> list[str]:
-        docs = await self.members.find({"kb_id": kb_id}, {"user_id": 1}).to_list(length=1000)
+    async def list_member_user_ids(self, kb_id: str, roles: list[str] | None = None) -> list[str]:
+        flt: dict[str, Any] = {"kb_id": kb_id}
+        if roles is not None:
+            flt["role"] = {"$in": roles}
+        docs = await self.members.find(flt, {"user_id": 1}).to_list(length=1000)
         return [str(d["user_id"]) for d in docs]
 
     async def list_member_kb_ids(self, user_id: str, roles: list[str]) -> list[str]:
         cursor = self.members.find({"user_id": user_id, "role": {"$in": roles}}, {"kb_id": 1})
         docs = await cursor.to_list(length=5000)
         return [str(d["kb_id"]) for d in docs]
+
+    async def list_members(
+        self, kb_id: str, roles: list[str] | None = None
+    ) -> list[dict[str, Any]]:
+        flt: dict[str, Any] = {"kb_id": kb_id}
+        if roles:
+            flt["role"] = {"$in": roles}
+        cursor = self.members.find(flt).sort("created_at", ASCENDING)
+        return await cursor.to_list(length=1000)
+
+    async def list_memberships(self, user_id: str, roles: list[str]) -> list[dict[str, Any]]:
+        cursor = self.members.find({"user_id": user_id, "role": {"$in": roles}})
+        return await cursor.to_list(length=5000)
+
+    async def count_members(self, kb_id: str, role: str) -> int:
+        return await self.members.count_documents({"kb_id": kb_id, "role": role})
+
+    async def set_member_role(
+        self, kb_id: str, user_id: str, role: str, from_roles: list[str]
+    ) -> Optional[dict[str, Any]]:
+        return await self.members.find_one_and_update(
+            {"kb_id": kb_id, "user_id": user_id, "role": {"$in": from_roles}},
+            {"$set": {"role": role}},
+            return_document=ReturnDocument.AFTER,
+        )
+
+    async def delete_member(self, kb_id: str, user_id: str, roles: list[str]) -> bool:
+        result = await self.members.delete_one(
+            {"kb_id": kb_id, "user_id": user_id, "role": {"$in": roles}}
+        )
+        return result.deleted_count > 0
+
+    async def delete_members_by_role(self, kb_id: str, role: str) -> int:
+        result = await self.members.delete_many({"kb_id": kb_id, "role": role})
+        return int(result.deleted_count)
 
     async def delete_members_by_kb(self, kb_id: str) -> None:
         await self.members.delete_many({"kb_id": kb_id})
@@ -703,6 +828,39 @@ class KnowledgeBaseStorage:
 
     async def delete_tasks_by_kb(self, kb_id: str) -> None:
         await self.tasks.delete_many({"kb_id": kb_id})
+
+    # ── notifications ───────────────────────────────────────
+
+    async def insert_notification(self, doc: dict[str, Any]) -> None:
+        await self.notifications.insert_one(doc)
+
+    async def list_notifications(
+        self, user_id: str, *, unread_only: bool = False, page: int = 1, page_size: int = 20
+    ) -> tuple[list[dict[str, Any]], int]:
+        page_size = min(max(int(page_size), 1), PAGE_SIZE_MAX)
+        page = max(int(page), 1)
+        flt: dict[str, Any] = {"user_id": user_id}
+        if unread_only:
+            flt["read"] = False
+        total = await self.notifications.count_documents(flt)
+        cursor = self.notifications.find(flt).sort("created_at", DESCENDING)
+        items = await cursor.skip((page - 1) * page_size).limit(page_size).to_list(length=page_size)
+        return items, total
+
+    async def count_unread_notifications(self, user_id: str) -> int:
+        return await self.notifications.count_documents({"user_id": user_id, "read": False})
+
+    async def mark_notification_read(self, user_id: str, notification_id: str) -> bool:
+        result = await self.notifications.update_one(
+            {"_id": notification_id, "user_id": user_id}, {"$set": {"read": True}}
+        )
+        return result.matched_count > 0
+
+    async def mark_all_notifications_read(self, user_id: str) -> int:
+        result = await self.notifications.update_many(
+            {"user_id": user_id, "read": False}, {"$set": {"read": True}}
+        )
+        return int(result.modified_count)
 
 
 _storage: Optional[KnowledgeBaseStorage] = None

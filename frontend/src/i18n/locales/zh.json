@@ -1207,7 +1207,8 @@
       "favorite": "添加到收藏",
       "goToSession": "在会话中定位",
       "openInNewTab": "在新标签页打开",
-      "unfavorite": "取消收藏"
+      "unfavorite": "取消收藏",
+      "importToKnowledge": "转到知识库"
     },
     "empty": "还没有展示过的文件",
     "favorites": "我的收藏",
@@ -1326,7 +1327,9 @@
       "mine": "我的知识库",
       "documents": "文档",
       "search": "检索测试",
-      "settings": "设置"
+      "settings": "设置",
+      "shared": "共享知识库",
+      "plaza": "知识广场"
     },
     "card": {
       "docCount": "{{count}} 个文档",
@@ -1335,7 +1338,8 @@
       "failedCount": "{{count}} 个失败",
       "indexOutdated": "需重建索引",
       "noDescription": "暂无描述",
-      "more": "更多操作"
+      "more": "更多操作",
+      "owner": "所有者：{{name}}"
     },
     "dialog": {
       "createTitle": "新建知识库",
@@ -1438,7 +1442,9 @@
         "extension": "不支持的文件类型：{{ext}}",
         "empty": "文件为空",
         "size": "文件超过 {{max}} MB 限制"
-      }
+      },
+      "tabUpload": "本地上传",
+      "tabLibrary": "从文件库导入"
     },
     "doc": {
       "tabContent": "解析内容",
@@ -1495,7 +1501,143 @@
     },
     "errors": {
       "disabled": "知识库功能未开启",
-      "notFound": "知识库不存在"
+      "notFound": "知识库不存在",
+      "quotaCount": "知识库数量已达上限，请删除不用的知识库或联系管理员",
+      "quotaDocs": "该知识库的文档数量已达上限",
+      "quotaStorage": "知识库存储空间不足，请删除文档或联系管理员",
+      "fileTooLarge": "文件超过知识库单文件大小上限",
+      "publicDisabled": "管理员已关闭知识库公开功能"
+    },
+    "sharedFilter": {
+      "all": "全部",
+      "shared": "分享给我",
+      "subscribed": "我的订阅"
+    },
+    "emptyShared": "还没有共享或订阅的知识库",
+    "emptyPlaza": "知识广场暂无内容",
+    "emptyOtherDesc": "有人分享或公开知识库后会出现在这里。",
+    "role": {
+      "owner": "所有者",
+      "editor": "编辑者",
+      "viewer": "查看者",
+      "subscriber": "订阅者",
+      "visitor": "访客"
+    },
+    "publicStatus": {
+      "none": "未公开",
+      "pending": "审核中",
+      "approved": "已公开",
+      "rejected": "已驳回",
+      "delisted": "已下架"
+    },
+    "quota": {
+      "count": "知识库 {{used}}/{{max}}",
+      "storage": "存储 {{used}} / {{max}}",
+      "docsPerKb": "单库最多 {{max}} 个文档",
+      "countReached": "知识库数量已达上限"
+    },
+    "subscribe": {
+      "subscribe": "订阅",
+      "unsubscribe": "取消订阅",
+      "subscribed": "已订阅",
+      "unsubscribed": "已取消订阅"
+    },
+    "share": {
+      "title": "分享知识库",
+      "button": "分享",
+      "addUsers": "添加用户",
+      "pastePlaceholder": "粘贴用户名，可用逗号、空格或换行分隔",
+      "add": "添加到列表",
+      "count": "已添加 {{count}}/{{max}}",
+      "tooMany": "一次最多分享给 {{max}} 位用户",
+      "unresolved": "未找到用户：{{list}}",
+      "resolvedCount": "已识别 {{count}} 位用户",
+      "resolve": "识别用户",
+      "confirm": "确认分享",
+      "shared": "已分享给 {{count}} 位用户",
+      "members": "已分享的成员",
+      "noMembers": "还没有分享给任何人",
+      "remove": "移除成员",
+      "removeTitle": "移除成员",
+      "removeConfirm": "确定移除“{{name}}”吗？对方将无法再访问这个知识库。",
+      "leave": "退出共享",
+      "leaveTitle": "退出共享",
+      "leaveConfirm": "确定退出“{{name}}”吗？退出后将无法再访问这个知识库。",
+      "left": "已退出共享"
+    },
+    "publish": {
+      "title": "公开到知识广场",
+      "hint": "公开后，其他用户可以在知识广场查看并订阅这个知识库。部分站点需要管理员审核。",
+      "reason": "原因：{{reason}}",
+      "publish": "发布",
+      "republish": "重新发布",
+      "unpublish": "取消公开",
+      "unpublishTitle": "取消公开",
+      "unpublishConfirm": "取消公开后，所有订阅者会失去访问权限，订阅关系也会被删除。确定继续吗？",
+      "submitted": "已提交审核",
+      "published": "已发布到知识广场",
+      "unpublished": "已取消公开"
+    },
+    "notifications": {
+      "title": "知识库通知",
+      "markAllRead": "全部已读",
+      "empty": "暂无通知",
+      "reason": "原因：{{reason}}",
+      "unreadDot": "有未读知识库通知",
+      "type": {
+        "kb_shared": "{{actor}} 将知识库“{{name}}”分享给了你",
+        "kb_role_changed": "你在知识库“{{name}}”中的角色已变更",
+        "kb_removed": "你已被移出知识库“{{name}}”",
+        "kb_member_left": "{{actor}} 退出了知识库“{{name}}”",
+        "kb_subscribed": "{{actor}} 订阅了你的知识库“{{name}}”",
+        "kb_publish_pending": "知识库“{{name}}”正在等待公开审核",
+        "kb_approved": "知识库“{{name}}”已通过公开审核",
+        "kb_rejected": "知识库“{{name}}”的公开申请被驳回",
+        "kb_delisted": "知识库“{{name}}”已被管理员下架",
+        "kb_unpublished": "知识库“{{name}}”已取消公开",
+        "generic": "知识库“{{name}}”有新动态"
+      }
+    },
+    "import": {
+      "dialogTitle": "转到知识库",
+      "fileLabel": "文件：{{name}}",
+      "noWritable": "没有可写入的知识库，请先新建一个。",
+      "confirm": "导入",
+      "result": "已导入 {{imported}} 个，重复 {{duplicates}} 个，失败 {{failed}} 个",
+      "searchPlaceholder": "搜索文件库中的文件",
+      "empty": "文件库中没有可导入的文件",
+      "tooMany": "一次最多导入 {{max}} 个文件",
+      "selected": "已选 {{count}}/{{max}}",
+      "action": "导入所选文件"
+    },
+    "admin": {
+      "title": "知识库管理",
+      "subtitle": "审核用户公开的知识库，或下架已公开的知识库",
+      "searchPlaceholder": "搜索知识库或所有者",
+      "status": {
+        "pending": "待审核",
+        "approved": "已通过",
+        "rejected": "已驳回",
+        "delisted": "已下架"
+      },
+      "empty": "没有符合条件的知识库",
+      "colName": "知识库",
+      "colOwner": "所有者",
+      "colDocs": "文档",
+      "colPublished": "发布时间",
+      "colStatus": "状态",
+      "colReason": "审核原因",
+      "colDescription": "描述",
+      "view": "查看",
+      "approve": "通过",
+      "reject": "驳回",
+      "delist": "下架",
+      "approved": "已通过",
+      "rejectedToast": "已驳回",
+      "delistedToast": "已下架",
+      "rejectTitle": "驳回公开申请",
+      "delistTitle": "下架知识库",
+      "reasonLabel": "原因（必填，会通知所有者）"
     }
   },
   "landing": {
@@ -1855,7 +1997,8 @@
     "workspace": "专家 · 技能 · 连接器",
     "scheduledTasks": "定时任务",
     "scheduledTasksAdmin": "定时任务管理",
-    "knowledge": "知识库"
+    "knowledge": "知识库",
+    "knowledgeAdmin": "知识库管理"
   },
   "navDesc": {
     "agents": "配置和管理 AI 助手",
@@ -2235,7 +2378,13 @@
     "validation": {
       "enterName": "请输入角色名称",
       "selectPermission": "请至少选择一个权限"
-    }
+    },
+    "kbLimitsTitle": "知识库限额",
+    "kbLimitsHint": "留空表示使用系统全局默认值；多个角色取最宽松的限额。",
+    "maxKbCount": "每用户知识库数量",
+    "maxKbDocs": "单个知识库文档数",
+    "kbStorageQuotaMb": "知识库存储配额（MB）",
+    "maxKbFileSizeMb": "知识库单文件大小上限（MB）"
   },
   "selectionActions": {
     "ask": "提问",
@@ -2328,6 +2477,10 @@
     "knowledge": {
       "title": "知识库",
       "description": "创建个人知识库，上传文档后让昆小智基于你的资料检索和回答问题"
+    },
+    "knowledgeAdmin": {
+      "title": "知识库管理",
+      "description": "审核和管理用户公开的知识库"
     }
   },
   "openSandboxAdmin": {
@@ -2626,7 +2779,12 @@
     "KB_RERANK_MODEL_ID": "知识库检索重排序使用的模型卡片 ID（kind=rerank）；留空则不重排序。",
     "KB_WORKER_CONCURRENCY": "知识库后台处理任务的并发数（1-16），修改后需重启服务生效。",
     "KB_MAX_FILE_MB": "知识库单个上传文件的大小上限（MB）。",
-    "KB_EMBEDDING_BATCH_SIZE": "知识库向量化每批发送的文本条数（1-256）。"
+    "KB_EMBEDDING_BATCH_SIZE": "知识库向量化每批发送的文本条数（1-256）。",
+    "KB_ALLOW_PUBLIC": "允许用户把知识库公开到知识广场；关闭后广场为空，订阅者和访客无法访问公开库",
+    "KB_PUBLIC_REQUIRES_REVIEW": "用户公开知识库前是否需要管理员审核",
+    "KB_DEFAULT_MAX_COUNT": "每个用户默认可创建的知识库数量上限（角色可单独覆盖）",
+    "KB_DEFAULT_MAX_DOCS_PER_KB": "单个知识库默认可容纳的文档数量上限（角色可单独覆盖）",
+    "KB_DEFAULT_STORAGE_QUOTA_MB": "每个用户知识库默认存储配额（MB，角色可单独覆盖）"
   },
   "settings": {
     "defaultModel": "默认模型",
@@ -3342,7 +3500,6 @@
       "unavailable": "专家已不可用",
       "unavailableHint": "所选专家已被删除、下架或你已无权使用，请编辑任务更换专家"
     },
-
     "title": "定时任务",
     "subtitle": "设定好时间，昆小智会自动帮你完成，并把结果通知你",
     "create": "新建定时任务",

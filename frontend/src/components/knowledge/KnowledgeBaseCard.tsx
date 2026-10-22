@@ -1,33 +1,47 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { Loader2, LibraryBig, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import {
+  Loader2,
+  LibraryBig,
+  LogOut,
+  MoreHorizontal,
+  Pencil,
+  Share2,
+  Trash2,
+} from "lucide-react";
 import type { KnowledgeBase } from "../../services/api/knowledgeBase";
 import { formatFileSize } from "../documents/utils/fileSize";
 import { formatTimeAgo } from "../../utils/datetime";
-import { STATUS_TONE_CLASSES, isKbProcessing } from "./knowledgeUtils";
+import { OUTLINE_BTN } from "./knowledgeStyles";
+import { KnowledgePublicStatusPill } from "./KnowledgePublicStatusPill";
+import { STATUS_TONE_CLASSES, getKbCapabilities, isKbProcessing } from "./knowledgeUtils";
 
 interface KnowledgeBaseCardProps {
   kb: KnowledgeBase;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onShare?: () => void;
+  onLeave?: () => void;
+  onSubscribe?: () => void;
+  onUnsubscribe?: () => void;
+  subscribeBusy?: boolean;
+}
+
+interface CardMenuItem {
+  key: string;
+  label: string;
+  icon: typeof Pencil;
+  danger?: boolean;
+  onSelect: () => void;
 }
 
 function Dot() {
   return <span className="inline-block h-1 w-1 rounded-full bg-[var(--theme-border)]" />;
 }
 
-function CardMenu({
-  onEdit,
-  onDelete,
-  label,
-}: {
-  onEdit: () => void;
-  onDelete: () => void;
-  label: string;
-}) {
-  const { t } = useTranslation();
+function CardMenu({ items, label }: { items: CardMenuItem[]; label: string }) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -99,30 +113,23 @@ function CardMenu({
             onClick={(e) => e.stopPropagation()}
             className="fixed z-[999] w-36 overflow-hidden rounded-xl border border-stone-200 bg-white py-1 shadow-lg dark:border-stone-700 dark:bg-stone-900"
           >
-            <button
-              type="button"
-              role="menuitem"
-              className={`${itemCls} text-stone-700 dark:text-stone-200`}
-              onClick={() => {
-                setPos(null);
-                onEdit();
-              }}
-            >
-              <Pencil size={14} />
-              {t("common.edit", "编辑")}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className={`${itemCls} text-red-600 dark:text-red-400`}
-              onClick={() => {
-                setPos(null);
-                onDelete();
-              }}
-            >
-              <Trash2 size={14} />
-              {t("common.delete", "删除")}
-            </button>
+            {items.map(({ key, label: itemLabel, icon: Icon, danger, onSelect }) => (
+              <button
+                key={key}
+                type="button"
+                role="menuitem"
+                className={`${itemCls} ${
+                  danger ? "text-red-600 dark:text-red-400" : "text-stone-700 dark:text-stone-200"
+                }`}
+                onClick={() => {
+                  setPos(null);
+                  onSelect();
+                }}
+              >
+                <Icon size={14} />
+                {itemLabel}
+              </button>
+            ))}
           </div>,
           document.body,
         )}
@@ -130,10 +137,50 @@ function CardMenu({
   );
 }
 
-export function KnowledgeBaseCard({ kb, onOpen, onEdit, onDelete }: KnowledgeBaseCardProps) {
+export function KnowledgeBaseCard({
+  kb,
+  onOpen,
+  onEdit,
+  onDelete,
+  onShare,
+  onLeave,
+  onSubscribe,
+  onUnsubscribe,
+  subscribeBusy = false,
+}: KnowledgeBaseCardProps) {
   const { t } = useTranslation();
   const processing = isKbProcessing(kb);
   const { stats } = kb;
+  const caps = getKbCapabilities(kb.my_role, kb);
+  const isOwner = kb.my_role === "owner";
+
+  const menuItems: CardMenuItem[] = [];
+  if (caps.canManageSettings) {
+    menuItems.push({ key: "edit", label: t("common.edit", "编辑"), icon: Pencil, onSelect: onEdit });
+    if (onShare) {
+      menuItems.push({
+        key: "share",
+        label: t("knowledge.share.button", "分享"),
+        icon: Share2,
+        onSelect: onShare,
+      });
+    }
+    menuItems.push({
+      key: "delete",
+      label: t("common.delete", "删除"),
+      icon: Trash2,
+      danger: true,
+      onSelect: onDelete,
+    });
+  } else if (caps.canLeave && onLeave) {
+    menuItems.push({
+      key: "leave",
+      label: t("knowledge.share.leave", "退出共享"),
+      icon: LogOut,
+      danger: true,
+      onSelect: onLeave,
+    });
+  }
 
   return (
     <div
@@ -186,11 +233,9 @@ export function KnowledgeBaseCard({ kb, onOpen, onEdit, onDelete }: KnowledgeBas
               {t("knowledge.card.processing", "处理中")}
             </span>
           )}
-          <CardMenu
-            onEdit={onEdit}
-            onDelete={onDelete}
-            label={t("knowledge.card.more", "更多操作")}
-          />
+          {menuItems.length > 0 && (
+            <CardMenu items={menuItems} label={t("knowledge.card.more", "更多操作")} />
+          )}
         </div>
 
         <p className="mt-3 line-clamp-2 min-h-[2.5rem] text-[13px] leading-relaxed text-[var(--theme-text-secondary)]">
@@ -202,6 +247,12 @@ export function KnowledgeBaseCard({ kb, onOpen, onEdit, onDelete }: KnowledgeBas
             <span className="scb__category-tag">
               {t(`knowledge.preset.${kb.chunk_preset}.name`, kb.chunk_preset)}
             </span>
+            {!isOwner && (
+              <span className="scb__status-pill scb__status-pill--inactive">
+                {t(`knowledge.role.${kb.my_role}`, kb.my_role)}
+              </span>
+            )}
+            <KnowledgePublicStatusPill status={kb.public_status} />
             {stats.failed_count > 0 && (
               <span className="scb__status-pill scb__status-pill--danger">
                 {t("knowledge.card.failedCount", {
@@ -220,6 +271,33 @@ export function KnowledgeBaseCard({ kb, onOpen, onEdit, onDelete }: KnowledgeBas
             {formatTimeAgo(t, kb.updated_at)}
           </span>
         </div>
+
+        {!isOwner && (
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <span className="min-w-0 truncate text-[11px] text-[var(--theme-text-tertiary)]">
+              {t("knowledge.card.owner", {
+                name: kb.owner_username,
+                defaultValue: "所有者：{{name}}",
+              })}
+            </span>
+            {(caps.canSubscribe && onSubscribe) || (caps.canUnsubscribe && onUnsubscribe) ? (
+              <button
+                type="button"
+                disabled={subscribeBusy}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (caps.canSubscribe) onSubscribe?.();
+                  else onUnsubscribe?.();
+                }}
+                className={`${OUTLINE_BTN} !px-3 !py-1 text-xs`}
+              >
+                {caps.canSubscribe
+                  ? t("knowledge.subscribe.subscribe", "订阅")
+                  : t("knowledge.subscribe.unsubscribe", "取消订阅")}
+              </button>
+            ) : null}
+          </div>
+        )}
       </div>
     </div>
   );

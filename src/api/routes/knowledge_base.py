@@ -9,13 +9,15 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Res
 from fastapi.responses import StreamingResponse
 
 from src.api.deps import get_current_user_required
-from src.infra.knowledge_base import service
+from src.infra.knowledge_base import notifications, quota, service, sharing
 from src.infra.knowledge_base.errors import (
     KBBusyError,
+    KBConflictError,
     KBDisabledError,
     KBDocumentNotFoundError,
     KBForbiddenError,
     KBNotFoundError,
+    KBQuotaError,
     KBTaskNotFoundError,
     KBValidationError,
 )
@@ -30,14 +32,28 @@ from src.kernel.schemas.knowledge_base import (
     KBDocIdsRequest,
     KBDocument,
     KBDocumentListResponse,
+    KBImportableFileListResponse,
+    KBImportRequest,
+    KBImportResponse,
     KBListResponse,
+    KBMember,
+    KBMemberAdd,
+    KBMemberAddResponse,
+    KBMemberListResponse,
+    KBMemberUpdate,
+    KBNotificationListResponse,
+    KBPlazaResponse,
+    KBQuotaResponse,
     KBSearchRequest,
     KBSearchResponse,
     KBTask,
     KBTaskEnqueueResponse,
     KBTaskListResponse,
+    KBUnreadCount,
     KBUpdate,
     KBUploadResponse,
+    KBUserResolveRequest,
+    KBUserResolveResponse,
     KnowledgeBase,
 )
 from src.kernel.schemas.user import TokenPayload
@@ -61,6 +77,13 @@ def _map_errors() -> Iterator[None]:
         ) from exc
     except (KBNotFoundError, KBDocumentNotFoundError, KBTaskNotFoundError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except KBQuotaError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": exc.code, "message": str(exc), "limit": exc.limit},
+        ) from exc
+    except KBConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except KBValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except KBForbiddenError as exc:
@@ -103,6 +126,77 @@ async def create_kb(
 ) -> KnowledgeBase:
     with _map_errors():
         return await service.create_kb(user, body)
+
+
+@router.get("/quota", response_model=KBQuotaResponse)
+async def get_quota(user: TokenPayload = Depends(get_current_user_required)) -> KBQuotaResponse:
+    with _map_errors():
+        service.ensure_enabled()
+        return await quota.get_quota(user)
+
+
+@router.post("/users/resolve", response_model=KBUserResolveResponse)
+async def resolve_users(
+    body: KBUserResolveRequest, _: TokenPayload = Depends(get_current_user_required)
+) -> KBUserResolveResponse:
+    with _map_errors():
+        return await sharing.resolve_users(body.usernames)
+
+
+@router.get("/plaza", response_model=KBPlazaResponse)
+async def list_plaza(
+    q: str | None = Query(None),
+    page: int = Query(1),
+    page_size: int = Query(20),
+    user: TokenPayload = Depends(get_current_user_required),
+) -> KBPlazaResponse:
+    with _map_errors():
+        return await sharing.list_plaza(user, q=q, page=page, page_size=page_size)
+
+
+@router.get("/notifications", response_model=KBNotificationListResponse)
+async def list_notifications(
+    unread_only: bool = Query(False),
+    page: int = Query(1),
+    page_size: int = Query(20),
+    user: TokenPayload = Depends(get_current_user_required),
+) -> KBNotificationListResponse:
+    with _map_errors():
+        return await notifications.list_notifications(
+            user, unread_only=unread_only, page=page, page_size=page_size
+        )
+
+
+@router.get("/notifications/unread-count", response_model=KBUnreadCount)
+async def unread_count(user: TokenPayload = Depends(get_current_user_required)) -> KBUnreadCount:
+    with _map_errors():
+        return await notifications.unread_count(user)
+
+
+@router.post("/notifications/read-all")
+async def mark_all_read(user: TokenPayload = Depends(get_current_user_required)) -> dict:
+    with _map_errors():
+        return {"updated": await notifications.mark_all_read(user)}
+
+
+@router.post("/notifications/{notification_id}/read", status_code=204)
+async def mark_notification_read(
+    notification_id: str, user: TokenPayload = Depends(get_current_user_required)
+) -> Response:
+    with _map_errors():
+        await notifications.mark_read(user, notification_id)
+    return Response(status_code=204)
+
+
+@router.get("/importable-files", response_model=KBImportableFileListResponse)
+async def list_importable_files(
+    q: str | None = Query(None),
+    page: int = Query(1),
+    page_size: int = Query(20),
+    user: TokenPayload = Depends(get_current_user_required),
+) -> KBImportableFileListResponse:
+    with _map_errors():
+        return await service.list_importable_files(user, q=q, page=page, page_size=page_size)
 
 
 @router.get("/{kb_id}", response_model=KnowledgeBase)
@@ -255,3 +349,80 @@ async def cancel_task(
 async def reindex(kb_id: str, user: TokenPayload = Depends(get_current_user_required)):
     with _map_errors():
         return await service.reindex_kb(user, kb_id)
+
+
+@router.post("/{kb_id}/documents/import", response_model=KBImportResponse)
+async def import_documents(
+    kb_id: str, body: KBImportRequest, user: TokenPayload = Depends(get_current_user_required)
+) -> KBImportResponse:
+    with _map_errors():
+        return await service.import_files(user, kb_id, body.file_ids)
+
+
+@router.get("/{kb_id}/members", response_model=KBMemberListResponse)
+async def list_members(
+    kb_id: str, user: TokenPayload = Depends(get_current_user_required)
+) -> KBMemberListResponse:
+    with _map_errors():
+        return await sharing.list_members(user, kb_id)
+
+
+@router.post("/{kb_id}/members", response_model=KBMemberAddResponse)
+async def add_members(
+    kb_id: str, body: KBMemberAdd, user: TokenPayload = Depends(get_current_user_required)
+) -> KBMemberAddResponse:
+    with _map_errors():
+        return await sharing.add_members(user, kb_id, body)
+
+
+@router.patch("/{kb_id}/members/{member_id}", response_model=KBMember)
+async def update_member(
+    kb_id: str,
+    member_id: str,
+    body: KBMemberUpdate,
+    user: TokenPayload = Depends(get_current_user_required),
+) -> KBMember:
+    with _map_errors():
+        return await sharing.update_member(user, kb_id, member_id, body.role)
+
+
+@router.delete("/{kb_id}/members/{member_id}", status_code=204)
+async def remove_member(
+    kb_id: str, member_id: str, user: TokenPayload = Depends(get_current_user_required)
+) -> Response:
+    with _map_errors():
+        await sharing.remove_member(user, kb_id, member_id)
+    return Response(status_code=204)
+
+
+@router.post("/{kb_id}/publish", response_model=KnowledgeBase)
+async def publish_kb(
+    kb_id: str, user: TokenPayload = Depends(get_current_user_required)
+) -> KnowledgeBase:
+    with _map_errors():
+        return await sharing.publish(user, kb_id)
+
+
+@router.post("/{kb_id}/unpublish", response_model=KnowledgeBase)
+async def unpublish_kb(
+    kb_id: str, user: TokenPayload = Depends(get_current_user_required)
+) -> KnowledgeBase:
+    with _map_errors():
+        return await sharing.unpublish(user, kb_id)
+
+
+@router.post("/{kb_id}/subscribe", response_model=KnowledgeBase)
+async def subscribe_kb(
+    kb_id: str, user: TokenPayload = Depends(get_current_user_required)
+) -> KnowledgeBase:
+    with _map_errors():
+        return await sharing.subscribe(user, kb_id)
+
+
+@router.delete("/{kb_id}/subscribe", status_code=204)
+async def unsubscribe_kb(
+    kb_id: str, user: TokenPayload = Depends(get_current_user_required)
+) -> Response:
+    with _map_errors():
+        await sharing.unsubscribe(user, kb_id)
+    return Response(status_code=204)

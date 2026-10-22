@@ -42,6 +42,24 @@ export interface KBPresetConfig {
   overlap_percent: number;
 }
 
+export type KBRole = "owner" | "editor" | "viewer" | "subscriber" | "visitor";
+
+export type KBMemberRole = "editor" | "viewer";
+
+export type KBPublicStatus =
+  | "none"
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "delisted";
+
+export type KBListScope =
+  | "mine"
+  | "shared"
+  | "subscribed"
+  | "writable"
+  | "readable";
+
 export interface KBConfig {
   enabled: boolean;
   ready: boolean;
@@ -51,6 +69,10 @@ export interface KBConfig {
   mineru_enabled: boolean;
   max_file_mb: number;
   rerank_available: boolean;
+  /** Mirrors `KB_ALLOW_PUBLIC`. */
+  allow_public: boolean;
+  /** Mirrors `KB_PUBLIC_REQUIRES_REVIEW`. */
+  public_requires_review: boolean;
 }
 
 export interface KBStats {
@@ -82,6 +104,14 @@ export interface KBTask {
   finished_at: string | null;
 }
 
+export interface KBReview {
+  action: string;
+  reviewer_id: string;
+  reviewer_username: string;
+  reason: string;
+  at: string | null;
+}
+
 export interface KnowledgeBase {
   id: string;
   name: string;
@@ -89,7 +119,14 @@ export interface KnowledgeBase {
   icon: string;
   owner_id: string;
   owner_username: string;
-  my_role: "owner";
+  my_role: KBRole;
+  public_status: KBPublicStatus;
+  published_at: string | null;
+  review: KBReview | null;
+  subscriber_count: number;
+  can_write: boolean;
+  can_manage: boolean;
+  can_chat: boolean;
   chunk_preset: KBChunkPreset;
   chunk_token_num: number;
   overlap_percent: number;
@@ -161,6 +198,141 @@ export interface KBDocumentListResponse {
 export interface KBUploadResult {
   document: KBDocument;
   duplicate: boolean;
+}
+
+export interface KBQuotaLimits {
+  kb_max_count: number;
+  kb_max_docs_per_kb: number;
+  kb_storage_quota_mb: number;
+  kb_max_file_size_mb: number;
+}
+
+export interface KBQuotaUsage {
+  kb_count: number;
+  doc_count: number;
+  max_docs_in_kb: number;
+  storage_bytes: number;
+}
+
+export interface KBQuota {
+  limits: KBQuotaLimits;
+  usage: KBQuotaUsage;
+}
+
+export interface KBMember {
+  user_id: string;
+  username: string;
+  role: KBRole;
+  granted_by: string;
+  created_at: string | null;
+}
+
+export interface KBResolvedUser {
+  username: string;
+  exists: boolean;
+  active: boolean;
+}
+
+export interface KBResolveUsersResponse {
+  items: KBResolvedUser[];
+}
+
+export type KBMemberAddErrorReason = "not_found" | "inactive" | "self";
+
+export interface KBShareResult {
+  added: KBMember[];
+  updated: KBMember[];
+  errors: Array<{ username: string; reason: KBMemberAddErrorReason }>;
+}
+
+export type KBNotificationType =
+  | "kb_shared"
+  | "kb_role_changed"
+  | "kb_removed"
+  | "kb_member_left"
+  | "kb_subscribed"
+  | "kb_publish_pending"
+  | "kb_approved"
+  | "kb_rejected"
+  | "kb_delisted"
+  | "kb_unpublished"
+  | (string & {});
+
+export interface KBNotification {
+  id: string;
+  type: KBNotificationType;
+  kb_id: string;
+  kb_name: string;
+  actor_username: string;
+  message: string;
+  read: boolean;
+  created_at: string | null;
+}
+
+export interface KBNotificationListResponse {
+  items: KBNotification[];
+  total: number;
+  unread: number;
+  page: number;
+  page_size: number;
+}
+
+export interface KBPageParams {
+  q?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export interface KBPagedKnowledgeBases {
+  items: KnowledgeBase[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface KBImportableFile {
+  id: string;
+  file_name: string;
+  file_type: string;
+  mime_type: string;
+  file_size: number;
+  created_at: string | null;
+}
+
+export interface KBImportableFilesResponse {
+  items: KBImportableFile[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export type KBImportStatus = "created" | "duplicate" | "skipped" | "failed";
+
+export interface KBImportItemResult {
+  file_id: string;
+  status: KBImportStatus;
+  code: string | null;
+  message: string | null;
+  document: KBDocument | null;
+}
+
+export interface KBImportResult {
+  results: KBImportItemResult[];
+  created: number;
+  duplicate: number;
+  skipped: number;
+  failed: number;
+}
+
+export type KBAdminStatus = "pending" | "approved" | "rejected" | "delisted";
+
+export type KBAdminItem = KnowledgeBase;
+
+export interface KBAdminListResponse {
+  items: KBAdminItem[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 export interface KBTaskEnqueueResult {
@@ -393,8 +565,113 @@ export const knowledgeBaseApi = {
     return authFetch<KBConfig>(`${BASE}/config`);
   },
 
-  list(scope: "mine" = "mine"): Promise<KBListResponse> {
+  list(scope: KBListScope = "mine"): Promise<KBListResponse> {
     return authFetch<KBListResponse>(`${BASE}${buildQuery({ scope })}`);
+  },
+
+  getQuota(): Promise<KBQuota> {
+    return authFetch<KBQuota>(`${BASE}/quota`);
+  },
+
+  resolveUsers(usernames: string[]): Promise<KBResolveUsersResponse> {
+    return authFetch<KBResolveUsersResponse>(`${BASE}/users/resolve`, {
+      method: "POST",
+      body: JSON.stringify({ usernames }),
+    });
+  },
+
+  plaza(params: KBPageParams = {}): Promise<KBPagedKnowledgeBases> {
+    return authFetch<KBPagedKnowledgeBases>(
+      `${BASE}/plaza${buildQuery({ ...params, q: params.q?.trim() })}`,
+    );
+  },
+
+  listNotifications(
+    params: { unread_only?: boolean; page?: number; page_size?: number } = {},
+  ): Promise<KBNotificationListResponse> {
+    return authFetch<KBNotificationListResponse>(
+      `${BASE}/notifications${buildQuery(params)}`,
+    );
+  },
+
+  getUnreadCount(): Promise<{ count: number }> {
+    return authFetch<{ count: number }>(`${BASE}/notifications/unread-count`);
+  },
+
+  async markNotificationsRead(ids: string[] | "all"): Promise<void> {
+    if (ids === "all") {
+      await authFetch<unknown>(`${BASE}/notifications/read-all`, { method: "POST" });
+      return;
+    }
+    await Promise.all(
+      ids.map((id) =>
+        authFetch<void>(`${BASE}/notifications/${encodeURIComponent(id)}/read`, {
+          method: "POST",
+        }),
+      ),
+    );
+  },
+
+  listImportableFiles(params: KBPageParams = {}): Promise<KBImportableFilesResponse> {
+    return authFetch<KBImportableFilesResponse>(
+      `${BASE}/importable-files${buildQuery({ ...params, q: params.q?.trim() })}`,
+    );
+  },
+
+  importFiles(kbId: string, fileIds: string[]): Promise<KBImportResult> {
+    return authFetch<KBImportResult>(kbUrl(kbId, "/documents/import"), {
+      method: "POST",
+      body: JSON.stringify({ file_ids: fileIds }),
+    });
+  },
+
+  listMembers(kbId: string): Promise<{ items: KBMember[] }> {
+    return authFetch<{ items: KBMember[] }>(kbUrl(kbId, "/members"));
+  },
+
+  shareWith(
+    kbId: string,
+    usernames: string[],
+    role: KBMemberRole,
+  ): Promise<KBShareResult> {
+    return authFetch<KBShareResult>(kbUrl(kbId, "/members"), {
+      method: "POST",
+      body: JSON.stringify({ usernames, role }),
+    });
+  },
+
+  updateMemberRole(kbId: string, userId: string, role: KBMemberRole): Promise<KBMember> {
+    return authFetch<KBMember>(kbUrl(kbId, `/members/${encodeURIComponent(userId)}`), {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+    });
+  },
+
+  async removeMember(kbId: string, userId: string): Promise<void> {
+    await authFetch<void>(kbUrl(kbId, `/members/${encodeURIComponent(userId)}`), {
+      method: "DELETE",
+    });
+  },
+
+  /** Leaving a share is removing yourself from the member list. */
+  leave(kbId: string, myUserId: string): Promise<void> {
+    return knowledgeBaseApi.removeMember(kbId, myUserId);
+  },
+
+  subscribe(kbId: string): Promise<KnowledgeBase> {
+    return authFetch<KnowledgeBase>(kbUrl(kbId, "/subscribe"), { method: "POST" });
+  },
+
+  async unsubscribe(kbId: string): Promise<void> {
+    await authFetch<void>(kbUrl(kbId, "/subscribe"), { method: "DELETE" });
+  },
+
+  publish(kbId: string): Promise<KnowledgeBase> {
+    return authFetch<KnowledgeBase>(kbUrl(kbId, "/publish"), { method: "POST" });
+  },
+
+  unpublish(kbId: string): Promise<KnowledgeBase> {
+    return authFetch<KnowledgeBase>(kbUrl(kbId, "/unpublish"), { method: "POST" });
   },
 
   create(data: KBCreate): Promise<KnowledgeBase> {
@@ -527,6 +804,38 @@ export const knowledgeBaseApi = {
   reindex(kbId: string): Promise<KBTaskEnqueueResult> {
     return authFetch<KBTaskEnqueueResult>(kbUrl(kbId, "/reindex"), {
       method: "POST",
+    });
+  },
+};
+
+const ADMIN_BASE = `${API_BASE}/api/admin/kb`;
+
+export const knowledgeBaseAdminApi = {
+  list(
+    params: KBPageParams & { status?: KBAdminStatus },
+  ): Promise<KBAdminListResponse> {
+    return authFetch<KBAdminListResponse>(
+      `${ADMIN_BASE}/public${buildQuery({ ...params, q: params.q?.trim() })}`,
+    );
+  },
+
+  approve(kbId: string): Promise<KBAdminItem> {
+    return authFetch<KBAdminItem>(`${ADMIN_BASE}/${encodeURIComponent(kbId)}/approve`, {
+      method: "POST",
+    });
+  },
+
+  reject(kbId: string, reason: string): Promise<KBAdminItem> {
+    return authFetch<KBAdminItem>(`${ADMIN_BASE}/${encodeURIComponent(kbId)}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  delist(kbId: string, reason: string): Promise<KBAdminItem> {
+    return authFetch<KBAdminItem>(`${ADMIN_BASE}/${encodeURIComponent(kbId)}/delist`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
     });
   },
 };

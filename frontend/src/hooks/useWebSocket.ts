@@ -42,6 +42,12 @@ export interface KbEventNotification {
     status?: string;
     task_id?: string;
     progress?: Record<string, unknown>;
+    /** `kb:notification` payload (mirrors backend `push_notification`). */
+    id?: string;
+    type?: string;
+    kb_name?: string;
+    actor_username?: string;
+    message?: string;
     [key: string]: unknown;
   };
 }

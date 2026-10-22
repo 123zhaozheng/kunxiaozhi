@@ -9,7 +9,7 @@ from tempfile import SpooledTemporaryFile
 from typing import Any
 
 from src.infra.async_utils import run_blocking_io
-from src.infra.knowledge_base.errors import KBValidationError
+from src.infra.knowledge_base.errors import KBQuotaError
 from src.infra.logging import get_logger
 from src.infra.storage.s3.service import get_or_init_storage
 
@@ -38,6 +38,32 @@ class SpooledUpload:
         self.file.close()
 
 
+class IteratorReader:
+    """Adapt an async byte iterator to the ``async read(n)`` shape ``spool_upload`` expects."""
+
+    def __init__(self, chunks: AsyncIterator[bytes]) -> None:
+        self._chunks = chunks
+        self._buffer = bytearray()
+        self._done = False
+
+    async def read(self, size: int = -1) -> bytes:
+        while not self._done and (size < 0 or len(self._buffer) < size):
+            try:
+                self._buffer.extend(await self._chunks.__anext__())
+            except StopAsyncIteration:
+                self._done = True
+        if size < 0:
+            size = len(self._buffer)
+        data = bytes(self._buffer[:size])
+        del self._buffer[:size]
+        return data
+
+    async def aclose(self) -> None:
+        close = getattr(self._chunks, "aclose", None)
+        if close is not None:
+            await close()
+
+
 async def spool_upload(file: Any, *, max_size_bytes: int, max_size_mb: int) -> SpooledUpload:
     """Stream an UploadFile into a bounded spool while hashing and counting bytes."""
     digest = hashlib.sha256()
@@ -50,7 +76,9 @@ async def spool_upload(file: Any, *, max_size_bytes: int, max_size_mb: int) -> S
                 break
             total += len(chunk)
             if total > max_size_bytes:
-                raise KBValidationError(f"文件大小超过 {max_size_mb}MB 限制")
+                raise KBQuotaError(
+                    "kb_file_too_large", f"文件大小超过 {max_size_mb}MB 限制", max_size_mb
+                )
             digest.update(chunk)
             await run_blocking_io(spooled.write, chunk)
         await run_blocking_io(spooled.seek, 0)

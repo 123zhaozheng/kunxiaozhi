@@ -317,6 +317,15 @@ function ScheduledTasksAdminPage() {
   return <AppContent key="scheduledAdmin" activeTab="scheduledAdmin" />;
 }
 
+function KnowledgeAdminPage() {
+  useSEO({
+    title: "seo.knowledgeAdmin.title",
+    description: "seo.knowledgeAdmin.description",
+    path: "/admin/knowledge-bases",
+  });
+  return <AppContent key="knowledgeAdmin" activeTab="knowledgeAdmin" />;
+}
+
 function MemoryPage() {
   useSEO({
     title: "seo.memory.title",
@@ -655,6 +664,19 @@ function App() {
                   toastMessage={t("errors.noPermission")}
                 >
                   <ScheduledTasksAdminPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/knowledge-bases"
+              element={
+                <ProtectedRoute
+                  permissions={[Permission.KNOWLEDGE_BASE_ADMIN]}
+                  redirectTo="/chat"
+                  showToast
+                  toastMessage={t("errors.noPermission")}
+                >
+                  <KnowledgeAdminPage />
                 </ProtectedRoute>
               }
             />

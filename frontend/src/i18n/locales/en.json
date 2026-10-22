@@ -1207,7 +1207,8 @@
       "favorite": "Add to favorites",
       "goToSession": "Go to session",
       "openInNewTab": "Open in new tab",
-      "unfavorite": "Remove from favorites"
+      "unfavorite": "Remove from favorites",
+      "importToKnowledge": "Move to knowledge base"
     },
     "empty": "No files revealed yet",
     "favorites": "Favorites",
@@ -1326,7 +1327,9 @@
       "mine": "My knowledge bases",
       "documents": "Documents",
       "search": "Retrieval test",
-      "settings": "Settings"
+      "settings": "Settings",
+      "shared": "Shared",
+      "plaza": "Plaza"
     },
     "card": {
       "docCount": "{{count}} documents",
@@ -1335,7 +1338,8 @@
       "failedCount": "{{count}} failed",
       "indexOutdated": "Reindex needed",
       "noDescription": "No description",
-      "more": "More actions"
+      "more": "More actions",
+      "owner": "Owner: {{name}}"
     },
     "dialog": {
       "createTitle": "New knowledge base",
@@ -1438,7 +1442,9 @@
         "extension": "Unsupported file type: {{ext}}",
         "empty": "The file is empty",
         "size": "File exceeds the {{max}} MB limit"
-      }
+      },
+      "tabUpload": "Upload",
+      "tabLibrary": "Import from file library"
     },
     "doc": {
       "tabContent": "Parsed content",
@@ -1495,7 +1501,143 @@
     },
     "errors": {
       "disabled": "The knowledge base feature is turned off",
-      "notFound": "Knowledge base not found"
+      "notFound": "Knowledge base not found",
+      "quotaCount": "Knowledge base limit reached. Delete unused ones or contact an admin.",
+      "quotaDocs": "This knowledge base has reached its document limit",
+      "quotaStorage": "Not enough knowledge base storage. Delete documents or contact an admin.",
+      "fileTooLarge": "The file exceeds the knowledge base file size limit",
+      "publicDisabled": "Publishing knowledge bases has been disabled by an admin"
+    },
+    "sharedFilter": {
+      "all": "All",
+      "shared": "Shared with me",
+      "subscribed": "Subscribed"
+    },
+    "emptyShared": "No shared or subscribed knowledge bases yet",
+    "emptyPlaza": "The plaza is empty",
+    "emptyOtherDesc": "Knowledge bases appear here once someone shares or publishes them.",
+    "role": {
+      "owner": "Owner",
+      "editor": "Editor",
+      "viewer": "Viewer",
+      "subscriber": "Subscriber",
+      "visitor": "Visitor"
+    },
+    "publicStatus": {
+      "none": "Private",
+      "pending": "Pending review",
+      "approved": "Public",
+      "rejected": "Rejected",
+      "delisted": "Delisted"
+    },
+    "quota": {
+      "count": "Knowledge bases {{used}}/{{max}}",
+      "storage": "Storage {{used}} / {{max}}",
+      "docsPerKb": "Up to {{max}} documents per base",
+      "countReached": "Knowledge base limit reached"
+    },
+    "subscribe": {
+      "subscribe": "Subscribe",
+      "unsubscribe": "Unsubscribe",
+      "subscribed": "Subscribed",
+      "unsubscribed": "Unsubscribed"
+    },
+    "share": {
+      "title": "Share knowledge base",
+      "button": "Share",
+      "addUsers": "Add users",
+      "pastePlaceholder": "Paste usernames separated by commas, spaces or new lines",
+      "add": "Add to list",
+      "count": "{{count}}/{{max}} added",
+      "tooMany": "You can share with at most {{max}} users at a time",
+      "unresolved": "Users not found: {{list}}",
+      "resolvedCount": "{{count}} users recognized",
+      "resolve": "Check users",
+      "confirm": "Confirm share",
+      "shared": "Shared with {{count}} users",
+      "members": "Members",
+      "noMembers": "Not shared with anyone yet",
+      "remove": "Remove member",
+      "removeTitle": "Remove member",
+      "removeConfirm": "Remove \"{{name}}\"? They will lose access to this knowledge base.",
+      "leave": "Leave share",
+      "leaveTitle": "Leave share",
+      "leaveConfirm": "Leave \"{{name}}\"? You will no longer have access to this knowledge base.",
+      "left": "You left the share"
+    },
+    "publish": {
+      "title": "Publish to the plaza",
+      "hint": "Once public, other users can find and subscribe to this knowledge base in the plaza. Some sites require admin review.",
+      "reason": "Reason: {{reason}}",
+      "publish": "Publish",
+      "republish": "Republish",
+      "unpublish": "Unpublish",
+      "unpublishTitle": "Unpublish",
+      "unpublishConfirm": "After unpublishing, all subscribers lose access and their subscriptions are removed. Continue?",
+      "submitted": "Submitted for review",
+      "published": "Published to the plaza",
+      "unpublished": "Unpublished"
+    },
+    "notifications": {
+      "title": "Knowledge base notifications",
+      "markAllRead": "Mark all read",
+      "empty": "No notifications",
+      "reason": "Reason: {{reason}}",
+      "unreadDot": "Unread knowledge base notifications",
+      "type": {
+        "kb_shared": "{{actor}} shared \"{{name}}\" with you",
+        "kb_role_changed": "Your role in \"{{name}}\" changed",
+        "kb_removed": "You were removed from \"{{name}}\"",
+        "kb_member_left": "{{actor}} left \"{{name}}\"",
+        "kb_subscribed": "{{actor}} subscribed to \"{{name}}\"",
+        "kb_publish_pending": "\"{{name}}\" is waiting for publish review",
+        "kb_approved": "\"{{name}}\" was approved for publishing",
+        "kb_rejected": "The publish request for \"{{name}}\" was rejected",
+        "kb_delisted": "\"{{name}}\" was delisted by an admin",
+        "kb_unpublished": "\"{{name}}\" is no longer public",
+        "generic": "New activity on \"{{name}}\""
+      }
+    },
+    "import": {
+      "dialogTitle": "Move to knowledge base",
+      "fileLabel": "File: {{name}}",
+      "noWritable": "No writable knowledge base. Create one first.",
+      "confirm": "Import",
+      "result": "{{imported}} imported, {{duplicates}} duplicates, {{failed}} failed",
+      "searchPlaceholder": "Search files in your library",
+      "empty": "No importable files in your library",
+      "tooMany": "You can import at most {{max}} files at a time",
+      "selected": "{{count}}/{{max}} selected",
+      "action": "Import selected files"
+    },
+    "admin": {
+      "title": "Knowledge base management",
+      "subtitle": "Review public knowledge bases or delist published ones",
+      "searchPlaceholder": "Search knowledge bases or owners",
+      "status": {
+        "pending": "Pending",
+        "approved": "Approved",
+        "rejected": "Rejected",
+        "delisted": "Delisted"
+      },
+      "empty": "No matching knowledge bases",
+      "colName": "Knowledge base",
+      "colOwner": "Owner",
+      "colDocs": "Documents",
+      "colPublished": "Published",
+      "colStatus": "Status",
+      "colReason": "Review reason",
+      "colDescription": "Description",
+      "view": "View",
+      "approve": "Approve",
+      "reject": "Reject",
+      "delist": "Delist",
+      "approved": "Approved",
+      "rejectedToast": "Rejected",
+      "delistedToast": "Delisted",
+      "rejectTitle": "Reject publish request",
+      "delistTitle": "Delist knowledge base",
+      "reasonLabel": "Reason (required, the owner is notified)"
     }
   },
   "landing": {
@@ -1855,7 +1997,8 @@
     "workspace": "Experts · Skills · Connectors",
     "scheduledTasks": "Scheduled Tasks",
     "scheduledTasksAdmin": "Scheduled Task Admin",
-    "knowledge": "Knowledge Base"
+    "knowledge": "Knowledge Base",
+    "knowledgeAdmin": "Knowledge base management"
   },
   "navDesc": {
     "agents": "Configure and manage AI agents",
@@ -2235,7 +2378,13 @@
     "validation": {
       "enterName": "Please enter role name",
       "selectPermission": "Please select at least one permission"
-    }
+    },
+    "kbLimitsTitle": "Knowledge base limits",
+    "kbLimitsHint": "Leave empty to use the global default. With multiple roles the most generous limit applies.",
+    "maxKbCount": "Knowledge bases per user",
+    "maxKbDocs": "Documents per knowledge base",
+    "kbStorageQuotaMb": "Knowledge base storage quota (MB)",
+    "maxKbFileSizeMb": "Knowledge base max file size (MB)"
   },
   "selectionActions": {
     "ask": "Ask",
@@ -2328,6 +2477,10 @@
     "knowledge": {
       "title": "Knowledge Base",
       "description": "Create personal knowledge bases and let Kunxiaozhi search and answer from your uploaded documents"
+    },
+    "knowledgeAdmin": {
+      "title": "Knowledge base management",
+      "description": "Review and manage public knowledge bases"
     }
   },
   "openSandboxAdmin": {
@@ -2626,7 +2779,12 @@
     "KB_RERANK_MODEL_ID": "Model card ID used to rerank knowledge base search results (kind=rerank). Leave empty to disable reranking.",
     "KB_WORKER_CONCURRENCY": "Concurrency of knowledge base background processing (1-16). Requires a service restart to take effect.",
     "KB_MAX_FILE_MB": "Maximum size (MB) of a single file uploaded to a knowledge base.",
-    "KB_EMBEDDING_BATCH_SIZE": "Number of text chunks sent per embedding request when indexing a knowledge base (1-256)."
+    "KB_EMBEDDING_BATCH_SIZE": "Number of text chunks sent per embedding request when indexing a knowledge base (1-256).",
+    "KB_ALLOW_PUBLIC": "Allow users to publish knowledge bases to the plaza. When off, the plaza is empty and subscribers and visitors lose access.",
+    "KB_PUBLIC_REQUIRES_REVIEW": "Whether publishing a knowledge base requires admin review",
+    "KB_DEFAULT_MAX_COUNT": "Default maximum number of knowledge bases per user (roles can override)",
+    "KB_DEFAULT_MAX_DOCS_PER_KB": "Default maximum number of documents per knowledge base (roles can override)",
+    "KB_DEFAULT_STORAGE_QUOTA_MB": "Default knowledge base storage quota per user in MB (roles can override)"
   },
   "settings": {
     "defaultModel": "Default Model",
@@ -3342,7 +3500,6 @@
       "unavailable": "Expert unavailable",
       "unavailableHint": "The selected expert was deleted, unpublished, or you no longer have access. Edit the task to pick another expert."
     },
-
     "title": "Scheduled Tasks",
     "subtitle": "Pick a time and the assistant will do the work for you and notify you",
     "create": "New scheduled task",

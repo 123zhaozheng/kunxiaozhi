@@ -3,6 +3,9 @@ import type {
   KBChunkPreset,
   KBConfig,
   KBDocument,
+  KBPublicStatus,
+  KBQuota,
+  KBRole,
   KBDocumentStatus,
   KBTask,
   KnowledgeBase,
@@ -264,3 +267,153 @@ export function pickPendingToStart<T extends { status: string }>(
   const slots = Math.max(0, concurrency - running);
   return items.filter((i) => i.status === "pending").slice(0, slots);
 }
+
+/* ── Roles & permissions ─────────────────────────────── */
+
+export interface KbCapabilities {
+  canWriteDocs: boolean;
+  canManageSettings: boolean;
+  canShare: boolean;
+  canSubscribe: boolean;
+  canUnsubscribe: boolean;
+  canLeave: boolean;
+}
+
+/** Backend capability flags win over role-derived defaults. */
+export function getKbCapabilities(
+  role: KBRole | null | undefined,
+  flags: Partial<Pick<KnowledgeBase, "can_write" | "can_manage">> = {},
+): KbCapabilities {
+  const r = role ?? "owner";
+  const canManage = flags.can_manage ?? r === "owner";
+  return {
+    canWriteDocs: flags.can_write ?? (r === "owner" || r === "editor"),
+    canManageSettings: canManage,
+    canShare: canManage,
+    canSubscribe: r === "visitor",
+    canUnsubscribe: r === "subscriber",
+    canLeave: r === "editor" || r === "viewer",
+  };
+}
+
+/** Public publishing is allowed unless the backend explicitly reports it as disabled. */
+export function isPublicAllowed(config: Partial<Pick<KBConfig, "allow_public">> | null): boolean {
+  return config?.allow_public !== false;
+}
+
+export type KbPublicTone = StatusTone;
+
+export function getPublicStatusMeta(
+  status: KBPublicStatus | undefined,
+): { tone: KbPublicTone; visible: boolean } {
+  switch (status) {
+    case "approved":
+      return { tone: "success", visible: true };
+    case "pending":
+      return { tone: "warning", visible: true };
+    case "rejected":
+    case "delisted":
+      return { tone: "danger", visible: true };
+    default:
+      return { tone: "neutral", visible: false };
+  }
+}
+
+/* ── Quota ───────────────────────────────────────────── */
+
+export function isKbCountQuotaReached(
+  quota: Pick<KBQuota, "limits" | "usage"> | null,
+): boolean {
+  return !!quota && quota.limits.kb_max_count > 0 && quota.usage.kb_count >= quota.limits.kb_max_count;
+}
+
+export function quotaPercent(used: number, limit: number): number {
+  if (limit <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((used / limit) * 100)));
+}
+
+/* ── Username paste parsing ──────────────────────────── */
+
+export const SHARE_MAX_USERNAMES = 50;
+
+export interface ParsedUsernames {
+  usernames: string[];
+  /** Entries dropped because the list already holds the maximum. */
+  overflow: number;
+}
+
+/** Splits on commas (ASCII/full-width), whitespace and newlines; dedupes case-insensitively. */
+export function parseUsernameInput(
+  raw: string,
+  existing: readonly string[] = [],
+  max: number = SHARE_MAX_USERNAMES,
+): ParsedUsernames {
+  const seen = new Set(existing.map((u) => u.toLowerCase()));
+  const usernames = [...existing];
+  let overflow = 0;
+  for (const part of raw.split(/[\s,，、;；]+/)) {
+    const name = part.trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    if (usernames.length >= max) {
+      overflow += 1;
+      continue;
+    }
+    seen.add(key);
+    usernames.push(name);
+  }
+  return { usernames, overflow };
+}
+
+/* ── File library import ─────────────────────────────── */
+
+export const IMPORT_MAX_FILES = 50;
+
+/** Only non-project library files with a supported extension can be imported. */
+export function canImportToKnowledgeBase(
+  file: { file_type: string; file_name: string },
+  allowedExtensions: readonly string[] | null | undefined,
+): boolean {
+  if (file.file_type === "project") return false;
+  const ext = getFileExtension(file.file_name);
+  if (!ext) return false;
+  return (allowedExtensions ?? []).some((e) => e.toLowerCase() === ext);
+}
+
+/* ── List tabs ───────────────────────────────────────── */
+
+export type KbListTab = "mine" | "shared" | "plaza";
+export type KbSharedFilter = "all" | "shared" | "subscribed";
+
+export const KB_LIST_TABS: KbListTab[] = ["mine", "shared", "plaza"];
+export const KB_SHARED_FILTERS: KbSharedFilter[] = ["all", "shared", "subscribed"];
+
+export function resolveKbListTab(value: string | null | undefined): KbListTab {
+  return KB_LIST_TABS.includes(value as KbListTab) ? (value as KbListTab) : "mine";
+}
+
+export function resolveKbSharedFilter(value: string | null | undefined): KbSharedFilter {
+  return KB_SHARED_FILTERS.includes(value as KbSharedFilter)
+    ? (value as KbSharedFilter)
+    : "all";
+}
+
+/** Merges lists by id, keeping the first occurrence. */
+export function mergeKbLists<T extends { id: string }>(...lists: T[][]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const list of lists) {
+    for (const item of list) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      out.push(item);
+    }
+  }
+  return out;
+}
+
+export const KB_NOTIFICATION_POLL_MS = 60_000;
+export const PLAZA_PAGE_SIZE = 12;
+export const ADMIN_PAGE_SIZE = 20;
+export const IMPORT_PAGE_SIZE = 10;

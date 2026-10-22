@@ -13,8 +13,12 @@ import type { KBConfig } from "../../services/api/knowledgeBase";
 import { formatFileSize } from "../documents/utils/fileSize";
 import type { UploadItem } from "./hooks/useKbUploadQueue";
 import { GHOST_BTN, PRIMARY_BTN } from "./knowledgeStyles";
+import { LibraryImportPanel } from "./LibraryImportPanel";
 
 interface UploadDialogProps {
+  /** Enables the "import from file library" tab. */
+  kbId?: string;
+  onImported?: () => void;
   config: KBConfig | null;
   items: UploadItem[];
   active: boolean;
@@ -69,6 +73,8 @@ function ItemStatus({ item }: { item: UploadItem }) {
 }
 
 export function UploadDialog({
+  kbId,
+  onImported,
   config,
   items,
   active,
@@ -81,6 +87,7 @@ export function UploadDialog({
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [mode, setMode] = useState<"upload" | "library">("upload");
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -122,6 +129,37 @@ export function UploadDialog({
           </button>
         </div>
 
+        {kbId && (
+          <div
+            className="flex gap-1 border-b border-stone-100 px-5 py-2 dark:border-stone-800"
+            role="tablist"
+          >
+            {(["upload", "library"] as const).map((key) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={mode === key}
+                onClick={() => setMode(key)}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                  mode === key
+                    ? "bg-[var(--theme-sidebar-active)] text-[var(--theme-text)]"
+                    : "text-[var(--theme-text-secondary)] hover:bg-[var(--theme-sidebar-hover)]"
+                }`}
+              >
+                {key === "upload"
+                  ? t("knowledge.upload.tabUpload", "本地上传")
+                  : t("knowledge.upload.tabLibrary", "从文件库导入")}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {kbId && mode === "library" ? (
+          <div className="flex-1 overflow-y-auto px-5 py-5">
+            <LibraryImportPanel kbId={kbId} onImported={() => onImported?.()} />
+          </div>
+        ) : (
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
           <div
             role="button"
@@ -245,6 +283,7 @@ export function UploadDialog({
             </ul>
           )}
         </div>
+        )}
 
         <div className="flex items-center justify-between gap-2 border-t border-stone-100 px-5 py-4 dark:border-stone-800">
           <p className="text-xs text-stone-500 dark:text-stone-400">

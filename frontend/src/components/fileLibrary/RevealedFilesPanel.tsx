@@ -5,6 +5,10 @@ import { useRevealedFilesGrouped } from "../../hooks/useRevealedFiles";
 import { getFullUrl } from "../../services/api";
 import type { RevealedFileItem } from "../../services/api";
 import { projectApi } from "../../services/api/project";
+import { knowledgeBaseApi } from "../../services/api/knowledgeBase";
+import { useSettingsContext } from "../../contexts/SettingsContext";
+import { ImportToKnowledgeBaseDialog } from "../knowledge/ImportToKnowledgeBaseDialog";
+import { KnowledgeImportContext } from "./KnowledgeImportContext";
 import DocumentPreview from "../documents/DocumentPreview";
 import { ImageViewer, VideoViewer } from "../common";
 import { DelayedUnmount } from "../common/DelayedUnmount";
@@ -31,6 +35,28 @@ import {
 export function RevealedFilesPanel() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { enableKnowledgeBase } = useSettingsContext();
+  const [kbExtensions, setKbExtensions] = useState<string[]>([]);
+  const [importFile, setImportFile] = useState<RevealedFileItem | null>(null);
+
+  useEffect(() => {
+    if (!enableKnowledgeBase) return;
+    let cancelled = false;
+    knowledgeBaseApi
+      .getConfig()
+      .then((cfg) => {
+        if (!cancelled && cfg.enabled) setKbExtensions(cfg.allowed_extensions);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [enableKnowledgeBase]);
+
+  const knowledgeImportValue = useMemo(
+    () => ({ allowedExtensions: kbExtensions, open: setImportFile }),
+    [kbExtensions],
+  );
 
   /* ── State ── */
   const [search, setSearch] = useState("");
@@ -157,7 +183,7 @@ export function RevealedFilesPanel() {
   );
 
   return (
-    <>
+    <KnowledgeImportContext.Provider value={knowledgeImportValue}>
       <div className="flex min-h-full flex-col @container">
         {/* Toolbar */}
         <Toolbar
@@ -274,6 +300,13 @@ export function RevealedFilesPanel() {
           onClose={handleExcalidrawViewerClose}
         />
       )}
-    </>
+
+      {importFile && (
+        <ImportToKnowledgeBaseDialog
+          file={importFile}
+          onClose={() => setImportFile(null)}
+        />
+      )}
+    </KnowledgeImportContext.Provider>
   );
 }

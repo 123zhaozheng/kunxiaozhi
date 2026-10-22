@@ -56,6 +56,8 @@ interface DocumentsTabProps {
   detail: KbDetailState;
   config: KBConfig | null;
   onOpenDocument: (doc: KBDocument, tab?: DocumentSidebarTab) => void;
+  /** Viewer / subscriber / visitor: no upload, retry, delete or index actions. */
+  readOnly?: boolean;
 }
 
 const VIEWABLE_STATUSES = new Set(["parsed", "indexing", "indexed", "error_indexing"]);
@@ -64,7 +66,13 @@ function errMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-export function DocumentsTab({ kbId, detail, config, onOpenDocument }: DocumentsTabProps) {
+export function DocumentsTab({
+  kbId,
+  detail,
+  config,
+  onOpenDocument,
+  readOnly = false,
+}: DocumentsTabProps) {
   const { t } = useTranslation();
   const {
     kb,
@@ -247,7 +255,7 @@ export function DocumentsTab({ kbId, detail, config, onOpenDocument }: Documents
 
   return (
     <div className="px-4 py-4 sm:px-6">
-      {kb?.index_outdated && (
+      {kb?.index_outdated && !readOnly && (
         <div role="alert" className={`${NOTICE_WARNING} mb-3 items-center justify-between`}>
           <span className="flex items-start gap-2">
             <AlertTriangle size={16} className="mt-0.5 shrink-0" />
@@ -291,14 +299,16 @@ export function DocumentsTab({ kbId, detail, config, onOpenDocument }: Documents
                 </span>
               )}
             </div>
-            <button
-              type="button"
-              onClick={cancelTask}
-              disabled={cancelBusy}
-              className={`${GHOST_BTN} !px-3 !py-1.5 text-xs`}
-            >
-              {t("knowledge.task.cancel", "取消处理")}
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={cancelTask}
+                disabled={cancelBusy}
+                className={`${GHOST_BTN} !px-3 !py-1.5 text-xs`}
+              >
+                {t("knowledge.task.cancel", "取消处理")}
+              </button>
+            )}
           </div>
           <div
             className="mt-2 h-1.5 overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800"
@@ -316,11 +326,13 @@ export function DocumentsTab({ kbId, detail, config, onOpenDocument }: Documents
       )}
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => setUploadOpen(true)} className={PRIMARY_BTN}>
-          <Upload size={16} />
-          {t("knowledge.upload.button", "上传文档")}
-          {queue.active && <Loader2 size={14} className="animate-spin" />}
-        </button>
+        {!readOnly && (
+          <button type="button" onClick={() => setUploadOpen(true)} className={PRIMARY_BTN}>
+            <Upload size={16} />
+            {t("knowledge.upload.button", "上传文档")}
+            {queue.active && <Loader2 size={14} className="animate-spin" />}
+          </button>
+        )}
         <div className="relative min-w-[12rem] flex-1 sm:max-w-xs">
           <Search
             size={16}
@@ -411,7 +423,7 @@ export function DocumentsTab({ kbId, detail, config, onOpenDocument }: Documents
                   "上传 PDF、Word、PPT、表格、文本等文档，系统会自动解析并建立索引。",
                 )}
           </p>
-          {!hasFilter && (
+          {!hasFilter && !readOnly && (
             <button
               type="button"
               onClick={() => setUploadOpen(true)}
@@ -432,9 +444,11 @@ export function DocumentsTab({ kbId, detail, config, onOpenDocument }: Documents
             <table className="w-full min-w-[34rem] text-left text-sm">
               <thead className="bg-[var(--theme-bg-subtle)] text-xs text-[var(--theme-text-secondary)]">
                 <tr>
-                  <th className="w-10 px-3 py-2.5">
-                    <Checkbox checked={allSelected} onChange={toggleAll} size="sm" />
-                  </th>
+                  {!readOnly && (
+                    <th className="w-10 px-3 py-2.5">
+                      <Checkbox checked={allSelected} onChange={toggleAll} size="sm" />
+                    </th>
+                  )}
                   <th className="px-3 py-2.5 font-medium">
                     {t("knowledge.docs.colName", "文件名")}
                   </th>
@@ -466,13 +480,15 @@ export function DocumentsTab({ kbId, detail, config, onOpenDocument }: Documents
                       key={doc.id}
                       className="border-t border-[var(--theme-border)] hover:bg-[var(--theme-bg-subtle)]"
                     >
-                      <td className="px-3 py-2.5">
-                        <Checkbox
-                          checked={selected.has(doc.id)}
-                          onChange={() => toggleOne(doc.id)}
-                          size="sm"
-                        />
-                      </td>
+                      {!readOnly && (
+                        <td className="px-3 py-2.5">
+                          <Checkbox
+                            checked={selected.has(doc.id)}
+                            onChange={() => toggleOne(doc.id)}
+                            size="sm"
+                          />
+                        </td>
+                      )}
                       <td className="max-w-[16rem] px-3 py-2.5">
                         <button
                           type="button"
@@ -529,7 +545,7 @@ export function DocumentsTab({ kbId, detail, config, onOpenDocument }: Documents
                           >
                             <Download size={16} />
                           </button>
-                          {isFailedStatus(doc.status) && (
+                          {!readOnly && isFailedStatus(doc.status) && (
                             <button
                               type="button"
                               onClick={() => void retryDocs([doc.id])}
@@ -541,16 +557,18 @@ export function DocumentsTab({ kbId, detail, config, onOpenDocument }: Documents
                               <RotateCcw size={16} />
                             </button>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => setDeleteIds([doc.id])}
-                            disabled={busy}
-                            className={`${ROW_ACTION_BTN} hover:!text-red-600`}
-                            aria-label={t("common.delete", "删除")}
-                            title={t("common.delete", "删除")}
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {!readOnly && (
+                            <button
+                              type="button"
+                              onClick={() => setDeleteIds([doc.id])}
+                              disabled={busy}
+                              className={`${ROW_ACTION_BTN} hover:!text-red-600`}
+                              aria-label={t("common.delete", "删除")}
+                              title={t("common.delete", "删除")}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -573,8 +591,10 @@ export function DocumentsTab({ kbId, detail, config, onOpenDocument }: Documents
         </div>
       )}
 
-      {uploadOpen && (
+      {uploadOpen && !readOnly && (
         <UploadDialog
+          kbId={kbId}
+          onImported={() => scheduleRefresh(POST_ACTION_REFRESH_MS)}
           config={config}
           items={queue.items}
           active={queue.active}

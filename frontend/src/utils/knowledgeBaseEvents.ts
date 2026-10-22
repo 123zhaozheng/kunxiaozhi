@@ -47,3 +47,22 @@ export function subscribeKnowledgeBaseRefresh(
     eventTarget.removeEventListener(KNOWLEDGE_BASE_REFRESH_EVENT, listener);
   };
 }
+
+/** Fired when KB notifications may have changed (WebSocket push, mark-read). */
+export const KB_NOTIFICATIONS_REFRESH_EVENT = "knowledge-base:notifications-refresh";
+
+export function dispatchKbNotificationsRefresh(target?: EventTarget): void {
+  const eventTarget = getEventTarget(target);
+  if (!eventTarget) return;
+  eventTarget.dispatchEvent(new CustomEvent(KB_NOTIFICATIONS_REFRESH_EVENT));
+}
+
+export function subscribeKbNotificationsRefresh(
+  handler: () => void,
+  target?: EventTarget,
+): () => void {
+  const eventTarget = getEventTarget(target);
+  if (!eventTarget) return () => undefined;
+  eventTarget.addEventListener(KB_NOTIFICATIONS_REFRESH_EVENT, handler);
+  return () => eventTarget.removeEventListener(KB_NOTIFICATIONS_REFRESH_EVENT, handler);
+}

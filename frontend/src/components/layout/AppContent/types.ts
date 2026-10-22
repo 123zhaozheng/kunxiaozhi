@@ -13,6 +13,7 @@ export type TabType =
   | "agents"
   | "files"
   | "knowledge"
+  | "knowledgeAdmin"
   | "notifications"
   | "memory"
   | "scheduled"

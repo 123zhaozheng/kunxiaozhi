@@ -45,6 +45,23 @@ class RoleLimits(BaseModel):
         le=(1 << 60) // (1024 * 1024),
         description="Per-user personal storage quota in MiB (null = use the global default)",
     )
+    kb_max_count: Optional[int] = Field(
+        default=None, ge=0, description="Max knowledge bases a user may own (null = global default)"
+    )
+    kb_max_docs_per_kb: Optional[int] = Field(
+        default=None, ge=0, description="Max documents per knowledge base (null = global default)"
+    )
+    kb_storage_quota_mb: Optional[int] = Field(
+        default=None,
+        gt=0,
+        le=(1 << 60) // (1024 * 1024),
+        description="Total knowledge base document storage in MiB (null = global default)",
+    )
+    kb_max_file_size_mb: Optional[int] = Field(
+        default=None,
+        gt=0,
+        description="Max knowledge base file size in MB (null = KB_MAX_FILE_MB)",
+    )
 
     model_config = ConfigDict(extra="allow")  # Allow future extensions
 

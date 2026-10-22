@@ -256,6 +256,11 @@ PERMISSION_METADATA: dict[str, dict[str, str]] = {
         "label": "管理所有定时任务",
         "description": "查看、暂停、恢复和删除所有用户的定时任务（管理员）",
     },
+    # Knowledge Base
+    Permission.KNOWLEDGE_BASE_ADMIN.value: {
+        "label": "管理公开知识库",
+        "description": "审核、驳回和下架用户公开的知识库（管理员）",
+    },
     # Environment Variables
     Permission.ENVVAR_READ.value: {
         "label": "读取环境变量",
@@ -415,6 +420,12 @@ PERMISSION_GROUPS_CONFIG: list[PermissionGroupConfig] = [
         "permissions": [
             Permission.SCHEDULED_TASK_USE.value,
             Permission.SCHEDULED_TASK_ADMIN.value,
+        ],
+    },
+    {
+        "name": "知识库",
+        "permissions": [
+            Permission.KNOWLEDGE_BASE_ADMIN.value,
         ],
     },
     {
