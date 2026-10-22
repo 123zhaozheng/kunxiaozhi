@@ -23,6 +23,7 @@ import {
   type KBSearchHit,
 } from "../../services/api/knowledgeBase";
 import { subscribeKnowledgeBaseRefresh } from "../../utils/knowledgeBaseEvents";
+import { KbChatToggle } from "./KbChatToggle";
 import {
   DocumentDetailSidebar,
   type DocumentFocus,
@@ -224,6 +225,7 @@ export function KnowledgeBaseDetail({ kbId }: KnowledgeBaseDetailProps) {
         icon={<LibraryBig />}
         actions={
           <div className="flex items-center gap-2">
+            <KbChatToggle kb={kb} onChange={setKb} />
             {caps.canShare && (
               <button type="button" onClick={() => setShareOpen(true)} className={OUTLINE_BTN}>
                 <Share2 size={16} />
@@ -289,6 +291,11 @@ export function KnowledgeBaseDetail({ kbId }: KnowledgeBaseDetailProps) {
             </span>
           ))}
         </div>
+        {kb.chat_enabled != null && (
+          <p className="mt-2 text-xs text-[var(--theme-text-tertiary)]">
+            {t("knowledge.chat.hint", "在对话中输入 @ 可临时指定知识库")}
+          </p>
+        )}
       </PanelHeader>
 
       {config && !config.ready && <KnowledgeNotReadyNotice className="mx-4 mt-3 sm:mx-6" />}

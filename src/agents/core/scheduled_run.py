@@ -29,8 +29,10 @@ from src.infra.logging.context import TraceContext
 # 定时任务聊天工具（草稿/查询），定时运行中不允许再创建定时任务
 SCHEDULED_TASK_CHAT_TOOL_NAMES = frozenset({"list_scheduled_tasks", "draft_scheduled_task"})
 
+# 保存到知识库需要用户在卡片上确认，定时运行中无人确认
 SCHEDULED_RUN_EXCLUDED_TOOLS = (
-    frozenset({"ask_human", "update_sop"}) | SCHEDULED_TASK_CHAT_TOOL_NAMES
+    frozenset({"ask_human", "update_sop", "save_to_knowledge_base"})
+    | SCHEDULED_TASK_CHAT_TOOL_NAMES
 )
 
 SCHEDULED_RUN_PROMPT = (

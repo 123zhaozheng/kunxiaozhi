@@ -53,3 +53,7 @@ class KBQuotaError(KBError):
 
 class KBConflictError(KBError):
     default_message = "操作冲突"
+
+
+class KBDraftExpiredError(KBError):
+    default_message = "草稿已过期，请让助手重新生成"

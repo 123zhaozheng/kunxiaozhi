@@ -16,6 +16,7 @@ import { ToolCallItem } from "./ToolCallItem";
 import { UserMessageBubble } from "./UserMessageBubble";
 import { MessagePartRenderer } from "./MessagePartRenderer";
 import { ExecutionProcessGroup } from "./ExecutionProcessGroup";
+import { MessageKbCitations } from "./items/KbCitations";
 import {
   partitionMessageParts,
   partitionProcessSegments,
@@ -529,6 +530,7 @@ export const ChatMessage = memo(function ChatMessage({
         <UserMessageBubble
           content={message.content}
           attachments={message.attachments}
+          kbMentions={message.kbMentions}
           isLastMessage={isLastMessage}
         />
       </div>
@@ -656,6 +658,10 @@ export const ChatMessage = memo(function ChatMessage({
                 parts={message.parts}
                 isStreaming={message.isStreaming}
                 onOpenPreview={onOpenPreview}
+              />
+              <MessageKbCitations
+                parts={message.parts}
+                isStreaming={message.isStreaming}
               />
             </div>
           ) : (

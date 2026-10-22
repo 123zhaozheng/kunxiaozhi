@@ -676,3 +676,44 @@ test("resolveSegmentDurationMs scopes duration to the segment", () => {
     undefined,
   );
 });
+
+test("kb save draft card is exiled; pending/failed/unparseable stay in process", () => {
+  const draft = JSON.stringify({ entity_type: "kb_save_draft", draft_id: "k1" });
+  const parts: MessagePart[] = [
+    tool({ name: "save_to_knowledge_base", success: true, result: draft }),
+    tool({ name: "save_to_knowledge_base", isPending: true }),
+    tool({ name: "save_to_knowledge_base", success: false, result: "boom" }),
+    tool({ name: "save_to_knowledge_base", success: true, result: "not-json" }),
+    tool({ name: "server:save_to_knowledge_base", success: true, result: draft }),
+  ];
+  const { processEntries, bodyEntries } = partitionMessageParts(parts);
+  assert.equal(processEntries.length, 3);
+  assert.deepEqual(
+    bodyEntries.map((e) => e.partIndex),
+    [0, 4],
+  );
+});
+
+test("kb tools map to the knowledge capability with concise summaries", () => {
+  const search = { part: tool({ name: "search_knowledge_base", args: { query: "报销" } }), partIndex: 0 };
+  assert.equal(getEntryCapability(search), "knowledge");
+  assert.deepEqual(getStepSummary(search), {
+    kind: "knowledge",
+    op: "search",
+    query: "报销",
+    filename: "",
+    line: null,
+  });
+  const open = {
+    part: tool({
+      name: "server:open_kb_document",
+      args: { kb_id: "k", doc_id: "d", line: 12 },
+      result: JSON.stringify({ entity_type: "kb_document_window", filename: "a.md", start_line: 12 }),
+    }),
+    partIndex: 1,
+  };
+  assert.equal(getEntryCapability(open), "knowledge");
+  const summary = getStepSummary(open);
+  assert.equal(summary.kind === "knowledge" && summary.filename, "a.md");
+  assert.equal(summary.kind === "knowledge" && summary.line, 12);
+});

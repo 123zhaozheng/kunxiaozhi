@@ -140,3 +140,16 @@ test("builds the checkpoint fork url", () => {
     "/api/sessions/session-1/checkpoints/checkpoint-1/fork",
   );
 });
+
+test("includes kb_ids in the submit chat body only when non-empty", () => {
+  const withKbs = buildSubmitChatBody({
+    message: "hi",
+    kbIds: ["kb-1", "kb-2"],
+  });
+  assert.deepEqual(withKbs.kb_ids, ["kb-1", "kb-2"]);
+  assert.equal("kb_ids" in buildSubmitChatBody({ message: "hi" }), false);
+  assert.equal(
+    "kb_ids" in buildSubmitChatBody({ message: "hi", kbIds: [] }),
+    false,
+  );
+});

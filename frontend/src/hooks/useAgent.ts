@@ -655,6 +655,7 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
           options?.getEnabledSkills?.(),
         );
         const disabledMcpTools = options?.getDisabledMcpTools?.() || [];
+        const kbIds = options?.getKnowledgeBaseIds?.() || [];
 
         // Merge session-level agent options (e.g. model) with ChatInput values
         const fullAgentOptions = {
@@ -677,6 +678,7 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
           enabledSkills,
           requestTeamId,
           goalForRun,
+          kbIds,
         )) as {
           session_id: string;
           run_id: string;
@@ -703,6 +705,7 @@ export function useAgent(options?: UseAgentOptions): UseAgentReturn {
             content,
             attachments,
             assistantMessageId: newRunId || undefined,
+            kbMentions: options?.getKnowledgeBaseMentions?.(),
           });
         setMessages(optimisticMessages);
         paintedOptimisticMessages = true;

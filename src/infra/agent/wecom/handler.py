@@ -29,6 +29,7 @@ from src.infra.storage.managed_integration import (
     reserve_managed_files,
 )
 from src.infra.storage.s3.service import get_or_init_storage
+from src.infra.tool.knowledge_base_tool import SAVE_TOOL_NAME as KB_SAVE_TOOL_NAME
 from src.infra.tool.scheduled_task_tool import DRAFT_TOOL_NAME
 from src.infra.upload.file_record import FileRecordStorage
 from src.infra.utils.datetime import utc_now
@@ -1074,7 +1075,7 @@ def create_wecom_message_handler(
                 user_id=session_owner_id,
                 executor=executor,
                 # 企微无法渲染草稿确认卡片，只保留查询工具
-                disabled_tools=[DRAFT_TOOL_NAME],
+                disabled_tools=[DRAFT_TOOL_NAME, KB_SAVE_TOOL_NAME],
                 project_id=project_id,
                 agent_options=wecom_agent_options or None,
                 session_name=session_title,

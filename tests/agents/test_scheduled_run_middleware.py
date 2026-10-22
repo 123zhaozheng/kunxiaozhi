@@ -64,6 +64,7 @@ def test_constants() -> None:
     assert SCHEDULED_RUN_EXCLUDED_TOOLS == {
         "ask_human",
         "update_sop",
+        "save_to_knowledge_base",
         "list_scheduled_tasks",
         "draft_scheduled_task",
     }

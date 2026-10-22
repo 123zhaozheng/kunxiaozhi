@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.infra.goal import GoalSpec
 from src.infra.utils.datetime import utc_now
@@ -78,6 +78,27 @@ class AgentRequest(BaseModel):
     project_id: Optional[str] = Field(None, description="Project ID to assign to new session")
     team_id: Optional[str] = Field(None, description="Team ID for team agent mode")
     goal: Optional[GoalSpec] = Field(None, description="Active goal for rubric-guided execution")
+    kb_ids: Optional[list[str]] = Field(
+        None, description="Knowledge base IDs @-mentioned for this turn only"
+    )
+
+    @field_validator("kb_ids")
+    @classmethod
+    def _clean_kb_ids(cls, value: Optional[list[str]]) -> Optional[list[str]]:
+        if value is None:
+            return None
+        seen: list[str] = []
+        for item in value:
+            item = str(item).strip()
+            if not item:
+                continue
+            if len(item) > 64:
+                raise ValueError("kb_id 过长")
+            if item not in seen:
+                seen.append(item)
+        if len(seen) > 10:
+            raise ValueError("最多可指定 10 个知识库")
+        return seen
 
 
 class AgentStep(BaseModel):

@@ -4,6 +4,7 @@ from src.infra.agent.middleware.code_interpreter import create_code_interpreter_
 from src.infra.agent.middleware.prompt_caching import PromptCachingMiddleware
 from src.infra.agent.middleware.prompt_injection import (
     EnvVarPromptMiddleware,
+    KnowledgeBasePromptMiddleware,
     MemoryIndexMiddleware,
     SandboxMCPMiddleware,
     SectionPromptMiddleware,
@@ -26,6 +27,7 @@ __all__ = [
     "EmptyContentRetryMiddleware",
     "EnvVarPromptMiddleware",
     "MCPQuotaMiddleware",
+    "KnowledgeBasePromptMiddleware",
     "MemoryIndexMiddleware",
     "ModelFallbackMiddleware",
     "PromptCachingMiddleware",

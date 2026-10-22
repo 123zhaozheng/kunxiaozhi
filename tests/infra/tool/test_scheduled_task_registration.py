@@ -77,7 +77,10 @@ def test_wecom_submit_disables_draft_tool() -> None:
         kwargs = {kw.arg: kw.value for kw in call.keywords}
         value = kwargs.get("disabled_tools")
         assert isinstance(value, ast.List), "WeCom submit must pass disabled_tools"
-        assert [e.id for e in value.elts if isinstance(e, ast.Name)] == ["DRAFT_TOOL_NAME"]
+        assert [e.id for e in value.elts if isinstance(e, ast.Name)] == [
+            "DRAFT_TOOL_NAME",
+            "KB_SAVE_TOOL_NAME",
+        ]
     assert tool_mod.DRAFT_TOOL_NAME == "draft_scheduled_task"
 
 

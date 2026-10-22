@@ -48,6 +48,7 @@ DOCUMENTS_COLLECTION = "kb_documents"
 CHUNKS_COLLECTION = "kb_chunks"
 TASKS_COLLECTION = "kb_tasks"
 NOTIFICATIONS_COLLECTION = "kb_notifications"
+DRAFTS_COLLECTION = "kb_save_drafts"
 NOTIFICATION_TTL_SECONDS = 90 * 24 * 3600
 PAGE_SIZE_MAX = 100
 
@@ -110,7 +111,12 @@ class KnowledgeBaseStorage:
     def notifications(self) -> Any:
         return self.db[NOTIFICATIONS_COLLECTION]
 
+    @property
+    def drafts(self) -> Any:
+        return self.db[DRAFTS_COLLECTION]
+
     async def ensure_indexes(self) -> None:
+        await self.drafts.create_index("purge_at", expireAfterSeconds=0, name="kb_draft_purge")
         await self.bases.create_index([("visibility", ASCENDING), ("public_status", ASCENDING)])
         await self.notifications.create_index([("user_id", ASCENDING), ("created_at", DESCENDING)])
         await self.notifications.create_index([("user_id", ASCENDING), ("read", ASCENDING)])
@@ -143,6 +149,32 @@ class KnowledgeBaseStorage:
         await self.tasks.create_index([("kb_id", ASCENDING), ("created_at", DESCENDING)])
         await self.tasks.create_index([("created_by", ASCENDING), ("status", ASCENDING)])
         logger.info("[KB] storage indexes ensured")
+
+    # ── agent save drafts ───────────────────────────────────
+
+    async def insert_draft(self, doc: dict[str, Any]) -> None:
+        await self.drafts.insert_one(doc)
+
+    async def get_draft(self, draft_id: str, owner_id: str) -> Optional[dict[str, Any]]:
+        return await self.drafts.find_one({"_id": draft_id, "owner_id": owner_id})
+
+    async def transition_draft(
+        self,
+        draft_id: str,
+        owner_id: str,
+        from_status: str,
+        to_status: str,
+        extra_set: Optional[dict[str, Any]] = None,
+        require_unexpired: bool = False,
+    ) -> Optional[dict[str, Any]]:
+        flt: dict[str, Any] = {"_id": draft_id, "owner_id": owner_id, "status": from_status}
+        if require_unexpired:
+            flt["expires_at"] = {"$gt": utc_now()}
+        return await self.drafts.find_one_and_update(
+            flt,
+            {"$set": {**(extra_set or {}), "status": to_status}},
+            return_document=ReturnDocument.AFTER,
+        )
 
     # ── knowledge bases ─────────────────────────────────────
 
@@ -292,6 +324,21 @@ class KnowledgeBaseStorage:
         cursor = self.members.find({"user_id": user_id, "role": {"$in": roles}})
         return await cursor.to_list(length=5000)
 
+    async def list_user_members(self, user_id: str, kb_ids: list[str]) -> list[dict[str, Any]]:
+        if not kb_ids:
+            return []
+        cursor = self.members.find({"user_id": user_id, "kb_id": {"$in": kb_ids}})
+        return await cursor.to_list(length=len(kb_ids))
+
+    async def set_member_chat_enabled(
+        self, kb_id: str, user_id: str, enabled: bool
+    ) -> Optional[dict[str, Any]]:
+        return await self.members.find_one_and_update(
+            {"kb_id": kb_id, "user_id": user_id},
+            {"$set": {"chat_enabled": enabled}},
+            return_document=ReturnDocument.AFTER,
+        )
+
     async def count_members(self, kb_id: str, role: str) -> int:
         return await self.members.count_documents({"kb_id": kb_id, "role": role})
 
@@ -373,7 +420,7 @@ class KnowledgeBaseStorage:
     async def document_briefs(self, doc_ids: list[str]) -> dict[str, dict[str, Any]]:
         if not doc_ids:
             return {}
-        cursor = self.documents.find({"_id": {"$in": doc_ids}}, {"kb_id": 1, "filename": 1})
+        cursor = self.documents.find({"_id": {"$in": doc_ids}}, {"kb_id": 1, "filename": 1, "chunk_count": 1})
         docs = await cursor.to_list(length=len(doc_ids))
         return {str(d["_id"]): d for d in docs}
 

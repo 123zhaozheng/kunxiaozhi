@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { clsx } from "clsx";
-import { Copy, Check, GitBranch, Boxes } from "lucide-react";
+import { Copy, Check, GitBranch, Boxes, LibraryBig } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { AttachmentCard, ImageViewer } from "../../common";
 import type { MessageAttachment } from "../../../types";
@@ -16,11 +16,13 @@ import { parseEmphasizedUserMessage } from "../chatInputSkillEmphasis";
 export function UserMessageBubble({
   content,
   attachments,
+  kbMentions,
   onFork,
   isLastMessage,
 }: {
   content?: string;
   attachments?: MessageAttachment[];
+  kbMentions?: { id: string; name: string }[];
   onFork?: () => void;
   isLastMessage?: boolean;
 }) {
@@ -83,6 +85,20 @@ export function UserMessageBubble({
         <div className="flex flex-col items-end max-w-[90%]">
           {/* Attachment preview - outside message bubble */}
           {hasAttachments && renderAttachments()}
+
+          {kbMentions && kbMentions.length > 0 && (
+            <div className="mb-1.5 flex flex-wrap justify-end gap-1.5">
+              {kbMentions.map((kb) => (
+                <span
+                  key={kb.id}
+                  className="inline-flex max-w-48 items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600 dark:bg-blue-500/10 dark:text-blue-400"
+                >
+                  <LibraryBig size={12} className="shrink-0" />
+                  <span className="truncate">@{kb.name}</span>
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* Message bubble */}
           {hasContent &&

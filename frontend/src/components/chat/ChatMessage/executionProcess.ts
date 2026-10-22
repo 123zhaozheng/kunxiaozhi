@@ -10,6 +10,13 @@ import type {
   ToolPart,
 } from "../../../types/message";
 import { isScheduledTaskDraftToolName } from "./items/scheduledTaskDraftResult";
+import {
+  bareToolName,
+  isKbSaveDraftToolName,
+  isKnowledgeBaseToolName,
+  parseKbSaveDraftResult,
+  parseKnowledgeBaseResult,
+} from "./items/knowledgeBaseResult";
 
 // 分组头能力图标数量上限，超出以 +N 收敛（prd R2.1）。
 export const MAX_CAPABILITY_ICONS = 5;
@@ -50,6 +57,7 @@ export type ProcessCapabilityKind =
   | "glob"
   | "ls"
   | "execute"
+  | "knowledge"
   | "mcp"
   | "tool"
   | "subagent"
@@ -70,6 +78,13 @@ export type ProcessStepSummary =
   | { kind: "glob"; pattern: string; searchPath: string }
   | { kind: "ls"; dirPath: string; dirName: string }
   | { kind: "execute"; command: string }
+  | {
+      kind: "knowledge";
+      op: "list" | "search" | "open" | "find" | "files";
+      query: string;
+      filename: string;
+      line: number | null;
+    }
   | { kind: "mcp" | "tool"; toolName: string; argSummary?: string };
 
 export interface CapabilitySummary {
@@ -176,12 +191,28 @@ function isExposedDraftCard(part: ToolPart): boolean {
   }
 }
 
+// 知识库保存草稿卡：与定时任务草稿同条件，外置不进过程集。
+function isExposedKbDraftCard(part: ToolPart): boolean {
+  if (!isKbSaveDraftToolName(part.name)) return false;
+  if (part.isPending || part.success === false) return false;
+  return parseKbSaveDraftResult(part.result as string | Record<string, unknown>) !== null;
+}
+
+const KB_OP_BY_TOOL: Record<string, "list" | "search" | "open" | "find" | "files"> = {
+  list_knowledge_bases: "list",
+  search_knowledge_base: "search",
+  open_kb_document: "open",
+  find_in_kb_document: "find",
+  search_kb_files: "files",
+};
+
 // tool part 的过程/外置判定（design §3 分区表）。
 function isProcessToolPart(part: ToolPart): boolean {
   // 产物卡片外置（prd R4.2）。
   if (part.name === "reveal_file" || part.name === "reveal_project") return false;
   // 待确认草稿卡外置（prd R7.2）。
   if (isExposedDraftCard(part)) return false;
+  if (isExposedKbDraftCard(part)) return false;
   return true;
 }
 
@@ -309,6 +340,7 @@ export function getEntryCapability(entry: ProcessPartEntry): ProcessCapabilityKi
         case "execute":
           return "execute";
         default:
+          if (isKnowledgeBaseToolName(part.name)) return "knowledge";
           return splitMcpToolName(part.name).isMcp ? "mcp" : "tool";
       }
     }
@@ -379,6 +411,37 @@ export function getStepSummary(entry: ProcessPartEntry): ProcessStepSummary {
         case "execute":
           return { kind: "execute", command: truncateCommand(asString(args.command)) };
         default: {
+          const kbOp = KB_OP_BY_TOOL[bareToolName(tool.name)];
+          if (kbOp) {
+            const parsed = parseKnowledgeBaseResult(
+              tool.result as string | Record<string, unknown> | undefined,
+            );
+            const resultFilename =
+              parsed &&
+              (parsed.entity_type === "kb_document_window" ||
+                parsed.entity_type === "kb_document_find")
+                ? parsed.filename
+                : "";
+            const resultLine =
+              parsed?.entity_type === "kb_document_window"
+                ? parsed.start_line
+                : null;
+            const rawLine = args.line ?? resultLine;
+            const line = typeof rawLine === "number" ? rawLine : null;
+            const patterns = Array.isArray(args.patterns)
+              ? args.patterns.filter((x): x is string => typeof x === "string")
+              : [];
+            return {
+              kind: "knowledge",
+              op: kbOp,
+              query:
+                asString(args.query) ||
+                asString(args.kb_name) ||
+                patterns.join(" "),
+              filename: resultFilename,
+              line,
+            };
+          }
           const { isMcp, toolName } = splitMcpToolName(tool.name);
           return {
             kind: isMcp ? "mcp" : "tool",

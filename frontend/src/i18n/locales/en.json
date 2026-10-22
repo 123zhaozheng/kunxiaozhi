@@ -1638,6 +1638,50 @@
       "rejectTitle": "Reject publish request",
       "delistTitle": "Delist knowledge base",
       "reasonLabel": "Reason (required, the owner is notified)"
+    },
+    "chat": {
+      "enabled": "Enable in chat",
+      "hint": "Type @ in a chat to pick a knowledge base for that message",
+      "mentionGroup": "Knowledge bases",
+      "mentionPersonaGroup": "Experts / roles",
+      "mentionTeamGroup": "Teams",
+      "docCount": "{{count}} documents",
+      "removeMention": "Remove knowledge base {{name}}"
+    },
+    "tools": {
+      "list": "List available knowledge bases",
+      "search": "Search knowledge base: {{query}}",
+      "searchNoQuery": "Search knowledge base",
+      "open": "Open document",
+      "openAtLine": "Open document at line {{line}}",
+      "openFile": "Open document: {{filename}}",
+      "openFileAtLine": "Open document: {{filename}} at line {{line}}",
+      "find": "Find in document: {{query}}",
+      "findNoQuery": "Find in document",
+      "files": "Find knowledge base files: {{query}}",
+      "filesNoQuery": "Find knowledge base files",
+      "searchTitle": "Search knowledge base: {{query}}",
+      "resultCount": "{{count}} sources",
+      "noResults": "No relevant content found",
+      "toggleSnippet": "Expand snippet"
+    },
+    "citations": {
+      "title": "Sources",
+      "lines": "lines {{range}}"
+    },
+    "draft": {
+      "untitled": "Untitled document",
+      "chars": "{{count}} chars",
+      "targetKb": "Save to",
+      "noWritableKb": "No writable knowledge base",
+      "confirm": "Confirm save",
+      "cancel": "Cancel",
+      "saved": "Saved to knowledge base",
+      "confirmedIn": "Saved to \"{{name}}\"",
+      "cancelled": "Cancelled",
+      "expired": "Expired",
+      "readonly": "Draft preview only",
+      "open": "View"
     }
   },
   "landing": {

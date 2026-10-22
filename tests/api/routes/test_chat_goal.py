@@ -186,3 +186,33 @@ async def test_execute_agent_stream_runs_agent_when_active_goal_is_supplied(
     assert events[2]["data"]["goal"] == {"objective": "hi", "rubric": "- say hi"}
     assert events[2]["data"]["ended_at"]
     assert agent.stream_kwargs["active_goal"] == {"objective": "hi", "rubric": "- say hi"}
+
+
+def test_kb_ids_are_validated_and_deduplicated() -> None:
+    from pydantic import ValidationError
+
+    assert AgentRequest(message="m", kb_ids=["a", "b", "a", " "]).kb_ids == ["a", "b"]
+    assert AgentRequest(message="m").kb_ids is None
+    with pytest.raises(ValidationError):
+        AgentRequest(message="m", kb_ids=[str(i) for i in range(11)])
+    with pytest.raises(ValidationError):
+        AgentRequest(message="m", kb_ids=["x" * 65])
+
+
+def test_kb_mentions_scrub_client_keys_and_skip_persistence() -> None:
+    from src.api.routes.chat import apply_kb_mentions
+
+    options = {"_kb_mentioned_ids": ["evil"], "_kb_other": 1, "model": "m"}
+    apply_kb_mentions(options, ["kb1"])
+    assert options == {"model": "m", "_kb_mentioned_ids": ["kb1"]}
+    apply_kb_mentions(options, None)
+    assert options == {"model": "m"}
+
+    request = AgentRequest(
+        message="m", agent_options={"model": "m", "_kb_mentioned_ids": ["kb1"]}, kb_ids=["kb1"]
+    )
+    config = build_conversation_config(
+        run_id="r", agent_id="search", request=request, language="en"
+    )
+    assert config["agent_options"] == {"model": "m"}
+    assert request.agent_options["_kb_mentioned_ids"] == ["kb1"]

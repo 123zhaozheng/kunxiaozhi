@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Check } from "lucide-react";
 import type { Team } from "../../types/team";
+import type { KnowledgeBase } from "../../services/api/knowledgeBase";
+import { KbMentionGroup } from "./KbMentionGroup";
 import { TeamAvatar } from "../team/TeamAvatar";
 import {
   getTeamFallbackAvatar,
@@ -10,6 +12,8 @@ import {
 
 interface TeamMentionPopupProps {
   teams: Team[];
+  knowledgeBases?: KnowledgeBase[];
+  onSelectKnowledgeBase?: (kb: KnowledgeBase) => void;
   highlightedIndex: number;
   selectedTeamId?: string | null;
   isLoading?: boolean;
@@ -42,6 +46,8 @@ function SkeletonItems() {
 
 export function TeamMentionPopup({
   teams,
+  knowledgeBases = [],
+  onSelectKnowledgeBase,
   highlightedIndex,
   selectedTeamId,
   isLoading,
@@ -51,6 +57,7 @@ export function TeamMentionPopup({
   placement,
 }: TeamMentionPopupProps) {
   const { t } = useTranslation();
+  const kbCount = knowledgeBases.length;
   const anchorRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -86,17 +93,34 @@ export function TeamMentionPopup({
     >
       <div className="mention-popup">
         <div className="mention-popup-content">
-          {isLoading && teams.length === 0 ? (
+          {isLoading && teams.length === 0 && kbCount === 0 ? (
             <div className="mention-popup-list">
               <SkeletonItems />
             </div>
-          ) : teams.length === 0 ? (
+          ) : teams.length === 0 && kbCount === 0 ? (
             <div className="mention-popup-empty">
               {t("team.noMatchingTeams", "没有匹配的团队")}
             </div>
           ) : (
             <div className="mention-popup-list">
-              {teams.map((team, index) => {
+              {onSelectKnowledgeBase && (
+                <KbMentionGroup
+                  knowledgeBases={knowledgeBases}
+                  highlightedIndex={highlightedIndex}
+                  trailingLabel={
+                    teams.length > 0
+                      ? t("knowledge.chat.mentionTeamGroup", "团队")
+                      : null
+                  }
+                  onSelect={onSelectKnowledgeBase}
+                  onHover={onHover}
+                  registerItem={(i, el) => {
+                    itemRefs.current[i] = el;
+                  }}
+                />
+              )}
+              {teams.map((team, teamIndex) => {
+                const index = teamIndex + kbCount;
                 const isActive = index === highlightedIndex;
                 const isSelected = selectedTeamId === team.id;
                 return (

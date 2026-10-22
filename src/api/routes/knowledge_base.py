@@ -9,12 +9,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Res
 from fastapi.responses import StreamingResponse
 
 from src.api.deps import get_current_user_required
-from src.infra.knowledge_base import notifications, quota, service, sharing
+from src.infra.knowledge_base import drafts, notifications, quota, service, sharing
 from src.infra.knowledge_base.errors import (
     KBBusyError,
     KBConflictError,
     KBDisabledError,
     KBDocumentNotFoundError,
+    KBDraftExpiredError,
     KBForbiddenError,
     KBNotFoundError,
     KBQuotaError,
@@ -24,6 +25,7 @@ from src.infra.knowledge_base.errors import (
 from src.infra.logging import get_logger
 from src.infra.storage.content_url import content_disposition
 from src.kernel.schemas.knowledge_base import (
+    KBChatEnabledUpdate,
     KBChunkListResponse,
     KBConfig,
     KBContentResponse,
@@ -32,6 +34,9 @@ from src.kernel.schemas.knowledge_base import (
     KBDocIdsRequest,
     KBDocument,
     KBDocumentListResponse,
+    KBDraft,
+    KBDraftConfirmRequest,
+    KBDraftConfirmResponse,
     KBImportableFileListResponse,
     KBImportRequest,
     KBImportResponse,
@@ -82,6 +87,8 @@ def _map_errors() -> Iterator[None]:
             status_code=400,
             detail={"code": exc.code, "message": str(exc), "limit": exc.limit},
         ) from exc
+    except KBDraftExpiredError as exc:
+        raise HTTPException(status_code=410, detail=str(exc)) from exc
     except KBConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except KBValidationError as exc:
@@ -199,6 +206,29 @@ async def list_importable_files(
         return await service.list_importable_files(user, q=q, page=page, page_size=page_size)
 
 
+@router.get("/drafts/{draft_id}", response_model=KBDraft)
+async def get_draft(draft_id: str, user: TokenPayload = Depends(get_current_user_required)):
+    with _map_errors():
+        return drafts.draft_view(await drafts.get_draft(draft_id, user.sub))
+
+
+@router.post("/drafts/{draft_id}/confirm", response_model=KBDraftConfirmResponse)
+async def confirm_draft(
+    draft_id: str,
+    body: KBDraftConfirmRequest,
+    user: TokenPayload = Depends(get_current_user_required),
+):
+    with _map_errors():
+        document, kb_id = await drafts.confirm_draft(user, draft_id, body.kb_id, body.title)
+    return KBDraftConfirmResponse(document=document, kb_id=kb_id)
+
+
+@router.post("/drafts/{draft_id}/cancel", response_model=KBDraft)
+async def cancel_draft(draft_id: str, user: TokenPayload = Depends(get_current_user_required)):
+    with _map_errors():
+        return drafts.draft_view(await drafts.cancel_draft(draft_id, user.sub))
+
+
 @router.get("/{kb_id}", response_model=KnowledgeBase)
 async def get_kb(kb_id: str, user: TokenPayload = Depends(get_current_user_required)):
     with _map_errors():
@@ -211,6 +241,16 @@ async def update_kb(
 ):
     with _map_errors():
         return await service.update_kb(user, kb_id, body)
+
+
+@router.patch("/{kb_id}/chat-enabled", response_model=KnowledgeBase)
+async def set_chat_enabled(
+    kb_id: str,
+    body: KBChatEnabledUpdate,
+    user: TokenPayload = Depends(get_current_user_required),
+):
+    with _map_errors():
+        return await service.set_chat_enabled(user, kb_id, body.enabled)
 
 
 @router.delete("/{kb_id}", status_code=204)

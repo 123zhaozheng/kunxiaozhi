@@ -15,6 +15,7 @@ import { formatFileSize } from "../documents/utils/fileSize";
 import { formatTimeAgo } from "../../utils/datetime";
 import { OUTLINE_BTN } from "./knowledgeStyles";
 import { KnowledgePublicStatusPill } from "./KnowledgePublicStatusPill";
+import { KbChatToggle } from "./KbChatToggle";
 import { STATUS_TONE_CLASSES, getKbCapabilities, isKbProcessing } from "./knowledgeUtils";
 
 interface KnowledgeBaseCardProps {
@@ -27,6 +28,7 @@ interface KnowledgeBaseCardProps {
   onSubscribe?: () => void;
   onUnsubscribe?: () => void;
   subscribeBusy?: boolean;
+  onChatEnabledChange?: (kb: KnowledgeBase) => void;
 }
 
 interface CardMenuItem {
@@ -147,6 +149,7 @@ export function KnowledgeBaseCard({
   onSubscribe,
   onUnsubscribe,
   subscribeBusy = false,
+  onChatEnabledChange,
 }: KnowledgeBaseCardProps) {
   const { t } = useTranslation();
   const processing = isKbProcessing(kb);
@@ -271,6 +274,12 @@ export function KnowledgeBaseCard({
             {formatTimeAgo(t, kb.updated_at)}
           </span>
         </div>
+
+        {onChatEnabledChange && kb.chat_enabled != null && (
+          <div className="mt-3">
+            <KbChatToggle kb={kb} onChange={onChatEnabledChange} />
+          </div>
+        )}
 
         {!isOwner && (
           <div className="mt-3 flex items-center justify-between gap-2">

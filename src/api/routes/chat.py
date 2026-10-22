@@ -225,6 +225,17 @@ def resolve_goal_for_request(
     return active_goal, request.message
 
 
+KB_MENTIONED_IDS_OPTION = "_kb_mentioned_ids"
+
+
+def apply_kb_mentions(agent_options: dict, kb_ids: list[str] | None) -> None:
+    """Drop client-supplied ``_kb_*`` keys, then inject this turn's @knowledge-base ids."""
+    for key in [k for k in agent_options if str(k).startswith("_kb_")]:
+        del agent_options[key]
+    if kb_ids:
+        agent_options[KB_MENTIONED_IDS_OPTION] = list(kb_ids)
+
+
 def build_conversation_config(
     run_id: str,
     agent_id: str,
@@ -238,7 +249,9 @@ def build_conversation_config(
         "current_run_id": run_id,
         "agent_id": agent_id,
         "executor_key": "agent_stream",
-        "agent_options": request.agent_options or {},
+        "agent_options": {
+            k: v for k, v in (request.agent_options or {}).items() if k != KB_MENTIONED_IDS_OPTION
+        },
         "disabled_tools": request.disabled_tools or [],
         "disabled_skills": request.disabled_skills or [],
         "enabled_skills": request.enabled_skills,
@@ -413,6 +426,7 @@ async def chat_stream(
         if request.agent_options is None:
             request.agent_options = {}
         await validate_agent_model_access(request.agent_options, user)
+        apply_kb_mentions(request.agent_options, request.kb_ids)
         from src.infra.persona_preset.dify_kb_agent_options import (
             apply_dify_kb_dataset_ids_to_agent_options,
         )

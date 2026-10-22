@@ -116,6 +116,7 @@ async def test_kb_crud_contract(env: Env) -> None:
         "can_write",
         "can_manage",
         "can_chat",
+        "chat_enabled",
         "graph_enabled",
         "embedding",
         "index_outdated",
@@ -431,3 +432,52 @@ def test_router_registered_under_api_kb() -> None:
 
     paths = {getattr(r, "path", "") for r in create_app().routes}
     assert {"/api/kb/config", "/api/kb", "/api/kb/{kb_id}/documents/upload", "/api/kb/{kb_id}/reindex"} <= paths
+
+
+async def test_chat_enabled_toggle_and_visibility(env: Env) -> None:
+    kb = await env.create()
+    assert kb["chat_enabled"] is True
+    resp = await env.client.patch(f"{BASE}/{kb['id']}/chat-enabled", json={"enabled": False})
+    assert resp.status_code == 200 and resp.json()["chat_enabled"] is False
+    listed = (await env.client.get(BASE)).json()["items"]
+    assert listed[0]["chat_enabled"] is False
+    env.as_user("stranger-9")
+    assert (
+        await env.client.patch(f"{BASE}/{kb['id']}/chat-enabled", json={"enabled": True})
+    ).status_code == 404
+
+
+async def test_draft_endpoints_confirm_and_cancel(env: Env) -> None:
+    from src.infra.knowledge_base import drafts
+
+    kb = await env.create()
+    first = await drafts.create_draft(
+        owner_id="owner-1", session_id=None, title="笔记", content="# x", suggested_kb_id=kb["id"]
+    )
+    url = f"{BASE}/drafts/{first['_id']}"
+    got = await env.client.get(url)
+    assert got.status_code == 200
+    body = got.json()
+    assert set(body) == {
+        "draft_id", "status", "title", "preview", "char_count", "suggested_kb_id", "kb_id",
+        "document_id", "expires_at",
+    }
+    assert body["status"] == "pending" and body["suggested_kb_id"] == kb["id"]
+
+    confirmed = await env.client.post(f"{url}/confirm", json={"kb_id": kb["id"]})
+    assert confirmed.status_code == 200, confirmed.text
+    out = confirmed.json()
+    assert out["kb_id"] == kb["id"] and out["document"]["filename"] == "笔记.md"
+    assert out["document"]["source"] == "agent"
+    assert (await env.client.get(url)).json()["status"] == "confirmed"
+    assert (await env.client.post(f"{url}/confirm", json={"kb_id": kb["id"]})).status_code == 409
+
+    second = await drafts.create_draft(
+        owner_id="owner-1", session_id=None, title="t", content="c", suggested_kb_id=None
+    )
+    cancel = await env.client.post(f"{BASE}/drafts/{second['_id']}/cancel")
+    assert cancel.status_code == 200 and cancel.json()["status"] == "cancelled"
+
+    env.as_user("stranger-9")
+    assert (await env.client.get(url)).status_code == 404
+    assert (await env.client.get(f"{BASE}/drafts/nope")).status_code == 404

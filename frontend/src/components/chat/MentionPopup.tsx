@@ -2,10 +2,14 @@ import { useEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Loader2, Pin, Star } from "lucide-react";
 import type { PersonaPreset } from "../../types";
+import type { KnowledgeBase } from "../../services/api/knowledgeBase";
+import { KbMentionGroup } from "./KbMentionGroup";
 import { PersonaAvatarWithLoading } from "../persona/PersonaAvatarWithLoading";
 
 interface MentionPopupProps {
   presets: PersonaPreset[];
+  knowledgeBases?: KnowledgeBase[];
+  onSelectKnowledgeBase?: (kb: KnowledgeBase) => void;
   highlightedIndex: number;
   selectedPresetId?: string | null;
   isLoading?: boolean;
@@ -45,6 +49,8 @@ function SkeletonItems() {
 
 export function MentionPopup({
   presets,
+  knowledgeBases = [],
+  onSelectKnowledgeBase,
   highlightedIndex,
   selectedPresetId,
   isLoading,
@@ -58,6 +64,7 @@ export function MentionPopup({
   placement,
 }: MentionPopupProps) {
   const { t } = useTranslation();
+  const kbCount = knowledgeBases.length;
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -106,11 +113,11 @@ export function MentionPopup({
     >
       <div className="mention-popup">
         <div className="mention-popup-content">
-          {isLoading && presets.length === 0 ? (
+          {isLoading && presets.length === 0 && kbCount === 0 ? (
             <div className="mention-popup-list">
               <SkeletonItems />
             </div>
-          ) : presets.length === 0 ? (
+          ) : presets.length === 0 && kbCount === 0 ? (
             <div className="mention-popup-empty">
               {t("chat.mentionNoResults", "没有匹配的角色")}
             </div>
@@ -120,7 +127,24 @@ export function MentionPopup({
               className="mention-popup-list"
               onScroll={handleScroll}
             >
-              {presets.map((preset, index) => {
+              {onSelectKnowledgeBase && (
+                <KbMentionGroup
+                  knowledgeBases={knowledgeBases}
+                  highlightedIndex={highlightedIndex}
+                  trailingLabel={
+                    presets.length > 0
+                      ? t("knowledge.chat.mentionPersonaGroup", "专家/角色")
+                      : null
+                  }
+                  onSelect={onSelectKnowledgeBase}
+                  onHover={onHover}
+                  registerItem={(i, el) => {
+                    itemRefs.current[i] = el;
+                  }}
+                />
+              )}
+              {presets.map((preset, presetIndex) => {
+                const index = presetIndex + kbCount;
                 const isActive = index === highlightedIndex;
                 const isSelected = selectedPresetId === preset.id;
                 return (

@@ -35,6 +35,7 @@ import {
   Pencil,
   Search,
   SquareTerminal,
+  LibraryBig,
   WandSparkles,
   Wrench,
   type LucideIcon,
@@ -173,6 +174,8 @@ function stepIconFor(
       return FolderOpen;
     case "execute":
       return SquareTerminal;
+    case "knowledge":
+      return LibraryBig;
     case "sandbox":
       return Box;
     case "summary":
@@ -254,6 +257,35 @@ function stepDescription(
       return preview === t("chat.message.toolExecute")
         ? preview
         : `${t("chat.message.toolExecute")} ${preview}`;
+    }
+    case "knowledge": {
+      const q = summary.query;
+      switch (summary.op) {
+        case "list":
+          return t("knowledge.tools.list");
+        case "search":
+          return q ? t("knowledge.tools.search", { query: q }) : t("knowledge.tools.searchNoQuery");
+        case "open":
+          if (summary.filename && summary.line) {
+            return t("knowledge.tools.openFileAtLine", {
+              filename: summary.filename,
+              line: summary.line,
+            });
+          }
+          if (summary.filename) {
+            return t("knowledge.tools.openFile", { filename: summary.filename });
+          }
+          return summary.line
+            ? t("knowledge.tools.openAtLine", { line: summary.line })
+            : t("knowledge.tools.open");
+        case "find":
+          return q
+            ? t("knowledge.tools.find", { query: q, filename: summary.filename })
+            : t("knowledge.tools.findNoQuery");
+        case "files":
+          return q ? t("knowledge.tools.files", { query: q }) : t("knowledge.tools.filesNoQuery");
+      }
+      return "";
     }
     case "mcp":
     case "tool": {

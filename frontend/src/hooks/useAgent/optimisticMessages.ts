@@ -6,6 +6,7 @@ interface CreateOptimisticMessagesForSendOptions {
   previousMessages: Message[];
   content: string;
   attachments?: MessageAttachment[];
+  kbMentions?: { id: string; name: string }[];
   now?: Date;
   createId?: () => string;
   /** Prefer the backend run id so SSE can attach without a rematch. */
@@ -21,6 +22,7 @@ export function createOptimisticMessagesForSend({
   previousMessages,
   content,
   attachments,
+  kbMentions,
   now = new Date(),
   createId = () => uuid(),
   assistantMessageId,
@@ -31,6 +33,9 @@ export function createOptimisticMessagesForSend({
     content: content.trim(),
     timestamp: now,
     attachments,
+    ...(kbMentions && kbMentions.length > 0
+      ? { kbMentions: [...kbMentions] }
+      : {}),
   };
 
   const resolvedAssistantId = assistantMessageId || createId();

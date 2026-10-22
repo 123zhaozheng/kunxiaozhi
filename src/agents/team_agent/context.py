@@ -19,6 +19,7 @@ TEAM_ROUTER_EXCLUDED_TOOLS = frozenset(
         "create_agent_team",
         "list_scheduled_tasks",  # 定时任务管理与路由职责无关
         "draft_scheduled_task",
+        "save_to_knowledge_base",  # 保存草稿需用户在卡片确认，团队路由不暴露
     }
 )
 

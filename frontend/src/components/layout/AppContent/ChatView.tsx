@@ -9,6 +9,7 @@ import { RevealPreviewHost } from "../../chat/ChatMessage/items/RevealPreviewHos
 import { SessionImageGalleryProvider } from "../../chat/ChatMessage/sessionImageGallery";
 import { PersistentToolPanelHost } from "../../chat/ChatMessage/items/persistentToolPanelState";
 import { ChatInput } from "../../chat/ChatInput";
+import type { KbMention } from "../../chat/chatInputTypes";
 import { WelcomePage } from "../../chat/WelcomePage";
 import { Virtuoso, type ListRange } from "react-virtuoso";
 import { ApprovalPanel } from "../../panels/ApprovalPanel";
@@ -117,6 +118,7 @@ export function ChatView({
   externalNavigationTargetRunPending,
   externalScrollToBottom,
   outlineToggleRef,
+  kbMentionsRef,
 }: ChatViewProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -170,6 +172,38 @@ export function ChatView({
   const handleRestoreEmphasizedSkills = useCallback((names: string[]) => {
     setEmphasizedSkillNames(names);
   }, []);
+
+  const [kbMentions, setKbMentions] = useState<KbMention[]>([]);
+  const updateKbMentions = useCallback(
+    (updater: (prev: KbMention[]) => KbMention[]) => {
+      setKbMentions((prev) => {
+        const next = updater(prev);
+        if (kbMentionsRef) kbMentionsRef.current = next;
+        return next;
+      });
+    },
+    [kbMentionsRef],
+  );
+  const handleAddKbMention = useCallback(
+    (kb: KbMention) =>
+      updateKbMentions((prev) =>
+        prev.some((item) => item.id === kb.id) ? prev : [...prev, kb],
+      ),
+    [updateKbMentions],
+  );
+  const handleRemoveKbMention = useCallback(
+    (id: string) =>
+      updateKbMentions((prev) => prev.filter((item) => item.id !== id)),
+    [updateKbMentions],
+  );
+  const handleClearKbMentions = useCallback(
+    () => updateKbMentions(() => []),
+    [updateKbMentions],
+  );
+  const handleRestoreKbMentions = useCallback(
+    (kbs: KbMention[]) => updateKbMentions(() => kbs),
+    [updateKbMentions],
+  );
 
   const {
     messagesContainerRef,
@@ -466,6 +500,11 @@ export function ChatView({
     onRemoveEmphasizedSkill: handleRemoveEmphasizedSkill,
     onClearEmphasizedSkills: handleClearEmphasizedSkills,
     onRestoreEmphasizedSkills: handleRestoreEmphasizedSkills,
+    kbMentions,
+    onAddKbMention: handleAddKbMention,
+    onRemoveKbMention: handleRemoveKbMention,
+    onClearKbMentions: handleClearKbMentions,
+    onRestoreKbMentions: handleRestoreKbMentions,
   };
 
   return (

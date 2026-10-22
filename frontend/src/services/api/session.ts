@@ -170,6 +170,7 @@ export function buildSubmitChatBody({
   userTimezone,
   teamId,
   goal,
+  kbIds,
 }: {
   message: string;
   sessionId?: string;
@@ -183,6 +184,7 @@ export function buildSubmitChatBody({
   userTimezone?: string;
   teamId?: string | null;
   goal?: RunGoalSpec | null;
+  kbIds?: string[];
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     message,
@@ -206,6 +208,9 @@ export function buildSubmitChatBody({
   }
   if (goal) {
     body.goal = goal;
+  }
+  if (kbIds && kbIds.length > 0) {
+    body.kb_ids = kbIds;
   }
   return body;
 }
@@ -413,6 +418,7 @@ export const sessionApi = {
     enabledSkills?: string[],
     teamId?: string | null,
     goal?: RunGoalSpec | null,
+    kbIds?: string[],
   ): Promise<{
     session_id: string;
     run_id: string;
@@ -432,6 +438,7 @@ export const sessionApi = {
       userTimezone: getBrowserTimezone(),
       teamId,
       goal,
+      kbIds,
     });
     return authFetch(`${API_BASE}/api/chat/stream?agent_id=${agentId}`, {
       method: "POST",

@@ -224,8 +224,8 @@ async def remove_member(user: TokenPayload, kb_id: str, target_id: str) -> None:
 # ── publishing ───────────────────────────────────────────────
 
 
-async def _respond(kb: dict[str, Any], role: str) -> KnowledgeBase:
-    return (await build_kb_responses([(kb, role)]))[0]
+async def _respond(kb: dict[str, Any], role: str, user_id: str | None = None) -> KnowledgeBase:
+    return (await build_kb_responses([(kb, role)], user_id))[0]
 
 
 async def publish(user: TokenPayload, kb_id: str) -> KnowledgeBase:
@@ -237,7 +237,7 @@ async def publish(user: TokenPayload, kb_id: str) -> KnowledgeBase:
     if status == PUBLIC_DELISTED:
         raise KBForbiddenError("该知识库已被管理员下架，无法重新公开")
     if status in (PUBLIC_PENDING, PUBLIC_APPROVED):
-        return await _respond(access.kb, access.role)
+        return await _respond(access.kb, access.role, user.sub)
 
     approved = not getattr(settings, "KB_PUBLIC_REQUIRES_REVIEW", False)
     kb = await get_kb_storage().transition_public_status(
@@ -252,7 +252,7 @@ async def publish(user: TokenPayload, kb_id: str) -> KnowledgeBase:
     )
     if kb is None:
         raise KBConflictError("公开状态已变化，请刷新后重试")
-    return await _respond(kb, access.role)
+    return await _respond(kb, access.role, user.sub)
 
 
 async def unpublish(user: TokenPayload, kb_id: str) -> KnowledgeBase:
@@ -268,7 +268,7 @@ async def unpublish(user: TokenPayload, kb_id: str) -> KnowledgeBase:
         {"visibility": "private", "public_status": PUBLIC_NONE, "published_at": None},
     )
     if kb is None:
-        return await _respond(access.kb, access.role)  # not public: nothing to undo
+        return await _respond(access.kb, access.role, user.sub)  # not public: nothing to undo
     await storage.delete_members_by_role(kb_id, KB_ROLE_SUBSCRIBER)
     await notif.notify(
         subscribers,
@@ -278,7 +278,7 @@ async def unpublish(user: TokenPayload, kb_id: str) -> KnowledgeBase:
         actor_id=user.sub,
         actor_username=user.username,
     )
-    return await _respond(kb, access.role)
+    return await _respond(kb, access.role, user.sub)
 
 
 # ── subscriptions ────────────────────────────────────────────
@@ -290,7 +290,7 @@ async def subscribe(user: TokenPayload, kb_id: str) -> KnowledgeBase:
     if access is None:
         raise KBNotFoundError()
     if access.role != KB_ROLE_VISITOR:
-        return await _respond(access.kb, access.role)  # owner/member/already subscribed
+        return await _respond(access.kb, access.role, user.sub)  # owner/member/already subscribed
     try:
         await get_kb_storage().insert_member(
             {
@@ -314,7 +314,7 @@ async def subscribe(user: TokenPayload, kb_id: str) -> KnowledgeBase:
         actor_id=user.sub,
         actor_username=user.username,
     )
-    return await _respond(access.kb, KB_ROLE_SUBSCRIBER)
+    return await _respond(access.kb, KB_ROLE_SUBSCRIBER, user.sub)
 
 
 async def unsubscribe(user: TokenPayload, kb_id: str) -> None:
@@ -344,7 +344,7 @@ async def list_plaza(
         )
     }
     items = await build_kb_responses(
-        [(kb, roles.get(str(kb["_id"]), KB_ROLE_VISITOR)) for kb in bases]
+        [(kb, roles.get(str(kb["_id"]), KB_ROLE_VISITOR)) for kb in bases], user.sub
     )
     return KBPlazaResponse(items=items, total=total, page=page, page_size=page_size)
 

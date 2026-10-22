@@ -198,6 +198,8 @@ export interface ChatViewProps {
   externalNavigationTargetRunPending?: boolean;
   externalScrollToBottom?: boolean;
   outlineToggleRef?: React.RefObject<(() => void) | null>;
+  /** ChatView 写入、useAgent 读取的本轮 @ 知识库。 */
+  kbMentionsRef?: React.MutableRefObject<{ id: string; name: string }[]>;
 }
 
 export { useCurrentTeam, resolveChatAssistantIdentity };

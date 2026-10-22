@@ -316,6 +316,16 @@ async def agent_node(state: Dict[str, Any], config: RunnableConfig) -> Dict[str,
     if rubric_middleware is not None:
         user_middleware.append(rubric_middleware)
 
+    if settings.KB_ENABLED and context.user_id:
+        from src.infra.agent.middleware import KnowledgeBasePromptMiddleware
+
+        user_middleware.append(
+            KnowledgeBasePromptMiddleware(
+                user_id=context.user_id,
+                mentioned_ids=agent_options.get("_kb_mentioned_ids"),
+            )
+        )
+
     # KV cache: tag final system block + last tool AFTER all dynamic injection
     # 定时运行：先过滤工具，再打缓存标记，保证缓存标记落在过滤后的工具上
     user_middleware.extend(scheduled_run_middleware())

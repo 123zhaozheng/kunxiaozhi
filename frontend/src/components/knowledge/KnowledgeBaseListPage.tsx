@@ -303,6 +303,9 @@ export function KnowledgeBaseListPage() {
                 onSubscribe={() => void runSubscription(kb, "subscribe")}
                 onUnsubscribe={() => void runSubscription(kb, "unsubscribe")}
                 subscribeBusy={busyKbId === kb.id}
+                onChatEnabledChange={(next) =>
+                  setItems((prev) => prev.map((item) => (item.id === next.id ? next : item)))
+                }
               />
             ))}
           </div>

@@ -187,12 +187,23 @@ def _to_task(task: dict[str, Any]) -> KBTask:
     return KBTask.model_validate(task)
 
 
-async def build_kb_responses(items: list[tuple[dict[str, Any], str]]) -> list[KnowledgeBase]:
-    """Attach live stats, the active task and the index-outdated flag to KB rows."""
+async def build_kb_responses(
+    items: list[tuple[dict[str, Any], str]], user_id: str | None = None
+) -> list[KnowledgeBase]:
+    """Attach live stats, the active task and the index-outdated flag to KB rows.
+
+    With ``user_id`` the caller's per-member ``chat_enabled`` is attached (``None`` for non-members).
+    """
     if not items:
         return []
     storage = get_kb_storage()
     ids = [str(kb["_id"]) for kb, _ in items]
+    chat_flags: dict[str, bool] = {}
+    if user_id:
+        chat_flags = {
+            str(m["kb_id"]): bool(m.get("chat_enabled", True))
+            for m in await storage.list_user_members(user_id, ids)
+        }
     stats = await storage.stats_for(ids)
     tasks = await storage.active_tasks_for(ids)
     card = await _current_embedding_card()
@@ -216,6 +227,7 @@ async def build_kb_responses(items: list[tuple[dict[str, Any], str]]) -> list[Kn
                     "can_write": can_write,
                     "can_manage": can_manage,
                     "can_chat": can_chat,
+                    "chat_enabled": chat_flags.get(str(kb["_id"])),
                     "subscriber_count": subscribers,
                     "embedding": (
                         {"model_name": emb.get("model_name"), "dim": emb.get("dim")}
@@ -318,7 +330,7 @@ async def create_kb(user: TokenPayload, body: KBCreate) -> KnowledgeBase:
     except Exception:
         await storage.delete_base(kb_id)
         raise
-    return (await build_kb_responses([(kb_doc, KB_ROLE_OWNER)]))[0]
+    return (await build_kb_responses([(kb_doc, KB_ROLE_OWNER)], user.sub))[0]
 
 
 _SCOPE_ROLES = {
@@ -345,13 +357,13 @@ async def list_kbs(user: TokenPayload, scope: str = "mine") -> list[KnowledgeBas
         for kb in bases
         if roles[str(kb["_id"])] != KB_ROLE_SUBSCRIBER or is_publicly_readable(kb)
     ]
-    return await build_kb_responses(items)
+    return await build_kb_responses(items, user.sub)
 
 
 async def get_kb(user: TokenPayload, kb_id: str) -> KnowledgeBase:
     ensure_enabled()
     access = await require_kb_access(user.sub, kb_id)
-    return (await build_kb_responses([(access.kb, access.role)]))[0]
+    return (await build_kb_responses([(access.kb, access.role)], user.sub))[0]
 
 
 async def update_kb(user: TokenPayload, kb_id: str, body: KBUpdate) -> KnowledgeBase:
@@ -373,7 +385,18 @@ async def update_kb(user: TokenPayload, kb_id: str, body: KBUpdate) -> Knowledge
             raise KBNotFoundError()
     else:
         updated = access.kb
-    return (await build_kb_responses([(updated, access.role)]))[0]
+    return (await build_kb_responses([(updated, access.role)], user.sub))[0]
+
+
+async def set_chat_enabled(user: TokenPayload, kb_id: str, enabled: bool) -> KnowledgeBase:
+    """Toggle the caller's own "use in chat" flag; visitors (non-members) get not-found."""
+    ensure_enabled()
+    access = await require_kb_access(user.sub, kb_id)
+    storage = get_kb_storage()
+    if await storage.get_member(kb_id, user.sub) is None:
+        raise KBNotFoundError()
+    await storage.set_member_chat_enabled(kb_id, user.sub, bool(enabled))
+    return (await build_kb_responses([(access.kb, access.role)], user.sub))[0]
 
 
 async def delete_kb(user: TokenPayload, kb_id: str) -> None:
@@ -1069,6 +1092,14 @@ async def search_bases(
         if len(results) >= top_k:
             break
     return results, warnings
+
+
+async def search_many(
+    bases: list[dict[str, Any]], req: KBSearchRequest
+) -> tuple[list[KBSearchHit], list[str]]:
+    """Multi-KB search over rows the caller already authorised (chat tools)."""
+    ensure_enabled()
+    return await search_bases(bases, req)
 
 
 async def search(user: TokenPayload, kb_id: str, req: KBSearchRequest) -> KBSearchResponse:

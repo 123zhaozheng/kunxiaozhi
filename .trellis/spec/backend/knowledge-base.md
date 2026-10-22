@@ -42,3 +42,11 @@ Code: `src/infra/knowledge_base/`, routes `src/api/routes/knowledge_base.py` (`/
 - Quota: `resolve_kb_limits` takes the most permissive non-null RoleLimits value across roles, else global `KB_DEFAULT_*` / `KB_MAX_FILE_MB`. `kb_max_count` / `kb_max_docs_per_kb` allow 0 (= none). KB count, doc count and storage are charged to the KB owner; file size uses the uploader's limit. Checks are not atomic (slight overshoot accepted). Errors: 400 `{code, message, limit}` with `kb_quota_count|kb_quota_docs|kb_quota_storage|kb_file_too_large`.
 - File-library import re-checks ownership per file (others' files → `file_not_found`), skips project files, streams to a spooled temp file for SHA-256, and shares `add_document_from_stream` with upload. Per-file failures are reported in `results`, not as a request error.
 - Notifications live in `kb_notifications` (90-day TTL) and are always scoped by `user_id`; WS `kb:notification` is best effort.
+
+## Agent tools (PR3)
+
+- Tools in `src/infra/tool/knowledge_base_tool.py` (registered when `KB_ENABLED`): `list_knowledge_bases`, `search_knowledge_base`, `open_kb_document`, `find_in_kb_document`, `search_kb_files`, `save_to_knowledge_base`. Each call re-resolves `chat_scope.resolve_chat_kb_scope` (user id from runtime, never model args); out-of-scope ids fail before any lookup. Tools never raise; results are JSON ≤ `RESULT_CHAR_BUDGET` (8000) — text fields shrink proportionally, list tools drop trailing items.
+- Client `agent_options` keys starting `_kb_` are untrusted and scrubbed on every entry path (`chat.apply_kb_mentions`, the direct agent stream route); `_kb_mentioned_ids` is per-turn only and never persisted to conversation config. Explicit @ narrows scope to mentioned ∩ readable, ignoring `chat_enabled`.
+- `find_in_kb_document` caps patterns (10 × 200 chars) and runs matching off the event loop with a 5 s deadline.
+- `save_to_knowledge_base` only creates a `kb_save_drafts` row (30 min TTL); `/api/kb/drafts/{id}/confirm` is atomic `pending → applying → confirmed` and re-checks writability + quota. It is excluded from scheduled runs, the team router and WeCom.
+- `KnowledgeBasePromptMiddleware` injects a short `<知识库>` section; KB names/descriptions are flattened (no control chars or `<>`) and truncated since subscribed public KBs carry other users' text.

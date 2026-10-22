@@ -22,6 +22,14 @@ import type { RevealPreviewRequest } from "./items/revealPreviewData";
 import type { RevealPreviewOpenSource } from "./items/revealPreviewState";
 import { createToolPartAnchorId } from "./messagePartAnchors";
 import { ScheduledTaskDraftCard } from "./items/ScheduledTaskDraftCard";
+import { KbSaveDraftCard } from "./items/KbSaveDraftCard";
+import { KnowledgeBaseSearchCard } from "./items/KnowledgeBaseSearchCard";
+import {
+  isKbSaveDraftToolName,
+  isKbSearchToolName,
+  parseKbSaveDraftResult,
+  parseKbSearchResult,
+} from "./items/knowledgeBaseResult";
 import {
   isScheduledTaskDraftToolName,
   parseScheduledTaskDraftResult,
@@ -230,6 +238,16 @@ export function MessagePartRenderer({
       const draft = parseScheduledTaskDraftResult(part.result);
       if (draft) {
         return <ScheduledTaskDraftCard result={draft} />;
+      }
+    }
+    if (!part.isPending && part.success !== false) {
+      const kbResult = part.result as string | Record<string, unknown> | undefined;
+      if (isKbSaveDraftToolName(part.name)) {
+        const draft = parseKbSaveDraftResult(kbResult);
+        if (draft) return <KbSaveDraftCard result={draft} />;
+      } else if (isKbSearchToolName(part.name)) {
+        const search = parseKbSearchResult(kbResult);
+        if (search) return <KnowledgeBaseSearchCard result={search} />;
       }
     }
     return (

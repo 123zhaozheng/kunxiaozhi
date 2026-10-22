@@ -127,6 +127,8 @@ export interface KnowledgeBase {
   can_write: boolean;
   can_manage: boolean;
   can_chat: boolean;
+  /** 当前用户是否在对话中启用该库；非成员为 null。 */
+  chat_enabled?: boolean | null;
   chunk_preset: KBChunkPreset;
   chunk_token_num: number;
   overlap_percent: number;
@@ -138,6 +140,25 @@ export interface KnowledgeBase {
   active_task: KBTask | null;
   created_at: string;
   updated_at: string;
+}
+
+export type KBDraftStatus = "pending" | "confirmed" | "cancelled" | "expired";
+
+export interface KBSaveDraft {
+  draft_id: string;
+  status: KBDraftStatus;
+  title: string;
+  preview: string;
+  char_count: number;
+  suggested_kb_id: string | null;
+  kb_id?: string | null;
+  document_id?: string | null;
+  expires_at: string | null;
+}
+
+export interface KBDraftConfirmResult {
+  document: KBDocument;
+  kb_id: string;
 }
 
 export interface KBCreate {
@@ -679,6 +700,36 @@ export const knowledgeBaseApi = {
       method: "POST",
       body: JSON.stringify(data),
     });
+  },
+
+  setChatEnabled(kbId: string, enabled: boolean): Promise<KnowledgeBase> {
+    return authFetch<KnowledgeBase>(kbUrl(kbId, "/chat-enabled"), {
+      method: "PATCH",
+      body: JSON.stringify({ enabled }),
+    });
+  },
+
+  getDraft(draftId: string): Promise<KBSaveDraft> {
+    return authFetch<KBSaveDraft>(
+      `${BASE}/drafts/${encodeURIComponent(draftId)}`,
+    );
+  },
+
+  confirmDraft(
+    draftId: string,
+    body: { kb_id: string; title?: string },
+  ): Promise<KBDraftConfirmResult> {
+    return authFetch<KBDraftConfirmResult>(
+      `${BASE}/drafts/${encodeURIComponent(draftId)}/confirm`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  },
+
+  cancelDraft(draftId: string): Promise<KBSaveDraft> {
+    return authFetch<KBSaveDraft>(
+      `${BASE}/drafts/${encodeURIComponent(draftId)}/cancel`,
+      { method: "POST" },
+    );
   },
 
   get(kbId: string): Promise<KnowledgeBase> {

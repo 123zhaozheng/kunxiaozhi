@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
 import toast from "react-hot-toast";
-import { Ban, Sparkles, Target, X } from "lucide-react";
+import { Ban, LibraryBig, Sparkles, Target, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ImageViewer } from "../common";
 import { ConfirmDialog } from "../common/ConfirmDialog";
@@ -11,6 +11,12 @@ import { SandboxCapacityDialog } from "./SandboxCapacityDialog";
 import { useFileUpload } from "../../hooks/useFileUpload";
 import { useMentionState } from "../../hooks/useMentionState";
 import { useMentionSearch } from "../../hooks/useMentionSearch";
+import { useKbMentionSearch } from "../../hooks/useKbMentionSearch";
+import {
+  getMergedMentionCount,
+  resolveMergedMention,
+} from "../../hooks/mentionMerge";
+import type { KnowledgeBase } from "../../services/api/knowledgeBase";
 import { useTeamMentionSearch } from "../../hooks/useTeamMentionSearch";
 import { useInputHistory } from "../../hooks/useInputHistory";
 import { useTextareaResize } from "../../hooks/useTextareaResize";
@@ -105,6 +111,11 @@ export const ChatInput = memo(function ChatInput({
   onRemoveEmphasizedSkill,
   onClearEmphasizedSkills,
   onRestoreEmphasizedSkills,
+  kbMentions = [],
+  onAddKbMention,
+  onRemoveKbMention,
+  onClearKbMentions,
+  onRestoreKbMentions,
   pendingInput,
   onPendingInputConsumed,
   className,
@@ -193,7 +204,8 @@ export const ChatInput = memo(function ChatInput({
   const mentionMode = currentAgent === "team" ? "team" : "persona";
   const requiresTeamSelection = currentAgent === "team" && !selectedTeamId;
   const mentionEnabled =
-    mentionMode === "team" ? !!onSelectTeam : !!onUsePersonaPreset;
+    (mentionMode === "team" ? !!onSelectTeam : !!onUsePersonaPreset) ||
+    !!onAddKbMention;
 
   useEffect(() => {
     const enteredTeamMode =
@@ -222,17 +234,27 @@ export const ChatInput = memo(function ChatInput({
     mention.isActive && mentionMode === "team",
   );
 
+  const kbMentionSearch = useKbMentionSearch(
+    mention.query,
+    mention.isActive && !!onAddKbMention,
+  );
+  const kbMentionCount = kbMentionSearch.knowledgeBases.length;
+
   useEffect(() => {
     if (mention.isActive) {
       setMentionResultCount(
-        mentionMode === "team"
-          ? teamMentionSearch.teams.length
-          : mentionSearch.presets.length,
+        getMergedMentionCount(
+          kbMentionCount,
+          mentionMode === "team"
+            ? teamMentionSearch.teams.length
+            : mentionSearch.presets.length,
+        ),
       );
     }
   }, [
     mention.isActive,
     mentionMode,
+    kbMentionCount,
     mentionSearch.presets.length,
     teamMentionSearch.teams.length,
     setMentionResultCount,
@@ -486,6 +508,27 @@ export const ChatInput = memo(function ChatInput({
     [input, mention, onUsePersonaPreset, resetMention, scheduleTextareaResize],
   );
 
+  const applyKbMentionSelection = useCallback(
+    (kb: KnowledgeBase) => {
+      if (!mention.isActive) return;
+      const before = input.substring(0, mention.atIndex);
+      const after = input.substring(mention.atIndex + mention.query.length + 1);
+      setInput(before + after);
+      setCursorPosition(before.length || 0);
+      requestAnimationFrame(() => {
+        const textarea = textareaRef.current;
+        if (textarea) {
+          textarea.selectionStart = textarea.selectionEnd = before.length;
+          textarea.focus();
+          scheduleTextareaResize();
+        }
+      });
+      onAddKbMention?.({ id: kb.id, name: kb.name });
+      resetMention();
+    },
+    [input, mention, onAddKbMention, resetMention, scheduleTextareaResize],
+  );
+
   const applyTeamMentionSelection = useCallback(
     (team: Team) => {
       if (!mention.isActive) return;
@@ -516,6 +559,7 @@ export const ChatInput = memo(function ChatInput({
       const trimmed = input.trim();
       const draftAttachments = [...attachments];
       const draftSkills = [...emphasizedSkillNames];
+      const draftKbs = [...kbMentions];
       let accepted = false;
       const handleAccepted = () => {
         if (accepted) return;
@@ -524,6 +568,7 @@ export const ChatInput = memo(function ChatInput({
         setInput("");
         setAttachments([]);
         onClearEmphasizedSkills?.();
+        onClearKbMentions?.();
         requestAnimationFrame(() => {
           if (textareaRef.current) {
             textareaRef.current.style.height = "auto";
@@ -557,6 +602,7 @@ export const ChatInput = memo(function ChatInput({
           setInput(draft);
           setAttachments(draftAttachments);
           onRestoreEmphasizedSkills?.(draftSkills);
+          onRestoreKbMentions?.(draftKbs);
           setCapacityModalOpen(true);
           requestAnimationFrame(() => {
             const textarea = textareaRef.current;
@@ -623,12 +669,26 @@ export const ChatInput = memo(function ChatInput({
       }
       if (e.key === "Enter" || e.key === "Tab") {
         e.preventDefault();
-        if (mentionMode === "team") {
-          const highlighted = teamMentionSearch.teams[mention.highlightedIndex];
-          if (highlighted) applyTeamMentionSelection(highlighted);
-        } else {
-          const highlighted = mentionSearch.presets[mention.highlightedIndex];
-          if (highlighted) applyMentionSelection(highlighted);
+        const merged =
+          mentionMode === "team"
+            ? resolveMergedMention(
+                kbMentionSearch.knowledgeBases,
+                teamMentionSearch.teams,
+                mention.highlightedIndex,
+              )
+            : resolveMergedMention(
+                kbMentionSearch.knowledgeBases,
+                mentionSearch.presets,
+                mention.highlightedIndex,
+              );
+        if (merged?.kind === "kb") {
+          applyKbMentionSelection(merged.kb);
+        } else if (merged?.kind === "item") {
+          if (mentionMode === "team") {
+            applyTeamMentionSelection(merged.item as Team);
+          } else {
+            applyMentionSelection(merged.item as PersonaPreset);
+          }
         }
         return;
       }
@@ -775,6 +835,10 @@ export const ChatInput = memo(function ChatInput({
           {mention.isActive && mentionMode === "persona" && (
             <MentionPopup
               presets={mentionSearch.presets}
+              knowledgeBases={kbMentionSearch.knowledgeBases}
+              onSelectKnowledgeBase={
+                onAddKbMention ? applyKbMentionSelection : undefined
+              }
               highlightedIndex={mention.highlightedIndex}
               selectedPresetId={selectedPersonaPresetId}
               isLoading={mentionSearch.isLoading}
@@ -790,6 +854,10 @@ export const ChatInput = memo(function ChatInput({
           {mention.isActive && mentionMode === "team" && (
             <TeamMentionPopup
               teams={teamMentionSearch.teams}
+              knowledgeBases={kbMentionSearch.knowledgeBases}
+              onSelectKnowledgeBase={
+                onAddKbMention ? applyKbMentionSelection : undefined
+              }
               highlightedIndex={mention.highlightedIndex}
               selectedTeamId={selectedTeamId}
               isLoading={teamMentionSearch.isLoading}
@@ -832,6 +900,36 @@ export const ChatInput = memo(function ChatInput({
                         defaultValue: "移除技能 {{name}}",
                       })}
                       onClick={() => onRemoveEmphasizedSkill?.(name)}
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {kbMentions.length > 0 && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 pt-2">
+                {kbMentions.map((kb) => (
+                  <span
+                    key={kb.id}
+                    className="group inline-flex min-w-0 items-center gap-1.5"
+                  >
+                    <LibraryBig
+                      size={14}
+                      className="shrink-0"
+                      style={{ color: "var(--theme-text-secondary)" }}
+                    />
+                    <span className="max-w-48 truncate text-sm font-semibold text-blue-600 dark:text-blue-400 font-serif">
+                      {kb.name}
+                    </span>
+                    <button
+                      type="button"
+                      className="inline-flex rounded p-0.5 text-stone-400 opacity-0 transition-opacity group-hover:opacity-100 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300"
+                      aria-label={t("knowledge.chat.removeMention", {
+                        name: kb.name,
+                        defaultValue: "移除知识库 {{name}}",
+                      })}
+                      onClick={() => onRemoveKbMention?.(kb.id)}
                     >
                       <X size={12} />
                     </button>

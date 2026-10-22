@@ -13,6 +13,11 @@ import type {
 import type { ActiveGoalSpec } from "../../hooks/useAgent/types";
 import type { ModelOption } from "../../services/api/model";
 
+export interface KbMention {
+  id: string;
+  name: string;
+}
+
 export interface ChatInputProps {
   onSend: (
     message: string,
@@ -99,6 +104,11 @@ export interface ChatInputProps {
   onRemoveEmphasizedSkill?: (name: string) => void;
   onClearEmphasizedSkills?: () => void;
   onRestoreEmphasizedSkills?: (names: string[]) => void;
+  kbMentions?: KbMention[];
+  onAddKbMention?: (kb: KbMention) => void;
+  onRemoveKbMention?: (id: string) => void;
+  onClearKbMentions?: () => void;
+  onRestoreKbMentions?: (kbs: KbMention[]) => void;
   pendingInput?: string | null;
   onPendingInputConsumed?: () => void;
   className?: string;

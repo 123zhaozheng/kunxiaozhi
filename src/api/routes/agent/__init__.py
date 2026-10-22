@@ -500,6 +500,9 @@ async def chat_stream(
 
     # Pass all agent_options to the agent
     agent_options = request_body.agent_options or {}
+    # ``_kb_*`` keys are server-injected (see chat.apply_kb_mentions); never trust them here.
+    for key in [k for k in agent_options if str(k).startswith("_kb_")]:
+        del agent_options[key]
     request_body.agent_options = agent_options
     logger.info(f"[API] request.agent_options: {request_body.agent_options}")
     logger.info(f"[API] agent_options to pass: {agent_options}")

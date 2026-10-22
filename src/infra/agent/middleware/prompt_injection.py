@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -158,3 +159,78 @@ class EnvVarPromptMiddleware(AgentMiddleware):
             new_system_message = _append_system_text_blocks(request.system_message, prompt_sections)
             request = request.override(system_message=new_system_message)
         return await handler(request)
+
+
+KB_PROMPT_MAX_ITEMS = 10
+KB_PROMPT_DESC_CHARS = 60
+KB_PROMPT_NAME_CHARS = 40
+
+
+def _prompt_safe(text: str | None, limit: int) -> str:
+    """Flatten user-authored KB text (names may come from other users' public KBs)."""
+    cleaned = re.sub(r"[\x00-\x1f\x7f<>]", " ", text or "")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned[:limit] + "…" if len(cleaned) > limit else cleaned
+
+
+def build_knowledge_base_prompt(scope: list[Any], mentioned: bool) -> str:
+    """Prompt section for the chat-visible KBs; empty when there are none."""
+    if not scope:
+        return ""
+    parts = []
+    for kb in scope[:KB_PROMPT_MAX_ITEMS]:
+        name = _prompt_safe(kb.name, KB_PROMPT_NAME_CHARS)
+        desc = _prompt_safe(kb.description, KB_PROMPT_DESC_CHARS)
+        parts.append(f"{name}（{desc}）" if desc else name)
+    listing = "；".join(parts)
+    if len(scope) > KB_PROMPT_MAX_ITEMS:
+        listing += f" 等 {len(scope)} 个"
+    lines = [
+        "<知识库>",
+        f"当前对话可用的个人知识库：{listing}",
+        "当问题可能与这些知识库内容相关时，先用 search_knowledge_base 检索，回答中注明来源文件。",
+    ]
+    if mentioned:
+        names = "、".join(
+            _prompt_safe(kb.name, KB_PROMPT_NAME_CHARS) for kb in scope[:KB_PROMPT_MAX_ITEMS]
+        )
+        lines.append(f"用户本轮指定了知识库：{names}。回答前必须先在这些知识库中检索。")
+    lines.append("</知识库>")
+    return "\n".join(lines)
+
+
+class KnowledgeBasePromptMiddleware(AgentMiddleware):
+    """Append the chat-visible knowledge bases to the system prompt (scope computed once)."""
+
+    def __init__(self, *, user_id: str | None, mentioned_ids: list[str] | None = None) -> None:
+        super().__init__()
+        self._user_id = user_id
+        self._mentioned_ids = list(mentioned_ids or []) or None
+        self._section: str | None = None
+
+    async def _compute(self) -> str:
+        if not self._user_id:
+            return ""
+        try:
+            from src.infra.knowledge_base.chat_scope import resolve_chat_kb_scope
+            from src.kernel.config import settings
+
+            if not getattr(settings, "KB_ENABLED", False):
+                return ""
+            scope = await resolve_chat_kb_scope(self._user_id, self._mentioned_ids)
+            return build_knowledge_base_prompt(scope, bool(self._mentioned_ids))
+        except Exception:
+            logger.warning("[KB] Failed to build knowledge base prompt", exc_info=True)
+            return ""
+
+    async def awrap_model_call(
+        self,
+        request: ModelRequest[ContextT],
+        handler: Callable[[ModelRequest[ContextT]], Awaitable[ModelResponse[ResponseT]]],
+    ) -> ModelResponse[ResponseT]:
+        if self._section is None:
+            self._section = await self._compute()
+        if not self._section:
+            return await handler(request)
+        new_system_message = _append_system_text_block(request.system_message, self._section)
+        return await handler(request.override(system_message=new_system_message))

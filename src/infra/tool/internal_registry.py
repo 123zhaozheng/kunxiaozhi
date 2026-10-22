@@ -15,6 +15,7 @@ from src.infra.tool.dify_kb_tool import (
 )
 from src.infra.tool.env_var_tool import get_env_var_tools
 from src.infra.tool.image_generation_tool import get_image_generation_tool
+from src.infra.tool.knowledge_base_tool import get_knowledge_base_tools
 from src.infra.tool.mcp_client import MCPToolWithRetry
 from src.infra.tool.persona_preset_tool import get_persona_preset_tools
 from src.infra.tool.read_document_tool import get_read_document_tool
@@ -77,6 +78,8 @@ def build_internal_tools(*, include_sandbox_tools: bool | None = None) -> list[B
         settings, "SCHEDULED_TASK_CHAT_TOOL_ENABLED", True
     ):
         tools.extend(get_scheduled_task_tools())
+    if getattr(settings, "KB_ENABLED", False):
+        tools.extend(get_knowledge_base_tools())
     return tools
 
 

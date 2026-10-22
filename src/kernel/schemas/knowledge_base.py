@@ -148,6 +148,7 @@ class KnowledgeBase(_KBModel):
     can_write: bool = False
     can_manage: bool = False
     can_chat: bool = True
+    chat_enabled: Optional[bool] = None
     graph_enabled: bool = False
     embedding: Optional[KBEmbeddingInfo] = None
     index_outdated: bool = False
@@ -155,6 +156,10 @@ class KnowledgeBase(_KBModel):
     active_task: Optional[KBTask] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+
+class KBChatEnabledUpdate(_KBModel):
+    enabled: bool
 
 
 class KBCreate(_KBModel):
@@ -431,3 +436,25 @@ class KBAdminListResponse(_KBModel):
     total: int = 0
     page: int = 1
     page_size: int = 20
+
+
+class KBDraftConfirmRequest(_KBModel):
+    kb_id: str
+    title: Optional[str] = None
+
+
+class KBDraft(_KBModel):
+    draft_id: str
+    status: str
+    title: str = ""
+    preview: str = ""
+    char_count: int = 0
+    suggested_kb_id: Optional[str] = None
+    kb_id: Optional[str] = None
+    document_id: Optional[str] = None
+    expires_at: datetime
+
+
+class KBDraftConfirmResponse(_KBModel):
+    document: KBDocument
+    kb_id: str

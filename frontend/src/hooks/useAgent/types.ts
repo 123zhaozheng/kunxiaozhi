@@ -160,6 +160,9 @@ export interface UseAgentOptions {
   getDisabledSkills?: () => string[];
   getEnabledSkills?: () => string[] | undefined;
   getPersonaPresetId?: () => string | null;
+  /** 本轮 @ 指定的知识库 id（只对本轮生效）。 */
+  getKnowledgeBaseIds?: () => string[];
+  getKnowledgeBaseMentions?: () => { id: string; name: string }[];
   getDisabledMcpTools?: () => string[];
   getAgentOptions?: () => Record<string, boolean | string | number>;
   onSkillAdded?: (

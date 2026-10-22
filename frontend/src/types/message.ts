@@ -28,6 +28,8 @@ export interface Message {
   feedbackId?: string;
   // 是否被取消
   cancelled?: boolean;
+  // 用户消息本轮 @ 的知识库（仅实时展示）
+  kbMentions?: { id: string; name: string }[];
 }
 
 // 消息内容块类型

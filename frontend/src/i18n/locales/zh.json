@@ -1638,6 +1638,50 @@
       "rejectTitle": "驳回公开申请",
       "delistTitle": "下架知识库",
       "reasonLabel": "原因（必填，会通知所有者）"
+    },
+    "chat": {
+      "enabled": "对话中启用",
+      "hint": "在对话中输入 @ 可临时指定知识库",
+      "mentionGroup": "知识库",
+      "mentionPersonaGroup": "专家/角色",
+      "mentionTeamGroup": "团队",
+      "docCount": "{{count}} 个文档",
+      "removeMention": "移除知识库 {{name}}"
+    },
+    "tools": {
+      "list": "查看可用知识库",
+      "search": "检索知识库：{{query}}",
+      "searchNoQuery": "检索知识库",
+      "open": "打开文档",
+      "openAtLine": "打开文档 第 {{line}} 行",
+      "openFile": "打开文档：{{filename}}",
+      "openFileAtLine": "打开文档：{{filename}} 第 {{line}} 行",
+      "find": "在文档中查找：{{query}}",
+      "findNoQuery": "在文档中查找",
+      "files": "查找知识库文件：{{query}}",
+      "filesNoQuery": "查找知识库文件",
+      "searchTitle": "检索知识库：{{query}}",
+      "resultCount": "{{count}} 条来源",
+      "noResults": "没有找到相关内容",
+      "toggleSnippet": "展开片段"
+    },
+    "citations": {
+      "title": "参考来源",
+      "lines": "第 {{range}} 行"
+    },
+    "draft": {
+      "untitled": "未命名文档",
+      "chars": "{{count}} 字",
+      "targetKb": "保存到",
+      "noWritableKb": "没有可写入的知识库",
+      "confirm": "确认保存",
+      "cancel": "取消",
+      "saved": "已存入知识库",
+      "confirmedIn": "已存入《{{name}}》",
+      "cancelled": "已取消",
+      "expired": "已过期",
+      "readonly": "仅展示草稿内容",
+      "open": "查看"
     }
   },
   "landing": {

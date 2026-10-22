@@ -152,6 +152,7 @@ export function ChatAppContent({
 
   const projectManager = useProjectManager();
 
+  const kbMentionsRef = useRef<{ id: string; name: string }[]>([]);
   const sessionConfigRef = useRef({
     disabledSkills: [] as string[],
     enabledSkills: undefined as string[] | undefined,
@@ -216,6 +217,8 @@ export function ChatAppContent({
     getEnabledSkills: () => sessionConfigRef.current.enabledSkills,
     getPersonaPresetId: () => sessionConfigRef.current.personaPresetId,
     getDisabledMcpTools: () => sessionConfigRef.current.disabledMcpTools,
+    getKnowledgeBaseIds: () => kbMentionsRef.current.map((kb) => kb.id),
+    getKnowledgeBaseMentions: () => kbMentionsRef.current,
     getAgentOptions: () => sessionConfigRef.current.agentOptions,
     onSkillAdded: (
       skillName: string,
@@ -916,6 +919,7 @@ export function ChatAppContent({
           }
           externalScrollToBottom={externalScrollToBottom}
           outlineToggleRef={outlineToggleRef}
+          kbMentionsRef={kbMentionsRef}
         />
         <BlockPreviewPortal />
       </>
