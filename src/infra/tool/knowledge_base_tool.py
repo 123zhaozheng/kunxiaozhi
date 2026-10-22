@@ -297,7 +297,10 @@ async def _search(
     else:
         bases = await storage.list_bases(wanted)
         request = KBSearchRequest(
-            query=query, top_k=SEARCH_RECALL if doc_filter else top_k, mode="hybrid"
+            query=query,
+            top_k=SEARCH_RECALL if doc_filter else top_k,
+            mode="hybrid",
+            use_graph=True,  # only takes effect for KBs whose graph is built
         )
         hits, warnings = await service.search_many(bases, request)
         if doc_filter is not None:
@@ -318,6 +321,7 @@ async def _search(
             "end_line": hit.end_line,
             "chunk_count": int((briefs.get(hit.doc_id) or {}).get("chunk_count") or 0),
             "score": round(float(hit.score), 4),
+            "sources": hit.sources,
             "content": hit.text[:SNIPPET_CHARS],
         }
         for n, hit in enumerate(results, start=1)

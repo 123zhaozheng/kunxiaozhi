@@ -180,6 +180,7 @@ test("route, tab content and settings are wired for the knowledge base", () => {
   const constants = read("../../panels/SettingsPanel.constants.ts");
   assert.match(constants, /KB_EMBEDDING_MODEL_ID: "embedding"/);
   assert.match(constants, /KB_RERANK_MODEL_ID: "rerank"/);
+  assert.match(constants, /KB_GRAPH_LLM_MODEL_ID: "chat"/);
   assert.match(constants, /"knowledge_base"/);
   assert.match(read("../../../utils/backendErrors.ts"), /kb_disabled/);
   const ws = read("../../../hooks/useWebSocket.ts");

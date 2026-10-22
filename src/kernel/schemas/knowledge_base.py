@@ -30,6 +30,7 @@ TASK_CANCELLED = "cancelled"
 TASK_ACTIVE_STATUSES = (TASK_QUEUED, TASK_RUNNING)
 TASK_TERMINAL_STATUSES = (TASK_SUCCEEDED, TASK_FAILED, TASK_CANCELLED)
 TASK_TYPE_INGEST = "ingest"
+TASK_TYPE_GRAPH = "graph"
 
 # ── kb states / roles ────────────────────────────────────────
 KB_STATUS_ACTIVE = "active"
@@ -199,6 +200,7 @@ class KBConfig(_KBModel):
     rerank_available: bool = False
     allow_public: bool = True
     public_requires_review: bool = False
+    allow_graph: bool = True
 
 
 class KBListResponse(_KBModel):
@@ -267,6 +269,7 @@ class KBSearchRequest(_KBModel):
     use_rerank: Optional[bool] = None
     score_threshold: float = 0.0
     vector_weight: float = 0.7
+    use_graph: bool = False
 
 
 class KBSearchHit(_KBModel):
@@ -281,6 +284,7 @@ class KBSearchHit(_KBModel):
     end_line: Optional[int] = None
     score: float
     rerank_score: Optional[float] = None
+    sources: list[str] = Field(default_factory=lambda: ["chunk"])
 
 
 class KBSearchResponse(_KBModel):
@@ -458,3 +462,94 @@ class KBDraft(_KBModel):
 class KBDraftConfirmResponse(_KBModel):
     document: KBDocument
     kb_id: str
+
+
+# ── PR4: knowledge graph ──
+
+
+class KBGraphEnableRequest(_KBModel):
+    schema_text: str = Field(default="", alias="schema")
+
+
+class KBGraphStatus(_KBModel):
+    enabled: bool = False
+    schema_text: str = Field(default="", serialization_alias="schema")
+    total_chunks: int = 0
+    pending: int = 0
+    done: int = 0
+    failed: int = 0
+    excluded: int = 0
+    entity_count: int = 0
+    relation_count: int = 0
+    active_task: Optional[KBTask] = None
+    last_error: Optional[str] = None
+    allow_graph: bool = True
+
+
+class KBGraphNode(_KBModel):
+    id: str
+    name: str
+    label: str
+    mention_count: int = 0
+
+
+class KBGraphEdge(_KBModel):
+    id: str
+    source: str
+    target: str
+    label: str
+    text: str = ""
+
+
+class KBGraphResponse(_KBModel):
+    nodes: list[KBGraphNode] = Field(default_factory=list)
+    edges: list[KBGraphEdge] = Field(default_factory=list)
+    truncated: bool = False
+
+
+class KBGraphEntity(_KBModel):
+    id: str
+    name: str
+    label: str
+    attributes: dict[str, str] = Field(default_factory=dict)
+    mention_count: int = 0
+
+
+class KBGraphRelation(_KBModel):
+    id: str
+    source_id: str
+    target_id: str
+    source_name: str = ""
+    target_name: str = ""
+    label: str
+    text: str = ""
+
+
+class KBGraphMention(_KBModel):
+    doc_id: str
+    filename: str = ""
+    chunk_id: str
+    start_line: Optional[int] = None
+    end_line: Optional[int] = None
+    snippet: str = ""
+
+
+class KBGraphEntityDetail(_KBModel):
+    entity: KBGraphEntity
+    relations: list[KBGraphRelation] = Field(default_factory=list)
+    mentions: list[KBGraphMention] = Field(default_factory=list)
+    relations_total: int = 0
+    mentions_total: int = 0
+
+
+class KBGraphFailedChunk(_KBModel):
+    chunk_id: str
+    doc_id: str
+    filename: str = ""
+    error: str = ""
+    snippet: str = ""
+
+
+class KBGraphFailedResponse(_KBModel):
+    items: list[KBGraphFailedChunk] = Field(default_factory=list)
+    total: int = 0

@@ -107,6 +107,10 @@ def _apply_update(doc: dict[str, Any], update: dict[str, Any], inserting: bool) 
         doc.pop(path, None)
     for path, amount in update.get("$inc", {}).items():
         _set(doc, path, (_get(doc, path) or 0) + amount)
+    for path, values in update.get("$pullAll", {}).items():
+        current = _get(doc, path)
+        if isinstance(current, list):
+            _set(doc, path, [item for item in current if item not in values])
     for path, spec in update.get("$addToSet", {}).items():
         items = spec["$each"] if isinstance(spec, dict) and "$each" in spec else [spec]
         current = _get(doc, path)
@@ -358,7 +362,7 @@ class FakeCollection:
             for name, acc in spec.items():
                 if name == "_id":
                     continue
-                (op, arg), = acc.items()
+                ((op, arg),) = acc.items()
                 assert op == "$sum", op
                 amount = 1 if arg == 1 else (FakeCollection._expr(row, arg) or 0)
                 bucket[name] = bucket.get(name, 0) + amount
@@ -389,7 +393,9 @@ class FakeObjectStorage:
         self.objects: dict[str, bytes] = {}
         self.fail_uploads = False
 
-    async def upload_stream_to_key(self, file: Any, key: str, content_type=None, metadata=None, **_):
+    async def upload_stream_to_key(
+        self, file: Any, key: str, content_type=None, metadata=None, **_
+    ):
         if self.fail_uploads:
             raise RuntimeError("storage down")
         self.objects[key] = file.read()
@@ -492,6 +498,44 @@ class FakeVectorStore:
                 hits.append(self._hit(p, score))
         return sorted(hits, key=lambda h: -h.score)[:limit]
 
+    # graph points: collection -> {(kind, ref_id): GraphPoint}
+    graph: dict[str, dict[tuple[str, str], Any]] = field(default_factory=dict)
+
+    async def ensure_graph_collection(self, dim: int, model_name: str) -> str:
+        name = f"kbg_{dim}_{hashlib.sha1(model_name.encode()).hexdigest()[:8]}"
+        self.graph.setdefault(name, {})
+        return name
+
+    async def upsert_graph_points(self, collection: str, points: list[Any]) -> None:
+        store = self.graph.setdefault(collection, {})
+        for p in points:
+            store[(p.kind, p.ref_id)] = p
+        self.calls.append(("upsert_graph_points", (collection, len(points))))
+
+    async def search_graph(self, collection, kb_id, kind, vector, limit):
+        from src.infra.knowledge_base.vector_store import GraphHit
+
+        hits = [
+            GraphHit(
+                p.kind, p.ref_id, p.text, sum(a * b for a, b in zip(p.dense, vector, strict=False))
+            )
+            for (k, _), p in self.graph.get(collection, {}).items()
+            if k == kind and p.kb_id == kb_id
+        ]
+        return sorted(hits, key=lambda h: -h.score)[:limit]
+
+    async def delete_graph_points(self, collection: str, kind: str, ref_ids: list[str]) -> None:
+        store = self.graph.get(collection, {})
+        for ref in ref_ids:
+            store.pop((kind, ref), None)
+        self.calls.append(("delete_graph_points", (collection, kind, len(ref_ids))))
+
+    async def delete_graph_by_kb(self, collection: str, kb_id: str) -> None:
+        store = self.graph.get(collection, {})
+        for key in [k for k, p in store.items() if p.kb_id == kb_id]:
+            del store[key]
+        self.calls.append(("delete_graph_by_kb", (collection, kb_id)))
+
     async def close(self) -> None:
         return None
 
@@ -550,9 +594,7 @@ def install_kb_fakes(monkeypatch: pytest.MonkeyPatch) -> EngineFakes:
 
     monkeypatch.setattr(objects, "get_or_init_storage", _storage)
 
-    fakes = EngineFakes(
-        vectors=FakeVectorStore(), objects=object_store, mongo=mongo, published=[]
-    )
+    fakes = EngineFakes(vectors=FakeVectorStore(), objects=object_store, mongo=mongo, published=[])
     monkeypatch.setattr(vector_store, "get_vector_store", lambda: fakes.vectors)
 
     # settings
@@ -635,7 +677,9 @@ def install_kb_fakes(monkeypatch: pytest.MonkeyPatch) -> EngineFakes:
     monkeypatch.setattr(parsing, "parse_document", _parse)
 
     # chunking: one chunk per non-empty line
-    def _chunk(markdown: str, *, filename: str, preset=None, chunk_token_num=None, overlap_percent=None):
+    def _chunk(
+        markdown: str, *, filename: str, preset=None, chunk_token_num=None, overlap_percent=None
+    ):
         out = []
         for number, line in enumerate(markdown.splitlines(), start=1):
             if line.strip():

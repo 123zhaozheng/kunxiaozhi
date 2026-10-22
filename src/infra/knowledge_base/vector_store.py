@@ -56,6 +56,33 @@ def collection_name_for(dim: int, model_name: str) -> str:
     return f"kb_{dim}_{digest}"
 
 
+def graph_collection_name_for(dim: int, model_name: str) -> str:
+    """kbg_{dim}_{sha1(model_name)[:8]}"""
+    digest = hashlib.sha1(model_name.encode("utf-8")).hexdigest()[:8]
+    return f"kbg_{dim}_{digest}"
+
+
+def graph_point_id_for(kind: str, ref_id: str) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"kbg:{kind}:{ref_id}"))
+
+
+@dataclass(frozen=True)
+class GraphPoint:
+    kind: str  # "entity" | "triple"
+    ref_id: str
+    kb_id: str
+    text: str
+    dense: list[float]
+
+
+@dataclass(frozen=True)
+class GraphHit:
+    kind: str
+    ref_id: str
+    text: str
+    score: float
+
+
 def point_id_for(chunk_id: str) -> str:
     """Deterministic uuid5(NAMESPACE_URL, f"kb-chunk:{chunk_id}") as str."""
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"kb-chunk:{chunk_id}"))
@@ -239,6 +266,105 @@ class KBVectorStore:
             return []
         query = models.SparseVector(indices=vector.indices, values=vector.values)
         return await self._query(collection, kb_ids, query, SPARSE_VECTOR_NAME, limit)
+
+    async def ensure_graph_collection(self, dim: int, model_name: str) -> str:
+        """Dense-only COSINE collection for entity / relation vectors."""
+        name = graph_collection_name_for(dim, model_name)
+        if name in self._ensured:
+            return name
+        client = await self._get_client()
+        if not await client.collection_exists(name):
+            try:
+                await client.create_collection(
+                    collection_name=name,
+                    vectors_config={
+                        DENSE_VECTOR_NAME: models.VectorParams(
+                            size=dim, distance=models.Distance.COSINE
+                        )
+                    },
+                )
+            except Exception:
+                if not await client.collection_exists(name):
+                    raise
+        if self._server_mode:
+            for field_name in ("kb_id", "kind"):
+                try:
+                    await client.create_payload_index(
+                        collection_name=name,
+                        field_name=field_name,
+                        field_schema=models.PayloadSchemaType.KEYWORD,
+                    )
+                except Exception as exc:  # noqa: BLE001 - indexes only affect performance
+                    logger.warning(f"[KB] Payload index {field_name} on {name} failed: {exc}")
+        self._ensured.add(name)
+        return name
+
+    async def upsert_graph_points(self, collection: str, points: list[GraphPoint]) -> None:
+        client = await self._get_client()
+        for start in range(0, len(points), _UPSERT_BATCH_SIZE):
+            batch = [
+                models.PointStruct(
+                    id=graph_point_id_for(p.kind, p.ref_id),
+                    vector={DENSE_VECTOR_NAME: p.dense},
+                    payload={
+                        "kb_id": p.kb_id,
+                        "kind": p.kind,
+                        "ref_id": p.ref_id,
+                        "text": p.text,
+                    },
+                )
+                for p in points[start : start + _UPSERT_BATCH_SIZE]
+            ]
+            await client.upsert(collection_name=collection, points=batch, wait=True)
+
+    async def search_graph(
+        self, collection: str, kb_id: str, kind: str, vector: list[float], limit: int
+    ) -> list[GraphHit]:
+        if limit <= 0:
+            return []
+        client = await self._get_client()
+        flt = models.Filter(
+            must=[
+                models.FieldCondition(key="kb_id", match=models.MatchValue(value=kb_id)),
+                models.FieldCondition(key="kind", match=models.MatchValue(value=kind)),
+            ]
+        )
+        try:
+            response = await client.query_points(
+                collection_name=collection,
+                query=vector,
+                using=DENSE_VECTOR_NAME,
+                query_filter=flt,
+                limit=limit,
+                with_payload=True,
+            )
+        except Exception:
+            if await client.collection_exists(collection):
+                raise
+            return []
+        return [
+            GraphHit(
+                kind=kind,
+                ref_id=str((p.payload or {}).get("ref_id", "")),
+                text=str((p.payload or {}).get("text", "")),
+                score=float(p.score),
+            )
+            for p in response.points
+        ]
+
+    async def delete_graph_points(self, collection: str, kind: str, ref_ids: list[str]) -> None:
+        if not ref_ids:
+            return
+        client = await self._get_client()
+        selector = models.PointIdsList(points=[graph_point_id_for(kind, r) for r in ref_ids])
+        try:
+            await client.delete(collection_name=collection, points_selector=selector, wait=True)
+        except Exception:
+            if await client.collection_exists(collection):
+                raise
+
+    async def delete_graph_by_kb(self, collection: str, kb_id: str) -> None:
+        await self._delete_by_field(collection, "kb_id", kb_id)
 
     async def close(self) -> None:
         async with self._client_lock:

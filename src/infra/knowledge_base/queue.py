@@ -30,6 +30,8 @@ from src.kernel.schemas.knowledge_base import (
     TASK_QUEUED,
     TASK_RUNNING,
     TASK_SUCCEEDED,
+    TASK_TYPE_GRAPH,
+    TASK_TYPE_INGEST,
 )
 
 logger = get_logger(__name__)
@@ -216,9 +218,16 @@ async def process_kb_task(task_id: str) -> None:
         return
 
     now = utc_now()
-    if await storage.has_running_for_user(task["created_by"], now, task_id):
+    if await storage.has_running_for_user(
+        task["created_by"], now, task_id, task.get("type") or TASK_TYPE_INGEST
+    ):
         # One running task per user keeps big uploads from starving everyone else; the
         # finishing task (or the reconciler) republishes this one.
+        return
+    if task.get("type") == TASK_TYPE_GRAPH and await storage.has_running_graph_for_kb(
+        task["kb_id"], now, task_id
+    ):
+        # Builds for one KB are queued by different managers; never run two at once.
         return
 
     owner = _worker_id()
@@ -229,12 +238,29 @@ async def process_kb_task(task_id: str) -> None:
 
     stop, cancel, lost = asyncio.Event(), asyncio.Event(), asyncio.Event()
     heartbeat = asyncio.create_task(_heartbeat(task_id, owner, stop, cancel, lost))
+    is_graph = claimed.get("type") == TASK_TYPE_GRAPH
     try:
-        await _run_documents(claimed, owner, cancel, lost)
+        if is_graph:
+            from src.infra.knowledge_base import graph_build
+
+            await graph_build.run_graph_task(claimed, owner, cancel, lost)
+        else:
+            await _run_documents(claimed, owner, cancel, lost)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        if not is_graph:
+            raise
+        logger.exception("[KB] graph task %s crashed", task_id)
+        finished = await storage.finish_task(task_id, owner, TASK_FAILED, "图谱构建异常中断")
+        if finished is not None:
+            await push_task_updated(finished)
     finally:
         stop.set()
         heartbeat.cancel()
         await asyncio.gather(heartbeat, return_exceptions=True)
+        if not is_graph:
+            await _enqueue_graph_for_new_chunks(claimed["kb_id"], claimed["created_by"])
         await _after_task(claimed["kb_id"])
 
 
@@ -299,6 +325,16 @@ async def _run_documents(
     )
     if finished is not None:
         await push_task_updated(finished)
+
+
+async def _enqueue_graph_for_new_chunks(kb_id: str, user_id: str) -> None:
+    """Graph-enabled KBs pick up chunks written by an ingest task; never raises."""
+    try:
+        from src.infra.knowledge_base import graph_build
+
+        await graph_build.queue_new_chunks(kb_id, user_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[KB] queueing graph build for %s failed: %s", kb_id, exc)
 
 
 async def _after_task(kb_id: str) -> None:
@@ -370,7 +406,7 @@ async def reconcile_tasks() -> dict[str, int]:
             requeued = await storage.requeue_expired(task, now)
         except DuplicateKeyError:
             # A newer queued task exists for this KB; fold the leftovers into it.
-            await storage.merge_into_queued(kb_id, doc_ids)
+            await storage.merge_into_queued(kb_id, doc_ids, task.get("type") or TASK_TYPE_INGEST)
             await storage.close_expired(task, TASK_CANCELLED, "已合并到后续任务", now)
             stats["requeued"] += 1
             continue

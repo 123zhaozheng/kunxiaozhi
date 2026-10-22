@@ -245,9 +245,9 @@ export function pruneSelection(
   return new Set([...selected].filter((id) => visible.has(id)));
 }
 
-export type KbDetailTab = "documents" | "search" | "settings";
+export type KbDetailTab = "documents" | "search" | "graph" | "settings";
 
-export const KB_DETAIL_TABS: KbDetailTab[] = ["documents", "search", "settings"];
+export const KB_DETAIL_TABS: KbDetailTab[] = ["documents", "search", "graph", "settings"];
 
 export function resolveKbDetailTab(value: string | null | undefined): KbDetailTab {
   return KB_DETAIL_TABS.includes(value as KbDetailTab)

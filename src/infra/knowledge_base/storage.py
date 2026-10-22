@@ -37,6 +37,7 @@ from src.kernel.schemas.knowledge_base import (
     TASK_QUEUED,
     TASK_RUNNING,
     TASK_TERMINAL_STATUSES,
+    TASK_TYPE_GRAPH,
     TASK_TYPE_INGEST,
 )
 
@@ -148,6 +149,9 @@ class KnowledgeBaseStorage:
         await self.tasks.create_index([("status", ASCENDING), ("created_at", ASCENDING)])
         await self.tasks.create_index([("kb_id", ASCENDING), ("created_at", DESCENDING)])
         await self.tasks.create_index([("created_by", ASCENDING), ("status", ASCENDING)])
+        from src.infra.knowledge_base.graph_storage import GraphStorage
+
+        await GraphStorage(self).ensure_indexes()
         logger.info("[KB] storage indexes ensured")
 
     # ── agent save drafts ───────────────────────────────────
@@ -420,7 +424,9 @@ class KnowledgeBaseStorage:
     async def document_briefs(self, doc_ids: list[str]) -> dict[str, dict[str, Any]]:
         if not doc_ids:
             return {}
-        cursor = self.documents.find({"_id": {"$in": doc_ids}}, {"kb_id": 1, "filename": 1, "chunk_count": 1})
+        cursor = self.documents.find(
+            {"_id": {"$in": doc_ids}}, {"kb_id": 1, "filename": 1, "chunk_count": 1}
+        )
         docs = await cursor.to_list(length=len(doc_ids))
         return {str(d["_id"]): d for d in docs}
 
@@ -596,8 +602,10 @@ class KnowledgeBaseStorage:
 
     # ── tasks ───────────────────────────────────────────────
 
-    async def enqueue_task(self, kb_id: str, doc_ids: list[str], created_by: str) -> dict[str, Any]:
-        """Merge ``doc_ids`` into the KB's queued ingest task, creating it when absent."""
+    async def enqueue_task(
+        self, kb_id: str, doc_ids: list[str], created_by: str, task_type: str = TASK_TYPE_INGEST
+    ) -> dict[str, Any]:
+        """Merge ``doc_ids`` into the KB's queued ``task_type`` task, creating it when absent."""
         now = utc_now()
         update = {
             "$addToSet": {"doc_ids": {"$each": list(doc_ids)}},
@@ -617,7 +625,7 @@ class KnowledgeBaseStorage:
                 "last_published_at": None,
             },
         }
-        flt = {"kb_id": kb_id, "type": TASK_TYPE_INGEST, "status": TASK_QUEUED}
+        flt = {"kb_id": kb_id, "type": task_type, "status": TASK_QUEUED}
         for attempt in range(2):
             try:
                 task = await self.tasks.find_one_and_update(
@@ -638,9 +646,16 @@ class KnowledgeBaseStorage:
         return await self.tasks.find_one({"_id": task_id, "kb_id": kb_id})
 
     async def list_tasks(
-        self, kb_id: str, *, active_only: bool = False, limit: int = 20
+        self,
+        kb_id: str,
+        *,
+        active_only: bool = False,
+        limit: int = 20,
+        task_type: str | None = None,
     ) -> list[dict[str, Any]]:
+        """Tasks of one type; without ``task_type`` only ingest tasks (graph builds are separate)."""
         flt: dict[str, Any] = {"kb_id": kb_id}
+        flt["type"] = task_type if task_type else {"$ne": TASK_TYPE_GRAPH}
         if active_only:
             flt["status"] = {"$in": list(TASK_ACTIVE_STATUSES)}
         cursor = self.tasks.find(flt).sort("created_at", DESCENDING)
@@ -651,7 +666,11 @@ class KnowledgeBaseStorage:
         if not kb_ids:
             return {}
         cursor = self.tasks.find(
-            {"kb_id": {"$in": kb_ids}, "status": {"$in": list(TASK_ACTIVE_STATUSES)}}
+            {
+                "kb_id": {"$in": kb_ids},
+                "type": {"$ne": TASK_TYPE_GRAPH},
+                "status": {"$in": list(TASK_ACTIVE_STATUSES)},
+            }
         )
         picked: dict[str, dict[str, Any]] = {}
         for task in await cursor.to_list(length=5000):
@@ -667,10 +686,29 @@ class KnowledgeBaseStorage:
             await self.tasks.count_documents({"kb_id": kb_id, "status": TASK_RUNNING}, limit=1) > 0
         )
 
-    async def has_running_for_user(self, created_by: str, now: datetime, exclude_id: str) -> bool:
+    async def has_running_graph_for_kb(self, kb_id: str, now: datetime, exclude_id: str) -> bool:
+        count = await self.tasks.count_documents(
+            {
+                "kb_id": kb_id,
+                "type": TASK_TYPE_GRAPH,
+                "status": TASK_RUNNING,
+                "lease_until": {"$gt": now},
+                "_id": {"$ne": exclude_id},
+            },
+            limit=1,
+        )
+        return count > 0
+
+    async def has_running_for_user(
+        self, created_by: str, now: datetime, exclude_id: str, task_type: str = TASK_TYPE_INGEST
+    ) -> bool:
+        """Ingest and graph tasks throttle independently so a long build never blocks uploads."""
         count = await self.tasks.count_documents(
             {
                 "created_by": created_by,
+                "type": TASK_TYPE_GRAPH
+                if task_type == TASK_TYPE_GRAPH
+                else {"$ne": TASK_TYPE_GRAPH},
                 "status": TASK_RUNNING,
                 "lease_until": {"$gt": now},
                 "_id": {"$ne": exclude_id},
@@ -729,17 +767,25 @@ class KnowledgeBaseStorage:
         )
 
     async def update_progress(
-        self, task_id: str, owner: str, *, done: int, failed: int, current_doc_id: str | None
+        self,
+        task_id: str,
+        owner: str,
+        *,
+        done: int,
+        failed: int,
+        current_doc_id: str | None,
+        total: int | None = None,
     ) -> bool:
+        fields: dict[str, Any] = {
+            "progress.done": done,
+            "progress.failed": failed,
+            "progress.current_doc_id": current_doc_id,
+        }
+        if total is not None:
+            fields["progress.total"] = total
         result = await self.tasks.update_one(
             {"_id": task_id, "status": TASK_RUNNING, "lease_owner": owner},
-            {
-                "$set": {
-                    "progress.done": done,
-                    "progress.failed": failed,
-                    "progress.current_doc_id": current_doc_id,
-                }
-            },
+            {"$set": fields},
         )
         return result.modified_count > 0
 
@@ -808,9 +854,11 @@ class KnowledgeBaseStorage:
         )
         return result.modified_count > 0
 
-    async def merge_into_queued(self, kb_id: str, doc_ids: list[str]) -> bool:
+    async def merge_into_queued(
+        self, kb_id: str, doc_ids: list[str], task_type: str = TASK_TYPE_INGEST
+    ) -> bool:
         result = await self.tasks.update_one(
-            {"kb_id": kb_id, "type": TASK_TYPE_INGEST, "status": TASK_QUEUED},
+            {"kb_id": kb_id, "type": task_type, "status": TASK_QUEUED},
             {"$addToSet": {"doc_ids": {"$each": doc_ids}}},
         )
         return result.modified_count > 0 or result.matched_count > 0

@@ -8,6 +8,7 @@ import {
   FileText,
   LibraryBig,
   LogOut,
+  Network,
   Search,
   Settings2,
   Share2,
@@ -20,6 +21,7 @@ import { useWebSocket, type KbEventNotification } from "../../hooks/useWebSocket
 import {
   knowledgeBaseApi,
   type KBDocument,
+  type KBGraphMention,
   type KBSearchHit,
 } from "../../services/api/knowledgeBase";
 import { subscribeKnowledgeBaseRefresh } from "../../utils/knowledgeBaseEvents";
@@ -33,6 +35,7 @@ import { DocumentsTab } from "./DocumentsTab";
 import { useKbConfig } from "./hooks/useKbConfig";
 import { useKbDetail } from "./hooks/useKbDetail";
 import { KnowledgeDisabledState, KnowledgeNotFoundState, KnowledgeNotReadyNotice } from "./KnowledgeNotices";
+import { GraphTab } from "./graph/GraphTab";
 import { RetrievalTestTab } from "./RetrievalTestTab";
 import { SettingsTab } from "./SettingsTab";
 import { KnowledgePublicStatusPill } from "./KnowledgePublicStatusPill";
@@ -105,6 +108,25 @@ export function KnowledgeBaseDetail({ kbId }: KnowledgeBaseDetailProps) {
         setViewing({
           doc,
           focus: { startLine: hit.start_line, endLine: hit.end_line },
+          tab: "content",
+        });
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [kbId],
+  );
+
+  const openMention = useCallback(
+    async (mention: KBGraphMention) => {
+      try {
+        const doc = await knowledgeBaseApi.getDocument(kbId, mention.doc_id);
+        setViewing({
+          doc,
+          focus:
+            mention.start_line != null && mention.end_line != null
+              ? { startLine: mention.start_line, endLine: mention.end_line }
+              : null,
           tab: "content",
         });
       } catch (e) {
@@ -197,14 +219,21 @@ export function KnowledgeBaseDetail({ kbId }: KnowledgeBaseDetailProps) {
     { key: "size", text: formatFileSize(stats.size_bytes) },
   );
 
+  const showGraphTab = config?.allow_graph !== false;
   const tabEntries: Array<{ key: KbDetailTab; label: string; icon: typeof FileText }> = [
     { key: "documents", label: t("knowledge.tabs.documents", "文档"), icon: FileText },
     { key: "search", label: t("knowledge.tabs.search", "检索测试"), icon: Search },
+    ...(showGraphTab
+      ? [{ key: "graph" as const, label: t("knowledge.tabs.graph", "图谱"), icon: Network }]
+      : []),
     ...(caps.canManageSettings
       ? [{ key: "settings" as const, label: t("knowledge.tabs.settings", "设置"), icon: Settings2 }]
       : []),
   ];
-  const activeTab: KbDetailTab = tab === "settings" && !caps.canManageSettings ? "documents" : tab;
+  const activeTab: KbDetailTab =
+    (tab === "settings" && !caps.canManageSettings) || (tab === "graph" && !showGraphTab)
+      ? "documents"
+      : tab;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -343,6 +372,15 @@ export function KnowledgeBaseDetail({ kbId }: KnowledgeBaseDetailProps) {
         )}
         {activeTab === "search" && (
           <RetrievalTestTab kb={kb} config={config} onOpenHit={(hit) => void openHit(hit)} />
+        )}
+        {activeTab === "graph" && (
+          <GraphTab
+            kb={kb}
+            config={config}
+            canManage={kb.can_manage}
+            onChanged={() => scheduleRefresh(POST_ACTION_REFRESH_MS)}
+            onOpenMention={(mention) => void openMention(mention)}
+          />
         )}
         {activeTab === "settings" && (
           <SettingsTab

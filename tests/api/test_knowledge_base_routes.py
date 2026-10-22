@@ -85,6 +85,7 @@ async def test_config_is_not_shadowed_by_kb_id_route(env: Env) -> None:
         "rerank_available",
         "allow_public",
         "public_requires_review",
+        "allow_graph",
     }
     assert body["allow_public"] is True and body["public_requires_review"] is False
     assert body["enabled"] is True and body["ready"] is True and body["not_ready_reason"] is None
@@ -370,6 +371,7 @@ async def test_search_contract(env: Env) -> None:
         "end_line",
         "score",
         "rerank_score",
+        "sources",
     }
     assert hit["filename"] == "a.md" and hit["kb_name"] == "检索库" and hit["text"] == "apple banana"
 

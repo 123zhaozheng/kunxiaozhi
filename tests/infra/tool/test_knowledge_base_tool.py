@@ -155,7 +155,7 @@ async def test_search_tool_results_and_authorization(kb_env) -> None:
     first = out["results"][0]
     assert set(first) == {
         "ref", "kb_id", "kb_name", "doc_id", "filename", "start_line", "end_line",
-        "chunk_count", "score", "content",
+        "chunk_count", "score", "sources", "content",
     }
     assert first["doc_id"] == doc and first["kb_name"] == "A" and first["chunk_count"] > 0
 

@@ -11,7 +11,7 @@ import re
 from typing import Any
 
 from src.infra.async_utils import run_blocking_io
-from src.infra.knowledge_base import chunking, embedding, parsing, sparse, vector_store
+from src.infra.knowledge_base import chunking, embedding, graph_build, parsing, sparse, vector_store
 from src.infra.knowledge_base import objects as kb_objects
 from src.infra.knowledge_base.events import push_document_updated
 from src.infra.knowledge_base.storage import get_kb_storage
@@ -216,6 +216,8 @@ async def _index_stage(doc: dict[str, Any]) -> str:
         collection = await _resolve_collection(kb, card, len(vectors[0]))
         sparse_vectors = await run_blocking_io(_encode_sparse, texts)
 
+        if kb.get("graph_enabled"):
+            await graph_build.reclaim_documents(kb, [doc_id])
         await storage.replace_chunks(
             kb_id,
             doc_id,
@@ -233,6 +235,9 @@ async def _index_stage(doc: dict[str, Any]) -> str:
                 for chunk in chunks
             ],
         )
+        if kb.get("graph_enabled"):
+            # Again after replacing: a late extractor may have written to the reused chunk ids.
+            await graph_build.reclaim_documents(kb, [doc_id])
         points = [
             vector_store.ChunkPoint(
                 chunk_id=f"{doc_id}:{chunk.index}",

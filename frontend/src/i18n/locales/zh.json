@@ -1329,7 +1329,8 @@
       "search": "检索测试",
       "settings": "设置",
       "shared": "共享知识库",
-      "plaza": "知识广场"
+      "plaza": "知识广场",
+      "graph": "图谱"
     },
     "card": {
       "docCount": "{{count}} 个文档",
@@ -1479,7 +1480,13 @@
       "noResults": "没有找到相关内容",
       "noResultsHint": "可以降低相似度阈值，或换一种检索方式。",
       "summary": "找到 {{count}} 条结果，用时 {{ms}} ms",
-      "scoreBoth": "检索得分 {{score}} · 重排得分 {{rerank}}"
+      "scoreBoth": "检索得分 {{score}} · 重排得分 {{rerank}}",
+      "useGraph": "图谱增强",
+      "graphUnavailable": "知识图谱尚未构建完成",
+      "source": {
+        "chunk": "常规",
+        "graph": "图谱"
+      }
     },
     "settings": {
       "basic": "基本信息",
@@ -1682,6 +1689,56 @@
       "expired": "已过期",
       "readonly": "仅展示草稿内容",
       "open": "查看"
+    },
+    "graph": {
+      "title": "知识图谱",
+      "intro": "开启后会使用管理员配置的大模型，从已索引的分块中抽取实体与关系，并用于增强检索。抽取需要调用大模型，文档较多时可能耗时较长并产生费用。",
+      "schemaLabel": "抽取约束（可选）",
+      "schemaPlaceholder": "例如：只抽取人物、公司、产品，以及它们之间的任职与合作关系。",
+      "enable": "开启图谱",
+      "ownerOnly": "只有知识库所有者可以开启知识图谱。",
+      "disabledByAdmin": "管理员已关闭知识图谱功能。",
+      "enabled": "已开启知识图谱，开始构建",
+      "buildQueued": "已加入构建队列",
+      "nothingToBuild": "没有需要构建的分块",
+      "disabledDone": "已关闭知识图谱并清除图谱数据",
+      "loadFailed": "图谱状态加载失败",
+      "building": "构建中",
+      "continueBuild": "继续构建",
+      "retryFailed": "重试失败",
+      "disable": "关闭图谱",
+      "disableTitle": "关闭知识图谱",
+      "disableConfirm": "关闭后会删除这个知识库的全部实体、关系和图谱向量，重新开启需要重新抽取。确定关闭吗？",
+      "lastError": "构建失败：{{message}}",
+      "excludedHint": "{{count}} 个分块超过上限，未参与图谱构建。",
+      "failedSamples": "失败分块样例",
+      "failedEmpty": "暂无样例",
+      "status": {
+        "pending": "待构建",
+        "done": "已完成",
+        "failed": "失败",
+        "entities": "实体",
+        "relations": "关系"
+      },
+      "search": {
+        "placeholder": "搜索实体名称",
+        "button": "搜索"
+      },
+      "maxNodes": "节点数",
+      "depth": "深度",
+      "relayout": "重新布局",
+      "truncated": "仅显示部分节点，可调高节点数或缩小搜索范围",
+      "empty": "还没有抽取到实体，构建完成后会在这里显示。",
+      "emptySearch": "没有匹配的实体",
+      "entity": {
+        "title": "实体详情",
+        "close": "关闭详情",
+        "loadFailed": "实体详情加载失败",
+        "mentionCount": "出现在 {{count}} 个分块中",
+        "attributes": "属性",
+        "relations": "关系",
+        "mentions": "提及片段"
+      }
     }
   },
   "landing": {
@@ -2828,7 +2885,11 @@
     "KB_PUBLIC_REQUIRES_REVIEW": "用户公开知识库前是否需要管理员审核",
     "KB_DEFAULT_MAX_COUNT": "每个用户默认可创建的知识库数量上限（角色可单独覆盖）",
     "KB_DEFAULT_MAX_DOCS_PER_KB": "单个知识库默认可容纳的文档数量上限（角色可单独覆盖）",
-    "KB_DEFAULT_STORAGE_QUOTA_MB": "每个用户知识库默认存储配额（MB，角色可单独覆盖）"
+    "KB_DEFAULT_STORAGE_QUOTA_MB": "每个用户知识库默认存储配额（MB，角色可单独覆盖）",
+    "KB_ALLOW_GRAPH": "允许知识库使用知识图谱（实体/关系抽取与图增强检索）；关闭后详情页隐藏图谱标签，且不能开启或构建图谱。",
+    "KB_GRAPH_LLM_MODEL_ID": "知识图谱抽取实体与关系使用的对话模型卡片 ID（kind=chat）；留空则使用默认模型。未配置可用对话模型时图谱构建会失败。",
+    "KB_GRAPH_CONCURRENCY": "单个图谱构建任务同时调用大模型的并发数（1-16），并发越高越快但越容易触发限流。",
+    "KB_GRAPH_MAX_CHUNKS_PER_KB": "单个知识库参与图谱抽取的分块数量上限（100-100000），用于控制大模型调用成本；超出部分不会被抽取。"
   },
   "settings": {
     "defaultModel": "默认模型",
@@ -3247,7 +3308,8 @@
     "service": "邮件服务",
     "storage": "存储",
     "title": "标题生成",
-    "turnstile": "Turnstile"
+    "turnstile": "Turnstile",
+    "graph": "知识图谱"
   },
   "systemHealth": {
     "fetchFailed": "获取健康数据失败",

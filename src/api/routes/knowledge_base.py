@@ -9,7 +9,14 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Res
 from fastapi.responses import StreamingResponse
 
 from src.api.deps import get_current_user_required
-from src.infra.knowledge_base import drafts, notifications, quota, service, sharing
+from src.infra.knowledge_base import (
+    drafts,
+    graph_service,
+    notifications,
+    quota,
+    service,
+    sharing,
+)
 from src.infra.knowledge_base.errors import (
     KBBusyError,
     KBConflictError,
@@ -37,6 +44,11 @@ from src.kernel.schemas.knowledge_base import (
     KBDraft,
     KBDraftConfirmRequest,
     KBDraftConfirmResponse,
+    KBGraphEnableRequest,
+    KBGraphEntityDetail,
+    KBGraphFailedResponse,
+    KBGraphResponse,
+    KBGraphStatus,
     KBImportableFileListResponse,
     KBImportRequest,
     KBImportResponse,
@@ -466,3 +478,72 @@ async def unsubscribe_kb(
     with _map_errors():
         await sharing.unsubscribe(user, kb_id)
     return Response(status_code=204)
+
+
+# ── knowledge graph ──
+
+
+@router.get("/{kb_id}/graph/status", response_model=KBGraphStatus, response_model_by_alias=True)
+async def graph_status(
+    kb_id: str, user: TokenPayload = Depends(get_current_user_required)
+) -> KBGraphStatus:
+    with _map_errors():
+        return await graph_service.get_status(user, kb_id)
+
+
+@router.post("/{kb_id}/graph/enable", response_model=KBGraphStatus, response_model_by_alias=True)
+async def graph_enable(
+    kb_id: str,
+    body: KBGraphEnableRequest | None = None,
+    user: TokenPayload = Depends(get_current_user_required),
+) -> KBGraphStatus:
+    with _map_errors():
+        return await graph_service.enable(user, kb_id, body.schema_text if body else "")
+
+
+@router.post("/{kb_id}/graph/build", response_model=KBTaskEnqueueResponse)
+async def graph_build(
+    kb_id: str, user: TokenPayload = Depends(get_current_user_required)
+) -> KBTaskEnqueueResponse:
+    with _map_errors():
+        return await graph_service.build(user, kb_id)
+
+
+@router.post("/{kb_id}/graph/disable", response_model=KBGraphStatus, response_model_by_alias=True)
+async def graph_disable(
+    kb_id: str, user: TokenPayload = Depends(get_current_user_required)
+) -> KBGraphStatus:
+    with _map_errors():
+        return await graph_service.disable(user, kb_id)
+
+
+@router.get("/{kb_id}/graph/failed", response_model=KBGraphFailedResponse)
+async def graph_failed(
+    kb_id: str,
+    limit: int = Query(10),
+    user: TokenPayload = Depends(get_current_user_required),
+) -> KBGraphFailedResponse:
+    with _map_errors():
+        return await graph_service.list_failed(user, kb_id, limit)
+
+
+@router.get("/{kb_id}/graph/entities/{entity_id}", response_model=KBGraphEntityDetail)
+async def graph_entity(
+    kb_id: str, entity_id: str, user: TokenPayload = Depends(get_current_user_required)
+) -> KBGraphEntityDetail:
+    with _map_errors():
+        return await graph_service.get_entity(user, kb_id, entity_id)
+
+
+@router.get("/{kb_id}/graph", response_model=KBGraphResponse)
+async def graph_subgraph(
+    kb_id: str,
+    q: str = Query(""),
+    max_nodes: int = Query(100),
+    max_depth: int = Query(2),
+    user: TokenPayload = Depends(get_current_user_required),
+) -> KBGraphResponse:
+    with _map_errors():
+        return await graph_service.get_subgraph(
+            user, kb_id, q=q, max_nodes=max_nodes, max_depth=max_depth
+        )

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import { AlertTriangle, Loader2, Search } from "lucide-react";
@@ -6,6 +6,7 @@ import { GlassSelect } from "../common/GlassSelect";
 import {
   knowledgeBaseApi,
   type KBConfig,
+  type KBGraphStatus,
   type KBSearchHit,
   type KBSearchMode,
   type KBSearchResponse,
@@ -18,6 +19,7 @@ import {
   formatScorePercent,
 } from "./knowledgeUtils";
 import { INPUT_CLS, NOTICE_WARNING, PRIMARY_BTN } from "./knowledgeStyles";
+import { graphSearchAvailable } from "./graph/graphUtils";
 
 interface RetrievalTestTabProps {
   kb: KnowledgeBase;
@@ -42,6 +44,29 @@ export function RetrievalTestTab({ kb, config, onOpenHit }: RetrievalTestTabProp
   const [useRerank, setUseRerank] = useState(true);
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<KBSearchResponse | null>(null);
+  const [graphStatus, setGraphStatus] = useState<KBGraphStatus | null>(null);
+  const [useGraph, setUseGraph] = useState(true);
+
+  const graphEnabled = kb.graph_enabled;
+  useEffect(() => {
+    if (!graphEnabled) {
+      setGraphStatus(null);
+      return undefined;
+    }
+    let cancelled = false;
+    knowledgeBaseApi
+      .graphStatus(kb.id)
+      .then((res) => {
+        if (!cancelled) setGraphStatus(res);
+      })
+      .catch(() => {
+        if (!cancelled) setGraphStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [kb.id, graphEnabled]);
+  const graphAvailable = graphSearchAvailable(graphStatus);
 
   const topKValue = Math.max(1, Math.min(SEARCH_TOP_K_MAX, Math.round(Number(topK)) || SEARCH_TOP_K_DEFAULT));
   const thresholdNumber = Number(threshold);
@@ -60,6 +85,7 @@ export function RetrievalTestTab({ kb, config, onOpenHit }: RetrievalTestTabProp
         mode,
         use_rerank: rerankAvailable ? useRerank : false,
         score_threshold: thresholdValue,
+        use_graph: graphAvailable && useGraph,
       });
       setResponse(res);
     } catch (e) {
@@ -163,6 +189,29 @@ export function RetrievalTestTab({ kb, config, onOpenHit }: RetrievalTestTabProp
             />
             {t("knowledge.search.rerank", "重排序")}
           </label>
+          {graphEnabled && (
+            <label
+              className={`flex h-[42px] items-center gap-2 text-sm ${
+                graphAvailable
+                  ? "cursor-pointer text-stone-700 dark:text-stone-200"
+                  : "cursor-not-allowed text-stone-400 dark:text-stone-500"
+              }`}
+              title={
+                graphAvailable
+                  ? undefined
+                  : t("knowledge.search.graphUnavailable", "知识图谱尚未构建完成")
+              }
+            >
+              <input
+                type="checkbox"
+                checked={graphAvailable && useGraph}
+                disabled={!graphAvailable}
+                onChange={(e) => setUseGraph(e.target.checked)}
+                className="h-4 w-4 accent-stone-900 dark:accent-stone-100"
+              />
+              {t("knowledge.search.useGraph", "图谱增强")}
+            </label>
+          )}
         </div>
       </div>
 
@@ -234,6 +283,21 @@ export function RetrievalTestTab({ kb, config, onOpenHit }: RetrievalTestTabProp
                             defaultValue: "第 {{range}} 行",
                           })}
                         </span>
+                        {(hit.sources ?? ["chunk"]).map((source) => (
+                          <span
+                            key={source}
+                            data-source={source}
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                              source === "graph"
+                                ? "bg-violet-50 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+                                : "bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300"
+                            }`}
+                          >
+                            {source === "graph"
+                              ? t("knowledge.search.source.graph", "图谱")
+                              : t("knowledge.search.source.chunk", "常规")}
+                          </span>
+                        ))}
                         <span
                           className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
                           title={

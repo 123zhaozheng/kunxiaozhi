@@ -20,6 +20,10 @@ KB_SETTINGS = {
     "KB_EMBEDDING_BATCH_SIZE": (SettingType.NUMBER, 32, 1, 256),
     "KB_ALLOW_PUBLIC": (SettingType.BOOLEAN, True, None, None),
     "KB_PUBLIC_REQUIRES_REVIEW": (SettingType.BOOLEAN, False, None, None),
+    "KB_ALLOW_GRAPH": (SettingType.BOOLEAN, True, None, None),
+    "KB_GRAPH_LLM_MODEL_ID": (SettingType.STRING, "", None, None),
+    "KB_GRAPH_CONCURRENCY": (SettingType.NUMBER, 2, 1, 16),
+    "KB_GRAPH_MAX_CHUNKS_PER_KB": (SettingType.NUMBER, 3000, 100, 100000),
     "KB_DEFAULT_MAX_COUNT": (SettingType.NUMBER, 10, 1, 1000),
     "KB_DEFAULT_MAX_DOCS_PER_KB": (SettingType.NUMBER, 500, 1, 100000),
     "KB_DEFAULT_STORAGE_QUOTA_MB": (SettingType.NUMBER, 2048, 1, 10485760),
@@ -55,7 +59,8 @@ def test_definition_matches_settings_default_and_ranges(key, expected) -> None:
 @pytest.mark.parametrize("key", [k for k in KB_SETTINGS if k != "KB_ENABLED"])
 def test_everything_but_the_master_switch_depends_on_it(key) -> None:
     assert SETTING_DEFINITIONS[key]["depends_on"] == "KB_ENABLED"
-    assert SETTING_DEFINITIONS[key].get("frontend_visible", False) is False
+    visible = key == "KB_ALLOW_GRAPH"
+    assert SETTING_DEFINITIONS[key].get("frontend_visible", False) is visible
 
 
 def test_master_switch_is_visible_to_the_frontend_and_has_no_dependency() -> None:
@@ -74,7 +79,11 @@ def test_no_other_settings_in_the_category() -> None:
 
 
 def test_model_ids_may_be_saved_empty() -> None:
-    assert {"KB_EMBEDDING_MODEL_ID", "KB_RERANK_MODEL_ID"} <= _ALLOW_EMPTY_STRING_SETTINGS
+    assert {
+        "KB_EMBEDDING_MODEL_ID",
+        "KB_RERANK_MODEL_ID",
+        "KB_GRAPH_LLM_MODEL_ID",
+    } <= _ALLOW_EMPTY_STRING_SETTINGS
 
 
 def test_only_worker_concurrency_requires_a_restart() -> None:

@@ -73,6 +73,8 @@ export interface KBConfig {
   allow_public: boolean;
   /** Mirrors `KB_PUBLIC_REQUIRES_REVIEW`. */
   public_requires_review: boolean;
+  /** Mirrors `KB_ALLOW_GRAPH`. */
+  allow_graph: boolean;
 }
 
 export interface KBStats {
@@ -398,7 +400,10 @@ export interface KBSearchRequest {
   use_rerank?: boolean | null;
   score_threshold?: number;
   vector_weight?: number;
+  use_graph?: boolean;
 }
+
+export type KBSearchSource = "chunk" | "graph";
 
 export interface KBSearchHit {
   chunk_id: string;
@@ -412,12 +417,94 @@ export interface KBSearchHit {
   end_line: number;
   score: number;
   rerank_score?: number | null;
+  sources?: KBSearchSource[];
 }
 
 export interface KBSearchResponse {
   results: KBSearchHit[];
   warnings: string[];
   took_ms: number;
+}
+
+export interface KBGraphStatus {
+  enabled: boolean;
+  schema: string;
+  total_chunks: number;
+  pending: number;
+  done: number;
+  failed: number;
+  excluded: number;
+  entity_count: number;
+  relation_count: number;
+  active_task: KBTask | null;
+  last_error: string | null;
+  allow_graph: boolean;
+}
+
+export interface KBGraphNode {
+  id: string;
+  name: string;
+  label: string;
+  mention_count: number;
+}
+
+export interface KBGraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  label: string;
+  text: string;
+}
+
+export interface KBGraphData {
+  nodes: KBGraphNode[];
+  edges: KBGraphEdge[];
+  truncated: boolean;
+}
+
+export interface KBGraphEntity extends KBGraphNode {
+  attributes: Record<string, string>;
+}
+
+export interface KBGraphRelation {
+  id: string;
+  source_id: string;
+  target_id: string;
+  source_name: string;
+  target_name: string;
+  label: string;
+  text: string;
+}
+
+export interface KBGraphMention {
+  doc_id: string;
+  filename: string;
+  chunk_id: string;
+  start_line: number | null;
+  end_line: number | null;
+  snippet: string;
+}
+
+export interface KBGraphEntityDetail {
+  entity: KBGraphEntity;
+  relations: KBGraphRelation[];
+  mentions: KBGraphMention[];
+  relations_total: number;
+  mentions_total: number;
+}
+
+export interface KBGraphFailedChunk {
+  chunk_id: string;
+  doc_id: string;
+  filename: string;
+  error: string;
+  snippet: string;
+}
+
+export interface KBGraphQuery {
+  q?: string;
+  max_nodes?: number;
+  max_depth?: number;
 }
 
 export interface KBUploadOptions {
@@ -856,6 +943,50 @@ export const knowledgeBaseApi = {
     return authFetch<KBTaskEnqueueResult>(kbUrl(kbId, "/reindex"), {
       method: "POST",
     });
+  },
+
+  graphStatus(kbId: string): Promise<KBGraphStatus> {
+    return authFetch<KBGraphStatus>(kbUrl(kbId, "/graph/status"));
+  },
+
+  enableGraph(kbId: string, schema = ""): Promise<KBGraphStatus> {
+    return authFetch<KBGraphStatus>(kbUrl(kbId, "/graph/enable"), {
+      method: "POST",
+      body: JSON.stringify({ schema }),
+    });
+  },
+
+  buildGraph(kbId: string): Promise<KBTaskEnqueueResult> {
+    return authFetch<KBTaskEnqueueResult>(kbUrl(kbId, "/graph/build"), {
+      method: "POST",
+    });
+  },
+
+  disableGraph(kbId: string): Promise<KBGraphStatus> {
+    return authFetch<KBGraphStatus>(kbUrl(kbId, "/graph/disable"), {
+      method: "POST",
+    });
+  },
+
+  getGraph(kbId: string, query: KBGraphQuery = {}): Promise<KBGraphData> {
+    return authFetch<KBGraphData>(
+      kbUrl(kbId, `/graph${buildQuery({ ...query, q: query.q?.trim() || undefined })}`),
+    );
+  },
+
+  getGraphEntity(kbId: string, entityId: string): Promise<KBGraphEntityDetail> {
+    return authFetch<KBGraphEntityDetail>(
+      kbUrl(kbId, `/graph/entities/${encodeURIComponent(entityId)}`),
+    );
+  },
+
+  listGraphFailed(
+    kbId: string,
+    limit = 10,
+  ): Promise<{ items: KBGraphFailedChunk[]; total: number }> {
+    return authFetch<{ items: KBGraphFailedChunk[]; total: number }>(
+      kbUrl(kbId, `/graph/failed${buildQuery({ limit })}`),
+    );
   },
 };
 

@@ -1329,7 +1329,8 @@
       "search": "Retrieval test",
       "settings": "Settings",
       "shared": "Shared",
-      "plaza": "Plaza"
+      "plaza": "Plaza",
+      "graph": "Graph"
     },
     "card": {
       "docCount": "{{count}} documents",
@@ -1479,7 +1480,13 @@
       "noResults": "No relevant content found",
       "noResultsHint": "Lower the score threshold or try a different mode.",
       "summary": "{{count}} results in {{ms}} ms",
-      "scoreBoth": "Retrieval {{score}} · Rerank {{rerank}}"
+      "scoreBoth": "Retrieval {{score}} · Rerank {{rerank}}",
+      "useGraph": "Graph boost",
+      "graphUnavailable": "The knowledge graph has not been built yet",
+      "source": {
+        "chunk": "Chunk",
+        "graph": "Graph"
+      }
     },
     "settings": {
       "basic": "General",
@@ -1682,6 +1689,56 @@
       "expired": "Expired",
       "readonly": "Draft preview only",
       "open": "View"
+    },
+    "graph": {
+      "title": "Knowledge graph",
+      "intro": "When enabled, the model configured by the administrator extracts entities and relations from indexed chunks to enhance retrieval. Extraction calls the model, so large knowledge bases may take a while and incur cost.",
+      "schemaLabel": "Extraction constraints (optional)",
+      "schemaPlaceholder": "For example: only extract people, companies and products, and their employment or partnership relations.",
+      "enable": "Enable graph",
+      "ownerOnly": "Only the knowledge base owner can enable the knowledge graph.",
+      "disabledByAdmin": "The administrator has turned off the knowledge graph feature.",
+      "enabled": "Knowledge graph enabled, building started",
+      "buildQueued": "Added to the build queue",
+      "nothingToBuild": "No chunks need building",
+      "disabledDone": "Knowledge graph turned off and graph data removed",
+      "loadFailed": "Failed to load graph status",
+      "building": "Building",
+      "continueBuild": "Continue build",
+      "retryFailed": "Retry failed",
+      "disable": "Turn off graph",
+      "disableTitle": "Turn off knowledge graph",
+      "disableConfirm": "This deletes all entities, relations and graph vectors of this knowledge base. Turning it on again requires a new extraction. Continue?",
+      "lastError": "Build failed: {{message}}",
+      "excludedHint": "{{count}} chunks exceed the limit and are not part of the graph build.",
+      "failedSamples": "Failed chunk samples",
+      "failedEmpty": "No samples",
+      "status": {
+        "pending": "Pending",
+        "done": "Done",
+        "failed": "Failed",
+        "entities": "Entities",
+        "relations": "Relations"
+      },
+      "search": {
+        "placeholder": "Search entity names",
+        "button": "Search"
+      },
+      "maxNodes": "Nodes",
+      "depth": "Depth",
+      "relayout": "Re-layout",
+      "truncated": "Only some nodes are shown. Raise the node limit or narrow the search.",
+      "empty": "No entities extracted yet. They will appear here once the build finishes.",
+      "emptySearch": "No matching entities",
+      "entity": {
+        "title": "Entity details",
+        "close": "Close details",
+        "loadFailed": "Failed to load entity details",
+        "mentionCount": "Mentioned in {{count}} chunks",
+        "attributes": "Attributes",
+        "relations": "Relations",
+        "mentions": "Mentions"
+      }
     }
   },
   "landing": {
@@ -2828,7 +2885,11 @@
     "KB_PUBLIC_REQUIRES_REVIEW": "Whether publishing a knowledge base requires admin review",
     "KB_DEFAULT_MAX_COUNT": "Default maximum number of knowledge bases per user (roles can override)",
     "KB_DEFAULT_MAX_DOCS_PER_KB": "Default maximum number of documents per knowledge base (roles can override)",
-    "KB_DEFAULT_STORAGE_QUOTA_MB": "Default knowledge base storage quota per user in MB (roles can override)"
+    "KB_DEFAULT_STORAGE_QUOTA_MB": "Default knowledge base storage quota per user in MB (roles can override)",
+    "KB_ALLOW_GRAPH": "Allow knowledge bases to use the knowledge graph (entity/relation extraction and graph-enhanced retrieval). When off, the Graph tab is hidden and graphs cannot be enabled or built.",
+    "KB_GRAPH_LLM_MODEL_ID": "Chat model card ID (kind=chat) used to extract entities and relations. Leave empty to use the default model. Graph builds fail when no usable chat model is configured.",
+    "KB_GRAPH_CONCURRENCY": "Number of concurrent model calls per graph build task (1-16). Higher is faster but more likely to hit rate limits.",
+    "KB_GRAPH_MAX_CHUNKS_PER_KB": "Maximum number of chunks per knowledge base included in graph extraction (100-100000), to bound model cost. Chunks beyond the limit are not extracted."
   },
   "settings": {
     "defaultModel": "Default Model",
@@ -3247,7 +3308,8 @@
     "service": "Email Service",
     "storage": "Storage",
     "title": "Title Generation",
-    "turnstile": "Turnstile"
+    "turnstile": "Turnstile",
+    "graph": "Knowledge Graph"
   },
   "systemHealth": {
     "fetchFailed": "Failed to fetch health data",

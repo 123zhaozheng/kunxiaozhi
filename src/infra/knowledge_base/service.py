@@ -18,6 +18,8 @@ from src.infra.knowledge_base import (
     chunking,
     embedding,
     fusion,
+    graph_build,
+    graph_search,
     parsing,
     sparse,
     vector_store,
@@ -41,6 +43,7 @@ from src.infra.knowledge_base.errors import (
     KBValidationError,
 )
 from src.infra.knowledge_base.events import push_document_updated
+from src.infra.knowledge_base.graph_storage import GraphStorage
 from src.infra.knowledge_base.storage import (
     KnowledgeBaseStorage,
     expand_status_filter,
@@ -268,6 +271,7 @@ async def get_config() -> KBConfig:
         rerank_available=rerank_available,
         allow_public=bool(getattr(settings, "KB_ALLOW_PUBLIC", True)),
         public_requires_review=bool(getattr(settings, "KB_PUBLIC_REQUIRES_REVIEW", False)),
+        allow_graph=bool(getattr(settings, "KB_ALLOW_GRAPH", True)),
     )
 
 
@@ -308,6 +312,7 @@ async def create_kb(user: TokenPayload, body: KBCreate) -> KnowledgeBase:
         "published_at": None,
         "review": None,
         "graph_enabled": False,
+        "graph_schema": "",
         "status": KB_STATUS_ACTIVE,
         "created_at": now,
         "updated_at": now,
@@ -437,6 +442,10 @@ async def cleanup_kb(kb_id: str) -> bool:
         collection = ((kb or {}).get("embedding") or {}).get("collection")
         if collection:
             await vector_store.get_vector_store().delete_by_kb(collection, kb_id)
+        graph_collection = graph_build.graph_collection_of(kb or {})
+        if graph_collection:
+            await vector_store.get_vector_store().delete_graph_by_kb(graph_collection, kb_id)
+        await GraphStorage(storage).delete_kb_rows(kb_id)
         await storage.delete_chunks_by_kb(kb_id)
         await kb_objects.delete_prefix(f"kb/{kb_id}/")
         await storage.delete_tasks_by_kb(kb_id)
@@ -810,6 +819,9 @@ async def reindex_kb(user: TokenPayload, kb_id: str) -> KBTaskEnqueueResponse:
         except Exception:
             logger.exception("[KB] clearing vectors of %s before reindex failed", kb_id)
             raise
+    if access.kb.get("graph_enabled"):
+        # Graph vectors live in a collection keyed by the old embedding model; rebuild afterwards.
+        await graph_build.purge_graph(access.kb)
     await storage.clear_embedding_signature(kb_id)
 
     moved: list[str] = []
@@ -849,6 +861,12 @@ async def delete_documents(
     docs = await storage.delete_documents(kb_id, ids)
     removed = [d["_id"] for d in docs]
     await storage.delete_chunks_by_docs(removed)
+    # After the chunk rows are gone, so a late extractor fails its CAS instead of re-adding.
+    if access.kb.get("graph_enabled"):
+        try:
+            await graph_build.reclaim_documents(access.kb, removed)
+        except Exception:
+            logger.exception("[KB] reclaiming graph contribution of %s failed", removed)
     collection = (access.kb.get("embedding") or {}).get("collection")
     if collection:
         store = vector_store.get_vector_store()
@@ -1057,6 +1075,11 @@ async def search_bases(
     merged.sort(key=lambda h: (-h.score, h.chunk_id))
     candidates = merged[:recall]
 
+    sources: dict[str, list[str]] = {}
+    if req.use_graph:
+        candidates, sources = await graph_search.augment(indexed, candidates, query, query_vec)
+        candidates = candidates[:recall]
+
     fused_scores = {h.chunk_id: h.score for h in candidates}
     reranked = False
     if rerank_card is not None and candidates:
@@ -1087,6 +1110,7 @@ async def search_bases(
                 end_line=hit.end_line,
                 score=fused_scores.get(hit.chunk_id, hit.score) if reranked else hit.score,
                 rerank_score=hit.score if reranked else None,
+                sources=sources.get(hit.chunk_id) or ["chunk"],
             )
         )
         if len(results) >= top_k:

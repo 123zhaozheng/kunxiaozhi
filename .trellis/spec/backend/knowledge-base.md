@@ -50,3 +50,11 @@ Code: `src/infra/knowledge_base/`, routes `src/api/routes/knowledge_base.py` (`/
 - `find_in_kb_document` caps patterns (10 × 200 chars) and runs matching off the event loop with a 5 s deadline.
 - `save_to_knowledge_base` only creates a `kb_save_drafts` row (30 min TTL); `/api/kb/drafts/{id}/confirm` is atomic `pending → applying → confirmed` and re-checks writability + quota. It is excluded from scheduled runs, the team router and WeCom.
 - `KnowledgeBasePromptMiddleware` injects a short `<知识库>` section; KB names/descriptions are flattened (no control chars or `<>`) and truncated since subscribed public KBs carry other users' text.
+
+## Knowledge graph (PR4)
+
+- Opt-in per KB (`graph_enabled`, `graph_schema`); settings `KB_ALLOW_GRAPH`, `KB_GRAPH_LLM_MODEL_ID` (chat card, falls back to `DEFAULT_MODEL_ID`, never an embedding card), `KB_GRAPH_CONCURRENCY`, `KB_GRAPH_MAX_CHUNKS_PER_KB`.
+- Mongo `kb_graph_entities` / `kb_graph_triples`; chunks carry `graph_status` (`pending|done|failed|null`), `entity_ids`, `triple_ids`. Vectors live in Qdrant `kbg_{dim}_{sha1(model)[:8]}`.
+- Builds are `graph` tasks on the shared `kb_tasks` queue (own per-user throttle). Ingest tasks enqueue a build for new chunks; document delete/reindex reclaims contributions (`graph_build.reclaim_documents`).
+- `use_graph` search: entity/relation seeds -> 2-hop subgraph -> personalized PageRank -> RRF with regular hits; any failure degrades to regular results. Hits carry `sources`.
+- API: `/api/kb/{id}/graph/{status,enable,build,disable,failed}`, `GET /graph`, `GET /graph/entities/{entity_id}`.

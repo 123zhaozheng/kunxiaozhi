@@ -43,6 +43,7 @@ async def push_task_updated(task: dict[str, Any]) -> None:
         "kb:task_updated",
         {
             "task_id": task.get("_id"),
+            "type": task.get("type"),
             "status": task.get("status"),
             "progress": task.get("progress") or {},
         },

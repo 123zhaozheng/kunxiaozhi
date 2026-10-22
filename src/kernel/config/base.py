@@ -421,6 +421,10 @@ class Settings(BaseSettings):
     KB_EMBEDDING_BATCH_SIZE: int = 32
     KB_ALLOW_PUBLIC: bool = True
     KB_PUBLIC_REQUIRES_REVIEW: bool = False
+    KB_ALLOW_GRAPH: bool = True
+    KB_GRAPH_LLM_MODEL_ID: str = ""
+    KB_GRAPH_CONCURRENCY: int = 2
+    KB_GRAPH_MAX_CHUNKS_PER_KB: int = 3000
     KB_DEFAULT_MAX_COUNT: int = 10
     KB_DEFAULT_MAX_DOCS_PER_KB: int = 500
     KB_DEFAULT_STORAGE_QUOTA_MB: int = 2048

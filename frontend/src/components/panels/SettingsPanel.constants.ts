@@ -53,6 +53,7 @@ export const MODEL_CONFIG_SETTING_KEYS = new Set([
   "DIFY_KB_RERANK_MODEL_ID",
   "KB_EMBEDDING_MODEL_ID",
   "KB_RERANK_MODEL_ID",
+  "KB_GRAPH_LLM_MODEL_ID",
 ]);
 
 // Map of model-card ID setting keys to the card `kind` they reference.
@@ -65,4 +66,5 @@ export const MODEL_CARD_KIND_FILTER: Record<string, string> = {
   DIFY_KB_RERANK_MODEL_ID: "rerank",
   KB_EMBEDDING_MODEL_ID: "embedding",
   KB_RERANK_MODEL_ID: "rerank",
+  KB_GRAPH_LLM_MODEL_ID: "chat",
 };

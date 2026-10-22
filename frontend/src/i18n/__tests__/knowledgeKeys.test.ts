@@ -97,6 +97,10 @@ test("navigation, SEO, admin category and setting descriptions exist", () => {
     "settingDesc.KB_WORKER_CONCURRENCY",
     "settingDesc.KB_MAX_FILE_MB",
     "settingDesc.KB_EMBEDDING_BATCH_SIZE",
+    "settingDesc.KB_ALLOW_GRAPH",
+    "settingDesc.KB_GRAPH_LLM_MODEL_ID",
+    "settingDesc.KB_GRAPH_CONCURRENCY",
+    "settingDesc.KB_GRAPH_MAX_CHUNKS_PER_KB",
     "knowledge.errors.disabled",
   ];
   for (const name of maintainedLocales) {
