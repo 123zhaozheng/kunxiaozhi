@@ -1,21 +1,24 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import toast from "react-hot-toast";
 import {
+  Clock,
+  FileText,
   Loader2,
   LibraryBig,
   LogOut,
+  MessageSquare,
+  MessageSquareOff,
   MoreHorizontal,
   Pencil,
   Share2,
   Trash2,
 } from "lucide-react";
-import type { KnowledgeBase } from "../../services/api/knowledgeBase";
-import { formatFileSize } from "../documents/utils/fileSize";
+import { knowledgeBaseApi, type KnowledgeBase } from "../../services/api/knowledgeBase";
 import { formatTimeAgo } from "../../utils/datetime";
 import { OUTLINE_BTN } from "./knowledgeStyles";
 import { KnowledgePublicStatusPill } from "./KnowledgePublicStatusPill";
-import { KbChatToggle } from "./KbChatToggle";
 import { STATUS_TONE_CLASSES, getKbCapabilities, isKbProcessing } from "./knowledgeUtils";
 
 interface KnowledgeBaseCardProps {
@@ -37,10 +40,6 @@ interface CardMenuItem {
   icon: typeof Pencil;
   danger?: boolean;
   onSelect: () => void;
-}
-
-function Dot() {
-  return <span className="inline-block h-1 w-1 rounded-full bg-[var(--theme-border)]" />;
 }
 
 function CardMenu({ items, label }: { items: CardMenuItem[]; label: string }) {
@@ -156,8 +155,28 @@ export function KnowledgeBaseCard({
   const { stats } = kb;
   const caps = getKbCapabilities(kb.my_role, kb);
   const isOwner = kb.my_role === "owner";
+  const chatToggleable = !!onChatEnabledChange && kb.chat_enabled != null;
+
+  const toggleChat = async () => {
+    try {
+      const next = await knowledgeBaseApi.setChatEnabled(kb.id, !kb.chat_enabled);
+      onChatEnabledChange?.({ ...kb, ...next, chat_enabled: next.chat_enabled ?? !kb.chat_enabled });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const menuItems: CardMenuItem[] = [];
+  if (chatToggleable) {
+    menuItems.push({
+      key: "chat",
+      label: kb.chat_enabled
+        ? t("knowledge.card.disableChat", "对话中停用")
+        : t("knowledge.card.enableChat", "对话中启用"),
+      icon: kb.chat_enabled ? MessageSquareOff : MessageSquare,
+      onSelect: () => void toggleChat(),
+    });
+  }
   if (caps.canManageSettings) {
     menuItems.push({ key: "edit", label: t("common.edit", "编辑"), icon: Pencil, onSelect: onEdit });
     if (onShare) {
@@ -185,6 +204,45 @@ export function KnowledgeBaseCard({
     });
   }
 
+  const showSubscribe =
+    (caps.canSubscribe && !!onSubscribe) || (caps.canUnsubscribe && !!onUnsubscribe);
+  const pills = (
+    <>
+      {processing && (
+        <span
+          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_TONE_CLASSES.info}`}
+        >
+          <Loader2 size={10} className="animate-spin" aria-hidden="true" />
+          {t("knowledge.card.processing", "处理中")}
+        </span>
+      )}
+      {stats.failed_count > 0 && (
+        <span className="scb__status-pill scb__status-pill--danger">
+          {t("knowledge.card.failedCount", {
+            count: stats.failed_count,
+            defaultValue: "{{count}} 个失败",
+          })}
+        </span>
+      )}
+      {kb.index_outdated && (
+        <span className="scb__status-pill scb__status-pill--disabled">
+          {t("knowledge.card.indexOutdated", "需重建索引")}
+        </span>
+      )}
+      {!isOwner && (
+        <span className="scb__status-pill scb__status-pill--inactive">
+          {t(`knowledge.role.${kb.my_role}`, kb.my_role)}
+        </span>
+      )}
+      {isOwner && <KnowledgePublicStatusPill status={kb.public_status} />}
+      {kb.chat_enabled === false && (
+        <span className="scb__status-pill scb__status-pill--inactive">
+          {t("knowledge.card.chatOff", "对话中未启用")}
+        </span>
+      )}
+    </>
+  );
+
   return (
     <div
       role="link"
@@ -196,116 +254,67 @@ export function KnowledgeBaseCard({
           onOpen();
         }
       }}
-      className="scb group flex h-full cursor-pointer flex-col overflow-hidden bg-[var(--theme-bg-card)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-ring)]"
+      className="scb group flex h-full cursor-pointer flex-col bg-[var(--theme-bg-card)] p-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-ring)]"
     >
-      <div className="flex flex-1 flex-col p-4 sm:p-5">
-        <div className="flex items-start gap-3">
-          <div className="scb__icon-ring shrink-0">
-            <LibraryBig size={20} className="text-[var(--theme-primary)]" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h3
-              className="truncate text-base font-semibold leading-tight text-[var(--theme-text)]"
-              title={kb.name}
-            >
-              {kb.name}
-            </h3>
-            <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--theme-text-secondary)]">
-              <span>
-                {t("knowledge.card.docCount", {
-                  count: stats.doc_count,
-                  defaultValue: "{{count}} 个文档",
-                })}
-              </span>
-              <Dot />
-              <span>
-                {t("knowledge.card.chunkCount", {
-                  count: stats.chunk_count,
-                  defaultValue: "{{count}} 个分块",
-                })}
-              </span>
-              <Dot />
-              <span>{formatFileSize(stats.size_bytes)}</span>
-            </div>
-          </div>
-          {processing && (
-            <span
-              className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_TONE_CLASSES.info}`}
-            >
-              <Loader2 size={10} className="animate-spin" aria-hidden="true" />
-              {t("knowledge.card.processing", "处理中")}
-            </span>
-          )}
-          {menuItems.length > 0 && (
-            <CardMenu items={menuItems} label={t("knowledge.card.more", "更多操作")} />
-          )}
+      <div className="flex items-start gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-subtle)]">
+          <LibraryBig size={17} className="text-[var(--theme-text-secondary)]" />
         </div>
-
-        <p className="mt-3 line-clamp-2 min-h-[2.5rem] text-[13px] leading-relaxed text-[var(--theme-text-secondary)]">
-          {kb.description || t("knowledge.card.noDescription", "暂无描述")}
-        </p>
-
-        <div className="mt-4 flex items-center justify-between gap-2 border-t border-[var(--theme-border)] pt-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <span className="scb__category-tag">
-              {t(`knowledge.preset.${kb.chunk_preset}.name`, kb.chunk_preset)}
-            </span>
-            {!isOwner && (
-              <span className="scb__status-pill scb__status-pill--inactive">
-                {t(`knowledge.role.${kb.my_role}`, kb.my_role)}
-              </span>
-            )}
-            <KnowledgePublicStatusPill status={kb.public_status} />
-            {stats.failed_count > 0 && (
-              <span className="scb__status-pill scb__status-pill--danger">
-                {t("knowledge.card.failedCount", {
-                  count: stats.failed_count,
-                  defaultValue: "{{count}} 个失败",
-                })}
-              </span>
-            )}
-            {kb.index_outdated && (
-              <span className="scb__status-pill scb__status-pill--disabled">
-                {t("knowledge.card.indexOutdated", "需重建索引")}
-              </span>
-            )}
-          </div>
-          <span className="shrink-0 text-[11px] text-[var(--theme-text-tertiary)]">
-            {formatTimeAgo(t, kb.updated_at)}
-          </span>
+        <div className="min-w-0 flex-1">
+          <h3
+            className="truncate text-[15px] font-semibold leading-snug text-[var(--theme-text)]"
+            title={kb.name}
+          >
+            {kb.name}
+          </h3>
+          <p className="mt-0.5 line-clamp-2 text-[13px] leading-relaxed text-[var(--theme-text-secondary)]">
+            {kb.description || t("knowledge.card.noDescription", "暂无描述")}
+          </p>
         </div>
-
-        {onChatEnabledChange && kb.chat_enabled != null && (
-          <div className="mt-3">
-            <KbChatToggle kb={kb} onChange={onChatEnabledChange} />
-          </div>
+        {menuItems.length > 0 && (
+          <CardMenu items={menuItems} label={t("knowledge.card.more", "更多操作")} />
         )}
+      </div>
 
-        {!isOwner && (
-          <div className="mt-3 flex items-center justify-between gap-2">
-            <span className="min-w-0 truncate text-[11px] text-[var(--theme-text-tertiary)]">
+      <div className="mt-2 flex min-h-0 flex-wrap items-center gap-1.5 empty:hidden">{pills}</div>
+
+      <div className="mt-auto flex items-center justify-between gap-2 pt-3 text-xs text-[var(--theme-text-tertiary)]">
+        <span className="inline-flex min-w-0 items-center gap-1">
+          <FileText size={13} aria-hidden="true" />
+          {t("knowledge.card.docCount", {
+            count: stats.doc_count,
+            defaultValue: "{{count}} 个文档",
+          })}
+          {!isOwner && kb.owner_username && (
+            <span className="truncate">
+              {" · "}
               {t("knowledge.card.owner", {
                 name: kb.owner_username,
                 defaultValue: "所有者：{{name}}",
               })}
             </span>
-            {(caps.canSubscribe && onSubscribe) || (caps.canUnsubscribe && onUnsubscribe) ? (
-              <button
-                type="button"
-                disabled={subscribeBusy}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (caps.canSubscribe) onSubscribe?.();
-                  else onUnsubscribe?.();
-                }}
-                className={`${OUTLINE_BTN} !px-3 !py-1 text-xs`}
-              >
-                {caps.canSubscribe
-                  ? t("knowledge.subscribe.subscribe", "订阅")
-                  : t("knowledge.subscribe.unsubscribe", "取消订阅")}
-              </button>
-            ) : null}
-          </div>
+          )}
+        </span>
+        {showSubscribe ? (
+          <button
+            type="button"
+            disabled={subscribeBusy}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (caps.canSubscribe) onSubscribe?.();
+              else onUnsubscribe?.();
+            }}
+            className={`${OUTLINE_BTN} !rounded-lg !px-2.5 !py-1 text-xs`}
+          >
+            {caps.canSubscribe
+              ? t("knowledge.subscribe.subscribe", "订阅")
+              : t("knowledge.subscribe.unsubscribe", "取消订阅")}
+          </button>
+        ) : (
+          <span className="inline-flex shrink-0 items-center gap-1">
+            <Clock size={13} aria-hidden="true" />
+            {formatTimeAgo(t, kb.updated_at)}
+          </span>
         )}
       </div>
     </div>

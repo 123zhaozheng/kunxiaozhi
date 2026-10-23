@@ -3,8 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Globe2, LibraryBig, Plus, Users } from "lucide-react";
-import { PanelHeader } from "../common/PanelHeader";
+import { LibraryBig, Plus, Search, X } from "lucide-react";
 import { PanelLoadingState } from "../common/PanelLoadingState";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { Pagination } from "../common/Pagination";
@@ -32,7 +31,6 @@ import {
 interface ListTabEntry {
   key: KbListTab;
   label: string;
-  icon: typeof LibraryBig;
 }
 
 function useDebounced<T>(value: T, delay: number): T {
@@ -71,9 +69,9 @@ export function KnowledgeBaseListPage() {
   const [busyKbId, setBusyKbId] = useState<string | null>(null);
 
   const tabEntries: ListTabEntry[] = [
-    { key: "mine", label: t("knowledge.tabs.mine", "我的知识库"), icon: LibraryBig },
-    { key: "shared", label: t("knowledge.tabs.shared", "共享知识库"), icon: Users },
-    { key: "plaza", label: t("knowledge.tabs.plaza", "知识广场"), icon: Globe2 },
+    { key: "mine", label: t("knowledge.tabs.mine", "我的知识库") },
+    { key: "shared", label: t("knowledge.tabs.shared", "共享知识库") },
+    { key: "plaza", label: t("knowledge.tabs.plaza", "知识广场") },
   ];
 
   const updateParams = (mutate: (params: URLSearchParams) => void) => {
@@ -88,12 +86,14 @@ export function KnowledgeBaseListPage() {
     setPage(1);
   };
 
-  const changeTab = (next: KbListTab) =>
+  const changeTab = (next: KbListTab) => {
+    setSearch("");
     updateParams((params) => {
       if (next === "mine") params.delete("tab");
       else params.set("tab", next);
       params.delete("sub");
     });
+  };
 
   const changeSharedFilter = (next: (typeof KB_SHARED_FILTERS)[number]) =>
     updateParams((params) => {
@@ -169,77 +169,146 @@ export function KnowledgeBaseListPage() {
   };
 
   const openCreate = () => setDialog({ kb: null });
+  const clearFilters = () => {
+    setSearch("");
+    if (sharedFilter !== "all") changeSharedFilter("all");
+  };
+
+  const query = search.trim();
+  const hasFilter = query !== "" || (activeTab === "shared" && sharedFilter !== "all");
+  // First-run (nothing at all, no filter): hide search so the empty state stays simple.
+  const showSearch = query !== "" || items.length > 0;
+
+  const empty = (() => {
+    if (hasFilter) {
+      return {
+        title: query
+          ? t("knowledge.noMatchQuery", {
+              query,
+              defaultValue: "没有找到与“{{query}}”相关的知识库",
+            })
+          : t("knowledge.noMatchTitle", "没有找到匹配的知识库"),
+        desc: t("knowledge.noMatchDesc", "换个关键词，或清除筛选查看全部。"),
+        clear: true,
+      };
+    }
+    if (activeTab === "mine") {
+      return {
+        title: t("knowledge.emptyTitle", "还没有知识库"),
+        desc: t("knowledge.emptyDesc", "点击右上角「新建知识库」，开始整理你的第一份资料。"),
+        clear: false,
+      };
+    }
+    if (activeTab === "shared") {
+      return {
+        title: t("knowledge.emptyShared", "还没有共享给你的知识库"),
+        desc: t("knowledge.emptyOtherDesc", "别人分享给你或你订阅的知识库会出现在这里。"),
+        clear: false,
+      };
+    }
+    return {
+      title: t("knowledge.emptyPlaza", "知识广场暂无内容"),
+      desc: t("knowledge.emptyPlazaDesc", "有人公开知识库后会出现在这里。"),
+      clear: false,
+    };
+  })();
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <PanelHeader
-        title={t("knowledge.title", "知识库")}
-        subtitle={t("knowledge.subtitle", "把文档整理成知识库，让昆小智基于你的资料回答问题")}
-        icon={<LibraryBig />}
-        searchValue={search}
-        onSearchChange={setSearch}
-        searchPlaceholder={t("knowledge.searchPlaceholder", "搜索知识库名称或描述")}
-        actions={
-          <div className="flex items-center gap-2">
-            <KnowledgeNotificationsBell onOpenKb={(id) => navigate(`/knowledge/${id}`)} />
-            <button
-              type="button"
-              onClick={openCreate}
-              disabled={quotaReached}
-              title={
-                quotaReached
-                  ? t("knowledge.quota.countReached", "知识库数量已达上限")
-                  : undefined
-              }
-              className={PRIMARY_BTN}
-            >
-              <Plus size={16} />
-              {t("knowledge.create", "新建知识库")}
-            </button>
+      <div className="shrink-0 border-b border-[var(--theme-border)] px-4 sm:px-6">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2">
+          <div
+            className="-mb-2 flex items-center gap-5 self-stretch"
+            role="tablist"
+            aria-label={t("knowledge.title", "知识库")}
+          >
+            {tabEntries.map(({ key, label }) => {
+              const isActive = activeTab === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => changeTab(key)}
+                  className={`relative flex h-11 items-center text-sm transition-colors ${
+                    isActive
+                      ? "is-active font-semibold text-[var(--theme-text)] after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-[var(--theme-text)]"
+                      : "text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)]"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
-        }
-      />
 
-      {quota && <KnowledgeQuotaSummary quota={quota} className="mx-4 mb-3 sm:mx-6" />}
-
-      {config && !config.ready && <KnowledgeNotReadyNotice className="mx-4 mb-3 sm:mx-6" />}
-
-      <div className="flex shrink-0 items-center border-b border-[var(--theme-border)] px-4 py-2">
-        <div
-          className="inline-flex items-center gap-1 rounded-lg bg-[var(--theme-bg-subtle)] p-1"
-          role="tablist"
-          aria-label={t("knowledge.title", "知识库")}
-        >
-          {tabEntries.map(({ key, label, icon: Icon }) => {
-            const isActive = activeTab === key;
-            return (
+          <div className="ml-auto flex min-w-0 items-center gap-2">
+            {showSearch && (
+              <label className="relative block w-full min-w-0 sm:w-[280px]">
+                <Search
+                  size={15}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--theme-text-tertiary)]"
+                />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={
+                    activeTab === "shared"
+                      ? t("knowledge.searchShared", "搜索共享知识库")
+                      : t("knowledge.searchPlaceholder", "搜索知识库")
+                  }
+                  aria-label={t("knowledge.searchPlaceholder", "搜索知识库")}
+                  className="h-9 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-card)] pl-8 pr-8 text-sm text-[var(--theme-text)] placeholder:text-[var(--theme-text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-ring)] [&::-webkit-search-cancel-button]:hidden"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    aria-label={t("knowledge.clearSearch", "清除搜索")}
+                    className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-[var(--theme-text-tertiary)] hover:text-[var(--theme-text)]"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </label>
+            )}
+            <KnowledgeNotificationsBell onOpenKb={(id) => navigate(`/knowledge/${id}`)} />
+            {activeTab === "mine" && (
               <button
-                key={key}
                 type="button"
-                role="tab"
-                aria-selected={isActive}
-                onClick={() => changeTab(key)}
-                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                  isActive
-                    ? "is-active bg-[var(--theme-sidebar-active)] text-[var(--theme-text)]"
-                    : "text-[var(--theme-text-secondary)] hover:bg-[var(--theme-sidebar-hover)] hover:text-[var(--theme-text)]"
-                }`}
+                onClick={openCreate}
+                disabled={quotaReached}
+                title={
+                  quotaReached
+                    ? t("knowledge.quota.countReached", "知识库数量已达上限")
+                    : undefined
+                }
+                className={`${PRIMARY_BTN} h-9 shrink-0 !rounded-lg !py-0`}
               >
-                <Icon size={16} />
-                <span>{label}</span>
+                <Plus size={16} />
+                {t("knowledge.create", "新建知识库")}
               </button>
-            );
-          })}
+            )}
+          </div>
         </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+        {activeTab === "mine" && config && !config.ready && (
+          <KnowledgeNotReadyNotice className="mb-4" />
+        )}
+
         {activeTab === "shared" && (
-          <div className="ml-3 inline-flex items-center gap-1" role="group">
+          <div className="mb-3 flex flex-wrap items-center gap-1" role="group">
             {KB_SHARED_FILTERS.map((f) => (
               <button
                 key={f}
                 type="button"
                 aria-pressed={sharedFilter === f}
                 onClick={() => changeSharedFilter(f)}
-                className={`rounded-full px-2.5 py-1 text-xs ${
+                className={`rounded-md px-2.5 py-1 text-[13px] ${
                   sharedFilter === f
                     ? "bg-[var(--theme-sidebar-active)] font-medium text-[var(--theme-text)]"
                     : "text-[var(--theme-text-secondary)] hover:bg-[var(--theme-sidebar-hover)]"
@@ -250,47 +319,26 @@ export function KnowledgeBaseListPage() {
             ))}
           </div>
         )}
-      </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
         {loading ? (
           <PanelLoadingState text={t("common.loading", "加载中...")} />
         ) : filtered.length === 0 ? (
-          <div className="mx-auto mt-6 max-w-xl rounded-3xl border border-stone-200 p-6 text-center dark:border-stone-800">
-            <LibraryBig className="mx-auto mb-3 text-stone-400" size={36} />
-            <h3 className="text-lg font-semibold text-stone-900 dark:text-stone-100">
-              {items.length === 0
-                ? activeTab === "mine"
-                  ? t("knowledge.emptyTitle", "还没有知识库")
-                  : activeTab === "shared"
-                    ? t("knowledge.emptyShared", "还没有共享或订阅的知识库")
-                    : t("knowledge.emptyPlaza", "知识广场暂无内容")
-                : t("knowledge.noMatchTitle", "没有找到匹配的知识库")}
-            </h3>
-            <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
-              {items.length === 0 && activeTab !== "mine"
-                ? t("knowledge.emptyOtherDesc", "有人分享或公开知识库后会出现在这里。")
-                : items.length === 0
-                ? t(
-                    "knowledge.emptyDesc",
-                    "新建一个知识库并上传文档，系统会自动解析、切分并建立检索索引。",
-                  )
-                : t("knowledge.noMatchDesc", "换个关键词试试。")}
-            </p>
-            {items.length === 0 && activeTab === "mine" && (
+          <div className="mx-auto flex max-w-md flex-col items-center pt-16 text-center sm:pt-24">
+            <LibraryBig className="mb-3 text-[var(--theme-text-tertiary)]" size={28} />
+            <h3 className="text-[15px] font-semibold text-[var(--theme-text)]">{empty.title}</h3>
+            <p className="mt-1 text-[13px] text-[var(--theme-text-secondary)]">{empty.desc}</p>
+            {empty.clear && (
               <button
                 type="button"
-                onClick={openCreate}
-                disabled={quotaReached}
-                className={`${PRIMARY_BTN} mt-4`}
+                onClick={clearFilters}
+                className="mt-3 text-[13px] font-medium text-[var(--theme-text)] underline-offset-4 hover:underline"
               >
-                <Plus size={16} />
-                {t("knowledge.create", "新建知识库")}
+                {t("knowledge.clearFilters", "清除筛选")}
               </button>
             )}
           </div>
         ) : (
-          <div className="auto-grid-cols grid gap-4 sm:gap-5">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">
             {filtered.map((kb) => (
               <KnowledgeBaseCard
                 key={kb.id}
@@ -322,6 +370,13 @@ export function KnowledgeBaseListPage() {
           </div>
         )}
       </div>
+
+      {activeTab === "mine" && quota && (
+        <KnowledgeQuotaSummary
+          quota={quota}
+          className="shrink-0 px-4 py-3 sm:px-6"
+        />
+      )}
 
       {dialog && (
         <KnowledgeBaseDialog

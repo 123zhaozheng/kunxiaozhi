@@ -1309,7 +1309,7 @@
     "title": "知识库",
     "subtitle": "把文档整理成知识库，让昆小智基于你的资料回答问题",
     "create": "新建知识库",
-    "searchPlaceholder": "搜索知识库名称或描述",
+    "searchPlaceholder": "搜索知识库",
     "loadFailed": "知识库加载失败",
     "retryLoad": "重新加载",
     "notReady": "管理员尚未配置向量模型，暂时无法入库。你仍可以创建知识库，配置完成后文档会自动处理。",
@@ -1318,9 +1318,9 @@
     "notFoundTitle": "知识库不存在",
     "notFoundDesc": "它可能已被删除，或你没有访问权限。",
     "emptyTitle": "还没有知识库",
-    "emptyDesc": "新建一个知识库并上传文档，系统会自动解析、切分并建立检索索引。",
+    "emptyDesc": "点击右上角「新建知识库」，开始整理你的第一份资料。",
     "noMatchTitle": "没有找到匹配的知识库",
-    "noMatchDesc": "换个关键词试试。",
+    "noMatchDesc": "换个关键词，或清除筛选查看全部。",
     "deleteTitle": "删除知识库",
     "deleteConfirm": "确定删除“{{name}}”吗？库内所有文档、分块和检索索引都会被永久删除，此操作无法撤销。",
     "tabs": {
@@ -1340,7 +1340,10 @@
       "indexOutdated": "需重建索引",
       "noDescription": "暂无描述",
       "more": "更多操作",
-      "owner": "所有者：{{name}}"
+      "owner": "所有者：{{name}}",
+      "disableChat": "对话中停用",
+      "enableChat": "对话中启用",
+      "chatOff": "对话中未启用"
     },
     "dialog": {
       "createTitle": "新建知识库",
@@ -1520,9 +1523,9 @@
       "shared": "分享给我",
       "subscribed": "我的订阅"
     },
-    "emptyShared": "还没有共享或订阅的知识库",
+    "emptyShared": "还没有共享给你的知识库",
     "emptyPlaza": "知识广场暂无内容",
-    "emptyOtherDesc": "有人分享或公开知识库后会出现在这里。",
+    "emptyOtherDesc": "别人分享给你或你订阅的知识库会出现在这里。",
     "role": {
       "owner": "所有者",
       "editor": "编辑者",
@@ -1541,7 +1544,8 @@
       "count": "知识库 {{used}}/{{max}}",
       "storage": "存储 {{used}} / {{max}}",
       "docsPerKb": "单库最多 {{max}} 个文档",
-      "countReached": "知识库数量已达上限"
+      "countReached": "知识库数量已达上限",
+      "footerCount": "{{used}} / {{max}} 个知识库"
     },
     "subscribe": {
       "subscribe": "订阅",
@@ -1739,7 +1743,16 @@
         "relations": "关系",
         "mentions": "提及片段"
       }
-    }
+    },
+    "searchShared": "搜索共享知识库",
+    "clearSearch": "清除搜索",
+    "clearFilters": "清除筛选",
+    "emptyPlazaDesc": "有人公开知识库后会出现在这里。",
+    "noMatchQuery": "没有找到与“{{query}}”相关的知识库",
+    "notReadyTitle": "向量模型未配置，文档入库暂停",
+    "notReadyHint": "仍可新建知识库，配置后文档自动处理",
+    "goConfigure": "去配置",
+    "contactAdmin": "联系管理员"
   },
   "landing": {
     "agentSystem": "Agent 编排系统",

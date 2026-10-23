@@ -98,15 +98,14 @@ test("failed status badge is a retry button, healthy ones are not", () => {
   assert.match(processing, /animate-spin/);
 });
 
-test("knowledge base card shows stats, preset and processing state without a banner", () => {
+test("knowledge base card is compact: name, description, doc count, status, no chunk/size noise", () => {
   const html = renderToStaticMarkup(
     <KnowledgeBaseCard kb={kb()} onOpen={() => undefined} onEdit={() => undefined} onDelete={() => undefined} />,
   );
   assert.match(html, /产品手册/);
   assert.match(html, /4 个文档/);
-  assert.match(html, /88 个分块/);
-  assert.match(html, /3\.0 MB/);
-  assert.match(html, /问答/);
+  assert.doesNotMatch(html, /88 个分块/);
+  assert.doesNotMatch(html, /3\.0 MB/);
   assert.match(html, /处理中/);
   assert.match(html, /1 个失败/);
   assert.match(html, /class="scb /);
@@ -194,4 +193,12 @@ test("list page keeps a tablist and detail page exposes documents/search/setting
   assert.match(detail, /role="tablist"/);
   assert.match(detail, /useWebSocket\(\{ enabled: true, onKbEvent \}\)/);
   assert.match(detail, /searchParams\.get\("tab"\)/);
+});
+
+test("list page drops the duplicate header block and keeps one create entry", () => {
+  const src = read("../KnowledgeBaseListPage.tsx");
+  assert.doesNotMatch(src, /PanelHeader/);
+  assert.equal(src.match(/onClick=\{openCreate\}/g)?.length, 1);
+  assert.match(src, /sm:w-\[280px\]/);
+  assert.match(src, /activeTab === "mine" && quota/);
 });

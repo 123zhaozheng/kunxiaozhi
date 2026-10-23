@@ -1,16 +1,40 @@
-import { AlertTriangle, LibraryBig } from "lucide-react";
+import { AlertTriangle, ArrowRight, LibraryBig } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { NOTICE_WARNING, OUTLINE_BTN } from "./knowledgeStyles";
+import { useAuth } from "../../hooks/useAuth";
+import { Permission } from "../../types";
+import { NOTICE_BAR, OUTLINE_BTN } from "./knowledgeStyles";
 
 export function KnowledgeNotReadyNotice({ className = "" }: { className?: string }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { hasPermission } = useAuth();
+  const canConfigure = hasPermission(Permission.SETTINGS_MANAGE);
   return (
-    <div role="alert" className={`${NOTICE_WARNING} ${className}`}>
-      <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-      {t(
-        "knowledge.notReady",
-        "管理员尚未配置向量模型，暂时无法入库。你仍可以创建知识库，配置完成后文档会自动处理。",
+    <div role="alert" className={`${NOTICE_BAR} ${className}`}>
+      <AlertTriangle size={14} className="shrink-0 self-start mt-[3px]" />
+      <span className="min-w-0 flex-1">
+        <span className="font-medium">
+          {t("knowledge.notReadyTitle", "向量模型未配置，文档入库暂停")}
+        </span>
+        <span className="text-amber-700/80 dark:text-amber-200/70">
+          {" · "}
+          {t("knowledge.notReadyHint", "仍可新建知识库，配置后文档自动处理")}
+        </span>
+      </span>
+      {canConfigure ? (
+        <button
+          type="button"
+          onClick={() => navigate("/settings?category=knowledge_base")}
+          className="ml-auto inline-flex shrink-0 items-center gap-1 font-medium text-stone-900 hover:underline dark:text-stone-100"
+        >
+          {t("knowledge.goConfigure", "去配置")}
+          <ArrowRight size={14} />
+        </button>
+      ) : (
+        <span className="ml-auto shrink-0 text-amber-700/80 dark:text-amber-200/70">
+          {t("knowledge.contactAdmin", "联系管理员")}
+        </span>
       )}
     </div>
   );

@@ -18,3 +18,6 @@ export const INPUT_CLS =
 
 export const NOTICE_WARNING =
   "flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200";
+
+export const NOTICE_BAR =
+  "flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-amber-50 px-3 py-2 text-[13px] text-amber-800 dark:bg-amber-900/30 dark:text-amber-200";

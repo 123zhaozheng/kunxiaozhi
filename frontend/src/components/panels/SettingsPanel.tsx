@@ -95,8 +95,13 @@ export function SettingsPanel() {
   );
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeCategory, setActiveCategory] =
-    useState<SettingCategory>("frontend");
+  // ``?category=`` deep-links a section (e.g. the KB "去配置" notice).
+  const [activeCategory, setActiveCategory] = useState<SettingCategory>(() => {
+    const requested = new URLSearchParams(window.location.search).get("category");
+    return CATEGORY_ORDER.includes(requested as SettingCategory)
+      ? (requested as SettingCategory)
+      : "frontend";
+  });
   const [editValues, setEditValues] = useState<
     Record<string, string | number | boolean | object>
   >({});

@@ -1309,7 +1309,7 @@
     "title": "Knowledge Base",
     "subtitle": "Turn your documents into a knowledge base so Kunxiaozhi can answer from your material",
     "create": "New knowledge base",
-    "searchPlaceholder": "Search knowledge bases by name or description",
+    "searchPlaceholder": "Search knowledge bases",
     "loadFailed": "Failed to load the knowledge base",
     "retryLoad": "Reload",
     "notReady": "The administrator has not configured an embedding model yet, so documents cannot be indexed for now. You can still create knowledge bases; documents will be processed once it is configured.",
@@ -1318,9 +1318,9 @@
     "notFoundTitle": "Knowledge base not found",
     "notFoundDesc": "It may have been deleted, or you may not have access to it.",
     "emptyTitle": "No knowledge bases yet",
-    "emptyDesc": "Create a knowledge base and upload documents. They are parsed, chunked and indexed automatically.",
+    "emptyDesc": "Click “New knowledge base” at the top right to organize your first material.",
     "noMatchTitle": "No matching knowledge bases",
-    "noMatchDesc": "Try a different keyword.",
+    "noMatchDesc": "Try another keyword, or clear filters to see everything.",
     "deleteTitle": "Delete knowledge base",
     "deleteConfirm": "Delete “{{name}}”? All documents, chunks and search indexes in it will be permanently removed. This cannot be undone.",
     "tabs": {
@@ -1340,7 +1340,10 @@
       "indexOutdated": "Reindex needed",
       "noDescription": "No description",
       "more": "More actions",
-      "owner": "Owner: {{name}}"
+      "owner": "Owner: {{name}}",
+      "disableChat": "Disable in chat",
+      "enableChat": "Enable in chat",
+      "chatOff": "Off in chat"
     },
     "dialog": {
       "createTitle": "New knowledge base",
@@ -1520,9 +1523,9 @@
       "shared": "Shared with me",
       "subscribed": "Subscribed"
     },
-    "emptyShared": "No shared or subscribed knowledge bases yet",
+    "emptyShared": "Nothing has been shared with you yet",
     "emptyPlaza": "The plaza is empty",
-    "emptyOtherDesc": "Knowledge bases appear here once someone shares or publishes them.",
+    "emptyOtherDesc": "Knowledge bases shared with you or that you subscribe to appear here.",
     "role": {
       "owner": "Owner",
       "editor": "Editor",
@@ -1541,7 +1544,8 @@
       "count": "Knowledge bases {{used}}/{{max}}",
       "storage": "Storage {{used}} / {{max}}",
       "docsPerKb": "Up to {{max}} documents per base",
-      "countReached": "Knowledge base limit reached"
+      "countReached": "Knowledge base limit reached",
+      "footerCount": "{{used}} / {{max}} knowledge bases"
     },
     "subscribe": {
       "subscribe": "Subscribe",
@@ -1739,7 +1743,16 @@
         "relations": "Relations",
         "mentions": "Mentions"
       }
-    }
+    },
+    "searchShared": "Search shared knowledge bases",
+    "clearSearch": "Clear search",
+    "clearFilters": "Clear filters",
+    "emptyPlazaDesc": "Knowledge bases appear here once someone publishes them.",
+    "noMatchQuery": "No knowledge bases match “{{query}}”",
+    "notReadyTitle": "Embedding model not configured — document indexing is paused",
+    "notReadyHint": "You can still create knowledge bases; documents are processed once it is configured",
+    "goConfigure": "Configure",
+    "contactAdmin": "Contact your administrator"
   },
   "landing": {
     "agentSystem": "Agent Orchestration",
