@@ -1318,7 +1318,7 @@
     "notFoundTitle": "Knowledge base not found",
     "notFoundDesc": "It may have been deleted, or you may not have access to it.",
     "emptyTitle": "No knowledge bases yet",
-    "emptyDesc": "Click “New knowledge base” at the top right to organize your first material.",
+    "emptyDesc": "Create a knowledge base to start organizing your first material.",
     "noMatchTitle": "No matching knowledge bases",
     "noMatchDesc": "Try another keyword, or clear filters to see everything.",
     "deleteTitle": "Delete knowledge base",

@@ -1318,7 +1318,7 @@
     "notFoundTitle": "知识库不存在",
     "notFoundDesc": "它可能已被删除，或你没有访问权限。",
     "emptyTitle": "还没有知识库",
-    "emptyDesc": "点击右上角「新建知识库」，开始整理你的第一份资料。",
+    "emptyDesc": "新建一个知识库，开始整理你的第一份资料。",
     "noMatchTitle": "没有找到匹配的知识库",
     "noMatchDesc": "换个关键词，或清除筛选查看全部。",
     "deleteTitle": "删除知识库",

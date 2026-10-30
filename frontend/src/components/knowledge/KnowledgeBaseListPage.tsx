@@ -18,7 +18,7 @@ import { KnowledgeDisabledState, KnowledgeNotReadyNotice } from "./KnowledgeNoti
 import { KnowledgeNotificationsBell } from "./KnowledgeNotificationsDialog";
 import { KnowledgeQuotaSummary } from "./KnowledgeQuotaSummary";
 import { KnowledgeShareDialog } from "./KnowledgeShareDialog";
-import { PRIMARY_BTN } from "./knowledgeStyles";
+import { PRIMARY_BTN, PRIMARY_BTN_SM } from "./knowledgeStyles";
 import {
   KB_SHARED_FILTERS,
   PLAZA_PAGE_SIZE,
@@ -190,13 +190,15 @@ export function KnowledgeBaseListPage() {
           : t("knowledge.noMatchTitle", "没有找到匹配的知识库"),
         desc: t("knowledge.noMatchDesc", "换个关键词，或清除筛选查看全部。"),
         clear: true,
+        create: false,
       };
     }
     if (activeTab === "mine") {
       return {
         title: t("knowledge.emptyTitle", "还没有知识库"),
-        desc: t("knowledge.emptyDesc", "点击右上角「新建知识库」，开始整理你的第一份资料。"),
+        desc: t("knowledge.emptyDesc", "新建一个知识库，开始整理你的第一份资料。"),
         clear: false,
+        create: true,
       };
     }
     if (activeTab === "shared") {
@@ -204,12 +206,14 @@ export function KnowledgeBaseListPage() {
         title: t("knowledge.emptyShared", "还没有共享给你的知识库"),
         desc: t("knowledge.emptyOtherDesc", "别人分享给你或你订阅的知识库会出现在这里。"),
         clear: false,
+        create: false,
       };
     }
     return {
       title: t("knowledge.emptyPlaza", "知识广场暂无内容"),
       desc: t("knowledge.emptyPlazaDesc", "有人公开知识库后会出现在这里。"),
       clear: false,
+      create: false,
     };
   })();
 
@@ -285,7 +289,7 @@ export function KnowledgeBaseListPage() {
                     ? t("knowledge.quota.countReached", "知识库数量已达上限")
                     : undefined
                 }
-                className={`${PRIMARY_BTN} h-9 shrink-0 !rounded-lg !py-0`}
+                className={`${PRIMARY_BTN_SM} shrink-0`}
               >
                 <Plus size={16} />
                 {t("knowledge.create", "新建知识库")}
@@ -301,17 +305,20 @@ export function KnowledgeBaseListPage() {
         )}
 
         {activeTab === "shared" && (
-          <div className="mb-3 flex flex-wrap items-center gap-1" role="group">
+          <div
+            className="mb-4 inline-flex flex-wrap items-center gap-1 rounded-lg bg-[var(--theme-bg-subtle)] p-1"
+            role="group"
+          >
             {KB_SHARED_FILTERS.map((f) => (
               <button
                 key={f}
                 type="button"
                 aria-pressed={sharedFilter === f}
                 onClick={() => changeSharedFilter(f)}
-                className={`rounded-md px-2.5 py-1 text-[13px] ${
+                className={`rounded-md px-3 py-1 text-[13px] font-medium transition-colors ${
                   sharedFilter === f
-                    ? "bg-[var(--theme-sidebar-active)] font-medium text-[var(--theme-text)]"
-                    : "text-[var(--theme-text-secondary)] hover:bg-[var(--theme-sidebar-hover)]"
+                    ? "bg-[var(--theme-sidebar-active)] text-[var(--theme-text)]"
+                    : "text-[var(--theme-text-secondary)] hover:bg-[var(--theme-sidebar-hover)] hover:text-[var(--theme-text)]"
                 }`}
               >
                 {t(`knowledge.sharedFilter.${f}`, f)}
@@ -324,9 +331,22 @@ export function KnowledgeBaseListPage() {
           <PanelLoadingState text={t("common.loading", "加载中...")} />
         ) : filtered.length === 0 ? (
           <div className="mx-auto flex max-w-md flex-col items-center pt-16 text-center sm:pt-24">
-            <LibraryBig className="mb-3 text-[var(--theme-text-tertiary)]" size={28} />
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-subtle)]">
+              <LibraryBig className="text-[var(--theme-text-secondary)]" size={26} />
+            </div>
             <h3 className="text-[15px] font-semibold text-[var(--theme-text)]">{empty.title}</h3>
             <p className="mt-1 text-[13px] text-[var(--theme-text-secondary)]">{empty.desc}</p>
+            {empty.create && (
+              <button
+                type="button"
+                onClick={openCreate}
+                disabled={quotaReached}
+                className={`${PRIMARY_BTN} mt-5`}
+              >
+                <Plus size={16} />
+                {t("knowledge.create", "新建知识库")}
+              </button>
+            )}
             {empty.clear && (
               <button
                 type="button"

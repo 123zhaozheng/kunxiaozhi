@@ -408,7 +408,7 @@ export function DocumentsTab({
           <Loader2 className="animate-spin" size={22} />
         </div>
       ) : items.length === 0 ? (
-        <div className="mx-auto mt-4 max-w-xl rounded-3xl border border-stone-200 p-6 text-center dark:border-stone-800">
+        <div className="mx-auto max-w-xl px-4 py-16 text-center">
           <FileText className="mx-auto mb-3 text-stone-400" size={36} />
           <h3 className="text-lg font-semibold text-stone-900 dark:text-stone-100">
             {hasFilter

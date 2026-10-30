@@ -4,14 +4,21 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import {
+  AlertTriangle,
   ArrowLeft,
+  BellOff,
+  CheckCircle2,
   FileText,
+  HardDrive,
+  Layers,
   LibraryBig,
+  Loader2,
   LogOut,
   Network,
   Search,
   Settings2,
   Share2,
+  type LucideIcon,
 } from "lucide-react";
 import { PanelHeader } from "../common/PanelHeader";
 import { PanelLoadingState } from "../common/PanelLoadingState";
@@ -26,6 +33,7 @@ import {
 } from "../../services/api/knowledgeBase";
 import { subscribeKnowledgeBaseRefresh } from "../../utils/knowledgeBaseEvents";
 import { KbChatToggle } from "./KbChatToggle";
+import { KnowledgeActionMenu, type ActionMenuItem } from "./KnowledgeActionMenu";
 import {
   DocumentDetailSidebar,
   type DocumentFocus,
@@ -39,8 +47,9 @@ import { GraphTab } from "./graph/GraphTab";
 import { RetrievalTestTab } from "./RetrievalTestTab";
 import { SettingsTab } from "./SettingsTab";
 import { KnowledgePublicStatusPill } from "./KnowledgePublicStatusPill";
+import { KnowledgeStatusPill } from "./KnowledgeStatusPill";
 import { KnowledgeShareDialog } from "./KnowledgeShareDialog";
-import { OUTLINE_BTN, PRIMARY_BTN } from "./knowledgeStyles";
+import { ICON_OUTLINE_BTN, OUTLINE_BTN, PRIMARY_BTN } from "./knowledgeStyles";
 import {
   POST_ACTION_REFRESH_MS,
   getKbCapabilities,
@@ -53,6 +62,18 @@ interface ViewingState {
   focus: DocumentFocus | null;
   tab: DocumentSidebarTab;
 }
+
+interface StatItem {
+  key: string;
+  text: string;
+  icon: LucideIcon;
+  tone?: "info" | "danger";
+}
+
+const STAT_TONE_CLASS = {
+  info: "font-medium text-sky-700 dark:text-sky-300",
+  danger: "font-medium text-red-600 dark:text-red-400",
+} as const;
 
 interface KnowledgeBaseDetailProps {
   kbId: string;
@@ -185,19 +206,23 @@ export function KnowledgeBaseDetail({ kbId }: KnowledgeBaseDetailProps) {
     }
   };
 
-  const chips: Array<{ key: string; text: string; danger?: boolean }> = [
+  const statItems: StatItem[] = [
     {
       key: "docs",
+      icon: FileText,
       text: t("knowledge.stats.docs", { count: stats.doc_count, defaultValue: "{{count}} 个文档" }),
     },
     {
       key: "indexed",
+      icon: CheckCircle2,
       text: t("knowledge.stats.indexed", { count: stats.indexed_count, defaultValue: "{{count}} 已完成" }),
     },
   ];
   if (stats.processing_count > 0) {
-    chips.push({
+    statItems.push({
       key: "processing",
+      icon: Loader2,
+      tone: "info",
       text: t("knowledge.stats.processing", {
         count: stats.processing_count,
         defaultValue: "{{count}} 处理中",
@@ -205,19 +230,40 @@ export function KnowledgeBaseDetail({ kbId }: KnowledgeBaseDetailProps) {
     });
   }
   if (stats.failed_count > 0) {
-    chips.push({
+    statItems.push({
       key: "failed",
-      danger: true,
+      icon: AlertTriangle,
+      tone: "danger",
       text: t("knowledge.stats.failed", { count: stats.failed_count, defaultValue: "{{count}} 失败" }),
     });
   }
-  chips.push(
+  statItems.push(
     {
       key: "chunks",
+      icon: Layers,
       text: t("knowledge.stats.chunks", { count: stats.chunk_count, defaultValue: "{{count}} 个分块" }),
     },
-    { key: "size", text: formatFileSize(stats.size_bytes) },
+    { key: "size", icon: HardDrive, text: formatFileSize(stats.size_bytes) },
   );
+
+  const moreItems: ActionMenuItem[] = [];
+  if (caps.canUnsubscribe) {
+    moreItems.push({
+      key: "unsubscribe",
+      label: t("knowledge.subscribe.unsubscribe", "取消订阅"),
+      icon: BellOff,
+      onSelect: () => void runRoleAction("unsubscribe"),
+    });
+  }
+  if (caps.canLeave) {
+    moreItems.push({
+      key: "leave",
+      label: t("knowledge.share.leave", "退出共享"),
+      icon: LogOut,
+      danger: true,
+      onSelect: () => setLeaveOpen(true),
+    });
+  }
 
   const showGraphTab = config?.allow_graph !== false;
   const tabEntries: Array<{ key: KbDetailTab; label: string; icon: typeof FileText }> = [
@@ -271,54 +317,42 @@ export function KnowledgeBaseDetail({ kbId }: KnowledgeBaseDetailProps) {
                 {t("knowledge.subscribe.subscribe", "订阅")}
               </button>
             )}
-            {caps.canUnsubscribe && (
-              <button
-                type="button"
-                disabled={roleBusy}
-                onClick={() => void runRoleAction("unsubscribe")}
-                className={OUTLINE_BTN}
-              >
-                {t("knowledge.subscribe.unsubscribe", "取消订阅")}
-              </button>
-            )}
-            {caps.canLeave && (
-              <button type="button" onClick={() => setLeaveOpen(true)} className={OUTLINE_BTN}>
-                <LogOut size={16} />
-                {t("knowledge.share.leave", "退出共享")}
-              </button>
-            )}
-            {caps.canManageSettings && (
-              <button
-                type="button"
-                onClick={() => changeTab("settings")}
-                className={OUTLINE_BTN}
-              >
-                <Settings2 size={16} />
-                {t("knowledge.tabs.settings", "设置")}
-              </button>
+            {moreItems.length > 0 && (
+              <KnowledgeActionMenu
+                items={moreItems}
+                label={t("knowledge.card.more", "更多操作")}
+                buttonClassName={ICON_OUTLINE_BTN}
+              />
             )}
           </div>
         }
       >
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          {kb.my_role !== "owner" && (
-            <span className="scb__status-pill scb__status-pill--inactive">
-              {t(`knowledge.role.${kb.my_role}`, kb.my_role)}
-            </span>
-          )}
-          <KnowledgePublicStatusPill status={kb.public_status} />
-          {chips.map((chip) => (
-            <span
-              key={chip.key}
-              className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
-                chip.danger
-                  ? "bg-red-50 text-red-700 dark:bg-red-900/40 dark:text-red-300"
-                  : "bg-[var(--theme-bg-subtle)] text-[var(--theme-text-secondary)]"
-              }`}
-            >
-              {chip.text}
-            </span>
-          ))}
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <span className="inline-flex items-center gap-1.5 empty:hidden">
+            {kb.my_role !== "owner" && (
+              <KnowledgeStatusPill tone="neutral">
+                {t(`knowledge.role.${kb.my_role}`, kb.my_role)}
+              </KnowledgeStatusPill>
+            )}
+            <KnowledgePublicStatusPill status={kb.public_status} />
+          </span>
+          <ul className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px]">
+            {statItems.map(({ key, text, icon: Icon, tone }) => (
+              <li
+                key={key}
+                className={`inline-flex items-center gap-1.5 ${
+                  tone ? STAT_TONE_CLASS[tone] : "text-[var(--theme-text-secondary)]"
+                }`}
+              >
+                <Icon
+                  size={14}
+                  className={tone === "info" ? "animate-spin" : undefined}
+                  aria-hidden="true"
+                />
+                {text}
+              </li>
+            ))}
+          </ul>
         </div>
         {kb.chat_enabled != null && (
           <p className="mt-2 text-xs text-[var(--theme-text-tertiary)]">

@@ -129,6 +129,8 @@ test("knowledge components never use gradient banners or emoji", () => {
     "../KnowledgeBasePanel.tsx",
     "../KnowledgeBaseListPage.tsx",
     "../KnowledgeBaseCard.tsx",
+    "../KnowledgeActionMenu.tsx",
+    "../KnowledgeStatusPill.tsx",
     "../KnowledgeBaseDetail.tsx",
     "../KnowledgeBaseDialog.tsx",
     "../KnowledgeBaseFormFields.tsx",
@@ -195,10 +197,11 @@ test("list page keeps a tablist and detail page exposes documents/search/setting
   assert.match(detail, /searchParams\.get\("tab"\)/);
 });
 
-test("list page drops the duplicate header block and keeps one create entry", () => {
+test("list page drops the duplicate header block; create lives in the toolbar and the first-run empty state", () => {
   const src = read("../KnowledgeBaseListPage.tsx");
   assert.doesNotMatch(src, /PanelHeader/);
-  assert.equal(src.match(/onClick=\{openCreate\}/g)?.length, 1);
+  assert.equal(src.match(/onClick=\{openCreate\}/g)?.length, 2);
+  assert.match(src, /\{empty\.create && \(/);
   assert.match(src, /sm:w-\[280px\]/);
   assert.match(src, /activeTab === "mine" && quota/);
 });

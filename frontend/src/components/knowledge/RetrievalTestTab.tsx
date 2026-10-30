@@ -104,7 +104,7 @@ export function RetrievalTestTab({ kb, config, onOpenHit }: RetrievalTestTabProp
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-4 sm:px-6">
-      <div className="rounded-2xl border border-stone-200 bg-white p-4 dark:border-stone-700 dark:bg-stone-900">
+      <div>
         <div className="flex gap-2">
           <input
             value={query}
@@ -236,11 +236,11 @@ export function RetrievalTestTab({ kb, config, onOpenHit }: RetrievalTestTabProp
 
       <div className="mt-4">
         {!response ? (
-          <div className="rounded-3xl border border-dashed border-stone-300 p-8 text-center text-sm text-stone-500 dark:border-stone-700 dark:text-stone-400">
+          <div className="py-12 text-center text-sm text-stone-500 dark:text-stone-400">
             {t("knowledge.search.initialHint", "输入一个问题试试，看看知识库能召回哪些内容。")}
           </div>
         ) : response.results.length === 0 ? (
-          <div className="rounded-3xl border border-stone-200 p-8 text-center dark:border-stone-800">
+          <div className="py-12 text-center">
             <div className="text-base font-semibold text-stone-900 dark:text-stone-100">
               {t("knowledge.search.noResults", "没有找到相关内容")}
             </div>
