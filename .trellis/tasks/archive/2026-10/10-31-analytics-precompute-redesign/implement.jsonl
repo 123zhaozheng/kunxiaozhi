@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/analytics-dashboard.md", "reason": "dashboard structure and contract tests"}
+{"file": ".trellis/spec/backend/analytics-persona-and-lists.md", "reason": "analytics endpoint and storage contracts"}
