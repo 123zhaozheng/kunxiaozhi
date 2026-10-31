@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.infra.analytics.daily_freeze import DailyFreezeWorker
+from src.infra.analytics.daily_freeze import ENRICH_DATES_PER_TICK, DailyFreezeWorker
 
 
 class _Redis:
@@ -29,19 +29,26 @@ class _Redis:
 
 
 @pytest.mark.asyncio
-async def test_daily_freeze_uses_previous_utc8_day_and_releases_lock(monkeypatch) -> None:
+async def test_daily_freeze_tick_freezes_yesterday_refreshes_today_and_enriches(monkeypatch) -> None:
     redis = _Redis()
-    freeze = AsyncMock()
-    monkeypatch.setattr("src.infra.analytics.daily_freeze.read_or_freeze", freeze)
+    storage = object()
+    ensure = AsyncMock(return_value=set())
+    refresh = AsyncMock(return_value=3)
+    enrich = AsyncMock(return_value=0)
+    monkeypatch.setattr("src.infra.analytics.daily_freeze.ensure_dates_frozen", ensure)
+    monkeypatch.setattr("src.infra.analytics.daily_freeze.refresh_today_snapshot", refresh)
+    monkeypatch.setattr("src.infra.analytics.daily_freeze.enrich_snapshot_extras", enrich)
     worker = DailyFreezeWorker(
         redis_client=redis,
+        storage=storage,
         now_factory=lambda: datetime(2026, 9, 13, 16, 30, tzinfo=timezone.utc),
     )
 
     assert await worker.run_once() is True
-    filters = freeze.call_args.args[0]
-    assert filters.start.strftime("%Y-%m-%d") == "2026-09-13"
-    assert filters.end.strftime("%Y-%m-%d") == "2026-09-14"
+    # 2026-09-13 16:30 UTC is 2026-09-14 00:30 UTC+8, so "yesterday" is 09-13.
+    ensure.assert_awaited_once_with(storage, redis, ["2026-09-13"])
+    refresh.assert_awaited_once_with(storage)
+    enrich.assert_awaited_once_with(storage, redis, ENRICH_DATES_PER_TICK)
     assert redis.eval_calls
 
 

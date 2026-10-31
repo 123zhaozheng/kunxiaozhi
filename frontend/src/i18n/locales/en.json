@@ -268,11 +268,13 @@
   },
   "analytics": {
     "dimensions": {
-      "byAgentHint": "Session count by agent_id",
-      "byPersonaHint": "Session count by persona",
-      "agentTop5": "By agent Top 5",
-      "personaTop5": "By persona Top 5",
-      "modelTokenTop5": "Model tokens Top 5"
+      "byAgentHint": "Active sessions per agent",
+      "byPersonaHint": "Active sessions per persona",
+      "agentTop5": "Sessions by agent",
+      "personaTop5": "Sessions by persona",
+      "modelTokenTop5": "Tokens by model",
+      "more": "{{count}} more",
+      "totalLabel": "Total {{value}}"
     },
     "drilldown": {
       "agent": "Agent",
@@ -411,13 +413,15 @@
       "byModelHint": "Total tokens per model",
       "total": "Total tokens",
       "unit": "tokens",
-      "partial": "Historical data has no model dimension; only the portion with model detail is shown.",
+      "partial": "Per-model detail for some dates is still being filled in the background; refresh shortly for the full picture.",
       "partialSince": "Historical data has no model dimension; per-model detail is available from {{date}}."
     },
     "trend": {
       "activeUsers": "Active users",
       "hint": "Sessions, active users and user messages by day; tokens on the right axis",
-      "title": "Core trends"
+      "title": "Core trends",
+      "dailyHint": "Daily (UTC+8)",
+      "hourlyHint": "Hourly (UTC+8)"
     },
     "weekdays": [
       "Sun",
@@ -427,7 +431,13 @@
       "Thu",
       "Fri",
       "Sat"
-    ]
+    ],
+    "tabs": {
+      "dashboard": "Dashboard",
+      "usage": "Usage detail"
+    },
+    "dataUpdatedAt": "Data as of {{time}}",
+    "dataUpdatedHint": "Pre-aggregated in the background every minute; opening the dashboard never recomputes"
   },
   "appName": "昆小智",
   "approvals": {
@@ -3134,7 +3144,6 @@
       "unavailable": "Expert unavailable",
       "unavailableHint": "The selected expert was deleted, unpublished, or you no longer have access. Edit the task to pick another expert."
     },
-
     "title": "Scheduled Tasks",
     "subtitle": "Pick a time and the assistant will do the work for you and notify you",
     "create": "New scheduled task",

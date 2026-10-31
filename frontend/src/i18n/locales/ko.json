@@ -268,11 +268,13 @@
   },
   "analytics": {
     "dimensions": {
-      "agentTop5": "에이전트별 Top5",
-      "byAgentHint": "세션 수를 에이전트별로 집계",
-      "byPersonaHint": "세션 수를 페르소나별로 집계",
-      "modelTokenTop5": "모델별 토큰 Top5",
-      "personaTop5": "페르소나별 Top5"
+      "agentTop5": "에이전트별 세션",
+      "byAgentHint": "에이전트별 활성 세션",
+      "byPersonaHint": "Persona별 활성 세션",
+      "modelTokenTop5": "모델별 토큰",
+      "personaTop5": "Persona별 세션",
+      "more": "외 {{count}}개",
+      "totalLabel": "합계 {{value}}"
     },
     "drilldown": {
       "agent": "Agent",
@@ -411,13 +413,15 @@
       "byModelHint": "모델별 총 토큰 수",
       "total": "총 토큰",
       "unit": "tokens",
-      "partial": "과거 데이터에는 모델 차원이 없어 모델별 내역이 있는 부분만 표시합니다。",
+      "partial": "일부 날짜의 모델별 내역을 백그라운드에서 채우는 중입니다. 잠시 후 새로고침하세요.",
       "partialSince": "과거 데이터에는 모델 차원이 없어 모델별 내역은 {{date}}부터 제공됩니다。"
     },
     "trend": {
       "activeUsers": "활성 사용자",
       "hint": "세션·활성 사용자·사용자 메시지 일별 비교, 토큰은 우측 축",
-      "title": "핵심 추이"
+      "title": "핵심 추이",
+      "dailyHint": "일별 (UTC+8)",
+      "hourlyHint": "시간별 (UTC+8)"
     },
     "weekdays": [
       "일",
@@ -427,7 +431,13 @@
       "목",
       "금",
       "토"
-    ]
+    ],
+    "tabs": {
+      "dashboard": "대시보드",
+      "usage": "사용 내역"
+    },
+    "dataUpdatedAt": "{{time}} 기준 데이터",
+    "dataUpdatedHint": "백그라운드에서 매분 사전 집계되므로 열 때마다 다시 계산하지 않습니다"
   },
   "appName": "昆小智",
   "approvals": {

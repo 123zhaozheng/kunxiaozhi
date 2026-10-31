@@ -33,6 +33,13 @@ _MISSING = object()
 # date is re-frozen once to fill the gaps. $setOnInsert keeps existing rows
 # untouched, and the marker itself carries no metric.
 _COMPLETE_MARKER_USER_ID = "__snapshot_complete__"
+# Today's numbers are pre-aggregated by a background worker into their own
+# collection (overwritten each refresh) so a dashboard read never scans traces.
+TODAY_SNAPSHOT_COLLECTION_NAME = "analytics_today_snapshot"
+# Breakdown fields added on top of the immutable core counts. A daily marker
+# without ``extras_version`` means its rows predate them and get enriched.
+EXTRAS_VERSION = 1
+_EXTRA_FIELDS = ("hour_messages", "hour_tokens", "model_tokens")
 
 
 def snapshot_match(filters: Any, dates: list[str]) -> dict[str, Any]:
@@ -214,6 +221,260 @@ def _session_id_expr() -> dict[str, Any]:
     return {"$ifNull": ["$session_id", {"$toString": "$_id"}]}
 
 
+def _row_key(eid: dict[str, Any]) -> tuple[str | None, str | None, str | None]:
+    return (
+        str(eid.get("user_id")) if eid.get("user_id") is not None else None,
+        str(eid.get("persona_preset_id")) if eid.get("persona_preset_id") is not None else None,
+        str(eid.get("agent_id")) if eid.get("agent_id") is not None else None,
+    )
+
+
+def _empty_row(date: str, key: tuple[str | None, str | None, str | None]) -> dict[str, Any]:
+    return {
+        "date": date,
+        "user_id": key[0],
+        "persona_preset_id": key[1],
+        "agent_id": key[2],
+        "new_sessions": 0,
+        "new_session_ids": [],
+        "active_sessions": 0,
+        "active_session_ids": [],
+        "user_messages": 0,
+        "tokens": 0,
+        "last_active_at": None,
+        "hour_messages": [0] * 24,
+        "hour_tokens": [0] * 24,
+        "model_tokens": [],
+    }
+
+
+async def compute_day_rows(storage: Any, target_date: str) -> list[dict[str, Any]]:
+    """Aggregate one UTC+8 day into snapshot rows keyed by user × persona × agent.
+
+    Shared by the immutable daily freeze and the periodically refreshed today
+    snapshot, so both carry the same core counts and breakdown extras.
+    Raises on aggregation failure; callers must not write a partial day.
+    """
+    from src.infra.analytics.storage import _model_label_expr
+    from src.infra.analytics.usage_query import UsageFilters, new_sessions_match, usage_facts_stages
+
+    # Deliberately omit every read filter: a date is frozen as a full
+    # snapshot, and filtering is applied only by _merge_results.
+    date_dt = datetime.strptime(target_date, "%Y-%m-%d").replace(tzinfo=CST)
+    date_filters = UsageFilters(start=date_dt, end=date_dt + timedelta(days=1))
+    key_fields = {
+        "user_id": "$user_id",
+        "persona_preset_id": "$persona_preset_id",
+        "agent_id": "$agent_id",
+    }
+    hour_docs = await storage.traces.aggregate(
+        usage_facts_stages(date_filters)
+        + [
+            {
+                "$group": {
+                    "_id": {
+                        **key_fields,
+                        "hour": {"$hour": {"date": "$started_at", "timezone": "Asia/Shanghai"}},
+                    },
+                    "user_messages": {"$sum": "$user_messages"},
+                    "tokens": {"$sum": "$tokens"},
+                    "active_session_ids": {
+                        "$addToSet": {
+                            "$cond": [{"$gt": ["$user_messages", 0]}, "$session_id", None]
+                        }
+                    },
+                    "last_active_at": {"$max": "$started_at"},
+                }
+            },
+            {"$match": {"_id.user_id": {"$nin": [None, ""]}}},
+        ]
+    ).to_list(length=None)
+    # Peak/hourly ownership follows each user:message event's own timestamp,
+    # not the trace start (a long run can span hours or midnight).
+    message_hour_docs = await storage.traces.aggregate(
+        usage_facts_stages(date_filters)[:-1]
+        + [
+            {"$match": {"user_messages": {"$gt": 0}}},
+            {"$unwind": "$events"},
+            {
+                "$match": {
+                    "events.event_type": "user:message",
+                    "events.timestamp": {"$gte": date_filters.start, "$lt": date_filters.end},
+                }
+            },
+            {
+                "$group": {
+                    "_id": {
+                        **key_fields,
+                        "hour": {"$hour": {"date": "$events.timestamp", "timezone": "Asia/Shanghai"}},
+                    },
+                    "user_messages": {"$sum": 1},
+                }
+            },
+            {"$match": {"_id.user_id": {"$nin": [None, ""]}}},
+        ]
+    ).to_list(length=None)
+    model_docs = await storage.traces.aggregate(
+        # [:-1] keeps ``events`` (the final stage projects them away).
+        usage_facts_stages(date_filters)[:-1]
+        + [
+            {"$unwind": "$events"},
+            {"$match": {"events.event_type": "token:usage"}},
+            {
+                "$group": {
+                    "_id": {**key_fields, "model": _model_label_expr()},
+                    "tokens": {"$sum": {"$ifNull": ["$events.data.total_tokens", 0]}},
+                }
+            },
+            {"$match": {"_id.user_id": {"$nin": [None, ""]}}},
+        ]
+    ).to_list(length=None)
+    session_docs = await storage.sessions.aggregate(
+        [
+            {"$match": new_sessions_match(date_filters)},
+            {
+                "$group": {
+                    "_id": {
+                        "user_id": "$user_id",
+                        "persona_preset_id": "$metadata.persona_preset_id",
+                        "agent_id": "$agent_id",
+                    },
+                    "new_sessions": {"$sum": 1},
+                    "new_session_ids": {"$addToSet": _session_id_expr()},
+                }
+            },
+        ]
+    ).to_list(length=None)
+
+    rows: dict[tuple[str | None, str | None, str | None], dict[str, Any]] = {}
+    active_ids: dict[tuple[str | None, str | None, str | None], set[str]] = {}
+    for doc in hour_docs:
+        eid = doc.get("_id") or {}
+        key = _row_key(eid)
+        row = rows.setdefault(key, _empty_row(target_date, key))
+        hour = int(eid.get("hour") or 0) % 24
+        messages = int(doc.get("user_messages", 0) or 0)
+        tokens = int(doc.get("tokens", 0) or 0)
+        row["user_messages"] += messages
+        row["tokens"] += tokens
+        row["hour_tokens"][hour] += tokens
+        active_ids.setdefault(key, set()).update(_flatten_ids(doc.get("active_session_ids")))
+        last = doc.get("last_active_at")
+        if last and (row["last_active_at"] is None or last > row["last_active_at"]):
+            row["last_active_at"] = last
+    for key, ids in active_ids.items():
+        rows[key]["active_session_ids"] = sorted(ids)
+        rows[key]["active_sessions"] = len(ids)
+
+    for doc in message_hour_docs:
+        eid = doc.get("_id") or {}
+        key = _row_key(eid)
+        row = rows.setdefault(key, _empty_row(target_date, key))
+        row["hour_messages"][int(eid.get("hour") or 0) % 24] += int(doc.get("user_messages", 0) or 0)
+
+    for doc in model_docs:
+        eid = doc.get("_id") or {}
+        key = _row_key(eid)
+        tokens = int(doc.get("tokens", 0) or 0)
+        if tokens <= 0:
+            continue
+        row = rows.setdefault(key, _empty_row(target_date, key))
+        row["model_tokens"].append({"model": str(eid.get("model") or "unknown"), "tokens": tokens})
+
+    for doc in session_docs:
+        key = _row_key(doc.get("_id") or {})
+        row = rows.setdefault(key, _empty_row(target_date, key))
+        ids = sorted(set(row["new_session_ids"]) | _flatten_ids(doc.get("new_session_ids")))
+        row["new_session_ids"] = ids
+        row["new_sessions"] = len(ids)
+    return list(rows.values())
+
+
+async def refresh_today_snapshot(storage: Any) -> int:
+    """Recompute today's rows into the today snapshot; returns the row count.
+
+    Rows are overwritten (today is still changing), the marker is written
+    after the rows, and stale rows (and any previous day) are removed last so
+    readers never lose the marker mid-refresh.
+    """
+    today = today_cst()
+    run_ts = datetime.now(timezone.utc)
+    rows = await compute_day_rows(storage, today)
+    collection = storage.today_snapshot
+    ops = [
+        UpdateOne(
+            {
+                "date": today,
+                "user_id": row["user_id"],
+                "persona_preset_id": row["persona_preset_id"],
+                "agent_id": row["agent_id"],
+            },
+            {"$set": {**row, "refreshed_at": run_ts}},
+            upsert=True,
+        )
+        for row in rows
+    ]
+    if ops:
+        await collection.bulk_write(ops, ordered=False)
+    await collection.update_one(
+        {"date": today, "user_id": _COMPLETE_MARKER_USER_ID},
+        {
+            "$set": {
+                "date": today,
+                "user_id": _COMPLETE_MARKER_USER_ID,
+                "persona_preset_id": None,
+                "agent_id": None,
+                "refreshed_at": run_ts,
+            }
+        },
+        upsert=True,
+    )
+    await collection.delete_many(
+        {"$or": [{"date": {"$ne": today}}, {"refreshed_at": {"$lt": run_ts}}]}
+    )
+    return len(rows)
+
+
+async def ensure_dates_frozen(storage: Any, redis_client: Any, dates: list[str]) -> set[str]:
+    """Freeze historical dates whose completion marker is missing.
+
+    Returns the dates still missing afterwards (lock race / failure / no Redis).
+    """
+    today = today_cst()
+    candidates = [date for date in dates if date != today]
+    if not candidates:
+        return set()
+    # Completeness is date-based and marker-based. Never let a filtered
+    # read decide that a partial persona/agent snapshot freezes the
+    # whole date, and re-freeze dates written before the marker existed.
+    cursor = storage.snapshot.find(
+        {"date": {"$in": candidates}, "user_id": _COMPLETE_MARKER_USER_ID},
+        {"date": 1},
+    )
+    existing_docs = await cursor.to_list(length=None)
+    existing_dates = {doc.get("date") for doc in existing_docs if doc.get("date")}
+    truly_missing = [date for date in candidates if date not in existing_dates]
+    if not truly_missing:
+        return set()
+    if redis_client is None:
+        return set(truly_missing)
+    frozen = await _freeze_dates(storage, redis_client, truly_missing, None)
+    return set(truly_missing) - frozen
+
+
+async def enrich_snapshot_extras(storage: Any, redis_client: Any, limit: int) -> int:
+    """Fill breakdown extras on the most recent frozen dates that lack them."""
+    cursor = storage.snapshot.find(
+        {"user_id": _COMPLETE_MARKER_USER_ID, "extras_version": {"$exists": False}},
+        {"date": 1},
+    ).sort("date", -1).limit(limit)
+    docs = await cursor.to_list(length=limit)
+    dates = [str(doc["date"]) for doc in docs if doc.get("date")]
+    if not dates:
+        return 0
+    return len(await _freeze_dates(storage, redis_client, dates, None, enrich_only=True))
+
+
 async def read_or_freeze(filters: Any, storage: Any | None = None) -> dict[str, Any]:
     """Read usage metrics, freezing missing historical dates first.
 
@@ -231,7 +492,6 @@ async def read_or_freeze(filters: Any, storage: Any | None = None) -> dict[str, 
             role_user_ids=getattr(filters, "role_user_ids", None),
         )
 
-    today = today_cst()
     start_str, end_inclusive = range_to_date_strings(filters.start, filters.end)
     dates = day_buckets(start_str, end_inclusive)
 
@@ -240,43 +500,30 @@ async def read_or_freeze(filters: Any, storage: Any | None = None) -> dict[str, 
 
         storage = AnalyticsStorage()
 
-    redis_client = None
     snapshot_unavailable = False
     try:
-        redis_client = create_redis_client(isolated_pool=True)
-    except Exception as exc:
-        logger.warning("[Analytics] Redis client creation failed: %s", exc)
-
-    try:
-        missing_dates = [date for date in dates if date != today]
-        if missing_dates:
-            # Completeness is date-based and marker-based. Never let a filtered
-            # read decide that a partial persona/agent snapshot freezes the
-            # whole date, and re-freeze dates written before the marker existed.
-            cursor = storage.snapshot.find(
-                {"date": {"$in": missing_dates}, "user_id": _COMPLETE_MARKER_USER_ID},
-                {"date": 1},
-            )
-            existing_docs = await cursor.to_list(length=None)
-            existing_dates = {doc.get("date") for doc in existing_docs if doc.get("date")}
-            truly_missing = [date for date in missing_dates if date not in existing_dates]
-            if truly_missing:
-                if redis_client is None:
+        # The background worker freezes every past day, so this is only a
+        # safety net: Redis is opened solely when a date is actually missing.
+        missing = await ensure_dates_frozen(storage, None, dates)
+        if missing:
+            redis_client = None
+            try:
+                redis_client = create_redis_client(isolated_pool=True)
+            except Exception as exc:
+                logger.warning("[Analytics] Redis client creation failed: %s", exc)
+            try:
+                # A lock race, aggregate failure, or marker write failure
+                # must never be mistaken for an empty snapshot.
+                if redis_client is None or await ensure_dates_frozen(
+                    storage, redis_client, sorted(missing)
+                ):
                     snapshot_unavailable = True
-                else:
-                    frozen_dates = await _freeze_dates(
-                        storage, redis_client, truly_missing, filters
-                    )
-                    if set(truly_missing) - frozen_dates:
-                        # A lock race, aggregate failure, or marker write
-                        # failure must never be mistaken for an empty snapshot.
-                        snapshot_unavailable = True
+            finally:
+                if redis_client is not None:
+                    await redis_client.aclose()
     except Exception as exc:
         snapshot_unavailable = True
         logger.warning("[Analytics] Snapshot check/freeze failed: %s", exc)
-    finally:
-        if redis_client is not None:
-            await redis_client.aclose()
 
     result = await _merge_results(
         storage, filters, dates, skip_historical=snapshot_unavailable
@@ -290,10 +537,19 @@ async def read_or_freeze(filters: Any, storage: Any | None = None) -> dict[str, 
     return result
 
 
-async def _freeze_dates(storage: Any, redis_client: Any, dates: list[str], filters: Any) -> set[str]:
-    """Freeze each date under its own lock; filtered reads never affect writes."""
-    from src.infra.analytics.usage_query import UsageFilters, new_sessions_match, usage_facts_stages
+async def _freeze_dates(
+    storage: Any,
+    redis_client: Any,
+    dates: list[str],
+    filters: Any,
+    *,
+    enrich_only: bool = False,
+) -> set[str]:
+    """Freeze each date under its own lock; filtered reads never affect writes.
 
+    ``enrich_only`` targets already-frozen dates: only the breakdown extras
+    are written, with no upsert, so the immutable core counts cannot shift.
+    """
     release_lua = """
 if redis.call("get", KEYS[1]) == ARGV[1] then
     return redis.call("del", KEYS[1])
@@ -367,135 +623,34 @@ end
 
         renew_task = asyncio.create_task(renew_loop())
         try:
-            # Deliberately omit every read filter: a date is frozen as a full
-            # snapshot, and filtering is applied only by _merge_results.
-            date_dt = datetime.strptime(target_date, "%Y-%m-%d").replace(tzinfo=CST)
-            next_date_dt = date_dt + timedelta(days=1)
-            date_filters = UsageFilters(start=date_dt, end=next_date_dt)
-
             if lock_lost:
                 continue
             try:
-                granular_docs = await storage.traces.aggregate(
-                    usage_facts_stages(date_filters)
-                    + [
-                        {
-                            "$group": {
-                                "_id": {
-                                    "user_id": "$user_id",
-                                    "persona_preset_id": "$persona_preset_id",
-                                    "agent_id": "$agent_id",
-                                },
-                                "user_messages": {"$sum": "$user_messages"},
-                                "tokens": {"$sum": "$tokens"},
-                                "active_session_ids": {
-                                    "$addToSet": {
-                                        "$cond": [
-                                            {"$gt": ["$user_messages", 0]},
-                                            "$session_id",
-                                            None,
-                                        ]
-                                    }
-                                },
-                                "last_active_at": {"$max": "$started_at"},
-                            }
-                        },
-                        {"$match": {"_id.user_id": {"$nin": [None, ""]}}},
-                    ]
-                ).to_list(length=None)
+                rows = await compute_day_rows(storage, target_date)
             except Exception as exc:
-                logger.warning("[Analytics] Trace aggregation for %s failed: %s", target_date, exc)
+                logger.warning("[Analytics] Day aggregation for %s failed: %s", target_date, exc)
                 continue
 
             if lock_lost:
                 continue
-            try:
-                new_sessions_docs = await storage.sessions.aggregate(
-                    [
-                        {"$match": new_sessions_match(date_filters)},
-                        {
-                            "$group": {
-                                "_id": {
-                                    "user_id": "$user_id",
-                                    "persona_preset_id": "$metadata.persona_preset_id",
-                                    "agent_id": "$agent_id",
-                                },
-                                "new_sessions": {"$sum": 1},
-                                "new_session_ids": {"$addToSet": _session_id_expr()},
-                            }
-                        },
-                    ]
-                ).to_list(length=None)
-            except Exception as exc:
-                logger.warning("[Analytics] Session aggregation for %s failed: %s", target_date, exc)
-                continue
-
-            groups: dict[tuple[str | None, str | None, str | None], dict[str, Any]] = {}
-            for gdoc in granular_docs:
-                eid = gdoc.get("_id") or {}
-                key = (
-                    str(eid.get("user_id")) if eid.get("user_id") is not None else None,
-                    str(eid.get("persona_preset_id")) if eid.get("persona_preset_id") is not None else None,
-                    str(eid.get("agent_id")) if eid.get("agent_id") is not None else None,
-                )
-                groups[key] = {
-                    "date": target_date,
-                    "user_id": key[0],
-                    "persona_preset_id": key[1],
-                    "agent_id": key[2],
-                    "new_sessions": 0,
-                    "new_session_ids": [],
-                    "active_sessions": len(_flatten_ids(gdoc.get("active_session_ids"))),
-                    "active_session_ids": sorted(_flatten_ids(gdoc.get("active_session_ids"))),
-                    "user_messages": int(gdoc.get("user_messages", 0) or 0),
-                    "tokens": int(gdoc.get("tokens", 0) or 0),
-                    "last_active_at": gdoc.get("last_active_at"),
-                    "frozen_at": datetime.now(timezone.utc),
-                }
-
-            for sdoc in new_sessions_docs:
-                eid = sdoc.get("_id") or {}
-                key = (
-                    str(eid.get("user_id")) if eid.get("user_id") is not None else None,
-                    str(eid.get("persona_preset_id")) if eid.get("persona_preset_id") is not None else None,
-                    str(eid.get("agent_id")) if eid.get("agent_id") is not None else None,
-                )
-                group = groups.setdefault(
-                    key,
-                    {
-                        "date": target_date,
-                        "user_id": key[0],
-                        "persona_preset_id": key[1],
-                        "agent_id": key[2],
-                        "new_sessions": 0,
-                        "new_session_ids": [],
-                        "active_sessions": 0,
-                        "active_session_ids": [],
-                        "user_messages": 0,
-                        "tokens": 0,
-                        "last_active_at": None,
-                        "frozen_at": datetime.now(timezone.utc),
-                    },
-                )
-                ids = sorted(_flatten_ids(sdoc.get("new_session_ids")))
-                group["new_session_ids"] = sorted(set(group["new_session_ids"]) | set(ids))
-                group["new_sessions"] = len(group["new_session_ids"])
-
-            if lock_lost:
-                continue
+            frozen_at = datetime.now(timezone.utc)
             ops: list[UpdateOne] = []
-            for doc in groups.values():
+            for row in rows:
+                key = {
+                    "date": target_date,
+                    "user_id": row["user_id"],
+                    "persona_preset_id": row["persona_preset_id"],
+                    "agent_id": row["agent_id"],
+                }
+                extras = {k: row[k] for k in _EXTRA_FIELDS}
+                if enrich_only:
+                    ops.append(UpdateOne(key, {"$set": extras}, upsert=False))
+                    continue
+                core = {k: v for k, v in row.items() if k not in _EXTRA_FIELDS}
+                core["frozen_at"] = frozen_at
+                # Core counts stay immutable once frozen ($setOnInsert).
                 ops.append(
-                    UpdateOne(
-                        {
-                            "date": target_date,
-                            "user_id": doc["user_id"],
-                            "persona_preset_id": doc["persona_preset_id"],
-                            "agent_id": doc["agent_id"],
-                        },
-                        {"$setOnInsert": doc},
-                        upsert=True,
-                    )
+                    UpdateOne(key, {"$setOnInsert": core, "$set": extras}, upsert=True)
                 )
             if ops:
                 await storage.snapshot.bulk_write(ops, ordered=False)
@@ -513,8 +668,9 @@ end
                         "user_id": _COMPLETE_MARKER_USER_ID,
                         "persona_preset_id": None,
                         "agent_id": None,
-                        "frozen_at": datetime.now(timezone.utc),
-                    }
+                        "frozen_at": frozen_at,
+                    },
+                    "$set": {"extras_version": EXTRAS_VERSION},
                 },
                 upsert=True,
             )
@@ -536,6 +692,95 @@ end
 
 
     return completed_dates
+
+
+async def _today_snapshot_marker(storage: Any) -> dict[str, Any] | None:
+    """Today's snapshot marker, or ``None`` until the worker has written it."""
+    try:
+        doc = await storage.today_snapshot.find_one(
+            {"date": today_cst(), "user_id": _COMPLETE_MARKER_USER_ID}
+        )
+    except Exception as exc:
+        logger.debug("[Analytics] Today snapshot unavailable: %s", exc)
+        return None
+    return doc if isinstance(doc, dict) else None
+
+
+async def _extras_complete(
+    storage: Any,
+    historical_dates: list[str],
+    skip_historical: bool,
+    today_from_traces: bool,
+) -> bool:
+    """True when every date in range carries the hour/model breakdowns."""
+    if today_from_traces or (historical_dates and skip_historical):
+        return False
+    if not historical_dates:
+        return True
+    try:
+        docs = await storage.snapshot.find(
+            {
+                "date": {"$in": historical_dates},
+                "user_id": _COMPLETE_MARKER_USER_ID,
+                "extras_version": {"$gte": EXTRAS_VERSION},
+            },
+            {"date": 1},
+        ).to_list(length=None)
+    except Exception as exc:
+        logger.debug("[Analytics] Snapshot extras markers unavailable: %s", exc)
+        return False
+    return set(historical_dates) <= {doc.get("date") for doc in docs}
+
+
+def _apply_breakdowns(
+    result: dict[str, Any],
+    dates: list[str],
+    hour_docs: list[dict[str, Any]],
+    model_totals: dict[str, int],
+    day_user_sets: dict[str, set[str]],
+) -> None:
+    """Derive hourly trend, peak slot, model totals and daily users."""
+    by_date_hour: dict[tuple[str, int], list[int]] = {}
+    for doc in hour_docs:
+        key = doc.get("_id") or {}
+        slot = by_date_hour.setdefault((str(key.get("date")), int(key.get("hour") or 0)), [0, 0])
+        slot[0] += int(doc.get("user_messages", 0) or 0)
+        slot[1] += int(doc.get("tokens", 0) or 0)
+
+    result["by_hour"] = []
+    if len(dates) == 1:
+        result["by_hour"] = [
+            {
+                "hour": hour,
+                "user_messages": by_date_hour.get((dates[0], hour), [0, 0])[0],
+                "tokens": by_date_hour.get((dates[0], hour), [0, 0])[1],
+            }
+            for hour in range(24)
+        ]
+
+    # weekday follows Mongo $dayOfWeek - 1 (Sunday = 0), the API contract.
+    slots: dict[tuple[int, int], int] = {}
+    for (date, hour), (messages, _tokens) in by_date_hour.items():
+        try:
+            weekday = datetime.strptime(date, "%Y-%m-%d").isoweekday() % 7
+        except ValueError:
+            continue
+        slots[(weekday, hour)] = slots.get((weekday, hour), 0) + messages
+    best = max(
+        ((count, -weekday, -hour) for (weekday, hour), count in slots.items() if count > 0),
+        default=None,
+    )
+    result["peak"] = (
+        {"weekday": -best[1], "hour": -best[2], "user_messages": best[0]} if best else None
+    )
+
+    result["by_model"] = sorted(
+        ({"model": model, "tokens": tokens} for model, tokens in model_totals.items() if tokens > 0),
+        key=lambda item: (-item["tokens"], item["model"]),
+    )
+    result["active_users_by_day"] = {
+        date: len(day_user_sets.get(date, set())) for date in dates
+    }
 
 
 async def _aggregate_session_groups(storage: Any, filters: Any) -> list[dict[str, Any]]:
@@ -598,6 +843,12 @@ async def _merge_results(
         "by_user_persona": [],
         "active_users": 0,
         "using_users": 0,
+        "by_hour": [],
+        "peak": None,
+        "by_model": [],
+        "active_users_by_day": {},
+        "extras_complete": False,
+        "refreshed_at": None,
         "snapshot_complete": not (
             skip_historical and any(date != today_cst() for date in dates)
         ) and not snapshot_read_failed,
@@ -613,16 +864,28 @@ async def _merge_results(
     agent_items: list[dict[str, Any]] = []
     user_items: list[dict[str, Any]] = []
     user_persona_items: list[dict[str, Any]] = []
+    hour_docs: list[dict[str, Any]] = []
+    model_totals: dict[str, int] = {}
+    day_user_sets: dict[str, set[str]] = {}
+    extras_failed = False
+    historical_day_loaded = False
+
+    today_marker = await _today_snapshot_marker(storage) if today in dates else None
+    sources: list[tuple[Any, list[str], bool]] = []
+    if historical_dates and not skip_historical:
+        sources.append((storage.snapshot, historical_dates, True))
+    if today_marker is not None:
+        sources.append((storage.today_snapshot, [today], False))
+    result["refreshed_at"] = today_marker.get("refreshed_at") if today_marker else None
 
     try:
-        if historical_dates and not skip_historical:
-            snapshot_collection = storage.snapshot
+        for snapshot_collection, source_dates, is_historical in sources:
             # The completion marker carries no metric and must never reach an
             # aggregation; excluding it here covers every dimension below.
             base_match: list[dict[str, Any]] = [
                 {
                     "$match": {
-                        "date": {"$in": historical_dates},
+                        "date": {"$in": source_dates},
                         "user_id": {"$ne": _COMPLETE_MARKER_USER_ID},
                     }
                 }
@@ -640,6 +903,8 @@ async def _merge_results(
                     dimension_docs[dimension] = await snapshot_collection.aggregate(
                         base_match + snapshot_group_stages(dimension)  # type: ignore[arg-type]
                     ).to_list(length=None)
+                    if dimension == "day" and is_historical:
+                        historical_day_loaded = True
                 except Exception as exc:
                     logger.warning("[Analytics] Snapshot %s aggregation failed: %s", dimension, exc)
                     snapshot_read_failed = True
@@ -741,7 +1006,52 @@ async def _merge_results(
                 logger.debug("[Analytics] Snapshot agent users unavailable: %s", exc)
                 snapshot_read_failed = True
 
-        if historical_dates and (skip_historical or not historical_items):
+            try:
+                hour_docs.extend(
+                    await snapshot_collection.aggregate(
+                        base_match
+                        + [
+                            {"$match": {"hour_messages": {"$type": "array"}}},
+                            {"$unwind": {"path": "$hour_messages", "includeArrayIndex": "hour"}},
+                            {
+                                "$group": {
+                                    "_id": {"date": "$date", "hour": "$hour"},
+                                    "user_messages": {"$sum": "$hour_messages"},
+                                    "tokens": {"$sum": {"$arrayElemAt": ["$hour_tokens", "$hour"]}},
+                                }
+                            },
+                        ]
+                    ).to_list(length=None)
+                )
+                for doc in await snapshot_collection.aggregate(
+                    base_match
+                    + [
+                        {"$unwind": "$model_tokens"},
+                        {
+                            "$group": {
+                                "_id": "$model_tokens.model",
+                                "tokens": {"$sum": "$model_tokens.tokens"},
+                            }
+                        },
+                    ]
+                ).to_list(length=None):
+                    model = str(doc.get("_id") or "unknown")
+                    model_totals[model] = model_totals.get(model, 0) + int(doc.get("tokens", 0) or 0)
+                for doc in await snapshot_collection.aggregate(
+                    base_match
+                    + [
+                        {"$match": {"user_messages": {"$gt": 0}}},
+                        {"$group": {"_id": "$date", "user_ids": {"$addToSet": "$user_id"}}},
+                    ]
+                ).to_list(length=None):
+                    day_user_sets.setdefault(str(doc.get("_id")), set()).update(
+                        {str(uid) for uid in (doc.get("user_ids") or []) if uid}
+                    )
+            except Exception as exc:
+                logger.warning("[Analytics] Snapshot breakdown aggregation failed: %s", exc)
+                extras_failed = True
+
+        if historical_dates and (skip_historical or not historical_day_loaded):
             realtime = await _compute_realtime_aggregate(storage, filters, historical_dates)
             historical_items.extend(realtime.get("trend", []))
             realtime_user_ids.update({str(uid) for uid in realtime.get("active_user_ids", set()) if uid})
@@ -788,8 +1098,9 @@ async def _merge_results(
             except Exception as exc:
                 logger.debug("[Analytics] Realtime fallback user set unavailable: %s", exc)
 
-        # Today's metrics are always live and new sessions are queried independently.
-        if today in dates:
+        # Cold-start fallback only: until the worker has written today's
+        # snapshot, today's metrics are aggregated live from traces.
+        if today in dates and today_marker is None:
             today_dt = datetime.strptime(today, "%Y-%m-%d").replace(tzinfo=CST)
             tomorrow_dt = today_dt + timedelta(days=1)
             today_filters = UsageFilters(
@@ -941,6 +1252,8 @@ async def _merge_results(
                             "tokens": int(doc.get("tokens", 0) or 0),
                         }
                     )
+                    if int(doc.get("user_messages", 0) or 0) > 0:
+                        day_user_sets.setdefault(today, set()).add(uid)
             for doc in await today_dimension("user_persona"):
                 identifier = doc.get("_id") or {}
                 uid = str(identifier.get("user_id")) if identifier.get("user_id") else None
@@ -1088,6 +1401,11 @@ async def _merge_results(
                 user_persona_items, ("user_id", "persona_preset_id")
             )
         ]
+
+        _apply_breakdowns(result, dates, hour_docs, model_totals, day_user_sets)
+        result["extras_complete"] = not extras_failed and await _extras_complete(
+            storage, historical_dates, skip_historical, today in dates and today_marker is None
+        )
 
         for item in result["by_persona"]:
             item["active_users"] = len(persona_user_sets.get(item.get("persona_preset_id"), set()))

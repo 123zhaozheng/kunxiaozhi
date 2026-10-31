@@ -1,123 +1,70 @@
 /**
- * Analytics shared primitives — cards, chart shells and formatters.
+ * Analytics shared primitives — card shell, ranked bars, feedback bars, trend.
  *
- * Ported unchanged from the former monolithic `AnalyticsPanel.tsx` so the
- * dashboard blocks keep identical visuals while being split into sections.
- * Colors stay on existing constants / theme tokens; S3/S4 will restyle.
+ * Forms follow the dataviz method: breakdowns are ranked horizontal bars in
+ * one hue (long model / persona names stay readable, close values stay
+ * comparable), trends are one series on one axis with a crosshair tooltip.
  */
 
-import { useCallback, useMemo } from "react";
+import { useId, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Bar,
-  BarChart,
+  Area,
+  AreaChart,
   CartesianGrid,
-  Cell,
-  Legend,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import { ThumbsDown, ThumbsUp } from "lucide-react";
 import { PanelLoadingState } from "../../common/PanelLoadingState";
-import type {
-  ByLabelItem,
-  ByPresetFeedbackItem,
-  TrendDataPoint,
-} from "../../../types/analytics";
-import { PIE_COLORS, formatDonutLegendLabel, formatNumber } from "./analyticsFormat";
+import type { ByLabelItem, ByPresetFeedbackItem } from "../../../types/analytics";
+import {
+  STATUS_COLOR,
+  formatNumber,
+  formatPercent,
+  rankRows,
+} from "./analyticsFormat";
+import { useSeriesColor } from "./useSeriesColor";
 
-export function StatsCard({
-  icon: Icon,
-  label,
-  value,
-  hint,
-  onClick,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string | number;
-  hint?: string;
-  onClick?: () => void;
-}) {
-  const className = [
-    "glass-card flex w-full items-center gap-3 rounded-xl p-4 sm:p-5 text-left",
-    onClick
-      ? "cursor-pointer transition-colors hover:bg-[var(--glass-bg-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]"
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  const content = (
-    <>
-      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--glass-bg-subtle)] sm:h-12 sm:w-12">
-        <Icon
-          size={22}
-          className="text-stone-600 dark:text-stone-400"
-          aria-hidden
-        />
-      </div>
-      <div className="min-w-0">
-        <p className="truncate text-xs text-stone-500 dark:text-stone-400">
-          {label}
-        </p>
-        <p className="truncate text-lg font-bold text-stone-900 dark:text-stone-100 sm:text-xl">
-          {value}
-        </p>
-        {hint ? (
-          <p className="truncate text-[11px] text-stone-500 dark:text-stone-400">
-            {hint}
-          </p>
-        ) : null}
-      </div>
-    </>
-  );
-
-  if (onClick) {
-    return (
-      <button type="button" onClick={onClick} className={className}>
-        {content}
-      </button>
-    );
-  }
-
-  return <div className={className}>{content}</div>;
-}
+const FOCUS_RING =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]";
 
 export function ChartCard({
   title,
   subtitle,
   icon,
+  action,
   isLoading,
   error,
   isEmpty,
   emptyText,
+  className = "min-h-[240px]",
   children,
 }: {
   title: string;
   subtitle?: string;
   icon?: React.ReactNode;
+  /** Right-aligned header slot (metric switcher, total). */
+  action?: React.ReactNode;
   isLoading?: boolean;
   error?: string | null;
   isEmpty?: boolean;
   emptyText?: string;
+  className?: string;
   children: React.ReactNode;
 }) {
   const { t } = useTranslation();
   return (
-    <div className="glass-card flex min-h-[260px] flex-col rounded-xl p-4 sm:p-5">
-      <div className="mb-3 flex items-center gap-2">
+    <div className={`glass-card flex flex-col rounded-xl p-4 sm:p-5 ${className}`}>
+      <div className="mb-3 flex items-start gap-2">
         {icon ? (
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--glass-bg-subtle)]">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--glass-bg-subtle)] text-stone-600 dark:text-stone-300">
             {icon}
           </div>
         ) : null}
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h3 className="truncate text-sm font-semibold text-stone-900 dark:text-stone-100">
             {title}
           </h3>
@@ -127,6 +74,7 @@ export function ChartCard({
             </p>
           ) : null}
         </div>
+        {action ? <div className="flex-shrink-0">{action}</div> : null}
       </div>
       <div className="relative flex-1">
         {isLoading ? (
@@ -139,7 +87,7 @@ export function ChartCard({
             {error}
           </div>
         ) : isEmpty ? (
-          <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
+          <div className="flex h-full min-h-[120px] items-center justify-center text-sm text-stone-500 dark:text-stone-400">
             {emptyText ?? t("analytics.empty", "No data")}
           </div>
         ) : (
@@ -150,357 +98,243 @@ export function ChartCard({
   );
 }
 
-interface DonutBlockProps {
-  /** Top entries (already sorted by value desc; sliced to 5 internally). */
-  data: ByLabelItem[];
+interface RankedBarListProps {
+  items: ByLabelItem[];
   /**
-   * Number rendered in the donut hole. Must come from the same accessor as
+   * Denominator for the share column. Must come from the same accessor as
    * the matching KPI card (consistency contract, see analyticsKpi.ts).
    */
-  centerValue: number | null;
-  /** Small caption under the center number (e.g. 会话数 / 总 token). */
-  centerCaption?: string;
-  unitFormatter?: (value: number) => string;
-  onSliceClick?: (entry: ByLabelItem) => void;
+  total: number | null;
+  limit?: number;
+  formatValue?: (value: number) => string;
+  /** Display label override (e.g. translating reason codes). */
+  labelFor?: (item: ByLabelItem) => string;
+  onSelect?: (item: ByLabelItem) => void;
 }
 
-/** Top5 donut: ring slices for the top five entries, KPI field in the hole. */
-export function DonutBlock({
-  data,
-  centerValue,
-  centerCaption,
-  unitFormatter,
-  onSliceClick,
-}: DonutBlockProps) {
-  const top = useMemo(() => (data ?? []).slice(0, 5), [data]);
-  const renderLabel = useCallback(
-    // recharts passes (name, entry, index); `name` is the nameKey string.
-    (name: unknown) => formatDonutLegendLabel(name, top, unitFormatter),
-    [top, unitFormatter],
-  );
-  const format = (value: number) =>
-    unitFormatter ? unitFormatter(value) : formatNumber(value);
-
-  if (top.length === 0) {
-    return (
-      <div className="flex h-48 items-center justify-center text-sm text-stone-500 dark:text-stone-400">
-        —
-      </div>
-    );
-  }
+/** Ranked horizontal bars: label + value + share, one hue, largest first. */
+export function RankedBarList({
+  items,
+  total,
+  limit = 8,
+  formatValue = formatNumber,
+  labelFor,
+  onSelect,
+}: RankedBarListProps) {
+  const { t } = useTranslation();
+  const color = useSeriesColor();
+  const { rows, rest } = useMemo(() => rankRows(items, total, limit), [items, total, limit]);
 
   return (
-    <div
-      className="relative h-48"
-      role="img"
-      aria-label={
-        centerCaption
-          ? `${centerCaption}: ${centerValue === null ? "—" : format(centerValue)}`
-          : undefined
-      }
-    >
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie
-            data={top}
-            dataKey="value"
-            nameKey="label"
-            cx="50%"
-            cy="50%"
-            outerRadius={70}
-            innerRadius={46}
-            paddingAngle={1}
-            onClick={
-              onSliceClick ? (entry) => onSliceClick(entry as ByLabelItem) : undefined
-            }
-          >
-            {top.map((entry, index) => (
-              <Cell
-                key={entry.label}
-                fill={PIE_COLORS[index % PIE_COLORS.length]}
-                cursor={onSliceClick ? "pointer" : undefined}
-              />
-            ))}
-          </Pie>
-          <Tooltip
-            formatter={(value: number, _name, props) => [
-              format(value),
-              props?.payload?.label ?? "",
-            ]}
-          />
-          <Legend
-            layout="vertical"
-            align="right"
-            verticalAlign="middle"
-            iconSize={8}
-            wrapperStyle={{ fontSize: 11, lineHeight: "16px" }}
-            formatter={renderLabel}
-          />
-        </PieChart>
-      </ResponsiveContainer>
-      {/* Center number: the shared KPI field (pointer-events off so slices stay clickable). */}
-      <div className="pointer-events-none absolute inset-y-0 left-0 flex w-1/2 flex-col items-center justify-center">
-        <span className="text-lg font-bold text-stone-900 dark:text-stone-100">
-          {centerValue === null ? "—" : format(centerValue)}
-        </span>
-        {centerCaption ? (
-          <span className="text-[10px] text-stone-500 dark:text-stone-400">
-            {centerCaption}
-          </span>
-        ) : null}
-      </div>
+    <div>
+      <ul className="flex flex-col gap-1">
+        {rows.map(({ item, share, widthPct }) => {
+          const label = labelFor ? labelFor(item) : item.label;
+          const valueText = formatValue(item.value);
+          const shareText = share === null ? null : formatPercent(share);
+          const content = (
+            <>
+              <div className="flex items-baseline justify-between gap-3 text-xs">
+                <span className="min-w-0 truncate text-stone-700 dark:text-stone-200">
+                  {label}
+                </span>
+                <span className="flex-shrink-0 font-medium tabular-nums text-stone-900 dark:text-stone-100">
+                  {valueText}
+                  {shareText ? (
+                    <span className="ml-1.5 inline-block w-11 text-right font-normal text-stone-500 dark:text-stone-400">
+                      {shareText}
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[var(--glass-bg-subtle)]">
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${widthPct}%`, backgroundColor: color }}
+                />
+              </div>
+            </>
+          );
+          const tooltip = [label, valueText, shareText].filter(Boolean).join(" · ");
+          return (
+            <li key={item.id ?? item.label}>
+              {onSelect ? (
+                <button
+                  type="button"
+                  onClick={() => onSelect(item)}
+                  title={tooltip}
+                  className={`w-full rounded-md px-1.5 py-1.5 text-left transition-colors hover:bg-[var(--glass-bg-subtle)] ${FOCUS_RING}`}
+                >
+                  {content}
+                </button>
+              ) : (
+                <div title={tooltip} className="px-1.5 py-1.5">
+                  {content}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {rest ? (
+        <p className="mt-1.5 px-1.5 text-[11px] text-stone-500 dark:text-stone-400">
+          {t("analytics.dimensions.more", { count: rest.count, defaultValue: "{{count}} more" })}
+          {" · "}
+          {formatValue(rest.value)}
+        </p>
+      ) : null}
     </div>
   );
 }
 
-interface FeedbackByPresetBarProps {
+interface FeedbackPresetBarsProps {
   data: ByPresetFeedbackItem[];
-  onSliceClick?: (entry: ByPresetFeedbackItem) => void;
+  limit?: number;
+  onSelect?: (entry: ByPresetFeedbackItem) => void;
 }
 
-export function FeedbackByPresetBar({ data, onSliceClick }: FeedbackByPresetBarProps) {
+/** Per-persona up/down split: one stacked bar per persona, labelled counts. */
+export function FeedbackPresetBars({ data, limit = 6, onSelect }: FeedbackPresetBarsProps) {
   const { t } = useTranslation();
-  if ((data?.length ?? 0) === 0) {
-    return (
-      <div className="flex h-32 items-center justify-center text-sm text-stone-500 dark:text-stone-400">
-        —
-      </div>
-    );
-  }
-  const rows = data.map((d) => ({
-    name: d.preset_name || d.preset_id,
-    up: d.up_count,
-    down: d.down_count,
-    raw: d,
-  }));
+  const rows = useMemo(
+    () => [...(data ?? [])].sort((a, b) => b.total - a.total).slice(0, limit),
+    [data, limit],
+  );
+  const max = rows[0]?.total ?? 0;
+
   return (
-    <div
-      className="h-56"
-      role="img"
-      aria-label={t("analytics.feedback.byPreset", "按角色分反馈")}
-    >
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart
-          data={rows}
-          layout="vertical"
-          margin={{ top: 4, right: 16, bottom: 4, left: 8 }}
-        >
-          <CartesianGrid
-            strokeDasharray="3 3"
-            stroke="rgba(120,113,108,0.2)"
-            horizontal={false}
-          />
-          <XAxis type="number" tick={{ fontSize: 11, fill: "currentColor" }} allowDecimals={false} />
-          <YAxis
-            type="category"
-            dataKey="name"
-            tick={{ fontSize: 11, fill: "currentColor" }}
-            width={100}
-          />
-          <Tooltip
-            formatter={(value: number, name: string) => [formatNumber(Number(value)), name]}
-          />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Bar
-            dataKey="up"
-            name={t("analytics.feedback.up", "好评")}
-            stackId="a"
-            fill="#10b981"
-            cursor={onSliceClick ? "pointer" : undefined}
-            onClick={onSliceClick ? (entry) => onSliceClick((entry as { raw: ByPresetFeedbackItem }).raw) : undefined}
-          />
-          <Bar
-            dataKey="down"
-            name={t("analytics.feedback.down", "差评")}
-            stackId="a"
-            fill="#ef4444"
-            cursor={onSliceClick ? "pointer" : undefined}
-            onClick={onSliceClick ? (entry) => onSliceClick((entry as { raw: ByPresetFeedbackItem }).raw) : undefined}
-          />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
+    <ul className="flex flex-col gap-1">
+      {rows.map((entry) => {
+        const name = entry.preset_name || entry.preset_id;
+        const width = max > 0 ? Math.max((entry.total / max) * 100, 2) : 0;
+        const content = (
+          <>
+            <div className="flex items-baseline justify-between gap-3 text-xs">
+              <span className="min-w-0 truncate text-stone-700 dark:text-stone-200">{name}</span>
+              <span className="flex flex-shrink-0 items-center gap-2 tabular-nums text-stone-600 dark:text-stone-300">
+                <span className="inline-flex items-center gap-0.5">
+                  <ThumbsUp size={11} aria-hidden />
+                  {formatNumber(entry.up_count)}
+                </span>
+                <span className="inline-flex items-center gap-0.5">
+                  <ThumbsDown size={11} aria-hidden />
+                  {formatNumber(entry.down_count)}
+                </span>
+              </span>
+            </div>
+            <div className="mt-1 flex h-1.5 w-full overflow-hidden rounded-full bg-[var(--glass-bg-subtle)]">
+              <div className="flex h-full gap-0.5" style={{ width: `${width}%` }}>
+                {entry.up_count > 0 ? (
+                  <div
+                    className="h-full rounded-full"
+                    style={{ flexGrow: entry.up_count, backgroundColor: STATUS_COLOR.good }}
+                  />
+                ) : null}
+                {entry.down_count > 0 ? (
+                  <div
+                    className="h-full rounded-full"
+                    style={{ flexGrow: entry.down_count, backgroundColor: STATUS_COLOR.critical }}
+                  />
+                ) : null}
+              </div>
+            </div>
+          </>
+        );
+        const tooltip = `${name} · ${t("analytics.feedback.up", "好评")} ${entry.up_count} · ${t(
+          "analytics.feedback.down",
+          "差评",
+        )} ${entry.down_count}`;
+        return (
+          <li key={entry.preset_id}>
+            {onSelect ? (
+              <button
+                type="button"
+                onClick={() => onSelect(entry)}
+                title={tooltip}
+                className={`w-full rounded-md px-1.5 py-1.5 text-left transition-colors hover:bg-[var(--glass-bg-subtle)] ${FOCUS_RING}`}
+              >
+                {content}
+              </button>
+            ) : (
+              <div title={tooltip} className="px-1.5 py-1.5">
+                {content}
+              </div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
-interface ReasonBarProps {
-  data: ByLabelItem[];
-  onSliceClick?: (entry: ByLabelItem) => void;
+export interface TrendPoint {
+  /** X-axis key: `YYYY-MM-DD` or `HH:00`. */
+  key: string;
+  value: number;
 }
 
-export function ReasonBar({ data, onSliceClick }: ReasonBarProps) {
-  const { t } = useTranslation();
-  if ((data?.length ?? 0) === 0) {
-    return (
-      <div className="flex h-32 items-center justify-center text-sm text-stone-500 dark:text-stone-400">
-        {t("analytics.feedback.noReasons", "暂无点踩原因数据")}
-      </div>
-    );
-  }
-  return (
-    <div
-      className="h-56"
-      role="img"
-      aria-label={t("analytics.feedback.reasonDistribution", "点踩原因分布")}
-    >
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart
-          data={data}
-          layout="vertical"
-          margin={{ top: 4, right: 16, bottom: 4, left: 8 }}
-        >
-          <CartesianGrid
-            strokeDasharray="3 3"
-            stroke="rgba(120,113,108,0.2)"
-            horizontal={false}
-          />
-          <XAxis type="number" tick={{ fontSize: 11, fill: "currentColor" }} allowDecimals={false} />
-          <YAxis
-            type="category"
-            dataKey="label"
-            tick={{ fontSize: 11, fill: "currentColor" }}
-            width={120}
-            tickFormatter={(value: string) => t(`feedback.reason.${value}`, value)}
-          />
-          <Tooltip
-            formatter={(value: number) => [formatNumber(Number(value)), ""]}
-            labelFormatter={(label: string) => t(`feedback.reason.${label}`, label)}
-          />
-          <Bar
-            dataKey="value"
-            radius={[0, 4, 4, 0]}
-            fill="#ef4444"
-            cursor={onSliceClick ? "pointer" : undefined}
-            onClick={onSliceClick ? (entry) => onSliceClick(entry as ByLabelItem) : undefined}
-          />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
+interface TrendAreaProps {
+  points: TrendPoint[];
+  label: string;
+  formatValue?: (value: number) => string;
+  formatTick?: (key: string) => string;
 }
 
-export interface LineTrendProps {
-  series: Array<{
-    key: string;
-    color: string;
-    label: string;
-    data: TrendDataPoint[];
-    /** Plot against the right-hand axis (default left). */
-    yAxis?: "left" | "right";
-    /** Per-series tooltip formatting (falls back to the shared formatter). */
-    valueFormatter?: (value: number) => string;
-  }>;
-  valueFormatter?: (value: number) => string;
-}
-
-export function LineTrend({ series, valueFormatter }: LineTrendProps) {
-  const merged = useMemo(() => {
-    const dates = new Set<string>();
-    (series ?? []).forEach((s) => {
-      (s?.data ?? []).forEach((d) => {
-        if (d?.date) dates.add(d.date);
-      });
-    });
-    const sortedDates = Array.from(dates).sort();
-    return sortedDates.map((date) => {
-      const row: Record<string, string | number> = { date };
-      (series ?? []).forEach((s) => {
-        const match = (s?.data ?? []).find((d) => d?.date === date);
-        row[s?.key ?? ""] = match ? Number(match.value ?? 0) : 0;
-      });
-      return row;
-    });
-  }, [series]);
-
-  if (merged.length === 0) return null;
-
-  const singlePoint = merged.length === 1;
-  const hasRightAxis = (series ?? []).some((s) => s.yAxis === "right");
-  const formatFor = (s: (typeof series)[number]) =>
-    s.valueFormatter ?? valueFormatter ?? ((value: number) => formatNumber(value));
+/** One series on one axis, crosshair tooltip, light area fill. */
+export function TrendArea({
+  points,
+  label,
+  formatValue = formatNumber,
+  formatTick = (key) => key,
+}: TrendAreaProps) {
+  const color = useSeriesColor();
+  const gradientId = useId().replace(/:/g, "");
+  if (points.length === 0) return null;
 
   return (
-    <div
-      className="h-56"
-      role="img"
-      aria-label={series.map((item) => item.label).join(", ")}
-    >
+    <div className="h-60" role="img" aria-label={label}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={merged} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(120,113,108,0.2)" />
+        <AreaChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: -12 }}>
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity={0.22} />
+              <stop offset="100%" stopColor={color} stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(120,113,108,0.18)" />
           <XAxis
-            dataKey="date"
+            dataKey="key"
             tick={{ fontSize: 11, fill: "currentColor" }}
-            tickFormatter={(value) => {
-              if (value == null) return "";
-              const parts = String(value).split("-");
-              if (parts.length === 3) {
-                return `${parts[1]}/${parts[2]}`;
-              }
-              return String(value);
-            }}
+            tickFormatter={formatTick}
+            tickLine={false}
+            axisLine={false}
+            minTickGap={16}
           />
           <YAxis
-            yAxisId="left"
             tick={{ fontSize: 11, fill: "currentColor" }}
             tickFormatter={(value: number) => formatNumber(Number(value))}
-            width={40}
+            tickLine={false}
+            axisLine={false}
+            allowDecimals={false}
+            width={44}
           />
-          {hasRightAxis ? (
-            <YAxis
-              yAxisId="right"
-              orientation="right"
-              tick={{ fontSize: 11, fill: "currentColor" }}
-              tickFormatter={(value: number) => formatNumber(Number(value))}
-              width={44}
-            />
-          ) : null}
           <Tooltip
-            formatter={(value: number, name: string) => {
-              const match = (series ?? []).find((s) => s.label === name);
-              const format = match ? formatFor(match) : formatNumber;
-              return [format(value), name];
-            }}
-            labelFormatter={(label) => String(label ?? "")}
+            cursor={{ stroke: "rgba(120,113,108,0.45)", strokeWidth: 1 }}
+            formatter={(value: number) => [formatValue(Number(value)), label]}
+            labelFormatter={(key) => formatTick(String(key ?? ""))}
           />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
-          {series.map((s) => (
-            <Line
-              key={s.key}
-              yAxisId={s.yAxis === "right" ? "right" : "left"}
-              type="monotone"
-              dataKey={s.key}
-              name={s.label}
-              stroke={s.color}
-              strokeWidth={2}
-              dot={singlePoint ? { r: 4 } : false}
-              activeDot={{ r: 4 }}
-              label={
-                singlePoint
-                  ? (props: {
-                      x?: number;
-                      y?: number;
-                      value?: number;
-                    }) => {
-                      const v = Number(props?.value ?? 0);
-                      const text = formatFor(s)(v);
-                      return (
-                        <text
-                          x={props.x}
-                          y={(props.y ?? 0) - 10}
-                          fill="currentColor"
-                          fontSize={11}
-                          textAnchor="middle"
-                        >
-                          {text}
-                        </text>
-                      );
-                    }
-                  : false
-              }
-            />
-          ))}
-        </LineChart>
+          <Area
+            type="monotone"
+            dataKey="value"
+            name={label}
+            stroke={color}
+            strokeWidth={2}
+            fill={`url(#${gradientId})`}
+            dot={points.length === 1 ? { r: 4, fill: color, strokeWidth: 0 } : false}
+            activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--theme-bg-card, #fff)" }}
+            isAnimationActive={false}
+          />
+        </AreaChart>
       </ResponsiveContainer>
     </div>
   );

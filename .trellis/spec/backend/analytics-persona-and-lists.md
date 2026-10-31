@@ -186,7 +186,8 @@ bucketing: `resolve_range` / `previous_range` / `day_buckets`. `storage.py` impo
 | Collection | Doc shape | Uniqueness |
 |-----------|-----------|-----------|
 | `user_daily_activity` | `{user_id, date, sources: ["login","message"], updated_at}` | unique `(user_id, date)`; query index `(date, user_id)` |
-| `analytics_daily_snapshot` | one frozen usage-facts doc per `(date, filters-hash)` | never overwritten — writes use `$setOnInsert` upsert |
+| `analytics_daily_snapshot` | one row per `(date, user_id, persona_preset_id, agent_id)`: core counts + session-id sets, plus extras `hour_messages[24]` / `hour_tokens[24]` / `model_tokens[{model,tokens}]`; marker row `user_id="__snapshot_complete__"` carries `extras_version` | unique key; core via `$setOnInsert` (never overwritten), extras via `$set` |
+| `analytics_today_snapshot` | same row schema for **today only**, overwritten every worker tick; marker carries `refreshed_at` | unique key; rows `$set`, stale rows / other dates pruned after the marker write |
 | `analytics_backfill_state` | `{_id: "analytics_daily", cursor_date, updated_at}` | progress marker |
 
 ### Contracts
@@ -194,9 +195,32 @@ bucketing: `resolve_range` / `previous_range` / `day_buckets`. `storage.py` impo
 - **Write points are best-effort**: `UserStorage.touch_updated_at` records
   `source=login`, the executor message path records `source=message`; both wrapped
   in try/except warning-only. Never let activity recording fail the main flow.
-- **`read_or_freeze`** (`src/infra/analytics/snapshot.py`): today → realtime via
-  `usage_facts_stages()`; historical → read snapshot, freeze-on-miss, degrade to
-  realtime on any exception. It accepts a `storage` param so tests can inject mocks.
+- **Dashboard reads never scan traces** (new-api style pre-aggregation). The only
+  writers of usage numbers are background: `DailyFreezeWorker` ticks every 60s
+  (Redis lock) → `ensure_dates_frozen([yesterday])` → `refresh_today_snapshot()`
+  → `enrich_snapshot_extras(limit=5)`, plus `AnalyticsBackfillWorker` at startup.
+  Both freeze and today refresh go through the single `compute_day_rows()`.
+- **`read_or_freeze`** (`src/infra/analytics/snapshot.py`): historical dates read
+  the daily snapshot; today reads `analytics_today_snapshot` when its marker
+  exists (cold-start only: realtime traces until the first tick). Freeze-on-miss
+  stays as a safety net and opens Redis only when a date is actually missing.
+  Empty frozen days are authoritative — no realtime re-aggregation for them.
+  Result also carries `by_hour` (single-day range), `peak`, `by_model`,
+  `active_users_by_day`, `extras_complete`, `refreshed_at`.
+- **Shared read** `AnalyticsStorage._read_usage(filters)`: every usage endpoint
+  (summary for both periods, trend, hourly, insights, by-agent/persona, by-model,
+  users/active, by-user, export) goes through it — single flight for concurrent
+  requests + TTL cache (30s with today, 600s historical); incomplete/failed
+  results are never cached. Do not call `read_or_freeze` directly from storage.
+- **Enrichment never shifts history**: filling extras on an already-frozen date
+  (`_freeze_dates(..., enrich_only=True)`) is `$set` on existing rows with
+  `upsert=False`; only a never-frozen date may insert core rows.
+- **Hour ownership**: `hour_messages` buckets each `user:message` by its own
+  `events.timestamp` (peak contract); `hour_tokens` and day totals use trace
+  `started_at`.
+- **Model labels**: `/tokens/by-model` returns `label` = `model_configs.label`
+  (looked up by config `id`, then `value`) and `id` = raw model id; drilldown
+  filters must use `id`. `partial=true` while any date lacks `extras_version`.
 - **Freeze immutability**: Redis lock `analytics:snapshot:freeze:{date}` + unique
   index + `$setOnInsert` triple-guard. A frozen day never changes, even if traces
   arrive late.
@@ -217,7 +241,9 @@ bucketing: `resolve_range` / `previous_range` / `day_buckets`. `storage.py` impo
 | `test_analytics_snapshot_immutable` | freeze never overwrites; read_or_freeze fallback |
 | `test_analytics_backfill` | lock/batch/idempotent/cursor/exception-swallow |
 | `test_analytics_cross_consistency` | 5 cross-endpoint equalities under one filter (summary/by-persona/by-user/tokens-by-model/export.csv); real-MongoDB integration pins absolute numbers and skips cleanly when no local DB |
-| `test_analytics_insights_route` | insights filter passthrough + permission |
+| `test_analytics_insights_route` | insights filter passthrough + permission; peak/top users read the snapshot result, never traces |
+| `analytics/test_snapshot_precompute` | single flight + no caching of failures; today refresh order rows→marker→prune; today read touches no traces; enrichment is `$set`-only without upsert |
+| `test_tokens_by_model_snapshot` | display-name mapping keeps raw id; partial flag; realtime fallback only when the snapshot read fails |
 
 ---
 

@@ -212,53 +212,80 @@ def _filters() -> UsageFilters:
     )
 
 
-@pytest.mark.asyncio
-async def test_peak_buckets_only_traces_with_user_messages() -> None:
+def _snapshot_store(result: dict[str, Any]):
+    """Storage whose shared snapshot read returns ``result``; traces are off-limits."""
+    from unittest.mock import AsyncMock
+
     from src.infra.analytics.storage import AnalyticsStorage
 
     store = AnalyticsStorage()
-    store._traces = _FakeCollection(
-        [[{"_id": {"weekday": 5, "hour": 13}, "user_messages": 128}]]
-    )
+    store._read_usage = AsyncMock(return_value=result)
+    store._traces = _FakeCollection([])
+    return store
+
+
+@pytest.mark.asyncio
+async def test_peak_reads_snapshot_breakdown_without_scanning_traces() -> None:
+    store = _snapshot_store({"peak": {"weekday": 5, "hour": 13, "user_messages": 128}})
 
     peak = await store._insights_peak(_filters())
 
     assert peak is not None
-    assert peak.weekday == 5
-    assert peak.hour == 13
-    assert peak.user_messages == 128
-
-    # 口径锁：必须过滤 user_messages > 0（只有会话没有消息 → 无桶 → null），
-    # 且分桶时区为 Asia/Shanghai（与其它指标同源）
-    pipeline = store._traces.pipelines[0]
-    assert {"$match": {"user_messages": {"$gt": 0}}} in pipeline
-    group_id = next(s for s in pipeline if "$group" in s)["$group"]["_id"]
-    assert group_id["hour"]["$hour"]["timezone"] == "Asia/Shanghai"
-    day_of_week = group_id["weekday"]["$subtract"][0]
-    assert day_of_week["$dayOfWeek"]["timezone"] == "Asia/Shanghai"
+    assert (peak.weekday, peak.hour, peak.user_messages) == (5, 13, 128)
+    assert store._traces.pipelines == []
 
 
 @pytest.mark.asyncio
 async def test_peak_is_null_without_messages() -> None:
-    from src.infra.analytics.storage import AnalyticsStorage
-
-    store = AnalyticsStorage()
-    store._traces = _FakeCollection([[]])  # 无消息：聚合无结果
+    store = _snapshot_store({"peak": None})
 
     assert await store._insights_peak(_filters()) is None
+
+
+def test_peak_slot_uses_utc8_weekday_and_skips_empty_hours() -> None:
+    """Breakdown → peak: weekday follows $dayOfWeek - 1 (Sunday = 0)."""
+    from src.infra.analytics.snapshot import _apply_breakdowns
+
+    result: dict[str, Any] = {}
+    hour_docs = [
+        # 2026-08-23 is a Sunday, 2026-08-24 a Monday.
+        {"_id": {"date": "2026-08-23", "hour": 9}, "user_messages": 4, "tokens": 10},
+        {"_id": {"date": "2026-08-24", "hour": 13}, "user_messages": 7, "tokens": 20},
+        {"_id": {"date": "2026-08-24", "hour": 2}, "user_messages": 0, "tokens": 5},
+    ]
+    _apply_breakdowns(result, ["2026-08-23", "2026-08-24"], hour_docs, {}, {})
+
+    assert result["peak"] == {"weekday": 1, "hour": 13, "user_messages": 7}
+    assert result["by_hour"] == []  # multi-day ranges carry no hourly trend
+
+    single: dict[str, Any] = {}
+    _apply_breakdowns(single, ["2026-08-24"], hour_docs[1:], {}, {})
+    assert len(single["by_hour"]) == 24
+    assert single["by_hour"][13] == {"hour": 13, "user_messages": 7, "tokens": 20}
+
+    empty: dict[str, Any] = {}
+    _apply_breakdowns(empty, ["2026-08-24"], [], {}, {})
+    assert empty["peak"] is None
 
 
 @pytest.mark.asyncio
 async def test_top_token_users_joins_names_and_caps_at_three() -> None:
     from bson import ObjectId
 
-    from src.infra.analytics.storage import AnalyticsStorage
-
     uid1 = "64b7f1a2c3d4e5f6a7b8c9d0"
     uid2 = "64b7f1a2c3d4e5f6a7b8c9d1"
-    store = AnalyticsStorage()
-    store._traces = _FakeCollection(
-        [[{"_id": uid1, "tokens": 5000}, {"_id": uid2, "tokens": 3000}]]
+    uid3 = "64b7f1a2c3d4e5f6a7b8c9d2"
+    uid4 = "64b7f1a2c3d4e5f6a7b8c9d3"
+    store = _snapshot_store(
+        {
+            "by_user": [
+                {"user_id": uid2, "tokens": 3000},
+                {"user_id": uid1, "tokens": 5000},
+                {"user_id": uid3, "tokens": 100},
+                {"user_id": uid4, "tokens": 50},
+                {"user_id": "zero", "tokens": 0},
+            ]
+        }
     )
     store._users = _FakeCollection(
         [
@@ -271,14 +298,13 @@ async def test_top_token_users_joins_names_and_caps_at_three() -> None:
 
     items = await store._insights_top_token_users(_filters())
 
-    assert [item.tokens for item in items] == [5000, 3000]
+    assert [item.tokens for item in items] == [5000, 3000, 100]
     assert items[0].user_id == uid1
     assert items[0].username == "emp001"
     assert items[0].display_name == "张三"
     assert items[1].username == "emp002"
     assert items[1].display_name is None
-    # limit 3 落在 pipeline 里
-    assert {"$limit": 3} in store._traces.pipelines[0]
+    assert store._traces.pipelines == []
 
 
 @pytest.mark.asyncio

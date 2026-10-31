@@ -268,11 +268,13 @@
   },
   "analytics": {
     "dimensions": {
-      "agentTop5": "按智能体 Top5",
-      "byAgentHint": "会话数按智能体 agent_id 聚合",
-      "byPersonaHint": "会话数按 Persona 聚合",
-      "modelTokenTop5": "模型 Token Top5",
-      "personaTop5": "按 Persona Top5"
+      "agentTop5": "智能体会话",
+      "byAgentHint": "活跃会话数，按智能体",
+      "byPersonaHint": "活跃会话数，按 Persona",
+      "modelTokenTop5": "模型 Token",
+      "personaTop5": "Persona 会话",
+      "more": "其余 {{count}} 项",
+      "totalLabel": "合计 {{value}}"
     },
     "drilldown": {
       "agent": "智能体",
@@ -411,13 +413,15 @@
       "byModelHint": "每个模型的总 token 数",
       "total": "总 token",
       "unit": "tokens",
-      "partial": "历史数据没有模型维度，此处仅显示已有模型明细的部分。",
+      "partial": "部分日期的模型明细正在后台补齐，稍后刷新即可完整显示。",
       "partialSince": "历史数据没有模型维度，模型明细自 {{date}} 起可用。"
     },
     "trend": {
       "activeUsers": "活跃用户",
       "hint": "会话、活跃用户、用户消息按天对比，Token 见右轴",
-      "title": "核心趋势"
+      "title": "核心趋势",
+      "dailyHint": "按天（UTC+8）",
+      "hourlyHint": "按小时（UTC+8）"
     },
     "weekdays": [
       "周日",
@@ -427,7 +431,13 @@
       "周四",
       "周五",
       "周六"
-    ]
+    ],
+    "tabs": {
+      "dashboard": "数据看板",
+      "usage": "使用明细"
+    },
+    "dataUpdatedAt": "数据更新于 {{time}}",
+    "dataUpdatedHint": "统计由后台每分钟预计算，打开看板无需等待实时计算"
   },
   "appName": "昆小智",
   "approvals": {
@@ -3134,7 +3144,6 @@
       "unavailable": "专家已不可用",
       "unavailableHint": "所选专家已被删除、下架或你已无权使用，请编辑任务更换专家"
     },
-
     "title": "定时任务",
     "subtitle": "设定好时间，昆小智会自动帮你完成，并把结果通知你",
     "create": "新建定时任务",

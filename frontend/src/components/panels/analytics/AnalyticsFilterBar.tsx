@@ -235,9 +235,11 @@ export function AnalyticsFilterBar({
   onAgentChange,
 }: AnalyticsFilterBarProps) {
   const { t } = useTranslation();
+  const selectClass =
+    "glass-input min-w-[8.5rem] max-w-[14rem] truncate px-2 py-1 text-sm";
   return (
-    <div className="px-4 pb-3 pt-1 sm:px-6">
-      <div className="glass-card flex flex-wrap items-center gap-2 rounded-xl p-3">
+    <div className="px-4 pb-2 pt-1 sm:px-6">
+      <div className="glass-card flex flex-wrap items-center gap-2 rounded-xl p-2.5 sm:p-3">
         <div className="flex items-center gap-2 text-sm text-stone-600 dark:text-stone-300">
           <Clock size={16} aria-hidden />
           <span className="font-medium">{t("analytics.timeRange.label")}</span>
@@ -251,13 +253,15 @@ export function AnalyticsFilterBar({
         <span className="text-xs font-medium text-stone-500 dark:text-stone-400">
           {formatRangeLabel(range)}（UTC+8）
         </span>
-      </div>
-      {/* Persona and agent filters */}
-      <div className="mt-2 flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-xs text-stone-500 dark:text-stone-400">
+        <span
+          className="mx-1 hidden h-5 w-px bg-[var(--glass-border)] sm:block"
+          aria-hidden
+        />
+        {/* Persona and agent filters */}
+        <label className="flex items-center gap-1.5 text-xs text-stone-500 dark:text-stone-400">
           {t("analytics.filters.persona")}
           <select
-            className="glass-input min-w-[10rem] px-2 py-1.5 text-sm"
+            className={selectClass}
             value={personaPresetId}
             onChange={(event) => onPersonaChange(event.target.value)}
           >
@@ -269,10 +273,10 @@ export function AnalyticsFilterBar({
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-xs text-stone-500 dark:text-stone-400">
+        <label className="flex items-center gap-1.5 text-xs text-stone-500 dark:text-stone-400">
           {t("analytics.filters.agent")}
           <select
-            className="glass-input min-w-[10rem] px-2 py-1.5 text-sm"
+            className={selectClass}
             value={agentId}
             onChange={(event) => onAgentChange(event.target.value)}
           >

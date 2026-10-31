@@ -15,10 +15,12 @@ import { Line, LineChart, ResponsiveContainer } from "recharts";
 import { Cpu, Hash, MessageSquare, PieChart, Users } from "lucide-react";
 import type {
   TrendDataPoint,
+  UsageHourPoint,
   UsageSummaryResponse,
   UsageTrendPoint,
 } from "../../../types/analytics";
-import { PIE_COLORS, formatNumber } from "./analyticsFormat";
+import { formatNumber } from "./analyticsFormat";
+import { useSeriesColor } from "./useSeriesColor";
 import {
   formatDeltaPct,
   formatRatio,
@@ -38,6 +40,8 @@ export interface AnalyticsKpiRowProps {
   usageTrend: UsageTrendPoint[];
   /** Daily using-user counts from `/users/active` for the first card's sparkline. */
   activeTrend: TrendDataPoint[];
+  /** Hourly points of a single-day range; sparklines use them instead of days. */
+  hourly: UsageHourPoint[];
   /** A persona/agent filter switches the first card to the using-user metric. */
   isFiltered: boolean;
   /** Shows a skeleton for KPI values during the initial or filter load. */
@@ -186,6 +190,7 @@ export function AnalyticsKpiRow({
   summary,
   usageTrend,
   activeTrend,
+  hourly,
   isFiltered,
   isLoading,
   error,
@@ -193,6 +198,7 @@ export function AnalyticsKpiRow({
   onSessionsDrilldown,
 }: AnalyticsKpiRowProps) {
   const { t } = useTranslation();
+  const sparkColor = useSeriesColor();
   // Unfiltered the headline counts logins, so the message-based `/users/active`
   // series would trend a different metric than the number above it.
   const usersSparkline = isFiltered ? activeTrend.map((point) => point.value) : [];
@@ -229,6 +235,19 @@ export function AnalyticsKpiRow({
     t("analytics.overview.vsPrev", { pct, defaultValue: "较上一区间 {{pct}}" });
 
   const sparkFor = (metric: KpiMetric): number[] => {
+    // A single day is one daily point; trend its hours instead. Only messages
+    // and tokens have an hourly breakdown, the other cards show no sparkline.
+    if (hourly.length > 0) {
+      switch (metric) {
+        case "userMessages":
+        case "messagesPerUser":
+          return hourly.map((point) => point.user_messages);
+        case "totalTokens":
+          return hourly.map((point) => point.total_tokens);
+        default:
+          return [];
+      }
+    }
     switch (metric) {
       case "users":
         return usersSparkline;
@@ -269,7 +288,7 @@ export function AnalyticsKpiRow({
         delta={deltaFor("users")}
         deltaText={deltaText}
         sparkValues={sparkFor("users")}
-        sparkColor={PIE_COLORS[0]}
+        sparkColor={sparkColor}
         isLoading={isLoading}
         hint={
           !isFiltered && summary
@@ -288,7 +307,7 @@ export function AnalyticsKpiRow({
         delta={deltaFor("sessions")}
         deltaText={deltaText}
         sparkValues={sparkFor("sessions")}
-        sparkColor={PIE_COLORS[4]}
+        sparkColor={sparkColor}
         hint={
           summary
             ? t("analytics.overview.newSessions", {
@@ -307,7 +326,7 @@ export function AnalyticsKpiRow({
         delta={deltaFor("userMessages")}
         deltaText={deltaText}
         sparkValues={sparkFor("userMessages")}
-        sparkColor={PIE_COLORS[1]}
+        sparkColor={sparkColor}
         isLoading={isLoading}
       />
       <KpiCard
@@ -317,7 +336,7 @@ export function AnalyticsKpiRow({
         delta={deltaFor("totalTokens")}
         deltaText={deltaText}
         sparkValues={sparkFor("totalTokens")}
-        sparkColor={PIE_COLORS[3]}
+        sparkColor={sparkColor}
         isLoading={isLoading}
       />
       <KpiCard
@@ -327,7 +346,7 @@ export function AnalyticsKpiRow({
         delta={deltaFor("messagesPerUser")}
         deltaText={deltaText}
         sparkValues={sparkFor("messagesPerUser")}
-        sparkColor={PIE_COLORS[2]}
+        sparkColor={sparkColor}
         isLoading={isLoading}
         tooltip={t(
           "analytics.overview.messagesPerUserHint",
@@ -341,7 +360,7 @@ export function AnalyticsKpiRow({
         delta={deltaFor("tokensPerSession")}
         deltaText={deltaText}
         sparkValues={sparkFor("tokensPerSession")}
-        sparkColor={PIE_COLORS[5]}
+        sparkColor={sparkColor}
         isLoading={isLoading}
       />
       </div>

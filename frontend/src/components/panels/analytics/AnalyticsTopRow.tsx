@@ -1,45 +1,31 @@
 /**
- * Analytics Top Row — agent/persona/model Top5 donuts + feedback overview.
+ * Analytics Top Row — agent / persona / model ranked bars + feedback overview.
  *
- * Consistency contract (PRD R3.1): each donut's center number is read from
+ * Consistency contract (PRD R3.1): each list's share column is taken against
  * the very same accessor as its KPI card in `analyticsKpi.ts`:
- *   - 智能体 Top5 / Persona Top5 centers == sessions KPI (active_sessions)
- *   - 模型 Token Top5 center            == total tokens KPI (total_tokens)
+ *   - 智能体 / Persona 会话 shares == sessions KPI (active_sessions)
+ *   - 模型 Token shares            == total tokens KPI (total_tokens)
  */
 
 import { useTranslation } from "react-i18next";
-import {
-  Cpu,
-  ThumbsDown,
-  ThumbsUp,
-  User as UserIcon,
-} from "lucide-react";
+import { Bot, Cpu, MessageSquareWarning, ThumbsDown, ThumbsUp, User as UserIcon } from "lucide-react";
 import type {
   ByLabelItem,
   ByPresetFeedbackItem,
   FeedbackSummaryResponse,
   UsageSummaryResponse,
 } from "../../../types/analytics";
-import {
-  kpiSessionsValue,
-  kpiTotalTokensValue,
-} from "./analyticsKpi";
-import {
-  ChartCard,
-  DonutBlock,
-  FeedbackByPresetBar,
-  ReasonBar,
-  StatsCard,
-} from "./analyticsPrimitives";
-import { formatNumber } from "./analyticsFormat";
+import { kpiSessionsValue, kpiTotalTokensValue } from "./analyticsKpi";
+import { ChartCard, FeedbackPresetBars, RankedBarList } from "./analyticsPrimitives";
+import { STATUS_COLOR, formatNumber } from "./analyticsFormat";
 
 export interface AnalyticsTopRowProps {
-  /** Summary supplies the donut center numbers (same fields as KPI cards). */
+  /** Summary supplies the share denominators (same fields as KPI cards). */
   summary: UsageSummaryResponse | null;
   sessionsByAgent: ByLabelItem[];
   sessionsByPersona: ByLabelItem[];
   tokensByModel: ByLabelItem[];
-  /** Set when the range predates per-model data, so the chart must say so. */
+  /** Set while some dates' per-model breakdown is still being filled. */
   tokensByModelPartial?: { partial: boolean; since: string | null };
   feedbackSummary: FeedbackSummaryResponse | null;
   feedbackByPreset: ByPresetFeedbackItem[];
@@ -75,159 +61,174 @@ export function AnalyticsTopRow({
   onReasonClick,
 }: AnalyticsTopRowProps) {
   const { t } = useTranslation();
-  // The session donut centers reuse the sessions KPI accessor verbatim.
-  const sessionsCenter = kpiSessionsValue(summary);
-  const tokensCenter = kpiTotalTokensValue(summary);
+  // Both session lists share the sessions KPI accessor as their denominator.
+  const sessionsTotal = kpiSessionsValue(summary);
+  const tokensTotal = kpiTotalTokensValue(summary);
+  const totalAction = (value: number | null) =>
+    value === null ? null : (
+      <span className="text-xs tabular-nums text-stone-500 dark:text-stone-400">
+        {t("analytics.dimensions.totalLabel", {
+          value: formatNumber(value),
+          defaultValue: "Total {{value}}",
+        })}
+      </span>
+    );
 
   return (
     <>
-      {/* Dimension donuts: agent Top5 / persona Top5 / model token Top5 */}
-      <section className="mt-4">
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-          <ChartCard
-            title={t("analytics.dimensions.agentTop5", "按智能体 Top5")}
-            subtitle={t(
-              "analytics.dimensions.byAgentHint",
-              "会话数按 agent_id 聚合",
-            )}
-            icon={<Cpu size={16} aria-hidden />}
-            isLoading={isLoading}
-            error={errors.sessionsByAgent}
-            isEmpty={!isLoading && (sessionsByAgent?.length ?? 0) === 0}
-          >
-            <DonutBlock
-              data={sessionsByAgent}
-              centerValue={sessionsCenter}
-              centerCaption={t("analytics.sessions.sessions", "会话数")}
-              onSliceClick={onAgentSliceClick}
-            />
-          </ChartCard>
-          <ChartCard
-            title={t("analytics.dimensions.personaTop5", "按 Persona Top5")}
-            subtitle={t(
-              "analytics.dimensions.byPersonaHint",
-              "会话数按 Persona 聚合",
-            )}
-            icon={<UserIcon size={16} aria-hidden />}
-            isLoading={isLoading}
-            error={errors.sessionsByPersona}
-            isEmpty={!isLoading && (sessionsByPersona?.length ?? 0) === 0}
-          >
-            <DonutBlock
-              data={sessionsByPersona}
-              centerValue={sessionsCenter}
-              centerCaption={t("analytics.sessions.sessions", "会话数")}
-              onSliceClick={onPersonaSliceClick}
-            />
-          </ChartCard>
-          <ChartCard
-            title={t("analytics.dimensions.modelTokenTop5", "模型 Token Top5")}
-            subtitle={t(
-              "analytics.tokens.byModelHint",
-              "每个模型的总 token 数",
-            )}
-            icon={<Cpu size={16} aria-hidden />}
-            isLoading={isLoading}
-            error={errors.tokensByModel}
-            isEmpty={!isLoading && (tokensByModel?.length ?? 0) === 0}
-          >
-            {tokensByModelPartial?.partial ? (
-              <p className="mb-2 rounded-lg bg-amber-50 px-2 py-1.5 text-[11px] text-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
-                {tokensByModelPartial.since
-                  ? t(
-                      "analytics.tokens.partialSince",
-                      "历史数据没有模型维度，模型明细自 {{date}} 起可用。",
-                      { date: tokensByModelPartial.since },
-                    )
-                  : t(
-                      "analytics.tokens.partial",
-                      "历史数据没有模型维度，此处仅显示已有模型明细的部分。",
-                    )}
-              </p>
-            ) : null}
-            <DonutBlock
-              data={tokensByModel}
-              centerValue={tokensCenter}
-              centerCaption={t("analytics.tokens.total", "总 token")}
-              onSliceClick={onModelSliceClick}
-            />
-          </ChartCard>
-        </div>
+      <section className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <ChartCard
+          title={t("analytics.dimensions.agentTop5", "智能体会话")}
+          subtitle={t("analytics.dimensions.byAgentHint", "活跃会话数，按智能体")}
+          icon={<Bot size={16} aria-hidden />}
+          action={totalAction(sessionsTotal)}
+          isLoading={isLoading}
+          error={errors.sessionsByAgent}
+          isEmpty={!isLoading && (sessionsByAgent?.length ?? 0) === 0}
+        >
+          <RankedBarList
+            items={sessionsByAgent}
+            total={sessionsTotal}
+            onSelect={onAgentSliceClick}
+          />
+        </ChartCard>
+        <ChartCard
+          title={t("analytics.dimensions.personaTop5", "Persona 会话")}
+          subtitle={t("analytics.dimensions.byPersonaHint", "活跃会话数，按 Persona")}
+          icon={<UserIcon size={16} aria-hidden />}
+          action={totalAction(sessionsTotal)}
+          isLoading={isLoading}
+          error={errors.sessionsByPersona}
+          isEmpty={!isLoading && (sessionsByPersona?.length ?? 0) === 0}
+        >
+          <RankedBarList
+            items={sessionsByPersona}
+            total={sessionsTotal}
+            onSelect={onPersonaSliceClick}
+          />
+        </ChartCard>
+        <ChartCard
+          title={t("analytics.dimensions.modelTokenTop5", "模型 Token")}
+          subtitle={t("analytics.tokens.byModelHint", "每个模型的总 token 数")}
+          icon={<Cpu size={16} aria-hidden />}
+          action={totalAction(tokensTotal)}
+          isLoading={isLoading}
+          error={errors.tokensByModel}
+          isEmpty={!isLoading && (tokensByModel?.length ?? 0) === 0}
+        >
+          {tokensByModelPartial?.partial ? (
+            <p className="mb-2 rounded-lg bg-amber-50 px-2 py-1.5 text-[11px] text-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+              {t(
+                "analytics.tokens.partial",
+                "部分日期的模型明细正在后台补齐，稍后刷新即可完整显示。",
+              )}
+            </p>
+          ) : null}
+          <RankedBarList
+            items={tokensByModel}
+            total={tokensTotal}
+            onSelect={onModelSliceClick}
+          />
+        </ChartCard>
       </section>
 
       {/* Feedback overview */}
-      <section className="mt-4">
-        <h2 className="mb-2 text-sm font-semibold tracking-wide text-stone-600 uppercase dark:text-stone-400">
-          {t("analytics.feedback.title", "反馈")}
-        </h2>
-        {errors.feedbackSummary ? (
-          <p
-            role="alert"
-            className="mb-2 rounded-lg bg-red-50 p-2 text-xs text-red-700 dark:bg-red-900/30 dark:text-red-200"
-          >
-            {errors.feedbackSummary}
-          </p>
-        ) : null}
-        <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatsCard
-            icon={ThumbsUp}
-            label={t("analytics.feedback.total", "反馈总数")}
-            value={feedbackSummary ? formatNumber(feedbackSummary.total) : "—"}
+      <section className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <ChartCard
+          title={t("analytics.feedback.title", "反馈")}
+          icon={<ThumbsUp size={16} aria-hidden />}
+          isLoading={isLoading}
+          error={errors.feedbackSummary}
+          isEmpty={!isLoading && !feedbackSummary}
+        >
+          {feedbackSummary ? (
+            <div className="flex h-full flex-col justify-center gap-4">
+              <div>
+                <p className="text-xs text-stone-500 dark:text-stone-400">
+                  {t("analytics.feedback.upRate", "好评率")}
+                </p>
+                <p className="text-3xl font-bold tabular-nums text-stone-900 dark:text-stone-100">
+                  {feedbackSummary.total > 0
+                    ? `${feedbackSummary.up_percentage.toFixed(1)}%`
+                    : "—"}
+                </p>
+              </div>
+              {feedbackSummary.total > 0 ? (
+                <div className="flex h-1.5 w-full gap-0.5 overflow-hidden rounded-full">
+                  {feedbackSummary.up_count > 0 ? (
+                    <div
+                      className="h-full rounded-full"
+                      style={{ flexGrow: feedbackSummary.up_count, backgroundColor: STATUS_COLOR.good }}
+                    />
+                  ) : null}
+                  {feedbackSummary.down_count > 0 ? (
+                    <div
+                      className="h-full rounded-full"
+                      style={{ flexGrow: feedbackSummary.down_count, backgroundColor: STATUS_COLOR.critical }}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
+              <dl className="grid grid-cols-3 gap-2 text-xs">
+                <div>
+                  <dt className="text-stone-500 dark:text-stone-400">
+                    {t("analytics.feedback.total", "反馈总数")}
+                  </dt>
+                  <dd className="mt-0.5 text-sm font-semibold tabular-nums text-stone-900 dark:text-stone-100">
+                    {formatNumber(feedbackSummary.total)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="flex items-center gap-1 text-stone-500 dark:text-stone-400">
+                    <ThumbsUp size={11} aria-hidden />
+                    {t("analytics.feedback.upCount", "好评数")}
+                  </dt>
+                  <dd className="mt-0.5 text-sm font-semibold tabular-nums text-stone-900 dark:text-stone-100">
+                    {formatNumber(feedbackSummary.up_count)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="flex items-center gap-1 text-stone-500 dark:text-stone-400">
+                    <ThumbsDown size={11} aria-hidden />
+                    {t("analytics.feedback.downCount", "差评数")}
+                  </dt>
+                  <dd className="mt-0.5 text-sm font-semibold tabular-nums text-stone-900 dark:text-stone-100">
+                    {formatNumber(feedbackSummary.down_count)}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          ) : null}
+        </ChartCard>
+        <ChartCard
+          title={t("analytics.feedback.byPreset", "按 Persona 分反馈")}
+          subtitle={t("analytics.feedback.byPresetHint", "按 Persona 统计好评/差评")}
+          icon={<UserIcon size={16} aria-hidden />}
+          isLoading={isLoading}
+          error={errors.feedbackByPreset}
+          isEmpty={!isLoading && (feedbackByPreset?.length ?? 0) === 0}
+        >
+          <FeedbackPresetBars data={feedbackByPreset} onSelect={onFeedbackPresetClick} />
+        </ChartCard>
+        <ChartCard
+          title={t("analytics.feedback.reasonDistribution", "点踩原因分布")}
+          subtitle={t("analytics.feedback.reasonDistributionHint", "差评的 reason 分布")}
+          icon={<MessageSquareWarning size={16} aria-hidden />}
+          isLoading={isLoading}
+          error={errors.feedbackSummary}
+          isEmpty={
+            !isLoading && (feedbackSummary?.reason_distribution.length ?? 0) === 0
+          }
+          emptyText={t("analytics.feedback.noReasons", "暂无点踩原因数据")}
+        >
+          <RankedBarList
+            items={feedbackSummary?.reason_distribution ?? []}
+            total={feedbackSummary?.down_count ?? null}
+            limit={6}
+            labelFor={(item) => t(`feedback.reason.${item.label}`, item.label)}
+            onSelect={onReasonClick}
           />
-          <StatsCard
-            icon={ThumbsUp}
-            label={t("analytics.feedback.upCount", "好评数")}
-            value={feedbackSummary ? formatNumber(feedbackSummary.up_count) : "—"}
-          />
-          <StatsCard
-            icon={ThumbsDown}
-            label={t("analytics.feedback.downCount", "差评数")}
-            value={feedbackSummary ? formatNumber(feedbackSummary.down_count) : "—"}
-          />
-          <StatsCard
-            icon={ThumbsUp}
-            label={t("analytics.feedback.upRate", "好评率")}
-            value={
-              feedbackSummary
-                ? `${feedbackSummary.up_percentage.toFixed(1)}%`
-                : "—"
-            }
-          />
-        </div>
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <ChartCard
-            title={t("analytics.feedback.byPreset", "按角色分反馈")}
-            subtitle={t(
-              "analytics.feedback.byPresetHint",
-              "按角色智能体统计好评/差评",
-            )}
-            icon={<UserIcon size={16} aria-hidden />}
-            isLoading={isLoading}
-            error={errors.feedbackByPreset}
-            isEmpty={!isLoading && (feedbackByPreset?.length ?? 0) === 0}
-          >
-            <FeedbackByPresetBar data={feedbackByPreset} onSliceClick={onFeedbackPresetClick} />
-          </ChartCard>
-          <ChartCard
-            title={t("analytics.feedback.reasonDistribution", "点踩原因分布")}
-            subtitle={t(
-              "analytics.feedback.reasonDistributionHint",
-              "差评的 reason 分布",
-            )}
-            icon={<ThumbsDown size={16} aria-hidden />}
-            isLoading={isLoading}
-            error={errors.feedbackSummary}
-            isEmpty={
-              !isLoading &&
-              (feedbackSummary?.reason_distribution.length ?? 0) === 0
-            }
-          >
-            <ReasonBar
-              data={feedbackSummary?.reason_distribution ?? []}
-              onSliceClick={onReasonClick}
-            />
-          </ChartCard>
-        </div>
+        </ChartCard>
       </section>
     </>
   );

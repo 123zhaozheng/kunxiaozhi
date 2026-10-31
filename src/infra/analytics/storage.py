@@ -7,18 +7,21 @@ Analytics Storage - 聚合统计查询
 from __future__ import annotations
 
 import asyncio
+import time
 from datetime import datetime, timezone
 from typing import Any
 
 from src.infra.analytics.date_range import (
     _BUCKET_TZ,
-    CST,
     previous_range,
     range_to_date_strings,
     resolve_range,
 )
-from src.infra.analytics.snapshot import SNAPSHOT_COLLECTION_NAME, read_or_freeze
-from src.infra.analytics.usage_hourly import get_usage_hourly_collection
+from src.infra.analytics.snapshot import (
+    SNAPSHOT_COLLECTION_NAME,
+    TODAY_SNAPSHOT_COLLECTION_NAME,
+    read_or_freeze,
+)
 from src.infra.analytics.usage_query import (
     UsageFilters,
     new_sessions_match,
@@ -47,6 +50,7 @@ from src.kernel.schemas.analytics import (
     UsageByPersonaItem,
     UsageByUserItem,
     UsageByUserResponse,
+    UsageHourPoint,
     UsageInsightsFastestGrowingPersona,
     UsageInsightsPeak,
     UsageInsightsResponse,
@@ -60,10 +64,16 @@ logger = get_logger(__name__)
 
 _TOKEN_USAGE_EVENT = "token:usage"
 _TOP_PRESET_LIMIT = 10
+# Per-process cache of snapshot reads: one dashboard load fires ~10 requests
+# that all need the same aggregate, so they share one computation.
+_USAGE_CACHE_TTL_TODAY_SECONDS = 30.0
+_USAGE_CACHE_TTL_HISTORICAL_SECONDS = 600.0
+_USAGE_CACHE_MAX_ENTRIES = 256
+_MODEL_CONFIGS_COLLECTION = "model_configs"
 
 
 class _TokensByModelResult(list[ByLabelItem]):
-    """Legacy-compatible list carrying hourly model-dimension metadata."""
+    """Legacy-compatible list carrying model-dimension completeness metadata."""
 
     def __init__(
         self,
@@ -75,37 +85,6 @@ class _TokensByModelResult(list[ByLabelItem]):
         super().__init__(items)
         self.partial = partial
         self.model_data_since = model_data_since
-
-
-async def _aggregate_documents(
-    collection: Any,
-    pipeline: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Collect an async Motor cursor while remaining easy to fake in tests."""
-    cursor = collection.aggregate(pipeline)
-    if hasattr(cursor, "__await__"):
-        cursor = await cursor
-    if isinstance(cursor, list):
-        return cursor
-    if hasattr(cursor, "to_list"):
-        documents = cursor.to_list(length=None)
-        if hasattr(documents, "__await__"):
-            documents = await documents
-        return list(documents)
-    return [document async for document in cursor]
-
-
-def _bucket_date(value: Any) -> str | None:
-    """Format an hourly bucket using the analytics calendar timezone."""
-    if isinstance(value, datetime):
-        if value.tzinfo is None:
-            return value.date().isoformat()
-        return value.astimezone(CST).date().isoformat()
-    if isinstance(value, str) and value:
-        return value[:10]
-    if hasattr(value, "isoformat"):
-        return value.isoformat()[:10]
-    return None
 
 
 def _model_label(data: dict[str, Any]) -> str:
@@ -214,6 +193,10 @@ class AnalyticsStorage:
         self._snapshot = None
         self._activity = None
         self._activity_storage = None
+        self._today_snapshot = None
+        self._model_configs = None
+        self._usage_cache: dict[tuple[Any, ...], tuple[float, dict[str, Any]]] = {}
+        self._usage_inflight: dict[tuple[Any, ...], asyncio.Future[dict[str, Any]]] = {}
 
     # ── Collection accessors ────────────────────────────────────────
 
@@ -267,6 +250,20 @@ class AnalyticsStorage:
             db = get_mongo_client()[settings.MONGODB_DB]
             self._snapshot = db[SNAPSHOT_COLLECTION_NAME]
         return self._snapshot
+
+    @property
+    def today_snapshot(self):
+        if self._today_snapshot is None:
+            db = get_mongo_client()[settings.MONGODB_DB]
+            self._today_snapshot = db[TODAY_SNAPSHOT_COLLECTION_NAME]
+        return self._today_snapshot
+
+    @property
+    def model_configs(self):
+        if self._model_configs is None:
+            db = get_mongo_client()[settings.MONGODB_DB]
+            self._model_configs = db[_MODEL_CONFIGS_COLLECTION]
+        return self._model_configs
 
     @property
     def activity(self):
@@ -339,6 +336,11 @@ class AnalyticsStorage:
             )
             await self.snapshot.create_index(
                 [("date", 1), ("agent_id", 1)], background=True
+            )
+            await self.today_snapshot.create_index(
+                [("date", 1), ("user_id", 1), ("persona_preset_id", 1), ("agent_id", 1)],
+                unique=True,
+                background=True,
             )
             # S2: 用户日活跃记录索引
             await self.activity.create_index(
@@ -475,112 +477,77 @@ class AnalyticsStorage:
             total_sessions=total_sessions,
         )
 
-    async def _get_tokens_by_model_hourly(
-        self,
-        start: datetime,
-        end: datetime,
-    ) -> _TokensByModelResult | None:
-        """Read model totals from hourly aggregates, or signal unavailable data."""
-        collection = get_usage_hourly_collection()
-        bucket_match = {"bucket": {"$gte": start, "$lt": end}}
-        availability = await _aggregate_documents(
-            collection,
-            [{"$match": bucket_match}, {"$limit": 1}, {"$project": {"_id": 1}}],
-        )
-        if not availability:
-            return None
-        unknown_model_rows = await _aggregate_documents(
-            collection,
-            [
-                {"$match": bucket_match},
-                {"$match": {"model": None}},
-                {"$limit": 1},
-                {"$project": {"_id": 1}},
-            ],
-        )
-
-        model_pipeline: list[dict[str, Any]] = [
-            {"$match": bucket_match},
-            {"$match": {"model": {"$ne": None}}},
-            {
-                "$group": {
-                    "_id": "$model",
-                    "value": {"$sum": "$tokens"},
-                }
-            },
-            {"$sort": {"value": -1}},
-            {"$limit": 50},
-            {"$project": {"_id": 0, "label": "$_id", "value": 1}},
-        ]
-        model_documents = await _aggregate_documents(collection, model_pipeline)
-        if not model_documents:
-            # Only snapshot-backfilled rows (model=None) cover this range, so the
-            # pre-aggregate cannot answer a per-model question. Returning [] here
-            # would render an empty chart while the data exists in traces, which
-            # is worse than being slow -- fall back to the raw path instead.
-            return None
-
-        live_documents = await _aggregate_documents(
-            collection,
-            [
-                {"$match": {"source": "live"}},
-                {"$sort": {"bucket": 1}},
-                {"$limit": 1},
-                {"$project": {"_id": 0, "bucket": 1}},
-            ],
-        )
-        model_data_since = (
-            _bucket_date(live_documents[0].get("bucket")) if live_documents else None
-        )
-        requested_start = start.astimezone(CST).date()
-        live_start = (
-            datetime.fromisoformat(model_data_since).date() if model_data_since else None
-        )
-        partial = (
-            bool(unknown_model_rows) or live_start is None or requested_start < live_start
-        )
-
-        items = [
-            ByLabelItem(
-                label=str(document.get("label", document.get("_id"))),
-                value=float(document.get("value", 0) or 0),
-            )
-            for document in model_documents
-            if document.get("label", document.get("_id")) is not None
-        ]
-        return _TokensByModelResult(
-            items,
-            partial=partial,
-            model_data_since=model_data_since,
-        )
-
     async def get_tokens_by_model(
         self,
         start: datetime,
         end: datetime,
         filters: UsageFilters | None = None,
     ) -> list[ByLabelItem]:
-        """按模型聚合 token 消耗。"""
+        """按模型聚合 token 消耗（读快照的按模型拆分，label 映射为模型显示名）。
+
+        ``partial`` 表示区间内有日期的按模型拆分尚未由后台补齐。
+        """
         s = _ensure_datetime(start)
         e = _ensure_datetime(end)
-        # Filtered requests retain the legacy path because hourly rows have no role join.
-        if filters is None and bool(getattr(settings, "ANALYTICS_USAGE_HOURLY_ENABLED", False)):
-            try:
-                hourly_result = await self._get_tokens_by_model_hourly(s, e)
-            except Exception as ex:
-                logger.warning(
-                    "[Analytics] Hourly token aggregation failed, falling back to traces: %s",
-                    ex,
-                )
-            else:
-                if hourly_result is not None:
-                    return hourly_result
+        usage_filters = filters or UsageFilters(start=s, end=e)
+        try:
+            result = await self._read_usage(usage_filters)
+            if result.get("snapshot_complete", True) is False:
+                raise RuntimeError("analytics snapshot is incomplete")
+            totals = [
+                (str(item.get("model") or "unknown"), int(item.get("tokens", 0) or 0))
+                for item in result.get("by_model", []) or []
+            ][:50]
+            partial = not bool(result.get("extras_complete", False))
+        except Exception as ex:
+            logger.warning("tokens by model from snapshot failed: %s", ex)
+            totals = await self._get_tokens_by_model_realtime(s, e, filters)
+            partial = False
+
+        labels = await self._model_display_names([model for model, _ in totals])
+        items = [
+            ByLabelItem(label=labels.get(model, model), value=float(tokens), id=model)
+            for model, tokens in totals
+        ]
+        return _TokensByModelResult(items, partial=partial, model_data_since=None)
+
+    async def _model_display_names(self, models: list[str]) -> dict[str, str]:
+        """Map raw model ids (config id or model value) to their display label."""
+        wanted = [model for model in models if model and model != "unknown"]
+        if not wanted:
+            return {}
+        names: dict[str, str] = {}
+        try:
+            cursor = self.model_configs.find(
+                {"$or": [{"id": {"$in": wanted}}, {"value": {"$in": wanted}}]},
+                {"_id": 0, "id": 1, "value": 1, "label": 1},
+            )
+            async for doc in cursor:
+                label = str(doc.get("label") or doc.get("value") or "")
+                if not label:
+                    continue
+                if doc.get("value") in wanted:
+                    names.setdefault(str(doc["value"]), label)
+                if doc.get("id") in wanted:
+                    # A config id is exact; it wins over a shared value match.
+                    names[str(doc["id"])] = label
+        except Exception as ex:
+            logger.warning("model display name lookup failed: %s", ex)
+        return names
+
+    async def _get_tokens_by_model_realtime(
+        self,
+        start: datetime,
+        end: datetime,
+        filters: UsageFilters | None,
+    ) -> list[tuple[str, int]]:
+        """Fallback when the snapshot read fails: aggregate token events live."""
         if filters is None:
             pipeline: list[dict[str, Any]] = [
                 {
                     "$match": {
                         "events.event_type": _TOKEN_USAGE_EVENT,
-                        "started_at": {"$gte": s, "$lt": e},
+                        "started_at": {"$gte": start, "$lt": end},
                     }
                 },
             ]
@@ -609,13 +576,9 @@ class AnalyticsStorage:
                 {"$project": {"_id": 0, "label": "$_id", "value": 1}},
             ]
         )
-        out: list[ByLabelItem] = []
+        out: list[tuple[str, int]] = []
         async for doc in self.traces.aggregate(pipeline):
-            out.append(
-                ByLabelItem(
-                    label=str(doc.get("label", "unknown")), value=float(doc.get("value", 0))
-                )
-            )
+            out.append((str(doc.get("label", "unknown")), int(doc.get("value", 0) or 0)))
         return out
 
     async def get_sessions_by_agent(
@@ -648,7 +611,7 @@ class AnalyticsStorage:
     ) -> list[ByLabelItem]:
         """Top-N active sessions for one snapshot dimension."""
         try:
-            result = await read_or_freeze(filters, storage=self)
+            result = await self._read_usage(filters)
             rows = list(result.get(dimension, []) or [])
         except Exception as ex:
             logger.warning("sessions by %s from snapshot failed: %s", key, ex)
@@ -1461,6 +1424,58 @@ class AnalyticsStorage:
             role_user_ids=role_user_ids,
         )
 
+    async def _read_usage(self, filters: UsageFilters) -> dict[str, Any]:
+        """Snapshot read shared by every usage endpoint (single flight + TTL cache).
+
+        Concurrent requests for the same filters await one computation; the
+        result is cached briefly when the range includes today (refreshed by
+        the background worker) and longer for purely historical ranges.
+        Failures are never cached.
+        """
+        key = (
+            filters.start,
+            filters.end,
+            filters.persona_preset_id,
+            filters.agent_id,
+            tuple(filters.role_user_ids) if filters.role_user_ids is not None else None,
+        )
+        now = time.monotonic()
+        cached = self._usage_cache.get(key)
+        if cached and cached[0] > now:
+            return cached[1]
+        inflight = self._usage_inflight.get(key)
+        if inflight is not None:
+            return await asyncio.shield(inflight)
+
+        future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
+        self._usage_inflight[key] = future
+        try:
+            result = await read_or_freeze(filters, storage=self)
+        except BaseException as exc:
+            future.set_exception(exc)
+            # Mark retrieved so an unobserved failure does not log a warning.
+            future.exception()
+            raise
+        else:
+            future.set_result(result)
+            if result.get("snapshot_complete", True) is not False:
+                includes_today = filters.end > datetime.now(timezone.utc)
+                ttl = (
+                    _USAGE_CACHE_TTL_TODAY_SECONDS
+                    if includes_today
+                    else _USAGE_CACHE_TTL_HISTORICAL_SECONDS
+                )
+                if len(self._usage_cache) >= _USAGE_CACHE_MAX_ENTRIES:
+                    self._usage_cache = {
+                        k: v for k, v in self._usage_cache.items() if v[0] > now
+                    }
+                    if len(self._usage_cache) >= _USAGE_CACHE_MAX_ENTRIES:
+                        self._usage_cache.clear()
+                self._usage_cache[key] = (now + ttl, result)
+            return result
+        finally:
+            self._usage_inflight.pop(key, None)
+
     @staticmethod
     def _active_set_expr(field: str) -> dict[str, Any]:
         """仅把发过用户消息的 trace 计入去重集合；其余产出 null，Python 侧过滤。"""
@@ -1478,7 +1493,7 @@ class AnalyticsStorage:
         """
         numbers: dict[str, int]
         try:
-            result = await read_or_freeze(filters, storage=self)
+            result = await self._read_usage(filters)
 
             total = result.get("total", {})
             numbers = {
@@ -1554,6 +1569,11 @@ class AnalyticsStorage:
             role_user_ids=filters.role_user_ids,
         )
         prev_numbers = await self._usage_summary_numbers(prev_filters)
+        try:
+            # Cached by _read_usage, so this costs no extra aggregation.
+            data_updated_at = (await self._read_usage(filters)).get("refreshed_at")
+        except Exception:
+            data_updated_at = None
 
         return UsageSummaryResponse(
             active_users=numbers["active_users"],
@@ -1563,12 +1583,13 @@ class AnalyticsStorage:
             user_messages=numbers["user_messages"],
             total_tokens=numbers["total_tokens"],
             previous=UsageSummaryPrevious(**prev_numbers),
+            data_updated_at=data_updated_at,
         )
 
     async def get_usage_trend(self, filters: UsageFilters) -> list[UsageTrendPoint]:
         """使用情况按天趋势。新建会话来自 sessions，其余来自 usage facts。"""
         try:
-            result = await read_or_freeze(filters, storage=self)
+            result = await self._read_usage(filters)
             trend_data = result.get("trend", [])
             return [
                 UsageTrendPoint(
@@ -1584,6 +1605,22 @@ class AnalyticsStorage:
             logger.warning("get_usage_trend from snapshot failed: %s", ex)
             # Fallback to real-time computation
             return await self._get_usage_trend_realtime(filters)
+
+    async def get_usage_hourly(self, filters: UsageFilters) -> list[UsageHourPoint]:
+        """单日区间的 24 小时用户消息 / Token 分布；多日区间或快照不可用时为空。"""
+        try:
+            result = await self._read_usage(filters)
+        except Exception as ex:
+            logger.warning("get_usage_hourly from snapshot failed: %s", ex)
+            return []
+        return [
+            UsageHourPoint(
+                hour=int(point.get("hour", 0)),
+                user_messages=int(point.get("user_messages", 0) or 0),
+                total_tokens=int(point.get("tokens", 0) or 0),
+            )
+            for point in result.get("by_hour", []) or []
+        ]
 
     async def _get_usage_trend_realtime(self, filters: UsageFilters) -> list[UsageTrendPoint]:
         """Real-time fallback for get_usage_trend."""
@@ -1647,7 +1684,7 @@ class AnalyticsStorage:
     ) -> list[UsageByPersonaItem]:
         """使用情况按 Persona 分组。名称缺失时回查 persona_presets。"""
         try:
-            result = await read_or_freeze(filters, storage=self)
+            result = await self._read_usage(filters)
             raw_items = result.get("by_persona", [])
 
             # Build names lookup (same pattern as real-time path)
@@ -1826,7 +1863,7 @@ class AnalyticsStorage:
     ) -> UsageByUserResponse:
         """使用明细，行粒度为「用户 × Persona」，仅含区间内发过消息的用户。"""
         try:
-            result = await read_or_freeze(filters, storage=self)
+            result = await self._read_usage(filters)
             if result.get("snapshot_complete", True) is False:
                 raise RuntimeError("analytics snapshot is incomplete")
             raw_items = list(result.get("by_user_persona", []) or [])
@@ -1951,87 +1988,39 @@ class AnalyticsStorage:
         )
 
     async def _insights_peak(self, filters: UsageFilters) -> UsageInsightsPeak | None:
-        """峰值时段：只统计有用户消息的 trace，按 UTC+8 星期×小时分桶。
+        """峰值时段：用户消息按 UTC+8 星期×小时分桶后取最大桶。
 
-        峰值按用户消息自身的事件时间归属，而不是 trace 的开始时间。
-        无消息时返回 None。
+        小时归属来自快照行的 ``hour_messages``（按 trace 开始时间分桶，
+        与日维度同一时间归属）。无消息时返回 None。
         """
-        pipeline = usage_facts_stages(filters)[:-1] + [
-            {"$match": {"user_messages": {"$gt": 0}}},
-            {"$unwind": "$events"},
-            {
-                "$match": {
-                    "events.event_type": "user:message",
-                    "events.timestamp": {
-                        "$gte": filters.start,
-                        "$lt": filters.end,
-                    },
-                }
-            },
-            {
-                "$group": {
-                    "_id": {
-                        "weekday": {
-                            "$subtract": [
-                                {
-                                    "$dayOfWeek": {
-                                        "date": "$events.timestamp",
-                                        "timezone": _BUCKET_TZ,
-                                    }
-                                },
-                                1,
-                            ]
-                        },
-                        "hour": {
-                            "$hour": {
-                                "date": "$events.timestamp",
-                                "timezone": _BUCKET_TZ,
-                            }
-                        },
-                    },
-                    "user_messages": {"$sum": 1},
-                }
-            },
-            {"$sort": {"user_messages": -1}},
-            {"$limit": 1},
-        ]
-        try:
-            docs = await self.traces.aggregate(pipeline).to_list(length=1)
-        except Exception as ex:
-            logger.warning("_insights_peak aggregate failed: %s", ex)
+        result = await self._read_usage(filters)
+        peak = result.get("peak")
+        if not peak:
             return None
-        if not docs:
-            return None
-        doc = docs[0]
-        key = doc.get("_id") or {}
         return UsageInsightsPeak(
-            weekday=int(key.get("weekday", 0) or 0),
-            hour=int(key.get("hour", 0) or 0),
-            user_messages=int(doc.get("user_messages", 0) or 0),
+            weekday=int(peak.get("weekday", 0) or 0),
+            hour=int(peak.get("hour", 0) or 0),
+            user_messages=int(peak.get("user_messages", 0) or 0),
         )
 
     async def _insights_top_token_users(
         self, filters: UsageFilters, limit: int = 3
     ) -> list[UsageInsightsTopTokenUser]:
         """Token 消耗 Top N 用户（默认 3），补齐用户名/显示名。"""
-        pipeline = usage_facts_stages(filters) + [
-            {"$match": {"user_id": {"$nin": [None, ""]}}},
-            {"$group": {"_id": "$user_id", "tokens": {"$sum": "$tokens"}}},
-            {"$match": {"tokens": {"$gt": 0}}},
-            {"$sort": {"tokens": -1}},
-            {"$limit": limit},
-        ]
-        try:
-            docs = await self.traces.aggregate(pipeline).to_list(length=limit)
-        except Exception as ex:
-            logger.warning("_insights_top_token_users aggregate failed: %s", ex)
-            return []
-        if not docs:
+        result = await self._read_usage(filters)
+        ranked = sorted(
+            (
+                (str(item.get("user_id")), int(item.get("tokens", 0) or 0))
+                for item in result.get("by_user", []) or []
+                if item.get("user_id") and int(item.get("tokens", 0) or 0) > 0
+            ),
+            key=lambda pair: (-pair[1], pair[0]),
+        )[:limit]
+        if not ranked:
             return []
 
-        user_ids = [str(doc.get("_id")) for doc in docs if doc.get("_id")]
         user_meta: dict[str, dict[str, Any]] = {}
-        object_ids = _user_object_ids(user_ids)
+        object_ids = _user_object_ids([uid for uid, _ in ranked])
         if object_ids:
             try:
                 cursor = self.users.find(
@@ -2047,13 +2036,12 @@ class AnalyticsStorage:
 
         return [
             UsageInsightsTopTokenUser(
-                user_id=str(doc.get("_id")),
-                username=str((user_meta.get(str(doc.get("_id"))) or {}).get("username") or ""),
-                display_name=(user_meta.get(str(doc.get("_id"))) or {}).get("display_name"),
-                tokens=int(doc.get("tokens", 0) or 0),
+                user_id=uid,
+                username=str((user_meta.get(uid) or {}).get("username") or ""),
+                display_name=(user_meta.get(uid) or {}).get("display_name"),
+                tokens=tokens,
             )
-            for doc in docs
-            if doc.get("_id")
+            for uid, tokens in ranked
         ]
 
     async def _insights_fastest_growing_persona(
@@ -2129,6 +2117,23 @@ class AnalyticsStorage:
 
     async def get_active_users_by_day(self, filters: UsageFilters) -> list[TrendDataPoint]:
         """按天统计活跃用户（区间内发过消息的用户），与概览卡同源。"""
+        try:
+            result = await self._read_usage(filters)
+            if result.get("snapshot_complete", True) is not False:
+                return [
+                    TrendDataPoint(date=date, value=float(count))
+                    for date, count in sorted(
+                        (result.get("active_users_by_day") or {}).items()
+                    )
+                ]
+        except Exception as ex:
+            logger.warning("get_active_users_by_day from snapshot failed: %s", ex)
+        return await self._get_active_users_by_day_realtime(filters)
+
+    async def _get_active_users_by_day_realtime(
+        self, filters: UsageFilters
+    ) -> list[TrendDataPoint]:
+        """Fallback when the snapshot read is unavailable."""
         pipeline = usage_facts_stages(filters) + [
             {
                 "$group": {

@@ -1,16 +1,16 @@
 /**
- * Analytics consistency contract (PRD R3.1): donut center numbers and KPI
- * card numbers come from the same field.
+ * Analytics consistency contract (PRD R3.1): ranked-list shares and KPI card
+ * numbers come from the same field.
  *
  * Both `AnalyticsKpiRow` and `AnalyticsTopRow` must read their values from
  * the shared accessors in `analyticsKpi.ts`:
- *   - agent donut center   == sessions KPI card == kpiSessionsValue
- *   - persona donut center == sessions KPI card == kpiSessionsValue
- *   - model donut center   == total tokens card == kpiTotalTokensValue
+ *   - agent list share   == sessions KPI card == kpiSessionsValue
+ *   - persona list share == sessions KPI card == kpiSessionsValue
+ *   - model list share   == total tokens card == kpiTotalTokensValue
  *
  * Runtime assertions pin the accessors to the summary fields, and source
  * assertions pin both components to the shared accessors (no component may
- * re-derive the centers from slice sums or other fields).
+ * re-derive the denominators from row sums or other fields).
  *
  * Run: npx tsx --test src/components/panels/analytics/__tests__/analyticsConsistency.test.ts
  */
@@ -44,7 +44,7 @@ const summary: UsageSummaryResponse = {
   previous: null,
 };
 
-test("donut center accessors are pinned to the KPI summary fields", () => {
+test("share denominators are pinned to the KPI summary fields", () => {
   // Sessions KPI card and both session donut centers: active sessions.
   assert.equal(kpiSessionsValue(summary), summary.active_sessions);
   assert.equal(kpiSessionsValue(summary), 91);
@@ -81,31 +81,32 @@ test("first KPI card follows the PRD filter-dependent user metric", () => {
   assert.match(kpiRowSource, /isFiltered \? activeTrend\.map/);
 });
 
-test("both session donut centers use the sessions KPI accessor", () => {
+test("both session lists take shares against the sessions KPI accessor", () => {
   assert.match(topRowSource, /from "\.\/analyticsKpi"/);
-  // One shared value feeds both the agent and the persona donut holes.
-  assert.match(topRowSource, /const sessionsCenter = kpiSessionsValue\(summary\)/);
-  const centerUses = topRowSource.match(/centerValue=\{sessionsCenter\}/g) ?? [];
-  assert.equal(centerUses.length, 2, "agent + persona donuts share the center");
+  // One shared value is the denominator of both the agent and persona lists.
+  assert.match(topRowSource, /const sessionsTotal = kpiSessionsValue\(summary\)/);
+  const totalUses = topRowSource.match(/total=\{sessionsTotal\}/g) ?? [];
+  assert.equal(totalUses.length, 2, "agent + persona lists share the denominator");
 });
 
-test("model-token donut center uses the total-tokens KPI accessor", () => {
-  assert.match(topRowSource, /const tokensCenter = kpiTotalTokensValue\(summary\)/);
-  const centerUses = topRowSource.match(/centerValue=\{tokensCenter\}/g) ?? [];
-  assert.equal(centerUses.length, 1);
+test("model-token list takes shares against the total-tokens KPI accessor", () => {
+  assert.match(topRowSource, /const tokensTotal = kpiTotalTokensValue\(summary\)/);
+  const totalUses = topRowSource.match(/total=\{tokensTotal\}/g) ?? [];
+  assert.equal(totalUses.length, 1);
 });
 
-test("donut centers are never recomputed from slice values", () => {
-  // The centers must not be derived by summing the (Top5-truncated) slices.
-  assert.doesNotMatch(topRowSource, /centerValue=\{[^}]*reduce/);
-  assert.doesNotMatch(topRowSource, /centerValue=\{[^}]*sessionsByAgent/);
-  assert.doesNotMatch(topRowSource, /centerValue=\{[^}]*sessionsByPersona/);
-  assert.doesNotMatch(topRowSource, /centerValue=\{[^}]*tokensByModel/);
+test("shares are never recomputed from the visible rows", () => {
+  // A truncated list summed into its own denominator would inflate shares.
+  assert.doesNotMatch(topRowSource, /total=\{[^}]*reduce/);
+  assert.doesNotMatch(topRowSource, /total=\{[^}]*sessionsByAgent/);
+  assert.doesNotMatch(topRowSource, /total=\{[^}]*sessionsByPersona/);
+  assert.doesNotMatch(topRowSource, /total=\{[^}]*tokensByModel/);
 });
 
-test("donuts render the Top5 slices", () => {
-  assert.match(primitivesSource, /slice\(0, 5\)/);
-  assert.match(topRowSource, /DonutBlock/);
-  // Legacy full pies are gone from the top row.
-  assert.doesNotMatch(topRowSource, /PieBlock/);
+test("dimension breakdowns are ranked bars, not donuts or dual axes", () => {
+  assert.match(topRowSource, /RankedBarList/);
+  assert.doesNotMatch(topRowSource, /DonutBlock|PieBlock/);
+  assert.doesNotMatch(primitivesSource, /PieChart|<Pie[\s>]/);
+  // One axis only: no right-hand y-axis anywhere on the board.
+  assert.doesNotMatch(primitivesSource, /orientation="right"/);
 });

@@ -17,6 +17,7 @@ import test from "node:test";
 import { buildUsageQuery } from "../../../../services/api/analyticsQuery";
 import {
   addDaysString,
+  daysInRange,
   effectiveRangeFor,
   formatRangeLabel,
   isValidDateString,
@@ -249,4 +250,15 @@ test("filter bar exposes persona and agent controls to the parent", () => {
   // Preset group is shared with PresetAnalyticsModal (single implementation).
   assert.match(presetModalSource, /AnalyticsRangePresetPicker/);
   assert.match(filterBarSource, /export function AnalyticsRangePresetPicker/);
+});
+
+test("daysInRange lists every calendar day so charts plot gaps as zero", () => {
+  assert.deepEqual(daysInRange({ start: "2026-02-27", end: "2026-03-02" }), [
+    "2026-02-27",
+    "2026-02-28",
+    "2026-03-01",
+    "2026-03-02",
+  ]);
+  assert.deepEqual(daysInRange({ start: "2026-08-01", end: "2026-08-01" }), ["2026-08-01"]);
+  assert.equal(daysInRange({ start: "2025-01-01", end: "2026-12-31" }).length, 366);
 });

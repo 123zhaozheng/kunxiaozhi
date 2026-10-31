@@ -107,8 +107,11 @@ async def test_filtered_ring_pipelines_apply_filters_and_persona_fallback(monkey
 
     storage = AnalyticsStorage()
     traces = MagicMock()
-    traces.aggregate.return_value = _Cursor([{"label": "model-a", "value": 20}])
+    traces.aggregate.side_effect = AssertionError("dashboard reads must not scan traces")
     storage._traces = traces
+    model_configs = MagicMock()
+    model_configs.find.return_value = _Cursor([])
+    storage._model_configs = model_configs
     storage._preset_names = AsyncMock(return_value={})
     filters = UsageFilters(
         start=datetime(2026, 8, 1, tzinfo=timezone.utc),
@@ -131,6 +134,8 @@ async def test_filtered_ring_pipelines_apply_filters_and_persona_fallback(monkey
                     "active_sessions": 2,
                 }
             ],
+            "by_model": [{"model": "model-a", "tokens": 20}],
+            "extras_complete": True,
         }
 
     monkeypatch.setattr(storage_module, "read_or_freeze", fake_read_or_freeze)
@@ -147,16 +152,17 @@ async def test_filtered_ring_pipelines_apply_filters_and_persona_fallback(monkey
     )
     assert [(i.label, i.id) for i in persona_items] == [("A", "persona-a")]
 
-    assert len(seen) == 2
-    for received in seen:
-        assert received.persona_preset_id == "persona-a"
-        assert received.agent_id == "agent-a"
-        assert received.role_user_ids == ["user-1"]
+    # Every ring shares one cached filtered snapshot read.
+    assert len(seen) == 1
+    received = seen[0]
+    assert received.persona_preset_id == "persona-a"
+    assert received.agent_id == "agent-a"
+    assert received.role_user_ids == ["user-1"]
 
-    await storage.get_tokens_by_model(filters.start, filters.end, filters=filters)
-    token_pipeline = traces.aggregate.call_args.args[0]
-    assert token_pipeline[0]["$match"]["agent_id"] == "agent-a"
-    assert {"$match": {"persona_preset_id": "persona-a"}} in token_pipeline
+    models = await storage.get_tokens_by_model(filters.start, filters.end, filters=filters)
+    assert [(i.label, i.id, i.value) for i in models] == [("model-a", "model-a", 20.0)]
+    assert getattr(models, "partial") is False
+    assert len(seen) == 1
 
 
 @pytest.mark.asyncio
@@ -182,54 +188,62 @@ async def test_role_members_are_loaded_directly_from_users() -> None:
 
 
 @pytest.mark.asyncio
-async def test_peak_pipeline_buckets_user_message_event_timestamp() -> None:
-    storage = AnalyticsStorage()
-    traces = MagicMock()
-    traces.aggregate.return_value = _Cursor(
-        [{"_id": {"weekday": 2, "hour": 11}, "user_messages": 3}]
-    )
-    storage._traces = traces
-    filters = UsageFilters(
-        start=datetime(2026, 8, 1, tzinfo=timezone.utc),
-        end=datetime(2026, 8, 3, tzinfo=timezone.utc),
-    )
+async def test_day_rows_bucket_message_hours_by_event_timestamp() -> None:
+    """Peak/hourly ownership follows the user:message event time, not trace start."""
+    from src.infra.analytics.date_range import CST
+    from src.infra.analytics.snapshot import compute_day_rows
 
-    peak = await storage._insights_peak(filters)
+    storage = MagicMock()
+    hour_docs = [
+        {
+            "_id": {"user_id": "u1", "persona_preset_id": "p1", "agent_id": "fast", "hour": 9},
+            "user_messages": 3,
+            "tokens": 120,
+            "active_session_ids": ["s1"],
+            "last_active_at": datetime(2026, 8, 1, 1, tzinfo=timezone.utc),
+        }
+    ]
+    message_hour_docs = [
+        {"_id": {"user_id": "u1", "persona_preset_id": "p1", "agent_id": "fast", "hour": 10}, "user_messages": 3}
+    ]
+    model_docs = [
+        {"_id": {"user_id": "u1", "persona_preset_id": "p1", "agent_id": "fast", "model": "m1"}, "tokens": 120}
+    ]
+    storage.traces.aggregate.side_effect = [
+        _Cursor(hour_docs),
+        _Cursor(message_hour_docs),
+        _Cursor(model_docs),
+    ]
+    storage.sessions.aggregate.return_value = _Cursor([])
 
-    assert peak is not None
-    assert peak.hour == 11
-    pipeline = traces.aggregate.call_args.args[0]
-    assert {"$unwind": "$events"} in pipeline
-    peak_match = next(stage["$match"] for stage in pipeline if "$match" in stage and "events.timestamp" in stage["$match"])
-    assert peak_match["events.event_type"] == "user:message"
-    assert peak_match["events.timestamp"] == {"$gte": filters.start, "$lt": filters.end}
-    group = next(stage["$group"] for stage in pipeline if "$group" in stage)
-    assert group["user_messages"] == {"$sum": 1}
-    assert group["_id"]["hour"]["$hour"]["date"] == "$events.timestamp"
+    rows = await compute_day_rows(storage, "2026-08-01")
 
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["user_messages"] == 3
+    assert row["tokens"] == 120
+    assert row["active_sessions"] == 1
+    assert row["hour_tokens"][9] == 120
+    assert row["hour_messages"][10] == 3 and sum(row["hour_messages"]) == 3
+    assert row["model_tokens"] == [{"model": "m1", "tokens": 120}]
 
-@pytest.mark.asyncio
-async def test_peak_pipeline_excludes_messages_outside_trace_range() -> None:
-    """A trace boundary must not decide message-event date ownership."""
-    storage = AnalyticsStorage()
-    traces = MagicMock()
-    traces.aggregate.return_value = _Cursor([])
-    storage._traces = traces
-    filters = UsageFilters(
-        start=datetime(2026, 8, 1, tzinfo=timezone.utc),
-        end=datetime(2026, 8, 3, tzinfo=timezone.utc),
-    )
-
-    await storage._insights_peak(filters)
-
-    pipeline = traces.aggregate.call_args.args[0]
+    message_pipeline = storage.traces.aggregate.call_args_list[1].args[0]
+    assert {"$unwind": "$events"} in message_pipeline
     event_match = next(
         stage["$match"]
-        for stage in pipeline
+        for stage in message_pipeline
         if "$match" in stage and "events.timestamp" in stage["$match"]
     )
-    assert event_match["events.timestamp"]["$gte"] == filters.start
-    assert event_match["events.timestamp"]["$lt"] == filters.end
+    day_start = datetime(2026, 8, 1, tzinfo=CST)
+    assert event_match["events.event_type"] == "user:message"
+    assert event_match["events.timestamp"]["$gte"] == day_start
+    assert (event_match["events.timestamp"]["$lt"] - day_start).days == 1
+    group = next(stage["$group"] for stage in message_pipeline if "$group" in stage)
+    assert group["user_messages"] == {"$sum": 1}
+    assert group["_id"]["hour"]["$hour"] == {
+        "date": "$events.timestamp",
+        "timezone": "Asia/Shanghai",
+    }
 
 
 @pytest.mark.asyncio

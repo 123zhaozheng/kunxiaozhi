@@ -150,6 +150,10 @@ class UsageSummaryResponse(BaseModel):
         default=None,
         description="紧邻的上一等长周期对比值（同筛选条件）",
     )
+    data_updated_at: Optional[datetime] = Field(
+        default=None,
+        description="区间含今天时，今日预聚合快照的刷新时间（UTC）",
+    )
 
 
 class UsageTrendPoint(BaseModel):
@@ -162,10 +166,21 @@ class UsageTrendPoint(BaseModel):
     total_tokens: int = Field(default=0, description="当日 token 消耗")
 
 
+class UsageHourPoint(BaseModel):
+    """单日区间的小时趋势点"""
+
+    hour: int = Field(..., description="小时 (0-23，Asia/Shanghai)")
+    user_messages: int = Field(default=0, description="该小时用户消息数")
+    total_tokens: int = Field(default=0, description="该小时 token 消耗")
+
+
 class UsageTrendResponse(BaseModel):
     """使用情况趋势响应"""
 
     items: list[UsageTrendPoint] = Field(default_factory=list, description="按天趋势点")
+    hourly: list[UsageHourPoint] = Field(
+        default_factory=list, description="单日区间的 24 小时趋势（多日区间为空）"
+    )
 
 
 class UsageByPersonaItem(BaseModel):

@@ -5,11 +5,14 @@
  * 八个一致性契约请求（summary / trend / insights / by-agent / by-persona /
  * by-model / by-user / export）共用同一批 `start`/`end`（纯 YYYY-MM-DD 日期
  * 字符串）与 `usageFilters`。日界由后端（UTC+8 半开区间）负责。
+ *
+ * 后端只读后台预聚合的快照（今日每分钟刷新），打开看板不触发实时计算；
+ * 默认「今日」。版面：「数据看板 / 使用明细」两个 tab，钻取替换内容区。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BarChart3 } from "lucide-react";
+import { BarChart3, LayoutDashboard, Table2 } from "lucide-react";
 import { PanelHeader } from "../../common/PanelHeader";
 import { analyticsApi } from "../../../services/api/analytics";
 import { personaPresetApi } from "../../../services/api/personaPreset";
@@ -21,6 +24,7 @@ import type {
   TrendDataPoint,
   UsageByUserItem,
   UsageFilters,
+  UsageHourPoint,
   UsageInsightsResponse,
   UsageInsightsTopTokenUser,
   UsageSummaryResponse,
@@ -44,8 +48,11 @@ import {
   type AnalyticsDateRange,
   type FixedRangePreset,
 } from "./analyticsDates";
+import { formatTime } from "../../../utils/datetime";
 
 const USAGE_PAGE_SIZE = 20;
+
+type AnalyticsTab = "dashboard" | "usage";
 
 interface AnalyticsSectionErrors {
   summary: string | null;
@@ -90,7 +97,8 @@ export function AnalyticsPanel() {
   const { t } = useTranslation();
 
   // ── Filter state (single source of truth for every request) ──────────
-  const [preset, setPreset] = useState<AnalyticsRangePreset>("7d");
+  const [preset, setPreset] = useState<AnalyticsRangePreset>("1d");
+  const [tab, setTab] = useState<AnalyticsTab>("dashboard");
   const [customRange, setCustomRange] = useState<AnalyticsDateRange | null>(null);
   const [personaPresetId, setPersonaPresetId] = useState("");
   const [agentId, setAgentId] = useState("");
@@ -121,6 +129,7 @@ export function AnalyticsPanel() {
   const [summary, setSummary] = useState<UsageSummaryResponse | null>(null);
   const [insights, setInsights] = useState<UsageInsightsResponse | null>(null);
   const [usageTrend, setUsageTrend] = useState<UsageTrendPoint[]>([]);
+  const [usageHourly, setUsageHourly] = useState<UsageHourPoint[]>([]);
   const [activeTrend, setActiveTrend] = useState<TrendDataPoint[]>([]);
   const [sessionsByAgent, setSessionsByAgent] = useState<ByLabelItem[]>([]);
   const [sessionsByPersona, setSessionsByPersona] = useState<ByLabelItem[]>([]);
@@ -143,7 +152,6 @@ export function AnalyticsPanel() {
   const [usageError, setUsageError] = useState<string | null>(null);
   const [isUsageExporting, setIsUsageExporting] = useState(false);
   const [usageExportError, setUsageExportError] = useState<string | null>(null);
-  const usageTableRef = useRef<HTMLDivElement | null>(null);
 
   const [personaOptions, setPersonaOptions] = useState<Array<{ id: string; name: string }>>([]);
 
@@ -244,6 +252,11 @@ export function AnalyticsPanel() {
         ? usageTrendResult.value.items
         : [],
     );
+    setUsageHourly(
+      usageTrendResult.status === "fulfilled" && Array.isArray(usageTrendResult.value?.hourly)
+        ? usageTrendResult.value.hourly
+        : [],
+    );
     setActiveTrend(
       activeTrendResult.status === "fulfilled" && Array.isArray(activeTrendResult.value?.items)
         ? activeTrendResult.value.items
@@ -301,8 +314,10 @@ export function AnalyticsPanel() {
     fetchData();
   }, [fetchData]);
 
-  // Usage detail (paginated) shares the exact same filter batch.
+  // Usage detail (paginated) shares the exact same filter batch; it is only
+  // fetched while its tab is open.
   useEffect(() => {
+    if (tab !== "usage") return;
     let cancelled = false;
     const { start, end } = effectiveRange;
     setUsageLoading(true);
@@ -330,7 +345,7 @@ export function AnalyticsPanel() {
     return () => {
       cancelled = true;
     };
-  }, [effectiveRange, usageFilters, usagePage, t]);
+  }, [effectiveRange, usageFilters, usagePage, tab, t]);
 
   useEffect(() => {
     setUsagePage(1);
@@ -355,22 +370,32 @@ export function AnalyticsPanel() {
   const handlePresetChange = useCallback((next: FixedRangePreset) => {
     setPreset(next);
     setCustomRange(null);
+    setDrilldown(null);
   }, []);
 
   const handleCustomRangeApply = useCallback((range: AnalyticsDateRange) => {
     setCustomRange(range);
     setPreset("custom");
+    setDrilldown(null);
   }, []);
 
-  // Insight "Token 大户" click → filter the usage detail by that user and reveal it.
+  const handleTabChange = useCallback((next: AnalyticsTab) => {
+    setTab(next);
+    setDrilldown(null);
+  }, []);
+
+  // Insight "Token 大户" click → open the usage detail tab filtered by that user.
   const handleInsightUserDrilldown = useCallback(
     (user: UsageInsightsTopTokenUser) => {
       setUsageSearch(user.username || user.user_id);
       setUsagePage(1);
-      usageTableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setTab("usage");
+      setDrilldown(null);
     },
     [],
   );
+
+  const dataUpdatedAt = summary?.data_updated_at ?? null;
 
   return (
     <div className="glass-shell flex h-full flex-col min-h-0">
@@ -399,82 +424,147 @@ export function AnalyticsPanel() {
         onAgentChange={setAgentId}
       />
 
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-3 sm:px-6">
+        <div
+          className="inline-flex items-center gap-1 rounded-lg bg-[var(--glass-bg-subtle)] p-1"
+          role="tablist"
+          aria-label={t("analytics.title")}
+        >
+          {(
+            [
+              { key: "dashboard", label: t("analytics.tabs.dashboard", "数据看板"), icon: LayoutDashboard },
+              { key: "usage", label: t("analytics.tabs.usage", "使用明细"), icon: Table2 },
+            ] as const
+          ).map(({ key, label, icon: Icon }) => {
+            const active = tab === key && !drilldown;
+            return (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => handleTabChange(key)}
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  active
+                    ? "bg-[var(--theme-bg-card)] text-stone-900 shadow-sm dark:text-stone-100"
+                    : "text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
+                }`}
+              >
+                <Icon size={15} aria-hidden />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+        {dataUpdatedAt ? (
+          <span
+            className="text-xs text-stone-500 dark:text-stone-400"
+            title={t(
+              "analytics.dataUpdatedHint",
+              "统计由后台每分钟预计算，打开看板无需等待实时计算",
+            )}
+          >
+            {t("analytics.dataUpdatedAt", {
+              time: formatTime(dataUpdatedAt),
+              defaultValue: "数据更新于 {{time}}",
+            })}
+          </span>
+        ) : null}
+      </div>
+
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 pb-6 sm:px-6">
-        {/* KPI row */}
-        <AnalyticsKpiRow
-          summary={summary}
-          usageTrend={usageTrend}
-          activeTrend={activeTrend}
-          isFiltered={isFiltered}
-          isLoading={isLoading}
-          error={sectionErrors.summary}
-          onUsersDrilldown={() => setDrilldown({ kind: "users" })}
-          onSessionsDrilldown={() => setDrilldown({ kind: "sessions" })}
-        />
-
-        {/* Core trend + insight column */}
-        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <AnalyticsTrendChart
+        {drilldown ? (
+          <AnalyticsDrilldownList
+            key={`${drilldown.kind}-${drilldown.presetId ?? ""}-${drilldown.rating ?? ""}-${JSON.stringify(drilldown.initialFilters ?? {})}`}
+            kind={drilldown.kind}
+            start={effectiveRange.start}
+            end={effectiveRange.end}
+            presetId={drilldown.presetId}
+            rating={drilldown.rating}
+            initialFilters={drilldown.initialFilters}
+            personaOptions={personaOptions}
+            agentOptions={agentOptions}
+            onBack={() => setDrilldown(null)}
+          />
+        ) : tab === "dashboard" ? (
+          <>
+            <AnalyticsKpiRow
+              summary={summary}
               usageTrend={usageTrend}
               activeTrend={activeTrend}
+              hourly={usageHourly}
+              isFiltered={isFiltered}
               isLoading={isLoading}
-              error={sectionErrors.usageTrend || sectionErrors.activeTrend}
+              error={sectionErrors.summary}
+              onUsersDrilldown={() => setDrilldown({ kind: "users" })}
+              onSessionsDrilldown={() => setDrilldown({ kind: "sessions" })}
             />
-          </div>
-          <AnalyticsInsightPanel
-            insights={insights}
-            isLoading={isLoading}
-            error={sectionErrors.insights}
-            onPersonaSelect={setPersonaPresetId}
-            onUserDrilldown={handleInsightUserDrilldown}
-            onPeakDrilldown={() => setDrilldown({ kind: "users" })}
-            onNewUsersDrilldown={() =>
-              setDrilldown({ kind: "users", initialFilters: { firstUse: true } })
-            }
-          />
-        </div>
 
-        {/* Dimension donuts + feedback overview */}
-        <AnalyticsTopRow
-          summary={summary}
-          sessionsByAgent={sessionsByAgent}
-          sessionsByPersona={sessionsByPersona}
-          tokensByModel={tokensByModel}
-          tokensByModelPartial={tokensByModelPartial}
-          feedbackSummary={feedbackSummary}
-          feedbackByPreset={feedbackByPreset}
-          isLoading={isLoading}
-          errors={sectionErrors}
-          onAgentSliceClick={(entry) =>
-            setDrilldown({
-              kind: "sessions",
-              initialFilters: { agentId: entry.label },
-            })
-          }
-          onPersonaSliceClick={(entry) =>
-            setDrilldown({
-              kind: "sessions",
-              initialFilters: {
-                personaPresetId: entry.id || entry.label,
-              },
-            })
-          }
-          onModelSliceClick={(entry) =>
-            setDrilldown({
-              kind: "runs",
-              initialFilters: { model: entry.label },
-            })
-          }
-          onFeedbackPresetClick={(entry) =>
-            setDrilldown({ kind: "feedback", presetId: entry.preset_id })
-          }
-          onReasonClick={() => setDrilldown({ kind: "feedback", rating: "down" })}
-        />
+            {/* Core trend + insight column */}
+            <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+              <div className="lg:col-span-2">
+                <AnalyticsTrendChart
+                  usageTrend={usageTrend}
+                  activeTrend={activeTrend}
+                  hourly={usageHourly}
+                  range={effectiveRange}
+                  isLoading={isLoading}
+                  error={sectionErrors.usageTrend || sectionErrors.activeTrend}
+                />
+              </div>
+              <AnalyticsInsightPanel
+                insights={insights}
+                isLoading={isLoading}
+                error={sectionErrors.insights}
+                onPersonaSelect={setPersonaPresetId}
+                onUserDrilldown={handleInsightUserDrilldown}
+                onPeakDrilldown={() => setDrilldown({ kind: "users" })}
+                onNewUsersDrilldown={() =>
+                  setDrilldown({ kind: "users", initialFilters: { firstUse: true } })
+                }
+              />
+            </div>
 
-        {/* Usage detail */}
-        <div ref={usageTableRef} className="scroll-mt-4">
+            {/* Dimension rankings + feedback overview */}
+            <AnalyticsTopRow
+              summary={summary}
+              sessionsByAgent={sessionsByAgent}
+              sessionsByPersona={sessionsByPersona}
+              tokensByModel={tokensByModel}
+              tokensByModelPartial={tokensByModelPartial}
+              feedbackSummary={feedbackSummary}
+              feedbackByPreset={feedbackByPreset}
+              isLoading={isLoading}
+              errors={sectionErrors}
+              onAgentSliceClick={(entry) =>
+                setDrilldown({
+                  kind: "sessions",
+                  initialFilters: { agentId: entry.label },
+                })
+              }
+              onPersonaSliceClick={(entry) =>
+                setDrilldown({
+                  kind: "sessions",
+                  initialFilters: {
+                    personaPresetId: entry.id || entry.label,
+                  },
+                })
+              }
+              onModelSliceClick={(entry) =>
+                setDrilldown({
+                  kind: "runs",
+                  // label is the display name; the runs filter needs the raw model id.
+                  initialFilters: { model: entry.id || entry.label },
+                })
+              }
+              onFeedbackPresetClick={(entry) =>
+                setDrilldown({ kind: "feedback", presetId: entry.preset_id })
+              }
+              onReasonClick={() => setDrilldown({ kind: "feedback", rating: "down" })}
+            />
+          </>
+        ) : (
           <AnalyticsUsageTable
             rows={usageRows}
             total={usageTotal}
@@ -490,25 +580,8 @@ export function AnalyticsPanel() {
             onPageChange={setUsagePage}
             onExport={handleUsageExport}
           />
-        </div>
+        )}
       </div>
-
-      {drilldown ? (
-        <div className="px-4 pb-6 sm:px-6">
-          <AnalyticsDrilldownList
-            key={`${drilldown.kind}-${drilldown.presetId ?? ""}-${drilldown.rating ?? ""}-${JSON.stringify(drilldown.initialFilters ?? {})}`}
-            kind={drilldown.kind}
-            start={effectiveRange.start}
-            end={effectiveRange.end}
-            presetId={drilldown.presetId}
-            rating={drilldown.rating}
-            initialFilters={drilldown.initialFilters}
-            personaOptions={personaOptions}
-            agentOptions={agentOptions}
-            onBack={() => setDrilldown(null)}
-          />
-        </div>
-      ) : null}
     </div>
   );
 }
