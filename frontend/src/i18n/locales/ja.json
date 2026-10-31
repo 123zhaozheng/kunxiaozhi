@@ -268,11 +268,13 @@
   },
   "analytics": {
     "dimensions": {
-      "agentTop5": "エージェント別 Top5",
-      "byAgentHint": "セッション数をエージェント別に集計",
-      "byPersonaHint": "セッション数をペルソナ別に集計",
-      "modelTokenTop5": "モデル別トークン Top5",
-      "personaTop5": "ペルソナ別 Top5"
+      "agentTop5": "エージェント別セッション",
+      "byAgentHint": "エージェントごとのアクティブセッション",
+      "byPersonaHint": "Persona ごとのアクティブセッション",
+      "modelTokenTop5": "モデル別トークン",
+      "personaTop5": "Persona 別セッション",
+      "more": "他 {{count}} 件",
+      "totalLabel": "合計 {{value}}"
     },
     "drilldown": {
       "agent": "Agent",
@@ -411,13 +413,15 @@
       "byModelHint": "モデルごとの総トークン数",
       "total": "総トークン",
       "unit": "tokens",
-      "partial": "過去データにモデル次元がないため、モデル別内訳がある部分のみ表示します。",
+      "partial": "一部の日付のモデル別明細をバックグラウンドで補完中です。しばらくしてから再読み込みしてください。",
       "partialSince": "過去データにモデル次元がないため、モデル別内訳は {{date}} 以降で利用できます。"
     },
     "trend": {
       "activeUsers": "アクティブユーザー",
       "hint": "セッション・アクティブユーザー・ユーザーメッセージの日別比較、トークンは右軸",
-      "title": "コアトレンド"
+      "title": "コアトレンド",
+      "dailyHint": "日別（UTC+8）",
+      "hourlyHint": "時間別（UTC+8）"
     },
     "weekdays": [
       "日",
@@ -427,7 +431,13 @@
       "木",
       "金",
       "土"
-    ]
+    ],
+    "tabs": {
+      "dashboard": "ダッシュボード",
+      "usage": "利用明細"
+    },
+    "dataUpdatedAt": "{{time}} 時点のデータ",
+    "dataUpdatedHint": "バックグラウンドで毎分事前集計されるため、開くたびに再計算しません"
   },
   "appName": "昆小智",
   "approvals": {

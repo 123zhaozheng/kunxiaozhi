@@ -26,6 +26,7 @@ from src.kernel.schemas.analytics import (
     TrendDataPoint,
     UsageByPersonaItem,
     UsageByUserResponse,
+    UsageHourPoint,
     UsageInsightsResponse,
     UsageSummaryResponse,
     UsageTrendPoint,
@@ -196,6 +197,9 @@ class AnalyticsManager:
 
     async def get_usage_trend(self, filters: UsageFilters) -> list[UsageTrendPoint]:
         return await self.storage.get_usage_trend(filters)
+
+    async def get_usage_hourly(self, filters: UsageFilters) -> list[UsageHourPoint]:
+        return await self.storage.get_usage_hourly(filters)
 
     async def get_usage_by_persona(
         self, filters: UsageFilters

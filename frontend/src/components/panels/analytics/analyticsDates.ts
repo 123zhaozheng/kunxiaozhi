@@ -98,6 +98,20 @@ export function normalizeRangeInput(
   return start <= end ? { start, end } : { start: end, end: start };
 }
 
+/**
+ * Every calendar day of a range, inclusive. The backend omits days without
+ * activity, so charts fill the gaps with zero instead of joining across them.
+ */
+export function daysInRange(range: AnalyticsDateRange, maxDays = 366): AnalyticsDate[] {
+  const days: AnalyticsDate[] = [];
+  let day = range.start;
+  while (day <= range.end && days.length < maxDays) {
+    days.push(day);
+    day = addDaysString(day, 1);
+  }
+  return days;
+}
+
 /** `2026-08-22 → 2026-08-28` display label for a range. */
 export function formatRangeLabel(range: AnalyticsDateRange): string {
   return `${range.start} → ${range.end}`;

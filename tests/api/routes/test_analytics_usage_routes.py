@@ -96,6 +96,9 @@ class _FakeManager:
             )
         ]
 
+    async def get_usage_hourly(self, filters: UsageFilters) -> list:
+        return []
+
     async def get_usage_by_persona(
         self, filters: UsageFilters
     ) -> list[UsageByPersonaItem]:
@@ -175,6 +178,7 @@ async def test_usage_summary_returns_five_metrics_and_passes_filters() -> None:
             "user_messages": 400,
             "total_tokens": 60_000,
         },
+        "data_updated_at": None,
     }
     call = fake.filter_calls[0]
     assert call["persona_preset_id"] == "p1"

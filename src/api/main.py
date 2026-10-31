@@ -575,8 +575,10 @@ async def lifespan(app: FastAPI):
     _analytics_backfill_task = asyncio.create_task(_backfill_analytics())
     app.state.analytics_backfill_task = _analytics_backfill_task
 
-    # Freeze yesterday's UTC+8 analytics snapshot in the background. Any
-    # failure is logged by the worker and must never delay application startup.
+    # Keep analytics snapshots current in the background (freeze yesterday,
+    # refresh today's pre-aggregate every minute, fill breakdown extras) so the
+    # dashboard never aggregates traces on read. Failures are logged by the
+    # worker and must never delay application startup.
     async def _freeze_daily_analytics() -> None:
         from src.infra.analytics.daily_freeze import DailyFreezeWorker
 

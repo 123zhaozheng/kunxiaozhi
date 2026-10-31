@@ -1,23 +1,24 @@
 # Analytics Dashboard (`/analytics`)
 
-## Scenario: One-screen analytics board — filters on top, KPI row, trend + insights, dimension donuts, usage table
+## Scenario: Analytics board — one-row filters, [数据看板 | 使用明细] tabs, KPI row, trend + insights, ranked bars, feedback
 
 ### 1. Structure
 
 All files live in `frontend/src/components/panels/analytics/`:
 
 ```
-AnalyticsPanel.tsx          filter state + data orchestration + layout — the ONLY file that fetches
-AnalyticsFilterBar.tsx      date range + [Today][7d][30d][Custom] presets + Persona/agent dropdowns
-AnalyticsKpiRow.tsx         6 KPI cards (sparkline + vs-previous-period badge)
-AnalyticsTrendChart.tsx     multi-metric trend (sessions/active users/user messages + Token right axis)
+AnalyticsPanel.tsx          filter state + data orchestration + tabs/layout — the ONLY file that fetches
+AnalyticsFilterBar.tsx      one card: [Today][7d][30d][Custom] presets + range label + Persona/agent selects
+AnalyticsKpiRow.tsx         6 KPI cards (sparkline + vs-previous-period badge; hourly sparklines for 1d)
+AnalyticsTrendChart.tsx     one metric at a time (segmented switcher), one axis; hourly for 1d, daily zero-filled
 AnalyticsInsightPanel.tsx   right-column hard-data insights (peak hour, top token users, fastest persona, new users)
-AnalyticsTopRow.tsx         three Top5 donuts (agent / persona / model token) + feedback overview
-AnalyticsUsageTable.tsx     usage detail: search (current page) + CSV export + pagination
+AnalyticsTopRow.tsx         agent / persona / model ranked-bar cards + feedback overview row
+AnalyticsUsageTable.tsx     usage detail tab: search (current page) + CSV export + pagination
+useSeriesColor.ts           theme-aware single series hue
 analyticsKpi.ts             pure KPI derivation (accessors, per-user/per-session ratios, deltaPct)
 analyticsDates.ts           pure YYYY-MM-DD string arithmetic (Date.UTC, no setHours/toISOString)
-analyticsFormat.ts          number/date formatters, pie palette, weekday labels
-analyticsPrimitives.tsx     StatsCard / ChartCard / DonutBlock / LineTrend atoms
+analyticsFormat.ts          formatters, dataviz palette (series + status), pure rankRows()
+analyticsPrimitives.tsx     ChartCard / RankedBarList / FeedbackPresetBars / TrendArea atoms
 ```
 
 Subcomponents receive computed data and callbacks only — they never fetch. When filters
@@ -31,12 +32,21 @@ change, every section sees the same parameter batch (`usageFilters` memo in the 
 - **One serializer**: every usage endpoint (summary, trend, insights, by-agent,
   by-persona, by-model, by-user, export) goes through `buildUsageQuery`
   (`services/api/analyticsQuery.ts`). Guarded by `analyticsFilterContract.test.ts`.
-- **KPI ↔ donut same-source**: donut center numbers and KPI cards call the same
-  accessor in `analyticsKpi.ts` (`kpiSessionsValue` → `summary.new_sessions`,
-  `kpiTotalTokensValue` → `summary.total_tokens`). Accepted tradeoff: the session
-  card shows `new_sessions` (by-agent/by-persona endpoints count created sessions,
-  so `active_sessions` cannot be made consistent). Never derive the center by
-  summing slices.
+- **KPI ↔ ranked-list same-source**: list share denominators and KPI cards call
+  the same accessor in `analyticsKpi.ts` (`kpiSessionsValue` → `active_sessions`,
+  `kpiTotalTokensValue` → `total_tokens`). Never derive a denominator by summing
+  visible rows (a truncated list would inflate shares).
+- **Default range is 1d (today)**; nothing is computed on open — the backend
+  serves pre-aggregated snapshots and `summary.data_updated_at` is shown as
+  "数据更新于 HH:mm".
+- **Charts (dataviz)**: no donuts, no dual y-axis. Breakdowns are ranked
+  horizontal bars in one hue; trends are a single series with a crosshair
+  tooltip, daily series zero-filled via `daysInRange`. Status colors only for
+  feedback up/down, always with icon + label.
+- **Usage detail lives in its own tab** and is fetched only while that tab is
+  open; drilldowns replace the content area (with back) instead of appending
+  below the board.
+- **Model slices** show `label` (display name) but drill down with `id`.
 - **Ratios**: 人均消息 = `user_messages / using_users`; 会话均 Token =
   `total_tokens / active_sessions`. Divide-by-zero renders `—`, never NaN/Infinity.
 - **vs-previous badge** comes from `summary.previous`; when `previous` is missing
@@ -53,7 +63,8 @@ change, every section sees the same parameter batch (`usageFilters` memo in the 
 |------|--------|
 | `analytics/__tests__/analyticsFilterContract.test.ts` | 8 endpoints receive identical params on filter change; date strings contain no `T`/`Z`; no legacy date math in source |
 | `analytics/__tests__/analyticsKpiDerivation.test.ts` | ratio denominators, `—` on zero, hidden badge when previous missing |
-| `analytics/__tests__/analyticsConsistency.test.ts` | donut center and KPI use the same accessor (runtime + source scan) |
+| `analytics/__tests__/analyticsConsistency.test.ts` | ranked-list denominators and KPI use the same accessor; no donut / right axis (source scan) |
+| `analytics/__tests__/analyticsRankedBars.test.ts` | ranking order, tail folding, KPI-denominated shares |
 | `i18n/__tests__/usageReportKeys.test.ts` | 122+ required keys × 5 locales, weekdays array, removed orphan keys stay absent, "vs previous period" wording (never "last week") |
 
 ### 4. Gotchas

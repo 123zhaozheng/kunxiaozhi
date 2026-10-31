@@ -6,6 +6,7 @@ Analytics 路由 - 全局统计看板数据接口
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 from datetime import datetime, timezone
@@ -331,7 +332,7 @@ async def get_usage_trend(
     _: None = Depends(require_permissions("settings:manage")),
     manager: AnalyticsManager = Depends(get_analytics_manager),
 ) -> UsageTrendResponse:
-    """使用情况按天趋势（与 /usage/summary 同一口径）。"""
+    """使用情况按天趋势（与 /usage/summary 同一口径）；单日区间另附 24 小时趋势。"""
     s, e = _parse_range(start, end)
     filters = await manager.build_usage_filters(
         s,
@@ -340,8 +341,10 @@ async def get_usage_trend(
         agent_id=agent_id,
         role_id=role_id,
     )
-    items = await manager.get_usage_trend(filters)
-    return UsageTrendResponse(items=items)
+    items, hourly = await asyncio.gather(
+        manager.get_usage_trend(filters), manager.get_usage_hourly(filters)
+    )
+    return UsageTrendResponse(items=items, hourly=hourly)
 
 
 @router.get("/usage/by-persona", response_model=UsageByPersonaResponse)

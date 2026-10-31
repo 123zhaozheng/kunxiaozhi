@@ -201,6 +201,8 @@ export interface UsageSummaryResponse {
   total_tokens: number;
   /** Immediately preceding equal-length period (same filters); null when unavailable */
   previous: UsageSummaryPrevious | null;
+  /** When the range includes today: refresh time of today's pre-aggregate (UTC ISO) */
+  data_updated_at?: string | null;
 }
 
 /** Peak activity bucket (UTC+8) from user message times. */
@@ -245,8 +247,17 @@ export interface UsageTrendPoint {
   total_tokens: number;
 }
 
+/** Hourly point (UTC+8 hour 0-23), only for single-day ranges. */
+export interface UsageHourPoint {
+  hour: number;
+  user_messages: number;
+  total_tokens: number;
+}
+
 export interface UsageTrendResponse {
   items: UsageTrendPoint[];
+  /** 24 hourly points for a single-day range; empty for multi-day ranges */
+  hourly?: UsageHourPoint[];
 }
 
 /** One row per user × persona. */
